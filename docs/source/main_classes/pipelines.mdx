@@ -93,12 +93,38 @@ for out in tqdm(pipe(KeyDataset(dataset, "file"))):
     # ....
 ```
 
+For ease of use, a generator is also possible:
+
+
+```python
+from transformers import pipeline
+
+pipe = pipeline("text-classification")
+
+
+def data():
+    while True:
+        # This could come from a dataset, a database, a queue or HTTP request
+        # in a server
+        # Caveat: because this is iterative, you cannot use `num_workers > 1` variable
+        # to use multiple threads to preprocess data. You can still have 1 thread that
+        # does the preprocessing while the main runs the big inference
+        yield "This is a test"
+
+
+for out in pipe(data()):
+    print(out)
+    # {"text": "NUMBER TEN FRESH NELLY IS WAITING ON YOU GOOD NIGHT HUSBAND"}
+    # {"text": ....}
+    # ....
+```
+
 [[autodoc]] pipeline
 
 ## Pipeline batching
 
-All pipelines (except *zero-shot-classification* and *question-answering* currently) can use batching. This will work
-whenever the pipeline uses its streaming ability (so when passing lists or `Dataset`).
+All pipelines can use batching. This will work
+whenever the pipeline uses its streaming ability (so when passing lists or `Dataset` or `generator`).
 
 ```python
 from transformers import pipeline
@@ -119,7 +145,7 @@ for out in pipe(KeyDataset(dataset, "text"), batch_size=8, truncation="only_firs
 However, this is not automatically a win for performance. It can be either a 10x speedup or 5x slowdown depending
 on hardware, data and the actual model being used.
 
-Example where it's most a speedup:
+Example where it's mostly a speedup:
 
 </Tip>
 
@@ -127,7 +153,6 @@ Example where it's most a speedup:
 from transformers import pipeline
 from torch.utils.data import Dataset
 from tqdm.auto import tqdm
-
 
 pipe = pipeline("text-classification", device=0)
 
@@ -226,6 +251,39 @@ For users, a rule of thumb is:
   - The larger the GPU the more likely batching is going to be more interesting
 - As soon as you enable batching, make sure you can handle OOMs nicely.
 
+## Pipeline chunk batching
+
+`zero-shot-classification` and `question-answering` are slightly specific in the sense, that a single input might yield
+mutliple forward pass of a model. Under normal circumstances, this would yield issues with `batch_size` argument.
+
+In order to circumvent this issue, both of these pipelines are a bit specific, they are `ChunkPipeline` instead of
+regular `Pipeline`. In short:
+
+
+```python
+preprocessed = pipe.preprocess(inputs)
+model_outputs = pipe.forward(preprocessed)
+outputs = pipe.postprocess(model_ouputs)
+```
+
+Now becomes:
+
+
+```python
+all_model_outputs = []
+for preprocessed in pipe.preprocess(inputs):
+    model_outputs = pipe.forward(preprocessed)
+    all_model_outputs.append(model_outputs)
+outputs = pipe.postprocess(all_model_ouputs)
+```
+
+This should be very transparent to your code because the pipelines are used in
+the same way.
+
+This is a simplified view, since the pipeline can handle automatically the batch to ! Meaning you don't have to care
+about how many forward passes you inputs are actually going to trigger, you can optimize the `batch_size`
+independantly of the inputs. The caveats from the previous section still apply.
+
 ## Pipeline custom code
 
 If you want to override a specific pipeline.
@@ -240,10 +298,11 @@ If you want to try simply you can:
 
 ```python
 class MyPipeline(TextClassificationPipeline):
-    def postprocess(...):
-        ...
+    def postprocess():
+        # Your code goes here
         scores = scores * 100
-        ...
+        # And here
+
 
 my_pipeline = MyPipeline(model=model, tokenizer=tokenizer, ...)
 # or if you use *pipeline* function, then:

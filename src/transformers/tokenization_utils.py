@@ -73,6 +73,7 @@ class Trie:
         >>> trie.add("Hello 友達")
         >>> trie.data
         {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}}
+
         >>> trie.add("Hello")
         >>> trie.data
         {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}}
@@ -100,6 +101,7 @@ class Trie:
         >>> trie = Trie()
         >>> trie.split("[CLS] This is a extra_id_100")
         ["[CLS] This is a extra_id_100"]
+
         >>> trie.add("[CLS]")
         >>> trie.add("extra_id_1")
         >>> trie.add("extra_id_100")
@@ -129,7 +131,7 @@ class Trie:
         # This is used by the lookahead which needs to skip over
         # some text where the full match exceeded the place in the initial
         # for loop
-        skip = None
+        skip = 0
         # Main loop, Giving this algorithm O(n) complexity
         for current, current_char in enumerate(text):
             if skip and current < skip:
@@ -173,6 +175,11 @@ class Trie:
                             lookahead_index = current
                             end = current
                         next_char = text[lookahead_index] if lookahead_index < len(text) else None
+                        if "" in looktrie_pointer:
+                            start = lookstart
+                            end = lookahead_index
+                            skip = lookahead_index
+
                         while next_char in looktrie_pointer:
                             looktrie_pointer = looktrie_pointer[next_char]
                             lookahead_index += 1
@@ -217,7 +224,7 @@ class Trie:
 
             # If this character is a starting character within the trie
             # start keeping track of this partial match.
-            if current_char in self.data:
+            if current >= skip and current_char in self.data:
                 states[current] = self.data[current_char]
 
         # We have a cut at the end with states.
@@ -393,11 +400,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         ```python
         # Let's see how to increase the vocabulary of Bert model and tokenizer
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertModel.from_pretrained('bert-base-uncased')
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        model = BertModel.from_pretrained("bert-base-uncased")
 
-        num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
-        print('We have added', num_added_toks, 'tokens')
+        num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"])
+        print("We have added", num_added_toks, "tokens")
         # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         model.resize_token_embeddings(len(tokenizer))
         ```"""
@@ -454,8 +461,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         <Tip>
 
-        This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not
-        put this inside your training loop.
+        This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not put
+        this inside your training loop.
 
         </Tip>
 

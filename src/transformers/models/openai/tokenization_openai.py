@@ -78,8 +78,8 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
     - uses `SpaCy` tokenizer and `ftfy` for pre-BPE tokenization if they are installed, fallback to BERT's
       `BasicTokenizer` if not.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -104,7 +104,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
             from spacy.lang.en import English
 
             _nlp = English()
-            self.nlp = _nlp.Defaults.create_tokenizer(_nlp)
+            self.nlp = _nlp.tokenizer
             self.fix_text = ftfy.fix_text
         except ImportError:
             logger.warning("ftfy or spacy is not installed using BERT BasicTokenizer instead of SpaCy & ftfy.")

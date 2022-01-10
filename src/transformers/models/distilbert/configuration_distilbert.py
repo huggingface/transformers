@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DistilBERT model configuration """
+""" DistilBERT model configuration"""
 from collections import OrderedDict
 from typing import Mapping
 
@@ -36,19 +36,18 @@ DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class DistilBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DistilBertModel`] or a
-    [`TFDistilBertModel`]. It is used to instantiate a DistilBERT model according to the specified
-    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the DistilBERT [distilbert-base-uncased](https://huggingface.co/distilbert-base-uncased) architecture.
+    This is the configuration class to store the configuration of a [`DistilBertModel`] or a [`TFDistilBertModel`]. It
+    is used to instantiate a DistilBERT model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the DistilBERT
+    [distilbert-base-uncased](https://huggingface.co/distilbert-base-uncased) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the DistilBERT model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`DistilBertModel`] or
-            [`TFDistilBertModel`].
+            the `inputs_ids` passed when calling [`DistilBertModel`] or [`TFDistilBertModel`].
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -67,13 +66,12 @@ class DistilBertConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         activation (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         qa_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probabilities used in the question answering model
-            [`DistilBertForQuestionAnswering`].
+            The dropout probabilities used in the question answering model [`DistilBertForQuestionAnswering`].
         seq_classif_dropout (`float`, *optional*, defaults to 0.2):
             The dropout probabilities used in the sequence classification and the multiple choice model
             [`DistilBertForSequenceClassification`].

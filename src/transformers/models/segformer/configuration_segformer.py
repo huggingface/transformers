@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SegFormer model configuration """
+""" SegFormer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,14 +28,14 @@ SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SegformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SegformerModel`]. It is used
-    to instantiate an SegFormer model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the SegFormer
+    This is the configuration class to store the configuration of a [`SegformerModel`]. It is used to instantiate an
+    SegFormer model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the SegFormer
     [nvidia/segformer-b0-finetuned-ade-512-512](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         image_size (`int`, *optional*, defaults to 512):
@@ -62,8 +62,8 @@ class SegformerConfig(PretrainedConfig):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
@@ -79,8 +79,8 @@ class SegformerConfig(PretrainedConfig):
         decoder_hidden_size (`int`, *optional*, defaults to 256):
             The dimension of the all-MLP decode head.
         reshape_last_stage (`bool`, *optional*, defaults to `True`):
-            Whether to reshape the features of the last stage back to `(batch_size, num_channels, height, width)`.
-            Only required for the semantic segmentation model.
+            Whether to reshape the features of the last stage back to `(batch_size, num_channels, height, width)`. Only
+            required for the semantic segmentation model.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
 
