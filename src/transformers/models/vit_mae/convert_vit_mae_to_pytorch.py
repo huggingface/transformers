@@ -50,13 +50,36 @@ def rename_key(name):
     return name
 
 
-def convert_state_dict(orig_state_dict, model):
+def convert_state_dict(orig_state_dict, config):
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:
-            # TODO
-            pass
+            key_split = key.split(".")
+            layer_num = int(key_split[1])
+            if "decoder_blocks" in key:
+                dim = config.decoder_hidden_size
+                prefix = "decoder.decoder_layers."
+                if "weight" in key:
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                elif "bias" in key:
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
+                orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
+            else:
+                dim = config.hidden_size
+                prefix = "vit.encoder.layer."
+                if "weight" in key:
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                elif "bias" in key:
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
+
         else:
             orig_state_dict[rename_key(key)] = val
 
@@ -72,7 +95,7 @@ def convert_vit_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     feature_extractor = ViTMAEFeatureExtractor(size=config.image_size)
 
-    new_state_dict = convert_state_dict(state_dict, model)
+    new_state_dict = convert_state_dict(state_dict, config)
 
     for k, v in new_state_dict.items():
         print(k, v.shape)
@@ -84,6 +107,10 @@ def convert_vit_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     image = Image.open(requests.get(url, stream=True).raw)
     feature_extractor = ViTMAEFeatureExtractor(size=config.image_size)
     inputs = feature_extractor(images=image, return_tensors="pt")
+
+    # forward pass
+    outputs = model(**inputs)
+    print(outputs.keys())
 
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
