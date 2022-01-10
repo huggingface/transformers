@@ -173,6 +173,7 @@ PYTORCH_EXPORT_MODELS = {
     ("bert", "bert-base-cased"),
     ("camembert", "camembert-base"),
     ("distilbert", "distilbert-base-cased"),
+    ("electra", "google/electra-base-generator"),
     # ("longFormer", "longformer-base-4096"),
     ("roberta", "roberta-base"),
     ("xlm-roberta", "xlm-roberta-base"),
