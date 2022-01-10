@@ -901,11 +901,11 @@ class NystromformerForSequenceClassification(NystromformerPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-
+# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->Nystromformer
 @add_start_docstrings(
     """
-    Nyströmformer Model with a multiple choice classification head on top (a linear layer on top of the pooled output
-    and a softmax) e.g. for RocStories/SWAG tasks.
+    Nyströmformer Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
     """,
     NYSTROMFORMER_START_DOCSTRING,
 )
@@ -914,15 +914,16 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
         super().__init__(config)
 
         self.nystromformer = NystromformerModel(config)
-        self.sequence_summary = SequenceSummary(config)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(
-        NYSTROMFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
-    )
+    @add_start_docstrings_to_model_forward(NYSTROMFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -973,9 +974,9 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        pooled_output = outputs[1]
 
-        pooled_output = self.sequence_summary(sequence_output)
+        pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
 
@@ -985,7 +986,7 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
             loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
+            output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
@@ -994,7 +995,6 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
 
 @add_start_docstrings(
     """
