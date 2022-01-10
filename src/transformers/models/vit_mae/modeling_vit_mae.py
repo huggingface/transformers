@@ -727,6 +727,15 @@ class ViTMAEDecoder(nn.Module):
             config.decoder_hidden_size, config.patch_size ** 2 * config.num_channels, bias=True
         )  # encoder to decoder
         self.gradient_checkpointing = False
+        self.initialize_weights(num_patches)
+
+    def initialize_weights(self, num_patches):
+        decoder_pos_embed = get_2d_sincos_pos_embed(
+            self.decoder_pos_embed.shape[-1], int(num_patches ** 0.5), cls_token=True
+        )
+        self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
+
+        torch.nn.init.normal_(self.mask_token, std=0.02)
 
     def forward(
         self,
