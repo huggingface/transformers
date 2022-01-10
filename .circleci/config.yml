@@ -933,22 +933,9 @@ jobs:
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[all,testing]
-            - save_cache:
-                  key: v0.4-onnx-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
             - run: pip install ftfy
-            - save_cache:
-                  key: v0.4-torch-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
             - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 1 tests/test_tokenization_clip.py --dist=loadfile -s --make-reports=tests_tokenization_clip --durations=100
-                  fi
+                  python -m pytest -n 1 tests/test_tokenization_clip.py --dist=loadfile -s --make-reports=tests_tokenization_clip --durations=100 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -1009,7 +996,6 @@ workflows:
             - run_tests_onnxruntime
             - run_tests_hub
             - run_tests_layoutlmv2
-            - run_tests_tokenization_clip
     nightly:
         triggers:
             - schedule:
@@ -1030,6 +1016,7 @@ workflows:
             - run_tests_pipelines_tf_all
             - run_tests_onnxruntime_all
             - run_tests_hub_all
+            - run_tests_tokenization_clip
 
 #    tpu_testing_jobs:
 #        triggers:
