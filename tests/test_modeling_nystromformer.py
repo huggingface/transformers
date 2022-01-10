@@ -307,7 +307,7 @@ class NystromformerModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             token_logits = model(encoding.input_ids).logits
-            
+
         prediction = token_logits[:, 2, :].argmax(-1)[0]
 
         self.assertEqual(tokenizer.decode(prediction), "capital")
