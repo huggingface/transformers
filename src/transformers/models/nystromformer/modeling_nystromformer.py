@@ -452,7 +452,7 @@ class NystromformerEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransfrom with Bert->Nystromformer
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->Nystromformer
 class NystromformerPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
