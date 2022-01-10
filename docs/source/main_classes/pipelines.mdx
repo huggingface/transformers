@@ -79,14 +79,14 @@ GPU. If it doesn't don't hesitate to create an issue.
 import datasets
 from transformers import pipeline
 from transformers.pipelines.base import KeyDataset
-import tqdm
+from tqdm.auto import tqdm
 
 pipe = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
 dataset = datasets.load_dataset("superb", name="asr", split="test")
 
 # KeyDataset (only *pt*) will simply return the item in the dict returned by the dataset item
 # as we're not interested in the *target* part of the dataset.
-for out in tqdm.tqdm(pipe(KeyDataset(dataset, "file"))):
+for out in tqdm(pipe(KeyDataset(dataset, "file"))):
     print(out)
     # {"text": "NUMBER TEN FRESH NELLY IS WAITING ON YOU GOOD NIGHT HUSBAND"}
     # {"text": ....}
@@ -130,7 +130,6 @@ whenever the pipeline uses its streaming ability (so when passing lists or `Data
 from transformers import pipeline
 from transformers.pipelines.base import KeyDataset
 import datasets
-import tqdm
 
 dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
 pipe = pipeline("text-classification", device=0)
@@ -153,8 +152,7 @@ Example where it's mostly a speedup:
 ```python
 from transformers import pipeline
 from torch.utils.data import Dataset
-import tqdm
-
+from tqdm.auto import tqdm
 
 pipe = pipeline("text-classification", device=0)
 
@@ -172,7 +170,7 @@ dataset = MyDataset()
 for batch_size in [1, 8, 64, 256]:
     print("-" * 30)
     print(f"Streaming batch_size={batch_size}")
-    for out in tqdm.tqdm(pipe(dataset, batch_size=batch_size), total=len(dataset)):
+    for out in tqdm(pipe(dataset, batch_size=batch_size), total=len(dataset)):
         pass
 ```
 
@@ -228,7 +226,7 @@ Streaming batch_size=256
   0%|                                                                                 | 0/1000 [00:00<?, ?it/s]
 Traceback (most recent call last):
   File "/home/nicolas/src/transformers/test.py", line 42, in <module>
-    for out in tqdm.tqdm(pipe(dataset, batch_size=256), total=len(dataset)):
+    for out in tqdm(pipe(dataset, batch_size=256), total=len(dataset)):
 ....
     q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
 RuntimeError: CUDA out of memory. Tried to allocate 376.00 MiB (GPU 0; 3.95 GiB total capacity; 1.72 GiB already allocated; 354.88 MiB free; 2.46 GiB reserved in total by PyTorch)
