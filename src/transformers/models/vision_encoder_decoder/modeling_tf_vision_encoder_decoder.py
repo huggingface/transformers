@@ -130,7 +130,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
         kwargs: (*optional*) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
 
             - Without a prefix which will be input as `**encoder_kwargs` for the encoder forward function.
-            - With a *decoder_* prefix which will be input as `**decoder_kwargs`` for the decoder forward function.
+            - With a *decoder_* prefix which will be input as `**decoder_kwargs` for the decoder forward function.
 """
 
 
@@ -139,8 +139,8 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
     r"""
     [`TFVisionEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture
     with one of the base vision model classes of the library as encoder and another one of the base model classes as
-    decoder when created with the :meth*~transformers.TFAutoModel.from_pretrained* class method for the encoder and
-    :meth*~transformers.TFAutoModelForCausalLM.from_pretrained* class method for the decoder.
+    decoder when created with the [`~TFAutoModel.from_pretrained`] class method for the encoder and
+    [`~TFAutoModelForCausalLM.from_pretrained`] class method for the decoder.
     """
     config_class = VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
@@ -255,7 +255,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""
-        Initializing *TFVisionEncoderDecoderModel* from a pytorch checkpoint is not supported currently.
+        Initializing `TFVisionEncoderDecoderModel` from a pytorch checkpoint is not supported currently.
 
         If there are only pytorch checkpoints for a particular encoder-decoder model, a workaround is:
 
@@ -321,7 +321,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
 
 
         Params:
-            encoder_pretrained_model_name_or_path (:obj: *str*, *optional*):
+            encoder_pretrained_model_name_or_path (`str`, *optional*):
                 Information necessary to initiate the encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co. An
@@ -331,7 +331,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
                     - A path or url to a *pytorch index checkpoint file* (e.g, `./pt_model/`). In this case,
                       `encoder_from_pt` should be set to `True`.
 
-            decoder_pretrained_model_name_or_path (:obj: *str*, *optional*, defaults to *None*):
+            decoder_pretrained_model_name_or_path (`str`, *optional*, defaults to *None*):
                 Information necessary to initiate the decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
