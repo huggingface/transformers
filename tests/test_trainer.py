@@ -444,6 +444,16 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.check_trained_model(trainer.model)
 
+    def test_training_loss(self):
+        n_gpus = max(1, get_gpu_count())
+        trainer = get_regression_trainer(logging_steps=64 / (8 * n_gpus))
+        trainer.train()
+        log_history = trainer.state.log_history
+
+        losses = [log["loss"] for log in log_history if "loss" in log]
+        train_loss = log_history[-1]["train_loss"]
+        self.assertAlmostEqual(sum(losses) / len(losses), train_loss, places=4)
+
     def test_custom_optimizer(self):
         train_dataset = RegressionDataset()
         args = TrainingArguments("./regression")
