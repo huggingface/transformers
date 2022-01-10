@@ -7,6 +7,7 @@ from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
+from ..models.electra import ElectraOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
@@ -16,7 +17,6 @@ from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
-from ..models.electra import ElectraOnnxConfig
 from ..utils import logging
 from .config import OnnxConfig
 
