@@ -555,20 +555,25 @@ PEGASUS_START_DOCSTRING = r"""
 """
 
 PEGASUS_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Summarization example:
 
-        >>> from transformers import PegasusTokenizer, TFPegasusForConditionalGeneration
+    ```python
+    >>> from transformers import PegasusTokenizer, TFPegasusForConditionalGeneration
 
-        >>> model = TFPegasusForConditionalGeneration.from_pretrained('google/pegasus-xsum') >>> tokenizer =
-        PegasusTokenizer.from_pretrained('google/pegasus-xsum')
+    >>> model = TFPegasusForConditionalGeneration.from_pretrained("google/pegasus-xsum")
+    >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-xsum")
 
-        >>> ARTICLE_TO_SUMMARIZE = ( ... "PG&E stated it scheduled the blackouts in response to forecasts for high
-        winds " ... "amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers
-        were " ... "scheduled to be affected by the shutoffs which were expected to last through at least midday
-        tomorrow." ... ) >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='tf')
+    >>> ARTICLE_TO_SUMMARIZE = (
+    ...     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
+    ...     "amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were "
+    ...     "scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."
+    ... )
+    >>> inputs = tokenizer(ARTICLE_TO_SUMMARIZE, max_length=1024, return_tensors="tf")
 
-        >>> # Generate Summary >>> summary_ids = model.generate(inputs['input_ids']) >>> print([tokenizer.decode(g,
-        skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs["input_ids"])
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    ```
 """
 
 PEGASUS_INPUTS_DOCSTRING = r"""

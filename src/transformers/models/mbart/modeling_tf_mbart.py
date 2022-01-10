@@ -591,29 +591,38 @@ MBART_INPUTS_DOCSTRING = r"""
 """
 
 MBART_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Summarization example:
 
-        >>> from transformers import MBartTokenizer, TFMBartForConditionalGeneration, MBartConfig
+    ```python
+    >>> from transformers import MBartTokenizer, TFMBartForConditionalGeneration, MBartConfig
 
-        >>> model = MBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25') >>> tokenizer =
-        MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
+    >>> model = TFMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
+    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
-        >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen." >>> inputs =
-        tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='tf')
+    >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
+    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="tf")
 
-        >>> # Generate Summary >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5,
-        early_stopping=True) >>> print([tokenizer.decode(g, skip_special_tokens=True,
-        clean_up_tokenization_spaces=False) for g in summary_ids])
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    ```
 
-    Mask filling example::
+    Mask filling example:
 
-        >>> from transformers import MBartTokenizer, TFMBartForConditionalGeneration >>> tokenizer =
-        MBartTokenizer.from_pretrained('facebook/mbart-large-cc25') >>> # de_DE is the language symbol id <LID> for
-        German >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
+    ```python
+    >>> from transformers import MBartTokenizer, TFMBartForConditionalGeneration
 
-        >>> model = MBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25') >>> input_ids =
-        tokenizer([TXT], add_special_tokens=False, return_tensors='tf')['input_ids'] >>> logits =
-        model(input_ids).logits >>> probs = tf.nn.softmax(logits[0]) >>> # probs[5] is associated with the mask token
+    >>> model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
+    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
+
+    >>> # de_DE is the language symbol id <LID> for German
+    >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
+    >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors="tf")["input_ids"]
+
+    >>> logits = model(input_ids).logits
+    >>> probs = tf.nn.softmax(logits[0])
+    >>> # probs[5] is associated with the mask token
+    ```
 """
 
 
