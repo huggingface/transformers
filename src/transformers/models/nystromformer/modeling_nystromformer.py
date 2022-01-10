@@ -911,8 +911,7 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
         super().__init__(config)
 
         self.nystromformer = NystromformerModel(config)
-        classifier_dropout = config.hidden_dropout_prob
-        self.dropout = nn.Dropout(classifier_dropout)
+        self.pre_classifier = nn.Linear(config.hidden_size, config.hidden_size)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
@@ -971,10 +970,12 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
-        
-        pooled_output = self.dropout(sequence_output)
+        hidden_state = outputs[0]  # (bs * num_choices, seq_len, dim)
+        pooled_output = hidden_state[:, 0]  # (bs * num_choices, dim)
+        pooled_output = self.pre_classifier(pooled_output)  # (bs * num_choices, dim)
+        pooled_output = nn.ReLU()(pooled_output)  # (bs * num_choices, dim)
         logits = self.classifier(pooled_output)
+
         reshaped_logits = logits.view(-1, num_choices)
 
         loss = None
