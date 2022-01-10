@@ -52,6 +52,15 @@ from ...modeling_utils import (
 from ...utils import logging
 from .configuration_yoso import YosoConfig
 
+src_folder = os.path.dirname(os.path.realpath(__file__))
+append_root = lambda files : [os.path.join(src_folder, file) for file in files]
+src_files = append_root(
+    ['fast_lsh_cumulation_torch.cpp',
+     'fast_lsh_cumulation.cu',
+     'fast_lsh_cumulation_cuda.cu'])
+fast_lsh_cumulation = torch.utils.cpp_extension.load('fast_lsh_cumulation', src_files, verbose = True)
+
+import fast_lsh_cumulation as lsh_cumulation
 
 logger = logging.get_logger(__name__)
 
@@ -86,6 +95,22 @@ def normalize(inp):
     else:
         return nn.functional.normalize(inp, p = 2, dim = -1)
 
+def hashing(X, Y, num_hash, hash_len):
+    
+    assert len(X.size()) == 3 # [b, s, d]
+    assert len(Y.size()) == 3 # [b, s, d]
+
+    rmat = torch.randn(X.size(0), X.size(2), num_hash * hash_len, device = X.device)
+    raise_pow = 2 ** torch.arange(hash_len, device = X.device)
+
+    Xp = torch.matmul(X, rmat).reshape(X.size(0), X.size(1), num_hash, hash_len)
+    Yp = torch.matmul(Y, rmat).reshape(Y.size(0), Y.size(1), num_hash, hash_len)
+    Xb = (Xp > 0).int()
+    Yb = (Yp > 0).int()
+    Xh = torch.sum(Xb * raise_pow, dim = -1)
+    Yh = torch.sum(Yb * raise_pow, dim = -1)
+    return Xh.int(), Yh.int()
+
 class Cumulation(torch.autograd.Function):
     @staticmethod
     def forward(ctx, Q_mask, K_mask, Q, K, V, config):
@@ -118,6 +143,65 @@ class Cumulation(torch.autograd.Function):
         grad_Q = torch.matmul(weighted_exp, (hash_code_len / 2) * K)
         grad_K = torch.matmul(weighted_exp.transpose(-1, -2), (hash_code_len / 2) * Q)
         grad_V = torch.matmul(expectation.transpose(-1, -2), grad)
+
+        return None, None, grad_Q, grad_K, grad_V, None
+
+class LSHCumulation(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, Q_mask, K_mask, Q, K, V, config):
+
+        assert Q_mask.size(0) == K_mask.size(0)
+        assert Q_mask.size(0) == Q.size(0)
+        assert Q_mask.size(0) == K.size(0)
+        assert Q_mask.size(0) == V.size(0)
+        assert K.size(1) == V.size(1)
+        assert Q.size(2) == K.size(2)
+
+        Q_mask, K_mask, Q, K, V = to_contiguous([Q_mask, K_mask, Q, K, V])
+
+        use_cuda = Q_mask.is_cuda
+        num_hash = config["num_hash"]
+        hash_code_len = config["hash_code_len"]
+        hashtable_capacity = int(2 ** hash_code_len)
+
+        if config["use_fast_hash"]:
+            Q_hash_code, K_hash_code = lsh_cumulation.fast_hash(Q_mask, Q, K_mask, K, num_hash, hash_code_len, use_cuda, 1)
+        else:
+            Q_hash_code, K_hash_code = hashing(Q, K, num_hash, hash_code_len)
+
+        cumulation_V = lsh_cumulation.lsh_cumulation(Q_mask, Q_hash_code, K_mask, K_hash_code, V, hashtable_capacity, use_cuda, 1)
+
+        ctx.save_for_backward(Q_mask, K_mask, Q_hash_code, K_hash_code, Q, K, V)
+        ctx.config = config
+
+        return cumulation_V
+
+    @staticmethod
+    def backward(ctx, grad):
+
+        grad = to_contiguous(grad)
+
+        Q_mask, K_mask, Q_hash_code, K_hash_code, Q, K, V = ctx.saved_tensors
+        config = ctx.config
+
+        use_cuda = grad.is_cuda
+        hash_code_len = config["hash_code_len"]
+        hashtable_capacity = int(2 ** hash_code_len)
+        V_dim = grad.size(-1)
+
+        if config["n2_backward"]:
+            expectation = (1 - torch.acos(torch.matmul(Q, K.transpose(-1, -2))) / math.pi) ** hash_code_len
+            expectation = expectation * Q_mask[:, :, None] * K_mask[:, None, :]
+            weighted_exp = torch.matmul(grad, V.transpose(-1, -2)) * expectation
+            grad_Q = torch.matmul(weighted_exp, (hash_code_len / 2) * K)
+            grad_K = torch.matmul(weighted_exp.transpose(-1, -2), (hash_code_len / 2) * Q)
+            grad_V = torch.matmul(expectation.transpose(-1, -2), grad)
+        else:
+            grad_V = lsh_cumulation.lsh_cumulation(K_mask, K_hash_code, Q_mask, Q_hash_code, grad, hashtable_capacity, use_cuda, 1)
+            grad_Q = lsh_cumulation.lsh_weighted_cumulation(
+                Q_mask, Q_hash_code, grad, K_mask, K_hash_code, V, (hash_code_len / 2) * K, hashtable_capacity, use_cuda, 4)
+            grad_K = lsh_cumulation.lsh_weighted_cumulation(
+                K_mask, K_hash_code, V, Q_mask, Q_hash_code, grad, (hash_code_len / 2) * Q, hashtable_capacity, use_cuda, 4)
 
         return None, None, grad_Q, grad_K, grad_V, None
 
@@ -202,9 +286,19 @@ class YosoSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = position_embedding_type or getattr(config, "position_embedding_type", "absolute")
 
+        self.use_expectation = config.use_expectation
         self.hash_code_len = config.hash_code_len
-        self.lsh_config = {"hash_code_len":self.hash_code_len}
         self.use_conv = config.conv_window is not None
+        self.use_fast_hash = config.use_fast_hash
+        self.num_hash = config.num_hash
+        self.n2_backward = config.n2_backward
+
+        self.lsh_config = {
+            "hash_code_len":self.hash_code_len,
+            "use_fast_hash":self.use_fast_hash,
+            "num_hash":self.num_hash,
+            "n2_backward":self.n2_backward
+        }
 
         if config.conv_window is not None:
             self.conv = nn.Conv2d(
@@ -245,13 +339,23 @@ class YosoSelfAttention(nn.Module):
         K = key_layer.reshape(batch_size * num_heads, seq_len, head_dim)
         V = value_layer.reshape(batch_size * num_heads, seq_len, head_dim)
 
-        #print('batch size ', batch_size, 'num heads ', num_heads, 'seq len ', seq_len, 'head dim', head_dim)
-        #print(Q.size(), K.size(), V.size(), mask.size())
-
         mask = mask.squeeze().repeat(1, num_heads, 1).reshape(batch_size * num_heads, seq_len)
 
-        Q, K = normalize([Q, K])
-        X = Cumulation.apply(mask, mask, Q, K, V, self.lsh_config)
+        if (not self.use_expectation) and head_dim < 32:
+            Q = torch.cat([Q, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device = Q.device)], dim = -1)
+            K = torch.cat([K, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device = K.device)], dim = -1)
+            V = torch.cat([V, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device = V.device)], dim = -1)
+
+        if self.use_expectation or self.training:
+            Q, K = normalize([Q, K])
+
+        if self.use_expectation:            
+            X = Cumulation.apply(mask, mask, Q, K, V, self.lsh_config)
+        else:
+            X = LSHCumulation.apply(mask, mask, Q, K, V, self.lsh_config)
+
+        if (not self.use_expectation) and head_dim < 32:
+            X = X[:, :, :head_dim]
 
         X = normalize(X)
 
