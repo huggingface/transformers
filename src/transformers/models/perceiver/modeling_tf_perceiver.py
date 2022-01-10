@@ -9,7 +9,7 @@ from ...modeling_tf_utils import TFPreTrainedModel
 from .configuration_perceiver import PerceiverConfig
 from typing import Dict, Mapping, Callable, Any, Optional, Tuple
 from ...file_utils import ModelOutput
-from ...modeling_tf_utils import get_initializer
+from ...modeling_tf_utils import get_initializer, TFMaskedLanguageModelingLoss
 
 
 ModalitySizeType = Mapping[str, int]
@@ -55,6 +55,24 @@ class TFPerceiverMaskedLMOutput(ModelOutput):
     logits: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
+    cross_attentions: Optional[Tuple[tf.Tensor]] = None
+
+
+@dataclass
+class PerceiverDecoderOutput(ModelOutput):
+    """
+    Base class for Perceiver decoder outputs, with potential cross-attentions.
+
+    Args:
+        logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
+            Output of the basic decoder.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
+    """
+
+    logits: tf.Tensor = None
     cross_attentions: Optional[Tuple[tf.Tensor]] = None
 
 
@@ -128,6 +146,10 @@ class TFPerceiverSelfAttention(tf.keras.layers.Layer):
 
         attention_scores = tf.matmul(queries, keys, transpose_b=True)
         dk = tf.cast(self.qk_channels_per_head, dtype=attention_scores.dtype)
+
+        _, _, _, v_head_dim = shape_list(values)
+        hiddens = self.num_heads * v_head_dim
+
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
@@ -140,12 +162,12 @@ class TFPerceiverSelfAttention(tf.keras.layers.Layer):
         if head_mask is not None:
             attention_probs = tf.multiply(attention_probs, head_mask)
 
-        attention_output = tf.matmul(attention_probs, values)
-        attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
+        context_layer = tf.matmul(attention_probs, values)
+        context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])
+        new_context_layer_shape = shape_list(context_layer)[:-2] + [hiddens]
+        context_layer = tf.reshape(context_layer, new_context_layer_shape)
 
-        # (batch_size, seq_len_q, all_head_size)
-        attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.qk_channels))
-        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
 
@@ -507,6 +529,7 @@ class TFPerceiverModel(TFPerceiverPreTrainedModel):
             attention_mask = tf.fill(dims=(batch_size, seq_length), value=1.0)
         attention_mask_shape = shape_list(attention_mask)
         extended_attention_mask = tf.reshape(attention_mask, (attention_mask_shape[0], 1, 1, attention_mask_shape[1]))
+        extended_attention_mask = tf.cast(extended_attention_mask, dtype=tf.float32)
 
         if head_mask is not None:
             raise NotImplementedError
@@ -550,8 +573,9 @@ class TFPerceiverModel(TFPerceiverPreTrainedModel):
 
             if output_attentions and decoder_outputs.cross_attentions is not None:
                 if return_dict:
-                    encoder_outputs.cross_attentions = tf.add(
-                        encoder_outputs.cross_attentions, decoder_outputs.cross_attentions
+                    encoder_outputs.cross_attentions = (
+                        encoder_outputs.cross_attentions,
+                        decoder_outputs.cross_attentions,
                     )
                 else:
                     encoder_outputs = encoder_outputs + decoder_outputs.cross_attentions
@@ -574,7 +598,7 @@ class TFPerceiverModel(TFPerceiverPreTrainedModel):
         )
 
 
-class TFPerceiverForMaskedLM(TFPerceiverPreTrainedModel):
+class TFPerceiverForMaskedLM(TFPerceiverPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config):
         super(TFPerceiverForMaskedLM, self).__init__(config)
 
@@ -630,13 +654,15 @@ class TFPerceiverForMaskedLM(TFPerceiverPreTrainedModel):
         )
 
         logits = self.embedding_decoder(
-            outputs.logits if return_dict else outputs[0], embedding_layer=self.perceiver.input_preprocessor.embeddings
+            hidden_states=outputs.logits if return_dict else outputs[0],
+            embedding_layer=self.perceiver.input_preprocessor.embeddings,
         )
 
         masked_lm_loss = None
         if labels is not None:
-            loss_fct = tf.keras.losses.CategoricalCrossentropy(from_logits=True)  # -100 index = padding token
-            masked_lm_loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = self.compute_loss(labels=labels, logits=logits)
+            # loss_fct = tf.keras.losses.CategoricalCrossentropy(from_logits=True)  # -100 index = padding token
+            # masked_lm_loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -712,7 +738,7 @@ class TFPerceiverAbstractDecoder(tf.keras.layers.Layer, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def forward(self, query, z, query_mask=None):
+    def call(self, query, z, query_mask=None):
         raise NotImplementedError
 
 
@@ -740,7 +766,7 @@ class TFPerceiverBasicDecoder(TFPerceiverAbstractDecoder):
         position_encoding_only=False,
         **position_encoding_kwargs,
     ):
-        super(TFPerceiverBasicDecoder).__init__()
+        super(TFPerceiverBasicDecoder, self).__init__()
         self.output_num_channels = output_num_channels
         # If `none`, the decoder will not construct any position encodings.
         # You should construct your own when quering the decoder.
@@ -837,6 +863,30 @@ class TFPerceiverBasicDecoder(TFPerceiverAbstractDecoder):
 
         return pos_emb
 
+    def call(self, query, z, query_mask=None, output_attentions=False):
+        # Cross-attention decoding.
+        # key, value: B x N x K; query: B x M x K
+        # Attention maps -> B x N x M
+        # Output -> B x M x K
+        cross_attentions = () if output_attentions else None
+
+        layer_outputs = self.decoding_cross_attention(
+            query,
+            attention_mask=query_mask,
+            head_mask=None,
+            inputs=z,
+            inputs_mask=None,
+            output_attentions=output_attentions,
+        )
+        output = layer_outputs[0]
+
+        if output_attentions:
+            cross_attentions = cross_attentions + (layer_outputs[1],)
+
+        logits = self.final_layer(output)
+
+        return PerceiverDecoderOutput(logits=logits, cross_attentions=cross_attentions)
+
 
 class TFPerceiverClassificationDecoder:
     pass
@@ -875,7 +925,7 @@ class TFPerceiverTrainablePositionEncoding(TFPerceiverAbstractPositionEncoding):
     """Trainable position encoding."""
 
     def __init__(self, index_dims, num_channels=128):
-        super(TFPerceiverTrainablePositionEncoding).__init__()
+        super(TFPerceiverTrainablePositionEncoding, self).__init__()
         self._num_channels = num_channels
         self._index_dims = index_dims
         self._emb_dim = tf.reduce_prod(self._index_dims)
@@ -883,7 +933,7 @@ class TFPerceiverTrainablePositionEncoding(TFPerceiverAbstractPositionEncoding):
     def build(self, input_shape):
         self.position_embeddings = self.add_weight(
             shape=(self._emb_dim, self._num_channels),
-            initializer=get_initializer(self.config.initializer_range),
+            initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=1.0),
         )
         super().build(input_shape)
 
@@ -957,7 +1007,7 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
 
 class TFPerceiverFourierPositionEncoding(TFPerceiverAbstractPositionEncoding):
     def __init__(self, num_bands, max_resolution, concat_pos=True, sine_only=False):
-        super(TFPerceiverFourierPositionEncoding).__init__()
+        super(TFPerceiverFourierPositionEncoding, self).__init__()
         self.num_bands = num_bands
         self.max_resolution = max_resolution
         self.concat_pos = concat_pos
@@ -999,7 +1049,7 @@ class TFAbstractPreprocessor(tf.keras.layers.Layer):
 
 class TFPerceiverTextPreprocessor(TFAbstractPreprocessor):
     def __init__(self, config) -> None:
-        super(TFPerceiverTextPreprocessor).__init__()
+        super(TFPerceiverTextPreprocessor, self).__init__()
         self.config = config
         self.embeddings = tf.keras.layers.Embedding(input_dim=config.vocab_size, output_dim=config.d_model)
         self.position_embeddings = tf.keras.layers.Embedding(
@@ -1031,10 +1081,12 @@ class TFPerceiverEmbeddingDecoder(tf.keras.layers.Layer):
 
     def call(self, hidden_states, embedding_layer):
         batch_size, seq_len, d_model = shape_list(hidden_states)
-        output = tf.matmul(hidden_states.reshape([-1, d_model]), embedding_layer, transpose_b=True)  # Flatten batch dim
+        output = tf.matmul(
+            tf.reshape(hidden_states, [-1, d_model]), embedding_layer.get_weights()[0], transpose_b=True
+        )  # Flatten batch dim
         output = tf.add(output, self.bias)
 
-        return output.reshape([batch_size, seq_len, self.vocab_size])
+        return tf.reshape(output, [batch_size, seq_len, self.vocab_size])
 
 
 class TFPerceiverMultimodalPostprocessor:
