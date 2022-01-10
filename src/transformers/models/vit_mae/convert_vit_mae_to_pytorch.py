@@ -67,7 +67,7 @@ def convert_state_dict(orig_state_dict, config):
                 elif "bias" in key:
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
                     orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
             else:
                 dim = config.hidden_size
                 prefix = "vit.encoder.layer."
@@ -89,7 +89,6 @@ def convert_state_dict(orig_state_dict, config):
 def convert_vit_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     config = ViTMAEConfig()
     model = ViTMAEForPreTraining(config)
-    model.eval()
 
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
 
@@ -101,20 +100,17 @@ def convert_vit_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         print(k, v.shape)
 
     model.load_state_dict(new_state_dict)
+    model.eval()
 
     url = 'https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg'
 
     image = Image.open(requests.get(url, stream=True).raw)
     feature_extractor = ViTMAEFeatureExtractor(size=config.image_size)
     inputs = feature_extractor(images=image, return_tensors="pt")
-
-    print("Mean of pixel values:", inputs.pixel_values.mean())
-    print("Sum of pixel values:", inputs.pixel_values.sum())
     
     # forward pass
+    torch.manual_seed(2)
     outputs = model(**inputs)
-    print("Shape of logits:", outputs.logits.shape)
-    print("First values of logits:", outputs.logits[0, :3, :3])
 
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
