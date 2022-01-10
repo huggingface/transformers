@@ -1,25 +1,20 @@
 # Speech recognition community week - version 2 🤗
 
-Welcome to the 2nd version of the speech recognition community week! 
-The goal of this week is to make **robust** speech recognition models in as many 
-languages as possible.
-
-Welcome to the 2nd version of the speech recognition community event 🎙️ !
-The goal of this event is to build **robust**, **real-world** speech recognition (ASR) models in as many languages as possible 🌏🌍🌎.
+Welcome to the 2nd version of the speech recognition community event🎙️ !
+The goal of this event is to build **robust**, **real-world** speech recognition (ASR) models in as many languages as possible🌏🌍🌎.
 
 If necessary and available, free access to a V100 32 GB GPU will kindly be provided by the [OVH team](https://us.ovhcloud.com/) 🚀.
 
-This document summarizas all the relevant information required for the speech 
-community event 📋.
+This document summarizes all the relevant information required for the speech community event📋.
 
-Don't forget to sign up [here](TODO: Create google from) 🤗.
+Don't forget to sign up [here](TODO: Create google from)🤗.
 
 ## Table of Contents
 
 - [Organization](#organization)
 - [Important dates](#important-dates)
 - [How to install pytorch, transformers, datasets](#how-to-install-relevant-libraries)
-- [How to fine-tune a speech recognition model](#how-to-finetune-model)
+- [How to fine-tune a speech recognition model](#how-to-finetune-a-model)
 - [Talks](#talks)
 - [Project evaluation](#project-evaluation)
 - [General Tips & Tricks](#general-tips-and-tricks)
@@ -27,25 +22,25 @@ Don't forget to sign up [here](TODO: Create google from) 🤗.
 
 ## Organization
 
-Participants are encouraged to leverage pretrained speech recognition checkpoints,
-preferably [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53), to train a speech recognition system in a langauge of their 
+Participants are encouraged to leverage pre-trained speech recognition checkpoints,
+preferably [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53), to train a speech recognition system in a language of their 
 choice.
 
 Participants can make use of whatever data they think is useful to build a 
 **robust** speech recognition system for **real-world** audio data. We strongly 
-recommend to make use of [Mozilla's diverse Common Voice dataset](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0) when training the model.
+recommend making use of [Mozilla's diverse Common Voice dataset](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0) when training the model.
 Please do **not** use the `"test"` split of the Common Voice datasets for training
 as we will likely use this split for the final evaluation of your model.
 We kindly ask you to make sure that the dataset that you are using for training 
 has the appropriate licensing - see [here](TODO: ) for more information.
 
-During the event the fine-tuned models will regularly be tested on a **development 
-dataset** provided by the Hugging Face team and at the end of the event all models 
+During the event, the fine-tuned models will regularly be tested on a **development 
+dataset** provided by the Hugging Face team and at the end of the event, all models 
 will be tested on a **test dataset**. For each language, 
 the best performing model will receive a prize 🏆 - more information regarding 
 the testing [here](TODO: ) and prizes [here](TODO: ). We believe that framing the 
-event as a competition is more fun, but at the core we strongly encourage 
-participants to work together by helping each other to solve bugs, share important findings, etc... 🤗.
+event as a competition is more fun, but at the core, we strongly encourage 
+participants to work together by helping each other to solve bugs, share important findings, etc...🤗
 
 If possible it is encouraged to fine-tune the models on local GPU machines, but 
 if those are not available, the OVH cloud team kindly provides a limited 
@@ -53,7 +48,7 @@ number of GPUs for the event. For more information on how to get access to the G
 
 
 **Please note**:
-All important announcement will be made on discord. Please make sure that 
+All important announcements will be made on discord. Please make sure that 
 you've joined the following discord server: TODO: fill out.
 Please make sure that you have been added to the [Speech Event Organization](https://huggingface.co/speech-recognition-community-v2). You should have received an 
 invite by email. If you didn't receive an invite, please contact the organizers, *e.g.* Anton, Patrick, or Omar on discord.
@@ -61,8 +56,8 @@ invite by email. If you didn't receive an invite, please contact the organizers,
 
 ## Important dates
 
-- **12.01.** Officail announcement of the community event. Make sure to sign-up in [this google form](TODO: )
-- **12.01. - 19.01.** Participants will be signed up to the event.
+- **12.01.** Official announcement of the community event. Make sure to sign-up in [this google form](TODO: )
+- **12.01. - 19.01.** Participants sign up for the event.
 - **19.01.** Release of all relevant guides and training scripts.
 - **24.01.** Start of the community week! OVH & Hugging Face gives access to GPUs.
 - **24.01. - 07.02.** The OVH & Hugging Face team will be available for any questions, problems the participants might have.
@@ -76,7 +71,7 @@ The following libraries are required to fine-tune a speech model with 🤗 Trans
 - [Transformers](https://github.com/huggingface/transformers)
 - [Datasets](https://github.com/huggingface/datasets)
 
-We recommend to install the above libraries in a [virtual environment](https://docs.python.org/3/library/venv.html). 
+We recommend installing the above libraries in a [virtual environment](https://docs.python.org/3/library/venv.html). 
 If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). Create a virtual environment with the version of Python you're going
 to use and activate it.
 
@@ -102,9 +97,9 @@ python -c "import torch; print(torch.cuda.is_available())"
 If the above command doesn't print ``True``, in a first step, please follow the
 instructions [here](https://pytorch.org/) to install PyTorch with CUDA.
 
-We strongly recommend to make use of the provided PyTorch examples scripts in [transformers/examples/pytorch/speech-recognition](https://github.com/huggingface/transformers/tree/master/examples/pytorch/speech-recognition) to train your speech recognition
+We strongly recommend making use of the provided PyTorch examples scripts in [transformers/examples/pytorch/speech-recognition](https://github.com/huggingface/transformers/tree/master/examples/pytorch/speech-recognition) to train your speech recognition
 system.
-In all likelihood, you will adapt one of the example scripts, so we recommend forking and cloning the 🤗 Transformers repository as follows. 
+In all likelihood, you will adjust one of the example scripts, so we recommend forking and cloning the 🤗 Transformers repository as follows. 
 
 1. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the 'Fork' button on the repository's page. This creates a copy of the code
@@ -137,7 +132,7 @@ In all likelihood, you will adapt one of the example scripts, so we recommend fo
    If you have already cloned that repo, you might need to `git pull` to get the most recent changes in the `transformers`
    library.
 
-   Running this command will automatically install `pytorch` and most relevant 
+   Running this command will automatically install `pytorch` and the most relevant 
    libraries required for fine-tuning a speech recognition system.
 
 Next, you should also install the 🤗 Datasets library. We strongly recommend installing the 
@@ -157,7 +152,7 @@ the community week, please fork the datasets repository and follow the instructi
 [here](https://github.com/huggingface/datasets/blob/master/CONTRIBUTING.md#how-to-create-a-pull-request).
 
 To verify that all libraries are correctly installed, you can run the following command in a Python shell.
-It verifies that both `transformers` and `datasets` have been correcly installed.
+It verifies that both `transformers` and `datasets` have been correclty installed.
 
 ```python
 from transformers import AutoModelForCTC, AutoProcessor
@@ -178,21 +173,21 @@ logits = model(input_values).logits
 assert logits.shape[-1] == 32
 ```
 
-## How to finetune model
+## How to finetune a model
 
-In this section we show you how to fine-tune a pretrained [XLS-R Model](https://huggingface.co/docs/transformers/model_doc/xls_r) on the [Common Voice 7 dataset](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0). 
+In this section, we show you how to fine-tune a pre-trained [XLS-R Model](https://huggingface.co/docs/transformers/model_doc/xls_r) on the [Common Voice 7 dataset](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0). 
 
-We recommend to fine-tune one of the following pretrained XLS-R checkpoints:
+We recommend fine-tuning one of the following pre-trained XLS-R checkpoints:
 
 - [300M parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-300m)
 - [1B parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-1b)
 - [2B parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-2b)
 
-To begin with please note that in order to use the Common Voice dataset, you 
-have to accept that **your email address** and **username** is shared with the 
+To begin with, please note that to use the Common Voice dataset, you 
+have to accept that **your email address** and **username** are shared with the 
 mozilla-foundation. To get access to the dataset please click on "*Access repository*" [here](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0).
 
-Next, we recommend that you get familiar with the XLS-R model and its capatibilites.
+Next, we recommended that you get familiar with the XLS-R model and its capabilities.
 In collaboration with [Fairseq's Wav2Vec2 team](https://github.com/pytorch/fairseq/tree/main/examples/wav2vec), 
 we've written ["Fine-tuning XLS-R for Multi-Lingual ASR with 🤗 Transformers"](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2) which gives an in-detail explanation of how XLS-R functions and how it can be fine-tuned.
 
@@ -209,7 +204,7 @@ huggingface-cli login
 
 to login. It is recommend to login with your personal access token that can be found under your hugging face profile (icon in the top right corner on [hf.co](http://hf.co/), then Settings -> Access Tokens -> User Access Tokens -> New Token (if haven't generated one already)
 
-You can then copy paste this token to login locally.
+You can then copy-paste this token to log in locally.
 
 2. Create your model repository
 
@@ -246,7 +241,7 @@ git lfs install
 git clone https://huggingface.co/hf-test/xls-r-ab-test
 ```
 
-3. Add you training script and run command to the repository
+3. Add your training script and `run`-command to the repository
 
 We encourage participants to add all relevant files for training directly to the 
 directory so that everything is fully reproducible.
@@ -273,7 +268,7 @@ Alright, finally we can define the training script. We'll simply use some
 dummy hyper-parameters and configurations for demonstration purposes.
 
 Note that we add the flag `--use_auth_token` so that datasets requiring access, 
-such as [Common Voice 7](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0) can be downloaded. In addition we add the `--push_to_hub` flag to make use of the 
+such as [Common Voice 7](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0) can be downloaded. In addition, we add the `--push_to_hub` flag to make use of the 
 [Trainers `push_to-hub` functionality](https://huggingface.co/docs/transformers/master/en/main_classes/trainer#transformers.Trainer.push_to_hub) so that your model will be automatically uploaded to the Hub.
 
 Let's copy the following code snippet in a file called `run.sh`
@@ -316,17 +311,17 @@ The training should not take more than a couple of minutes.
 During the training intermediate saved checkpoints are automatically uploaded to
 your model repository as can be seen [on this commit](https://huggingface.co/hf-test/xls-r-ab-test/commit/0eb19a0fca4d7d163997b59663d98cd856022aa6) . 
 
-At the end of the training the [Trainer](https://huggingface.co/docs/transformers/master/en/main_classes/trainer) automatically creates a nice model card and all 
+At the end of the training, the [Trainer](https://huggingface.co/docs/transformers/master/en/main_classes/trainer) automatically creates a nice model card and all 
 relevant files are uploaded.
 
 5. Tips for real model training
 
 The above steps illustrate how a model can technically be fine-tuned.
 However as you can see on the model card [hf-test/xls-r-ab-test](https://huggingface.co/hf-test/xls-r-ab-test), our demonstration has a very poor performance which is
-not surprising given that we trained for just 10 steps on a randomely initialized
+not surprising given that we trained for just 10 steps on a randomly initialized
 model.
 
-For a real model training, one of the actual pretrained XLS-R models should be used:
+For a real model training, one of the actual pre-trained XLS-R models should be used:
 
 - [300M parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-300m)
 - [1B parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-1b)
@@ -390,9 +385,9 @@ echo '''python run_speech_recognition_ctc.py \
 	--push_to_hub''' > run.sh
 ```
 
-The training takes *ca.* 7 hours and yields a pretty reasonable test word 
-error rate as can be seen on the automatically generated [model card](https://huggingface.co/hf-test/xls-r-300m-sv).
+The training takes *ca.* 7 hours and yields a reasonable test word 
+error rate of 27% as can be seen on the automatically generated [model card](https://huggingface.co/hf-test/xls-r-300m-sv).
 
-The above chosen hyperparameters probably work quite well on a range of different 
-datasets, but are by no means optimal. It is up to you to find a good set of 
+The above-chosen hyperparameters probably work quite well on a range of different 
+datasets and languages, but are by no means optimal. It is up to you to find a good set of 
 hyperparameters.
