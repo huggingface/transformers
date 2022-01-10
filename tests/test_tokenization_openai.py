@@ -20,13 +20,14 @@ import unittest
 
 from transformers import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from transformers.models.openai.tokenization_openai import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_tokenizers
+from transformers.testing_utils import require_ftfy, require_spacy, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
 class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    """Tests OpenAIGPTTokenizer that uses BERT BasicTokenizer."""
 
     tokenizer_class = OpenAIGPTTokenizer
     rust_tokenizer_class = OpenAIGPTTokenizerFast
@@ -132,3 +133,12 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # tokenizer has no padding token
     def test_padding_different_model_input_name(self):
         pass
+
+
+@require_ftfy
+@require_spacy
+@require_tokenizers
+class OpenAIGPTTokenizationTestWithSpacy(OpenAIGPTTokenizationTest):
+    """Tests OpenAIGPTTokenizer that uses SpaCy and ftfy."""
+
+    pass
