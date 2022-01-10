@@ -811,7 +811,8 @@ class TrainingArguments:
                 raise ValueError("sharded_ddp is not supported with bf16")
         if (
             is_torch_available()
-            and (self.device.type != "cuda" and self.device.type != "xla")
+            and (self.device.type != "cuda")
+            and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
             and (self.fp16 or self.fp16_full_eval or self.bf16 or self.bf16_full_eval)
         ):
             raise ValueError(
