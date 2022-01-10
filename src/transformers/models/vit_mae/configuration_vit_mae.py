@@ -73,6 +73,10 @@ class ViTMAEConfig(PretrainedConfig):
             Number of hidden layers in the decoder.
         decoder_intermediate_size (`int`, *optional*, defaults to `2048`):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
+        mask_ratio (`float`, *optional*, defaults to `0.75`):
+            The ratio of the number of masked tokens in the input sequence.
+        norm_pix_loss (`bool`, *optional*, defaults to `False`):
+            Whether to normalize the pixel loss.
 
     Example:
 
@@ -110,6 +114,8 @@ class ViTMAEConfig(PretrainedConfig):
         decoder_hidden_size=512,
         decoder_num_hidden_layers=8,
         decoder_intermediate_size=2048,
+        mask_ratio=0.75,
+        norm_pix_loss=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -131,3 +137,5 @@ class ViTMAEConfig(PretrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.decoder_num_hidden_layers = decoder_num_hidden_layers
         self.decoder_intermediate_size = decoder_intermediate_size
+        self.mask_ratio = mask_ratio
+        self.norm_pix_loss = norm_pix_loss
