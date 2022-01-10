@@ -77,7 +77,7 @@ def deepspeed_inference_init(trainer, model_arch):
     deepspeed_inference_engine = deepspeed.init_inference(
         trainer.model,
         mp_size=args.world_size,
-        dtype=torch.half if args. fp16 else torch.float,  # XXX: Reza: how to define other types? ds config file?
+        dtype=torch.half if args.fp16 else torch.float,  # XXX: Reza: how to define other types? ds config file?
         **kwargs,
     )
 
