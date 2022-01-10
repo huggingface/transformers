@@ -76,7 +76,7 @@ class ViTMAEConfig(PretrainedConfig):
         mask_ratio (`float`, *optional*, defaults to `0.75`):
             The ratio of the number of masked tokens in the input sequence.
         norm_pix_loss (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the pixel loss.
+            Whether train with normalized pixels (see Table 3 in the paper).
 
     Example:
 

@@ -21,6 +21,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -142,8 +143,51 @@ def to_2tuple(x):
     return (x, x)
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
+def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
+    """
+    grid_size: int of the grid height and width return: pos_embed: [grid_size*grid_size, embed_dim] or
+    [1+grid_size*grid_size, embed_dim] (w/ or w/o cls_token)
+    """
+    grid_h = np.arange(grid_size, dtype=np.float32)
+    grid_w = np.arange(grid_size, dtype=np.float32)
+    grid = np.meshgrid(grid_w, grid_h)  # here w goes first
+    grid = np.stack(grid, axis=0)
+
+    grid = grid.reshape([2, 1, grid_size, grid_size])
+    pos_embed = get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
+    if cls_token:
+        pos_embed = np.concatenate([np.zeros([1, embed_dim]), pos_embed], axis=0)
+    return pos_embed
+
+
+def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
+    assert embed_dim % 2 == 0
+
+    # use half of dimensions to encode grid_h
+    emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0])  # (H*W, D/2)
+    emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[1])  # (H*W, D/2)
+
+    emb = np.concatenate([emb_h, emb_w], axis=1)  # (H*W, D)
+    return emb
+
+
+def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
+    """
+    embed_dim: output dimension for each position pos: a list of positions to be encoded: size (M,) out: (M, D)
+    """
+    assert embed_dim % 2 == 0
+    omega = np.arange(embed_dim // 2, dtype=np.float)
+    omega /= embed_dim / 2.0
+    omega = 1.0 / 10000 ** omega  # (D/2,)
+
+    pos = pos.reshape(-1)  # (M,)
+    out = np.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
+
+    emb_sin = np.sin(out)  # (M, D/2)
+    emb_cos = np.cos(out)  # (M, D/2)
+
+    emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
+    return emb
 
 
 class ViTMAEEmbeddings(nn.Module):
@@ -168,6 +212,22 @@ class ViTMAEEmbeddings(nn.Module):
             torch.zeros(1, self.num_patches + 1, config.hidden_size), requires_grad=False
         )
         self.config = config
+        self.initialize_weights()
+
+    def initialize_weights(self):
+        # initialization
+        # initialize (and freeze) pos_embed by sin-cos embedding
+        pos_embed = get_2d_sincos_pos_embed(
+            self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches ** 0.5), cls_token=True
+        )
+        self.position_embeddings.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+
+        # initialize patch_embeddings like nn.Linear (instead of nn.Conv2d)
+        w = self.patch_embeddings.projection.weight.data
+        torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+
+        # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
+        torch.nn.init.normal_(self.cls_token, std=0.02)
 
     def random_masking(self, x):
         """
@@ -499,18 +559,13 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            # we use xavier_uniform following official JAX ViT:
+            torch.nn.init.xavier_uniform_(module.weight)
+            if isinstance(module, nn.Linear) and module.bias is not None:
+                nn.init.constant_(module.bias, 0)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ViTMAEEncoder):
