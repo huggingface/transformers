@@ -438,10 +438,10 @@ You can also see a variety of benchmarks on tf32 vs other precisions:
 
 ### Gradient Accumulation
 
-Besides using gradient accumulation when a larger batch size is needed and can't normally be fit into the gpu's memory, enabling can also provide a 20-30% speed up as it runs the optimizer less often, e.g. see benchmarks for [RTX-3090](https://github.com/huggingface/transformers/issues/14608#issuecomment-1004392537)
+Since gradient accumulation essentially is identical to having a larger batch size, just as with the larger batch size here you are likely to see a 20-30% speedup due to the optimizer running less often. For example, see benchmarks for [RTX-3090](https://github.com/huggingface/transformers/issues/14608#issuecomment-1004392537)
 and [A100](https://github.com/huggingface/transformers/issues/15026#issuecomment-1004592231).
 
-To activate this feature in 🤗 Trainer add `--gradient_accumulation_steps 4` to its arguments (experiment with the value to get the best performance.
+To activate this feature in 🤗 Trainer add `--gradient_accumulation_steps 4` to its arguments (experiment with the value to get the best performance).
 
 It's important to remember that using gradient accumulation you may end up with a much larger effective batch size, so you may need to adjust the learning rate, its warm up and for very short datasets it'll impact the loss as the training will end up doing less steps than normal.
 
