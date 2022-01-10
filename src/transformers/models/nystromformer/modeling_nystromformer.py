@@ -162,7 +162,7 @@ class NystromformerSelfAttention(nn.Module):
                 groups=self.num_attention_heads,
             )
 
-    # Function to approximate Moore-Penrose inverse via the iterative method 
+    # Function to approximate Moore-Penrose inverse via the iterative method
     def iterative_inv(self, mat, n_iter=6):
         identity = torch.eye(mat.size(-1), device=mat.device)
         key = mat
@@ -177,7 +177,11 @@ class NystromformerSelfAttention(nn.Module):
 
         for _ in range(n_iter):
             key_value = torch.matmul(key, value)
-            value = torch.matmul(0.25 * value, 13 * identity - torch.matmul(key_value, 15 * identity - torch.matmul(key_value, 7 * identity - key_value)))
+            value = torch.matmul(
+                0.25 * value,
+                13 * identity
+                - torch.matmul(key_value, 15 * identity - torch.matmul(key_value, 7 * identity - key_value)),
+            )
         return value
 
     def transpose_for_scores(self, layer):
@@ -265,6 +269,7 @@ class NystromformerSelfOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
+
 
 class NystromformerAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
@@ -911,14 +916,16 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
         super().__init__(config)
 
         self.nystromformer = NystromformerModel(config)
-        classifier_dropout = (config.hidden_dropout_prob)
+        classifier_dropout = config.hidden_dropout_prob
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(NYSTROMFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        NYSTROMFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -990,6 +997,7 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 @add_start_docstrings(
     """
