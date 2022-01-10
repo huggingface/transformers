@@ -140,7 +140,8 @@ def get_model_table_from_auto_modules():
 
     # Build the table per se
     table = "|" + "|".join([_center_text(c, w) for c, w in zip(columns, widths)]) + "|\n"
-    table += "|" + "|".join(["-" * w for w in widths]) + "|\n"
+    # Use ":-----:" format to center-aligned table cell texts
+    table += "|" + "|".join([":" + "-" * (w - 2) + ":" for w in widths]) + "|\n"
 
     check = {True: "✅", False: "❌"}
     for name in model_names:
