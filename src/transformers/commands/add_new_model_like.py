@@ -19,7 +19,7 @@ from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple, Union
 
 import transformers.models.auto as auto_module
 from transformers.models.auto.configuration_auto import model_type_to_module_name
@@ -90,11 +90,14 @@ class ModelPatterns:
             self.tokenizer_class = f"{self.model_camel_cased}Tokenizer"
 
 
-def is_empty_line(line):
+def is_empty_line(line: str) -> bool:
+    """
+    Determines whether a line is empty or not.
+    """
     return len(line) == 0 or line.isspace()
 
 
-def find_indent(line):
+def find_indent(line: str) -> int:
     """
     Returns the number of spaces that start a line indent.
     """
@@ -104,7 +107,7 @@ def find_indent(line):
     return len(search.groups()[0])
 
 
-def parse_module_content(content: str):
+def parse_module_content(content: str) -> List[str]:
     """
     Parse the content of a module in the list of objects it defines.
 
@@ -141,7 +144,13 @@ def parse_module_content(content: str):
     return objects
 
 
-def add_content_to_text(text, content, add_after=None, add_before=None, exact_match=False):
+def add_content_to_text(
+    text: str,
+    content: str,
+    add_after: Optional[Union[str, re.Pattern]] = None,
+    add_before: Optional[Union[str, re.Pattern]] = None,
+    exact_match: bool = False,
+) -> str:
     """
     A utility to add some content inside a given text.
 
@@ -156,8 +165,11 @@ def add_content_to_text(text, content, add_after=None, add_before=None, exact_ma
            A line is considered a match with `add_after` or `add_before` if it matches exactly when `exact_match=True`,
            otherwise, if `add_after`/`add_before` is present in the line.
 
-    <Tip warning={true}> The arguments `add_after` and `add_before` are mutually exclusive, and one exactly needs to be
-    provided. </Tip>
+    <Tip warning={true}>
+
+    The arguments `add_after` and `add_before` are mutually exclusive, and one exactly needs to be provided.
+
+    </Tip>
 
     Returns:
         `str`: The text with the new content added if a match was found.
@@ -190,7 +202,13 @@ def add_content_to_text(text, content, add_after=None, add_before=None, exact_ma
     return "\n".join(new_lines)
 
 
-def add_content_to_file(file_name, content, add_after=None, add_before=None, exact_match=False):
+def add_content_to_file(
+    file_name: Union[str, os.PathLike],
+    content: str,
+    add_after: Optional[Union[str, re.Pattern]] = None,
+    add_before: Optional[Union[str, re.Pattern]] = None,
+    exact_match: bool = False,
+):
     """
     A utility to add some content inside a given file.
 
@@ -205,8 +223,11 @@ def add_content_to_file(file_name, content, add_after=None, add_before=None, exa
            A line is considered a match with `add_after` or `add_before` if it matches exactly when `exact_match=True`,
            otherwise, if `add_after`/`add_before` is present in the line.
 
-    <Tip warning={true}> The arguments `add_after` and `add_before` are mutually exclusive, and one exactly needs to be
-    provided. </Tip>
+    <Tip warning={true}>
+
+    The arguments `add_after` and `add_before` are mutually exclusive, and one exactly needs to be provided.
+
+    </Tip>
     """
     with open(file_name, "r", encoding="utf-8") as f:
         old_content = f.read()
@@ -219,7 +240,9 @@ def add_content_to_file(file_name, content, add_after=None, add_before=None, exa
         f.write(new_content)
 
 
-def replace_model_patterns(text: str, old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns):
+def replace_model_patterns(
+    text: str, old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns
+) -> Tuple[str, str]:
     """
     Replace all patterns present in a given text.
 
@@ -288,7 +311,7 @@ def replace_model_patterns(text: str, old_model_patterns: ModelPatterns, new_mod
     return text, ",".join(replacements)
 
 
-def get_module_from_file(module_file):
+def get_module_from_file(module_file: Union[str, os.PathLike]) -> str:
     """
     Returns the module name corresponding to a module file.
     """
@@ -405,7 +428,7 @@ def duplicate_module(
         content = f.write("\n".join(new_objects))
 
 
-def get_model_files(model_type):
+def get_model_files(model_type: str) -> Dict[str, Union[Path, List[Path]]]:
     """
     Retrieves all the files associated to a model.
 
@@ -413,7 +436,7 @@ def get_model_files(model_type):
         model_type (`str`): A valid model type (like "bert" or "gpt2")
 
     Returns:
-        `Dict[str, [Path, List[Path]]]`: A dictionary with the following keys:
+        `Dict[str, Union[Path, List[Path]]]`: A dictionary with the following keys:
         - **doc_file** -- The documentation file for the model.
         - **model_files** -- All the files in the model module.
         - **test_files** -- The test files for the model.
@@ -443,7 +466,20 @@ def get_model_files(model_type):
 _re_checkpoint_for_doc = re.compile("^_CHECKPOINT_FOR_DOC\s+=\s+(\S*)\s*$", flags=re.MULTILINE)
 
 
-def find_base_model_checkpoint(model_type, model_files=None):
+def find_base_model_checkpoint(
+    model_type: str, model_files: Optional[Dict[str, Union[Path, List[Path]]]] = None
+) -> str:
+    """
+    Finds the model checkpoint used in the docstrings for a given model.
+
+    Args:
+        model_type (`str`): A valid model type (like "bert" or "gpt2")
+        model_files (`Dict[str, Union[Path, List[Path]]`, *optional*):
+            The files associated to `model_type`. Can be passed to speed up the function, otherwise will be computed.
+
+    Returns:
+        `str`: The checkpoint used.
+    """
     if model_files is None:
         model_files = get_model_files(model_type)
     module_files = model_files["model_files"]
@@ -467,7 +503,20 @@ def find_base_model_checkpoint(model_type, model_files=None):
 _re_model_mapping = re.compile("MODEL_([A-Z_]*)MAPPING_NAMES")
 
 
-def retrieve_model_classes(model_type, frameworks=None):
+def retrieve_model_classes(model_type: str, frameworks: Optional[List[str]] = None) -> Dict[str, List[str]]:
+    """
+    Retrieve the model classes associated to a given model.
+
+    Args:
+        model_type (`str`): A valid model type (like "bert" or "gpt2")
+        frameworks (`List[str]`, *optional*):
+            The frameworks to look for. Will default to `["pt", "tf", "flax"]`, passing a smaller list will restrict
+            the classes returned.
+
+    Returns:
+        `Dict[str, List[str]]`: A dictionary with one key per framework and the list of model classes associated to
+        that framework as values.
+    """
     if frameworks is None:
         frameworks = ["pt", "tf", "flax"]
 
@@ -502,6 +551,9 @@ def retrieve_info_for_model(model_type):
 
     Returns:
         `Dict`: A dictionary with the following keys:
+        - **frameworks** (`List[str]`): The list of frameworks that back this model type.
+        - **model_classes** (`Dict[str, List[str]]`): The model classes implemented for that model type.
+        - **model_files** (`Dict[str, Union[Path, List[Path]]]`): The files associated with that model type.
         - **model_patterns** (`ModelPatterns`): The various patterns for the model.
     """
     if model_type not in auto_module.MODEL_NAMES_MAPPING:
@@ -548,7 +600,7 @@ def retrieve_info_for_model(model_type):
 _re_sentencepiece_tokenizers = re.compile(r"^\s*if is_(sentencepiece|tokenizers)_available\(\):\s*$")
 
 
-def clean_tokenization_in_init(init_file):
+def clean_tokenization_in_init(init_file: Union[str, os.PathLike]):
     """
     Removes all the import lines for tokenization in an init.
     """
@@ -588,7 +640,18 @@ def clean_tokenization_in_init(init_file):
         f.write("\n".join(new_lines))
 
 
-def add_model_to_main_init(old_model_patterns, new_model_patterns, with_tokenizer=True):
+def add_model_to_main_init(
+    old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns, with_tokenizer: bool = Tru
+):
+    """
+    Add a model to the main init of Transformers.
+
+    Args:
+        old_model_patterns (`ModelPatterns`): The patterns for the old model.
+        new_model_patterns (`ModelPatterns`): The patterns for the new model.
+        with_tokenizer (`bool`, *optional*, defaults to `True`):
+            Whether the tokenizer of the model should also be added to the init or not.
+    """
     with open(TRANSFORMERS_PATH / "__init__.py", "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -624,7 +687,14 @@ def add_model_to_main_init(old_model_patterns, new_model_patterns, with_tokenize
         f.write("\n".join(new_lines))
 
 
-def insert_tokenizer_in_auto_module(old_model_patterns, new_model_patterns):
+def insert_tokenizer_in_auto_module(old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns):
+    """
+    Add a tokenizer to the relevant mappings in the auto module.
+
+    Args:
+        old_model_patterns (`ModelPatterns`): The patterns for the old model.
+        new_model_patterns (`ModelPatterns`): The patterns for the new model.
+    """
     with open(TRANSFORMERS_PATH / "models" / "auto" / "tokenization_auto.py", "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -673,8 +743,17 @@ AUTO_CLASSES_PATTERNS = {
 }
 
 
-def add_model_to_auto_classes(old_model_patterns, new_model_patterns, model_classes):
+def add_model_to_auto_classes(
+    old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns, model_classes: Dict[str, List[str]]
+):
+    """
+    Add a model to the relevant mappings in the auto module.
 
+    Args:
+        old_model_patterns (`ModelPatterns`): The patterns for the old model.
+        new_model_patterns (`ModelPatterns`): The patterns for the new model.
+        model_classes (`Dict[str, List[str]]`): A dictionary framework to list of model classes implemented.
+    """
     for file in AUTO_CLASSES_PATTERNS:
         # Extend patterns with all model classes if necessary
         new_patterns = []
