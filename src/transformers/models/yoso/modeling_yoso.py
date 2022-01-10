@@ -51,6 +51,7 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_yoso import YosoConfig
+from torch.utils.cpp_extension import load
 
 src_folder = os.path.dirname(os.path.realpath(__file__))
 append_root = lambda files : [os.path.join(src_folder, file) for file in files]
@@ -58,7 +59,7 @@ src_files = append_root(
     ['fast_lsh_cumulation_torch.cpp',
      'fast_lsh_cumulation.cu',
      'fast_lsh_cumulation_cuda.cu'])
-fast_lsh_cumulation = torch.utils.cpp_extension.load('fast_lsh_cumulation', src_files, verbose = True)
+fast_lsh_cumulation = load('fast_lsh_cumulation', src_files, verbose = True)
 
 import fast_lsh_cumulation as lsh_cumulation
 
