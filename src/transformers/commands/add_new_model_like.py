@@ -19,7 +19,7 @@ from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Pattern, Tuple, Union
 
 import transformers.models.auto as auto_module
 from transformers.models.auto.configuration_auto import model_type_to_module_name
@@ -147,8 +147,8 @@ def parse_module_content(content: str) -> List[str]:
 def add_content_to_text(
     text: str,
     content: str,
-    add_after: Optional[Union[str, re.Pattern]] = None,
-    add_before: Optional[Union[str, re.Pattern]] = None,
+    add_after: Optional[Union[str, Pattern]] = None,
+    add_before: Optional[Union[str, Pattern]] = None,
     exact_match: bool = False,
 ) -> str:
     """
@@ -157,9 +157,9 @@ def add_content_to_text(
     Args:
        text (`str`): The text in which we want to insert some content.
        content (`str`): The content to add.
-       add_after (`str` or `re.Pattern`):
+       add_after (`str` or `Pattern`):
            The pattern to test on a line of `text`, the new content is added after the first instance matching it.
-       add_before (`str` or `re.Pattern`):
+       add_before (`str` or `Pattern`):
            The pattern to test on a line of `text`, the new content is added before the first instance matching it.
        exact_match (`bool`, *optional*, defaults to `False`):
            A line is considered a match with `add_after` or `add_before` if it matches exactly when `exact_match=True`,
@@ -181,7 +181,7 @@ def add_content_to_text(
     pattern = add_after if add_before is None else add_before
 
     def this_is_the_line(line):
-        if isinstance(pattern, re.Pattern):
+        if isinstance(pattern, Pattern):
             return pattern.search(line) is not None
         elif exact_match:
             return pattern == line
@@ -205,8 +205,8 @@ def add_content_to_text(
 def add_content_to_file(
     file_name: Union[str, os.PathLike],
     content: str,
-    add_after: Optional[Union[str, re.Pattern]] = None,
-    add_before: Optional[Union[str, re.Pattern]] = None,
+    add_after: Optional[Union[str, Pattern]] = None,
+    add_before: Optional[Union[str, Pattern]] = None,
     exact_match: bool = False,
 ):
     """
@@ -215,9 +215,9 @@ def add_content_to_file(
     Args:
        file_name (`str` or `os.PathLike`): The name of the file in which we want to insert some content.
        content (`str`): The content to add.
-       add_after (`str` or `re.Pattern`):
+       add_after (`str` or `Pattern`):
            The pattern to test on a line of `text`, the new content is added after the first instance matching it.
-       add_before (`str` or `re.Pattern`):
+       add_before (`str` or `Pattern`):
            The pattern to test on a line of `text`, the new content is added before the first instance matching it.
        exact_match (`bool`, *optional*, defaults to `False`):
            A line is considered a match with `add_after` or `add_before` if it matches exactly when `exact_match=True`,
