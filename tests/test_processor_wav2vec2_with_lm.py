@@ -243,8 +243,12 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         path_to_cached_dir = Path(language_model._kenlm_model.path.decode("utf-8")).parent.parent.absolute()
 
         downloaded_decoder_files = os.listdir(path_to_cached_dir)
+        expected_decoder_files = ["alphabet.json", "language_model"]
+
+        downloaded_decoder_files.sort()
+        expected_decoder_files.sort()
 
         # test that only decoder relevant files from
         # https://huggingface.co/hf-internal-testing/processor_with_lm/tree/main
         # are downloaded and none of the rest (e.g. README.md, ...)
-        self.assertListEqual(downloaded_decoder_files, ["alphabet.json", "language_model"])
+        self.assertListEqual(downloaded_decoder_files, expected_decoder_files)
