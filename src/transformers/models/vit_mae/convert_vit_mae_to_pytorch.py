@@ -94,6 +94,7 @@ def convert_vit_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.num_hidden_layers = 24
         config.num_attention_heads = 16
     elif "huge" in checkpoint_url:
+        config.patch_size = 14
         config.hidden_size = 1280
         config.intermediate_size = 5120
         config.num_hidden_layers = 32
