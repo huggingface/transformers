@@ -415,12 +415,12 @@ def duplicate_module(
         if (
             add_copied_from
             and not has_copied_from
-            and _re_class_func.search(content) is not None
+            and _re_class_func.search(obj) is not None
             and len(replacement) > 0
         ):
             # Copied from statement must be added just before the class/function definition, which may not be the
             # first line because of decorators.
-            object_name = _re_class_func.search(content).groups()[0]
+            object_name = _re_class_func.search(obj).groups()[0]
             module_name = get_module_from_file(module_file)
             obj = add_content_to_text(
                 obj, f"# Copied from {module_name}.{object_name} with {replacement}", add_before=_re_class_func
