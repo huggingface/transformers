@@ -126,14 +126,14 @@ ONNX standard. For example, we can load and run the model with [ONNX
 Runtime](https://onnxruntime.ai/) as follows:
 
 ```python
-from transformers import AutoTokenizer
-from onnxruntime import InferenceSession
+>>> from transformers import AutoTokenizer
+>>> from onnxruntime import InferenceSession
 
-tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-session = InferenceSession("onnx/model.onnx")
-# ONNX Runtime expects NumPy arrays as input
-inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")
-outputs = session.run(output_names=["last_hidden_state"], input_feed=dict(inputs))
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> session = InferenceSession("onnx/model.onnx")
+>>> # ONNX Runtime expects NumPy arrays as input
+>>> inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")
+>>> outputs = session.run(output_names=["last_hidden_state"], input_feed=dict(inputs))
 ```
 
 The required output names (i.e. `["last_hidden_state"]`) can be obtained by
@@ -141,16 +141,11 @@ taking a look at the ONNX configuration of each model. For example, for
 DistilBERT we have:
 
 ```python
-from transformers.models.distilbert import DistilBertConfig, DistilBertOnnxConfig
+>>> from transformers.models.distilbert import DistilBertConfig, DistilBertOnnxConfig
 
-config = DistilBertConfig()
-onnx_config = DistilBertOnnxConfig(config)
-print(list(onnx_config.outputs.keys()))
-```
-
-which outputs:
-
-```python
+>>> config = DistilBertConfig()
+>>> onnx_config = DistilBertOnnxConfig(config)
+>>> print(list(onnx_config.outputs.keys()))
 ["last_hidden_state"]
 ```
 
@@ -174,15 +169,10 @@ For each configuration, you can find the list of supported features via the
 `FeaturesManager`. For example, for DistilBERT we have:
 
 ```python
-from transformers.onnx.features import FeaturesManager
+>>> from transformers.onnx.features import FeaturesManager
 
-distilbert_features = list(FeaturesManager.get_supported_features_for_model_type("distilbert").keys())
-print(distilbert_features)
-```
-
-which outputs:
-
-```python
+>>> distilbert_features = list(FeaturesManager.get_supported_features_for_model_type("distilbert").keys())
+>>> print(distilbert_features)
 ["default", "masked-lm", "causal-lm", "sequence-classification", "token-classification", "question-answering"]
 ```
 
@@ -253,19 +243,19 @@ Since DistilBERT is an encoder-based model, its configuration inherits from
 `OnnxConfig`:
 
 ```python
-from typing import Mapping, OrderedDict
-from transformers.onnx import OnnxConfig
+>>> from typing import Mapping, OrderedDict
+>>> from transformers.onnx import OnnxConfig
 
 
-class DistilBertOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-            ]
-        )
+>>> class DistilBertOnnxConfig(OnnxConfig):
+...     @property
+...     def inputs(self) -> Mapping[str, Mapping[int, str]]:
+...         return OrderedDict(
+...             [
+...                 ("input_ids", {0: "batch", 1: "sequence"}),
+...                 ("attention_mask", {0: "batch", 1: "sequence"}),
+...             ]
+...         )
 ```
 
 Every configuration object must implement the `inputs` property and return a
@@ -289,10 +279,10 @@ Once you have implemented an ONNX configuration, you can instantiate it by
 providing the base model's configuration as follows:
 
 ```python
-from transformers import AutoConfig
+>>> from transformers import AutoConfig
 
-config = AutoConfig.from_pretrained("distilbert-base-uncased")
-onnx_config = DistilBertOnnxConfig(config)
+>>> config = AutoConfig.from_pretrained("distilbert-base-uncased")
+>>> onnx_config = DistilBertOnnxConfig(config)
 ```
 
 The resulting object has several useful properties. For example you can view the
@@ -306,12 +296,7 @@ ONNX operator set that will be used during the export:
 You can also view the outputs associated with the model as follows:
 
 ```python
-print(onnx_config.outputs)
-```
-
-which gives:
-
-```python
+>>> print(onnx_config.outputs)
 OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"})])
 ```
 
@@ -326,20 +311,20 @@ we wished to export DistilBERT with a sequence classification head, we could
 use:
 
 ```python
-from transformers import AutoConfig
+>>> from transformers import AutoConfig
 
-config = AutoConfig.from_pretrained("distilbert-base-uncased")
-onnx_config_for_seq_clf = DistilBertOnnxConfig(config, task="sequence-classification")
-# Returns OrderedDict([('logits', {0: 'batch'})])
-print(onnx_config_for_seq_clf.outputs)
+>>> config = AutoConfig.from_pretrained("distilbert-base-uncased")
+>>> onnx_config_for_seq_clf = DistilBertOnnxConfig(config, task="sequence-classification")
+>>> print(onnx_config_for_seq_clf.outputs)
+OrderedDict([('logits', {0: 'batch'})])
 ```
 
 <Tip>
 
 All of the base properties and methods associated with
-[`OnnxConfig`](https://github.com/huggingface/transformers/blob/c4fa908fa98c3d538462c537d29b7613dd71306e/src/transformers/onnx/config.py#L52)
+[`OnnxConfig`]
 and the other configuration classes can be overriden if needed. Check out
-[`BartOnnxConfig`](https://github.com/huggingface/transformers/blob/c4fa908fa98c3d538462c537d29b7613dd71306e/src/transformers/models/bart/configuration_bart.py#L186)
+[`BartOnnxConfig`]
 for an advanced example.
 
 </Tip>
@@ -352,16 +337,16 @@ model. Here we can use the `export()` function provided by the
 with the base model and tokenizer, and the path to save the exported file:
 
 ```python
-from pathlib import Path
-from transformers.onnx import export
-from transformers import AutoTokenizer, AutoModel
+>>> from pathlib import Path
+>>> from transformers.onnx import export
+>>> from transformers import AutoTokenizer, AutoModel
 
-onnx_path = Path("model.onnx")
-model_ckpt = "distilbert-base-uncased"
-base_model = AutoModel.from_pretrained(model_ckpt)
-tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
+>>> onnx_path = Path("model.onnx")
+>>> model_ckpt = "distilbert-base-uncased"
+>>> base_model = AutoModel.from_pretrained(model_ckpt)
+>>> tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
 
-onnx_inputs, onnx_outputs = export(tokenizer, base_model, onnx_config, onnx_config.default_onnx_opset, onnx_path)
+>>> onnx_inputs, onnx_outputs = export(tokenizer, base_model, onnx_config, onnx_config.default_onnx_opset, onnx_path)
 ```
 
 The `onnx_inputs` and `onnx_outputs` returned by the `export()` function are
@@ -370,10 +355,10 @@ configuration. Once the model is exported, you can test that the model is well
 formed as follows:
 
 ```python
-import onnx
+>>> import onnx
 
-onnx_model = onnx.load("model.onnx")
-onnx.checker.check_model(onnx_model)
+>>> onnx_model = onnx.load("model.onnx")
+>>> onnx.checker.check_model(onnx_model)
 ```
 
 <Tip>
@@ -395,16 +380,11 @@ agree within some absolute tolerance. Here we can use the
 as follows:
 
 ```python
-from transformers.onnx import validate_model_outputs
+>>> from transformers.onnx import validate_model_outputs
 
-validate_model_outputs(
-    onnx_config,
-    tokenizer,
-    base_model,
-    onnx_path,
-    onnx_outputs,
-    onnx_config.atol_for_validation,
-)
+>>> validate_model_outputs(
+...     onnx_config, tokenizer, base_model, onnx_path, onnx_outputs, onnx_config.atol_for_validation
+... )
 ```
 
 This function uses the `OnnxConfig.generate_dummy_inputs()` method to generate
