@@ -225,7 +225,7 @@ class PerceiverModelTest(TFModelTesterMixin, unittest.TestCase):
             # TFPerceiverForImageClassificationFourier,
             # TFPerceiverForOpticalFlow,
             # TFPerceiverForMultimodalAutoencoding,
-            # TFPerceiverForSequenceClassification,
+            TFPerceiverForSequenceClassification,
         )
         if is_tf_available()
         else ()
