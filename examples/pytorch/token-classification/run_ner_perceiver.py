@@ -280,21 +280,21 @@ def main():
             truncation=True,
             # We use this argument because the texts in our dataset are lists of words (with a label for each word).
             is_split_into_words=True,
-            # return_offsets_mapping=True,
         )
         labels = []
 
         """
         There is no PerceiverTokenizerFast, follow code works for conll2003 datasets.
         words: ['EU', 'rejects', 'German', 'call', 'to', 'boycott', 'British', 'lamb', '.']
-        words_labels: [3, 0, 7, 0, 0, 0, 7, 0, 0] 
+        words_labels: [3, 0, 7, 0, 0, 0, 7, 0, 0]
         tokens_labels: [-100, 3, 3, 0, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 7, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 7, 7, 7, 0, 0, 0, 0, 0, -100]
         """
         for i in range(len(tokenized_inputs["input_ids"])):
-            # -2 special token [BOS]  [SEP]
+            # -2 because of special tokens: [CLS], [SEP]
             id_length = len(tokenized_inputs["input_ids"][i]) - 2
             char_length = len("".join(examples[text_column_name][i]))
-            assert id_length == char_length
+            if id_length != char_length:
+                raise ValueError("Number of tokens and number of characters are not the same.")
 
             label_ids = [-100]
 

@@ -177,8 +177,9 @@ class PerceiverClassifierOutput(ModelOutput):
 @dataclass
 class PerceiverTokenClassifierOutput(ModelOutput):
     """
+    Base class for PerceiverForTokenClassification's outputs.
+
     Args:
-    Base class for Perceiver's outputs of token classification models.
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided) :
             Classification loss.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
