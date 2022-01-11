@@ -3,30 +3,26 @@ from tempfile import NamedTemporaryFile
 from unittest import TestCase
 from unittest.mock import patch
 
-from transformers import (  # LongformerConfig,; T5Config,
-    AlbertConfig,
-    AutoTokenizer,
-    BartConfig,
-    DistilBertConfig,
-    GPT2Config,
-    GPTNeoConfig,
-    LayoutLMConfig,
-    MBartConfig,
-    RobertaConfig,
-    XLMRobertaConfig,
-    is_torch_available, is_tf_available, TFAlbertModel, TFBartModel, TFBertModel, TFDistilBertModel, TFGPT2Model,
-    TFRobertaModel, TFXLMRobertaModel, TFMBartModel, AutoConfig,
-)
-from transformers.models.albert import AlbertOnnxConfig
-from transformers.models.bart import BartOnnxConfig
-from transformers.models.bert.configuration_bert import BertConfig, BertOnnxConfig
-from transformers.models.distilbert import DistilBertOnnxConfig
-from transformers.models.gpt2 import GPT2OnnxConfig
-from transformers.models.gpt_neo import GPTNeoOnnxConfig
-from transformers.models.layoutlm import LayoutLMOnnxConfig
+from parameterized import parameterized
 from transformers.models.mbart import MBartOnnxConfig
-from transformers.models.roberta import RobertaOnnxConfig
+
 from transformers.models.xlm_roberta import XLMRobertaOnnxConfig
+
+from transformers.models.roberta import RobertaOnnxConfig
+
+from transformers.models.distilbert import DistilBertOnnxConfig
+
+from transformers.models.bert import BertOnnxConfig
+
+from transformers.models.bart import BartOnnxConfig
+
+from transformers.models.albert import AlbertOnnxConfig
+
+from transformers.models.gpt2 import GPT2OnnxConfig
+
+from transformers import AutoConfig, AutoTokenizer, is_torch_available, is_tf_available, TFAlbertModel, BartConfig, \
+    BertConfig, TFDistilBertModel, RobertaConfig, TFXLMRobertaModel, TFRobertaModel, GPT2Config, TFGPT2Model, \
+    TFBertModel, TFBartModel, AlbertConfig, DistilBertConfig, XLMRobertaConfig, MBartConfig, TFMBartModel
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -190,40 +186,22 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
                     onnx_config_default.values_override["use_cache"], "use_cache should be False if not using past"
                 )
 
-
 if is_torch_available():
-    from transformers import (  # T5Model,
-        AlbertModel,
-        BartModel,
-        BertModel,
-        DistilBertModel,
-        GPT2Model,
-        GPTNeoModel,
-        LayoutLMModel,
-        MBartModel,
-        RobertaModel,
-        XLMRobertaModel,
-    )
-
-    PYTORCH_EXPORT_DEFAULT_MODELS = {
-        ("ALBERT", "hf-internal-testing/tiny-albert", AlbertModel, AlbertConfig, AlbertOnnxConfig),
-        ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
-        ("BERT", "bert-base-cased", BertModel, BertConfig, BertOnnxConfig),
-        ("DistilBERT", "distilbert-base-cased", DistilBertModel, DistilBertConfig, DistilBertOnnxConfig),
-        ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
-        ("GPT-Neo", "EleutherAI/gpt-neo-125M", GPTNeoModel, GPTNeoConfig, GPTNeoOnnxConfig),
-        # ("LongFormer", "longformer-base-4096", LongformerModel, LongformerConfig, LongformerOnnxConfig),
-        ("Roberta", "roberta-base", RobertaModel, RobertaConfig, RobertaOnnxConfig),
-        ("XLM-Roberta", "roberta-base", XLMRobertaModel, XLMRobertaConfig, XLMRobertaOnnxConfig),
-        ("LayoutLM", "microsoft/layoutlm-base-uncased", LayoutLMModel, LayoutLMConfig, LayoutLMOnnxConfig),
-        ("MBart", "sshleifer/tiny-mbart", MBartModel, MBartConfig, MBartOnnxConfig),
-        # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig),
+    PYTORCH_EXPORT_MODELS = {
+        ("albert", "hf-internal-testing/tiny-albert"),
+        ("bert", "bert-base-cased"),
+        ("ibert", "kssteven/ibert-roberta-base"),
+        ("camembert", "camembert-base"),
+        ("distilbert", "distilbert-base-cased"),
+        # ("longFormer", "longformer-base-4096"),
+        ("roberta", "roberta-base"),
+        ("xlm-roberta", "xlm-roberta-base"),
+        ("layoutlm", "microsoft/layoutlm-base-uncased"),
     }
 
     PYTORCH_EXPORT_WITH_PAST_MODELS = {
-        # ("BART", "facebook/bart-base", BartModel, BartConfig, BartOnnxConfig),
-        # ("GPT2", "gpt2", GPT2Model, GPT2Config, GPT2OnnxConfig),
-        # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig)
+        ("gpt2", "gpt2"),
+        ("gpt-neo", "EleutherAI/gpt-neo-125M"),
     }
 
     PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
@@ -263,17 +241,17 @@ if is_tf_available():
     )
 
     TENSORFLOW_EXPORT_DEFAULT_MODELS = {
-        ("ALBERT", "hf-internal-testing/tiny-albert", TFAlbertModel, AlbertConfig, AlbertOnnxConfig),
-        ("BART", "facebook/bart-base", TFBartModel, BartConfig, BartOnnxConfig),
-        ("BERT", "bert-base-cased", TFBertModel, BertConfig, BertOnnxConfig),
-        ("DistilBERT", "distilbert-base-cased", TFDistilBertModel, DistilBertConfig, DistilBertOnnxConfig),
-        ("GPT2", "gpt2", TFGPT2Model, GPT2Config, GPT2OnnxConfig),
+        ("albert", "hf-internal-testing/tiny-albert", TFAlbertModel, AlbertConfig, AlbertOnnxConfig),
+        ("bart", "facebook/bart-base", TFBartModel, BartConfig, BartOnnxConfig),
+        ("bert", "bert-base-cased", TFBertModel, BertConfig, BertOnnxConfig),
+        ("distilbert", "distilbert-base-cased", TFDistilBertModel, DistilBertConfig, DistilBertOnnxConfig),
+        ("gpt2", "gpt2", TFGPT2Model, GPT2Config, GPT2OnnxConfig),
         # ("GPT-Neo", "EleutherAI/gpt-neo-125M", TFGPTNeoModel, GPTNeoConfig, GPTNeoOnnxConfig),
         # ("LongFormer", "longformer-base-4096", LongformerModel, LongformerConfig, LongformerOnnxConfig),
-        ("Roberta", "roberta-base", TFRobertaModel, RobertaConfig, RobertaOnnxConfig),
-        ("XLM-Roberta", "roberta-base", TFXLMRobertaModel, XLMRobertaConfig, XLMRobertaOnnxConfig),
+        ("roberta", "roberta-base", TFRobertaModel, RobertaConfig, RobertaOnnxConfig),
+        ("xlmroberta", "roberta-base", TFXLMRobertaModel, XLMRobertaConfig, XLMRobertaOnnxConfig),
         # ("LayoutLM", "microsoft/layoutlm-base-uncased", TFLayoutLMModel, LayoutLMConfig, LayoutLMOnnxConfig),
-        ("MBart", "sshleifer/tiny-mbart", TFMBartModel, MBartConfig, MBartOnnxConfig),
+        ("mbart", "sshleifer/tiny-mbart", TFMBartModel, MBartConfig, MBartOnnxConfig),
         # ("T5", "t5-small", T5Model, T5Config, T5OnnxConfig),
     }
 
@@ -344,6 +322,20 @@ class OnnxExportTestCaseV2(TestCase):
 
     @require_torch
     def test_pytorch_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
+        self._pytorch_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_WITH_PAST_MODELS))
+    @slow
+    @require_torch
+    def test_pytorch_export_with_past(self, test_name, name, model_name, feature, onnx_config_class_constructor):
+        self._pytorch_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS))
+    @slow
+    @require_torch
+    def test_pytorch_export_seq2seq_with_past(
+            self, test_name, name, model_name, feature, onnx_config_class_constructor
+    ):
         self._pytorch_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
     @slow
