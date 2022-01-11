@@ -51,6 +51,10 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_torch_gpu_failures_short.txt
 
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_gpu_durations.txt
+
       - name: Run examples tests on GPU
         if: ${{ always() }}
         env:
@@ -67,6 +71,10 @@ jobs:
         if: ${{ always() }}
         run: cat reports/examples_torch_gpu_failures_short.txt
 
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/examples_torch_gpu_durations.txt
+
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
@@ -77,6 +85,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_pipeline_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_pipeline_gpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -118,6 +130,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_flax_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_flax_gpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -163,6 +179,10 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_tf_gpu_failures_short.txt
 
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_tf_gpu_durations.txt
+
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
@@ -175,6 +195,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_tf_pipeline_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_tf_pipeline_gpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -214,6 +238,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_xla_tpu_failures_short.txt
+
+      - name: Tests durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_xla_tpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -258,6 +286,10 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_torch_multi_gpu_failures_short.txt
 
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_multi_gpu_durations.txt
+
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
@@ -268,6 +300,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_pipeline_multi_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_pipeline_multi_gpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -313,6 +349,10 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_tf_multi_gpu_failures_short.txt
 
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_tf_multi_gpu_durations.txt
+
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
@@ -325,6 +365,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_tf_pipeline_multi_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_tf_pipeline_multi_gpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -403,6 +447,10 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_torch_cuda_extensions_gpu_failures_short.txt
 
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_cuda_extensions_gpu_durations.txt
+
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
@@ -442,6 +490,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_cuda_extensions_multi_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_cuda_extensions_multi_gpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
