@@ -1619,19 +1619,21 @@ BIGBIRD_PEGASUS_START_DOCSTRING = r"""
 """
 
 BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Summarization example:
 
-        >>> from transformers import PegasusTokenizer, BigBirdPegasusForConditionalGeneration, BigBirdPegasusConfig
+    ```python
+    >>> from transformers import PegasusTokenizer, BigBirdPegasusForConditionalGeneration
 
-        >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained('google/bigbird-pegasus-large-arxiv') >>>
-        tokenizer = PegasusTokenizer.from_pretrained('google/bigbird-pegasus-large-arxiv')
+    >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained("google/bigbird-pegasus-large-arxiv")
+    >>> tokenizer = PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs." >>> inputs =
-        tokenizer([ARTICLE_TO_SUMMARIZE], max_length=4096, return_tensors='pt', truncation=True)
+    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=4096, return_tensors="pt", truncation=True)
 
-        >>> # Generate Summary >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5,
-        early_stopping=True) >>> print([tokenizer.decode(g, skip_special_tokens=True,
-        clean_up_tokenization_spaces=False) for g in summary_ids])
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    ```
 """
 
 BIGBIRD_PEGASUS_INPUTS_DOCSTRING = r"""

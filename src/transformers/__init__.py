@@ -241,6 +241,10 @@ _import_structure = {
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
+    "models.nystromformer": [
+        "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "NystromformerConfig",
+    ],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
@@ -1122,6 +1126,19 @@ if is_torch_available():
         ]
     )
     _import_structure["models.mt5"].extend(["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"])
+    _import_structure["models.nystromformer"].extend(
+        [
+            "NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "NystromformerForMaskedLM",
+            "NystromformerForMultipleChoice",
+            "NystromformerForQuestionAnswering",
+            "NystromformerForSequenceClassification",
+            "NystromformerForTokenClassification",
+            "NystromformerLayer",
+            "NystromformerModel",
+            "NystromformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.openai"].extend(
         [
             "OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1487,6 +1504,7 @@ if is_tf_available():
             "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
             "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+            "TF_MODEL_FOR_VISION_2_SEQ_MAPPING",
             "TF_MODEL_MAPPING",
             "TF_MODEL_WITH_LM_HEAD_MAPPING",
             "TFAutoModel",
@@ -1500,6 +1518,7 @@ if is_tf_available():
             "TFAutoModelForSequenceClassification",
             "TFAutoModelForTableQuestionAnswering",
             "TFAutoModelForTokenClassification",
+            "TFAutoModelForVision2Seq",
             "TFAutoModelWithLMHead",
         ]
     )
@@ -1838,6 +1857,7 @@ if is_tf_available():
             "TFTransfoXLPreTrainedModel",
         ]
     )
+    _import_structure["models.vision_encoder_decoder"].extend(["TFVisionEncoderDecoderModel"])
     _import_structure["models.vit"].extend(
         [
             "TFViTForImageClassification",
@@ -2305,6 +2325,7 @@ if TYPE_CHECKING:
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
+    from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
@@ -3038,6 +3059,17 @@ if TYPE_CHECKING:
             MPNetPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
+        from .models.nystromformer import (
+            NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NystromformerForMaskedLM,
+            NystromformerForMultipleChoice,
+            NystromformerForQuestionAnswering,
+            NystromformerForSequenceClassification,
+            NystromformerForTokenClassification,
+            NystromformerLayer,
+            NystromformerModel,
+            NystromformerPreTrainedModel,
+        )
         from .models.openai import (
             OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OpenAIGPTDoubleHeadsModel,
@@ -3354,6 +3386,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
             TF_MODEL_MAPPING,
             TF_MODEL_WITH_LM_HEAD_MAPPING,
             TFAutoModel,
@@ -3367,6 +3400,7 @@ if TYPE_CHECKING:
             TFAutoModelForSequenceClassification,
             TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
+            TFAutoModelForVision2Seq,
             TFAutoModelWithLMHead,
         )
         from .models.bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
@@ -3636,6 +3670,7 @@ if TYPE_CHECKING:
             TFTransfoXLModel,
             TFTransfoXLPreTrainedModel,
         )
+        from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,

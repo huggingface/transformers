@@ -490,7 +490,7 @@ class TFEncoderDecoderMixin:
     def test_real_model_save_load_from_pretrained(self):
         model_2 = self.get_pretrained_model()
         input_ids = ids_tensor([13, 5], model_2.config.encoder.vocab_size)
-        decoder_input_ids = ids_tensor([13, 1], model_2.config.encoder.vocab_size)
+        decoder_input_ids = ids_tensor([13, 1], model_2.config.decoder.vocab_size)
         attention_mask = ids_tensor([13, 5], vocab_size=2)
 
         outputs = model_2(
@@ -650,7 +650,7 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 
         # make sure that cross attention layers are added
         decoder_config.add_cross_attention = True
-        #  disable cache for now
+        # disable cache for now
         decoder_config.use_cache = False
         return {
             "config": config,
