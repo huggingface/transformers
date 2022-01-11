@@ -431,12 +431,45 @@ def duplicate_module(
         content = f.write("\n".join(new_objects))
 
 
-def get_model_files(model_type: str) -> Dict[str, Union[Path, List[Path]]]:
+def filter_framework_files(
+    files: List[Union[str, os.PathLike]], frameworks: Optional[List[str]] = None
+) -> List[Union[str, os.PathLike]]:
+    """
+    Filter a list of files to only keep the ones corresponding to a list of frameworks.
+
+    Args:
+        files (`List[Union[str, os.PathLike]]`): The list of files to filter.
+        frameworks (`List[str]`, *optional*): The list of allowed frameworks.
+
+    Returns:
+        `List[Union[str, os.PathLike]]`: The list of filtered files.
+    """
+    if frameworks is None:
+        return files
+
+    framework_to_file = {}
+    for f in files:
+        parts = Path(f).name.split("_")
+        if "modeling" not in parts:
+            continue
+        if "tf" in parts:
+            framework_to_file["tf"] = f
+        elif "flax" in parts:
+            framework_to_file["flax"] = f
+        else:
+            framework_to_file["pt"] = f
+
+    return [framework_to_file[f] for f in frameworks]
+
+
+def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> Dict[str, Union[Path, List[Path]]]:
     """
     Retrieves all the files associated to a model.
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
+        frameworks (`List[str]`, *optional*):
+            If passed, will only keep the model files corresponding to the passed frameworks.
 
     Returns:
         `Dict[str, Union[Path, List[Path]]]`: A dictionary with the following keys:
@@ -448,6 +481,10 @@ def get_model_files(model_type: str) -> Dict[str, Union[Path, List[Path]]]:
 
     model_module = TRANSFORMERS_PATH / "models" / module_name
     model_files = list(model_module.glob("*.py"))
+    model_files = filter_framework_files(model_files, frameworks=frameworks)
+
+    if frameworks is not None:
+        model_files = []
 
     doc_file = REPO_PATH / "models" / "docs" / "source" / f"{model_type}.mdx"
 
@@ -458,6 +495,7 @@ def get_model_files(model_type: str) -> Dict[str, Union[Path, List[Path]]]:
         f"test_modeling_flax_{module_name}.py",
         f"test_tokenization_{module_name}.py",
     ]
+    test_files = filter_framework_files(test_files, frameworks=frameworks)
     # Add the test directory
     test_files = [REPO_PATH / "tests" / f for f in test_files]
     # Filter by existing files
@@ -545,12 +583,14 @@ def retrieve_model_classes(model_type: str, frameworks: Optional[List[str]] = No
     return model_classes
 
 
-def retrieve_info_for_model(model_type):
+def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
     """
     Retrieves all the information from a given model_type.
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
+        frameworks (`List[str]`, *optional*):
+            If passed, will only keep the info corresponding to the passed frameworks.
 
     Returns:
         `Dict`: A dictionary with the following keys:
@@ -567,17 +607,22 @@ def retrieve_info_for_model(model_type):
     tokenizer_classes = auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES[model_type]
     tokenizer_class = tokenizer_classes[0] if tokenizer_classes[0] is not None else tokenizer_classes[1]
 
-    model_files = get_model_files(model_type)
+    model_files = get_model_files(model_type, frameworks=frameworks)
     model_camel_cased = config_class.replace("Config", "")
 
-    frameworks = []
+    available_frameworks = []
     for fname in model_files["model_files"]:
         if "modeling_tf" in str(fname):
-            frameworks.append("tf")
+            available_frameworks.append("tf")
         elif "modeling_flax" in str(fname):
-            frameworks.append("flax")
+            available_frameworks.append("flax")
         elif "modeling" in str(fname):
-            frameworks.append("pt")
+            available_frameworks.append("pt")
+
+    if frameworks is None:
+        frameworks = available_frameworks.copy()
+    else:
+        frameworks = [f for f in frameworks if f in available_frameworks]
 
     model_classes = retrieve_model_classes(model_type, frameworks=frameworks)
 
@@ -903,7 +948,12 @@ def duplicate_doc_file(
         f.write("\n".join(new_blocks))
 
 
-def create_new_model_like(model_type: str, new_model_patterns: ModelPatterns, add_copied_from: bool = True):
+def create_new_model_like(
+    model_type: str,
+    new_model_patterns: ModelPatterns,
+    add_copied_from: bool = True,
+    frameworks: Optional[List[str]] = None,
+):
     """
     Creates a new model module like a given model of the Transformers library.
 
@@ -912,9 +962,11 @@ def create_new_model_like(model_type: str, new_model_patterns: ModelPatterns, ad
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         add_copied_from (`bool`, *optional*, defaults to `True`):
             Whether or not to add "Copied from" statements to all classes in the new model modeling files.
+        frameworks (`List[str]`, *optional*):
+            If passed, will limit the duplicate to the frameworks specified.
     """
     # Retrieve all the old model info.
-    model_info = retrieve_info_for_model(model_type)
+    model_info = retrieve_info_for_model(model_type, frameworks=frameworks)
     model_files = model_info["model_files"]
     old_model_patterns = model_info["model_patterns"]
     keep_old_tokenizer = old_model_patterns.tokenizer_class == new_model_patterns.tokenizer_class
@@ -978,7 +1030,7 @@ def create_new_model_like(model_type: str, new_model_patterns: ModelPatterns, ad
 
     # 5. Add doc file
     doc_file = REPO_PATH / "docs" / "source" / "model_doc" / f"{old_model_patterns.model_type}.mdx"
-    duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns)
+    duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns, frameworks=frameworks)
 
     # 6. Warn the user for duplicate patterns
     if old_model_patterns.model_type == old_model_patterns.checkpoint:
@@ -1017,7 +1069,6 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             self.old_model_type = config["old_model_type"]
             self.model_patterns = ModelPatterns(**config["new_model_patterns"])
             self.add_copied_from = config.get("add_copied_from", True)
-            # Ignored for now
             self.frameworks = config.get("frameworks", ["pt", "tf", "flax"])
 
     def run(self):
@@ -1025,4 +1076,5 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             model_type=self.old_model_type,
             new_model_patterns=self.model_patterns,
             add_copied_from=self.add_copied_from,
+            frameworks=self.frameworks,
         )

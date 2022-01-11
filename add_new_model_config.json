@@ -13,7 +13,6 @@
     },
     "frameworks": [
         "pt",
-        "tf",
-        "flax"
+        "tf"
     ]
 }
