@@ -412,12 +412,7 @@ def duplicate_module(
         # Regular classes functions
         obj, replacement = replace_model_patterns(obj, old_model_patterns, new_model_patterns)
         has_copied_from = re.search("^Copied from", obj, flags=re.MULTILINE)
-        if (
-            add_copied_from
-            and not has_copied_from
-            and _re_class_func.search(obj) is not None
-            and len(replacement) > 0
-        ):
+        if add_copied_from and not has_copied_from and _re_class_func.search(obj) is not None and len(replacement) > 0:
             # Copied from statement must be added just before the class/function definition, which may not be the
             # first line because of decorators.
             object_name = _re_class_func.search(obj).groups()[0]
@@ -804,6 +799,25 @@ def add_model_to_auto_classes(
     insert_tokenizer_in_auto_module(old_model_patterns, new_model_patterns)
 
 
+DOC_OVERVIEW_TEMPLATE = """## Overview
+
+The {model_name} model was proposed in [<INSERT PAPER NAME HERE>(<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+<INSERT SHORT SUMMARY HERE>
+
+The abstract from the paper is the following:
+
+*<INSERT PAPER ABSTRACT HERE>*
+
+Tips:
+
+<INSERT TIPS ABOUT MODEL HERE>
+
+This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
+The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+
+"""
+
+
 def duplicate_doc_file(
     doc_file: Union[str, os.PathLike],
     old_model_patterns: ModelPatterns,
@@ -856,7 +870,7 @@ def duplicate_doc_file(
         # The config starts the part of the doc with the classes.
         elif not in_classes and old_model_patterns.config_class in block.split("\n")[0]:
             in_classes = True
-            new_blocks.append("## Overview\n\nFill me\n\n")
+            new_blocks.append(DOC_OVERVIEW_TEMPLATE.format(model_name=new_model_patterns.model_name))
             new_block, _ = replace_model_patterns(block, old_model_patterns, new_model_patterns)
             new_blocks.append(new_block)
         # In classes
