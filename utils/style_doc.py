@@ -327,7 +327,7 @@ def style_docstring(docstring, max_len):
                 new_lines.append("")
             new_lines.append(line)
             # Add a new line after if not present
-            if not is_empty_line(lines[idx+1]):
+            if idx < len(lines) - 1 and not is_empty_line(lines[idx + 1]):
                 new_lines.append("")
         elif current_paragraph is None or find_indent(line) != current_indent:
             indent = find_indent(line)
