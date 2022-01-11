@@ -920,6 +920,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # the input dict (and loss is computed internally)
         if y is None and "labels" in x:
             y = x["labels"]  # Stops confusion with metric computations
+        elif y is None and "input_ids" in x:
+            # Just make any kind of dummy array to make loss work
+            y = tf.zeros(tf.shape(x["input_ids"])[0], dtype=tf.int64)
         y_pred = self(x, training=False)
         self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         # Updates stateful loss metrics.
