@@ -301,10 +301,6 @@ class PatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
-        # if height != self.image_size[0] or width != self.image_size[1]:
-        #     raise ValueError(
-        #         f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-        #     )
         x = self.projection(pixel_values)
         return x
 
@@ -381,7 +377,6 @@ class ViltSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -905,16 +900,6 @@ class ViltForMaskedLM(ViltPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-class ViltITMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.fc = nn.Linear(config.hidden_size, 2)
-
-    def forward(self, x):
-        x = self.fc(x)
-        return x
 
 
 class ViltPredictionHeadTransform(nn.Module):
