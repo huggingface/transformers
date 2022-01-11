@@ -244,7 +244,7 @@ architecture you wish to export:
 <Tip>
 
 A good way to implement a custom ONNX configuration is to look at the existing
-implementation in the `configuration_x.py` file of a similar architecture.
+implementation in the `configuration_<model_name>.py` file of a similar architecture.
 
 </Tip>
 
@@ -267,15 +267,22 @@ class DistilBertOnnxConfig(OnnxConfig):
         )
 ```
 
-Every configuration object must implement the `inputs` property and return an
-`OrderedDict`, where each key corresponds to an expected input, and each value
-indicates the axis of that input. The `OrderedDict` is needed to ensure the
-inputs are matched against their relative position within the
-`PreTrainedModel.forward()` method when tracing the graph.
+Every configuration object must implement the `inputs` property and return a
+mapping, where each key corresponds to an expected input, and each value
+indicates the axis of that input. For DistilBERT, we can see that two inputs are
+required: `input_ids` and `attention_mask`. These inputs have the same shape of
+`(batch_size, sequence_length)` which is why we see the same axes used in the
+configuration.
 
-For DistilBERT, we can see that two inputs are required: `input_ids` and
-`attention_mask`. These inputs have the same shape of `(batch_size,
-sequence_length)` which is why we see the same axes used in the configuration.
+<Tip>
+
+Notice that `inputs` property for `DistilBertOnnxConfig` returns an
+`OrderedDict`. This ensures that the inputs are matched with their relative
+position within the `PreTrainedModel.forward()` method when tracing the graph.
+We recommend using an `OrderedDict` for the `inputs` and `outputs` properties
+when implementing custom ONNX configurations.
+
+</Tip>
 
 Once you have implemented an ONNX configuration, you can instantiate it by
 providing the base model's configuration as follows:
@@ -410,7 +417,7 @@ We are looking to expand the set of ready-made configurations and welcome
 contributions from the community! If you would like to contribute your addition
 to the library, you will need to:
 
-* Implement the ONNX configuration in the corresponding `configuration_x.py`
+* Implement the ONNX configuration in the corresponding `configuration_<model_name>.py`
 file
 * Include the model architecture and corresponding features in
 [`onnx.features.FeatureManager`](https://github.com/huggingface/transformers/blob/c4fa908fa98c3d538462c537d29b7613dd71306e/src/transformers/onnx/features.py#L71)
