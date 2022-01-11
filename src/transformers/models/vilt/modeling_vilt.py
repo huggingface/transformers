@@ -43,17 +43,11 @@ VILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
+# Copied from transformers.models.vit.modeling_vit.to_2tuple
 def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
     return (x, x)
-
-
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
 
 
 class ViltEmbeddings(nn.Module):
@@ -365,6 +359,7 @@ class ViltSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Vilt
 class ViltSelfOutput(nn.Module):
     """
     The residual connection is defined in ViltLayer instead of here (as is the case with other models), due to the
@@ -377,6 +372,7 @@ class ViltSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
+
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -417,6 +413,7 @@ class ViltAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->Vilt
 class ViltIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -434,6 +431,7 @@ class ViltIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->Vilt
 class ViltOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -477,12 +475,6 @@ class ViltLayer(nn.Module):
 
         # in ViLT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
-
-        # TODO feedforward chunking not working for now
-        # layer_output = apply_chunking_to_forward(
-        #     self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, layer_output
-        # )
-
         layer_output = self.intermediate(layer_output)
 
         # second residual connection is done here
@@ -491,11 +483,6 @@ class ViltLayer(nn.Module):
         outputs = (layer_output,) + outputs
 
         return outputs
-
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output)
-        return layer_output
 
 
 class ViltEncoder(nn.Module):
