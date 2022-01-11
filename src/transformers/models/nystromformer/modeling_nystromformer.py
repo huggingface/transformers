@@ -128,7 +128,7 @@ class NystromformerSelfAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.num_landmarks = config.num_landmarks
-        self.seq_len = config.seq_len
+        self.seq_len = config.segment_means_seq_len
         self.conv_kernel_size = config.conv_kernel_size
 
         if config.inv_coeff_init_option:

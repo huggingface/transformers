@@ -59,8 +59,8 @@ class NystromformerConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`NystromformerModel`]-.
-        seq_len (`int`, *optional*, defaults to 64):
+            The vocabulary size of the `token_type_ids` passed when calling [`NystromformerModel`].
+        segment_means_seq_len (`int`, *optional*, defaults to 64):
             Sequence length used in segment-means.
         num_landmarks (`int`, *optional*, defaults to 64):
             The number of landmark (or Nystrom) points to use in Nystrom approximation of the softmax self-attention
@@ -103,7 +103,7 @@ class NystromformerConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=510,
         type_vocab_size=2,
-        seq_len=64,
+        segment_means_seq_len=64,
         num_landmarks=64,
         conv_kernel_size=65,
         inv_coeff_init_option=False,
@@ -125,7 +125,7 @@ class NystromformerConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
-        self.seq_len = seq_len
+        self.segment_means_seq_len = segment_means_seq_len
         self.num_landmarks = num_landmarks
         self.conv_kernel_size = conv_kernel_size
         self.inv_coeff_init_option = inv_coeff_init_option
