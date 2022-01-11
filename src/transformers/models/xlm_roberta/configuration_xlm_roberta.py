@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" XLM-RoBERTa configuration """
+""" XLM-RoBERTa configuration"""
 from collections import OrderedDict
 from typing import Mapping
 
@@ -36,8 +36,8 @@ XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class XLMRobertaConfig(RobertaConfig):
     """
-    This class overrides :class:`~transformers.RobertaConfig`. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`RobertaConfig`]. Please check the superclass for the appropriate documentation alongside
+    usage examples.
     """
 
     model_type = "xlm-roberta"
@@ -53,7 +53,3 @@ class XLMRobertaOnnxConfig(OnnxConfig):
                 ("attention_mask", {0: "batch", 1: "sequence"}),
             ]
         )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"}), ("pooler_output", {0: "batch"})])

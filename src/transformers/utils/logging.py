@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Logging utilities. """
+""" Logging utilities."""
 
 import logging
 import os
@@ -46,7 +46,7 @@ _default_log_level = logging.WARNING
 def _get_default_logging_level():
     """
     If TRANSFORMERS_VERBOSITY env var is set to one of the valid choices return that as the new default level. If it is
-    not - fall back to ``_default_log_level``
+    not - fall back to `_default_log_level`
     """
     env_level_str = os.getenv("TRANSFORMERS_VERBOSITY", None)
     if env_level_str:
@@ -125,18 +125,19 @@ def get_verbosity() -> int:
     Return the current level for the 🤗 Transformers's root logger as an int.
 
     Returns:
-        :obj:`int`: The logging level.
+        `int`: The logging level.
 
-    .. note::
+    <Tip>
 
-        🤗 Transformers has following logging levels:
+    🤗 Transformers has following logging levels:
 
-        - 50: ``transformers.logging.CRITICAL`` or ``transformers.logging.FATAL``
-        - 40: ``transformers.logging.ERROR``
-        - 30: ``transformers.logging.WARNING`` or ``transformers.logging.WARN``
-        - 20: ``transformers.logging.INFO``
-        - 10: ``transformers.logging.DEBUG``
-    """
+    - 50: `transformers.logging.CRITICAL` or `transformers.logging.FATAL`
+    - 40: `transformers.logging.ERROR`
+    - 30: `transformers.logging.WARNING` or `transformers.logging.WARN`
+    - 20: `transformers.logging.INFO`
+    - 10: `transformers.logging.DEBUG`
+
+    </Tip>"""
 
     _configure_library_root_logger()
     return _get_library_root_logger().getEffectiveLevel()
@@ -147,14 +148,14 @@ def set_verbosity(verbosity: int) -> None:
     Set the verbosity level for the 🤗 Transformers's root logger.
 
     Args:
-        verbosity (:obj:`int`):
+        verbosity (`int`):
             Logging level, e.g., one of:
 
-            - ``transformers.logging.CRITICAL`` or ``transformers.logging.FATAL``
-            - ``transformers.logging.ERROR``
-            - ``transformers.logging.WARNING`` or ``transformers.logging.WARN``
-            - ``transformers.logging.INFO``
-            - ``transformers.logging.DEBUG``
+            - `transformers.logging.CRITICAL` or `transformers.logging.FATAL`
+            - `transformers.logging.ERROR`
+            - `transformers.logging.WARNING` or `transformers.logging.WARN`
+            - `transformers.logging.INFO`
+            - `transformers.logging.DEBUG`
     """
 
     _configure_library_root_logger()
@@ -162,22 +163,22 @@ def set_verbosity(verbosity: int) -> None:
 
 
 def set_verbosity_info():
-    """Set the verbosity to the :obj:`INFO` level."""
+    """Set the verbosity to the `INFO` level."""
     return set_verbosity(INFO)
 
 
 def set_verbosity_warning():
-    """Set the verbosity to the :obj:`WARNING` level."""
+    """Set the verbosity to the `WARNING` level."""
     return set_verbosity(WARNING)
 
 
 def set_verbosity_debug():
-    """Set the verbosity to the :obj:`DEBUG` level."""
+    """Set the verbosity to the `DEBUG` level."""
     return set_verbosity(DEBUG)
 
 
 def set_verbosity_error():
-    """Set the verbosity to the :obj:`ERROR` level."""
+    """Set the verbosity to the `ERROR` level."""
     return set_verbosity(ERROR)
 
 
@@ -239,11 +240,9 @@ def enable_propagation() -> None:
 def enable_explicit_format() -> None:
     """
     Enable explicit formatting for every HuggingFace Transformers's logger. The explicit formatter is as follows:
-
-    ::
-
+    ```
         [LEVELNAME|FILENAME|LINE NUMBER] TIME >> MESSAGE
-
+    ```
     All handlers currently bound to the root logger are affected by this method.
     """
     handlers = _get_library_root_logger().handlers
@@ -263,3 +262,17 @@ def reset_format() -> None:
 
     for handler in handlers:
         handler.setFormatter(None)
+
+
+def warning_advice(self, *args, **kwargs):
+    """
+    This method is identical to `logger.warning()`, but if env var TRANSFORMERS_NO_ADVISORY_WARNINGS=1 is set, this
+    warning will not be printed
+    """
+    no_advisory_warnings = os.getenv("TRANSFORMERS_NO_ADVISORY_WARNINGS", False)
+    if no_advisory_warnings:
+        return
+    self.warning(*args, **kwargs)
+
+
+logging.Logger.warning_advice = warning_advice

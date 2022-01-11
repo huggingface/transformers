@@ -46,7 +46,6 @@ from transformers.testing_utils import (
     get_gpu_count,
     get_tests_dir,
     is_staging_test,
-    require_datasets,
     require_optuna,
     require_ray,
     require_sentencepiece,
@@ -57,6 +56,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_gpu,
     require_torch_non_multi_gpu,
+    require_torch_tf32,
     require_torch_up_to_2_gpus,
     slow,
 )
@@ -390,7 +390,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.check_trained_model(trainer.model, alternate_seed=True)
 
-    @require_datasets
     def test_trainer_with_datasets(self):
         import datasets
 
@@ -445,6 +444,27 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.check_trained_model(trainer.model)
 
+    def test_training_loss(self):
+        n_gpus = max(1, get_gpu_count())
+
+        # With even logs
+        trainer = get_regression_trainer(logging_steps=64 / (8 * n_gpus))
+        trainer.train()
+        log_history = trainer.state.log_history
+
+        losses = [log["loss"] for log in log_history if "loss" in log]
+        train_loss = log_history[-1]["train_loss"]
+        self.assertAlmostEqual(sum(losses) / len(losses), train_loss, places=4)
+
+        # With uneven logs
+        trainer = get_regression_trainer(logging_steps=5)
+        trainer.train()
+        log_history = trainer.state.log_history
+
+        # Training loss should be the same as before
+        new_train_loss = log_history[-1]["train_loss"]
+        self.assertAlmostEqual(train_loss, new_train_loss, places=4)
+
     def test_custom_optimizer(self):
         train_dataset = RegressionDataset()
         args = TrainingArguments("./regression")
@@ -491,6 +511,15 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(learning_rate=0.1, bf16=True, half_precision_backend="apex")
 
         # will add more specific tests once there are some bugs to fix
+
+    @require_torch_gpu
+    @require_torch_tf32
+    def test_tf32(self):
+
+        # very basic test
+        trainer = get_regression_trainer(learning_rate=0.1, tf32=True)
+        trainer.train()
+        self.check_trained_model(trainer.model)
 
 
 @require_torch
@@ -1085,17 +1114,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
 
     def test_training_finite_iterable_dataset(self):
-        num_gpus = max(1, get_gpu_count())
-        if num_gpus > 2:
-            return
-
         config = RegressionModelConfig()
         model = RegressionPreTrainedModel(config)
 
         batch_size = 1
         num_samples = 10
 
-        available_steps = num_samples // (batch_size * num_gpus)
+        available_steps = num_samples // batch_size
 
         data = FiniteIterableDataset(length=num_samples)
         train_args = TrainingArguments(
@@ -1502,7 +1527,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             expected_commits = [f"Training in progress, epoch {i}" for i in range(3, 0, -1)]
             expected_commits.append("initial commit")
             self.assertListEqual(commits, expected_commits)
-            print(commits, len(commits))
 
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, get_gpu_count())
@@ -1526,7 +1550,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             expected_commits = [f"Training in progress, step {i}" for i in range(total_steps, 0, -5)]
             expected_commits.append("initial commit")
             self.assertListEqual(commits, expected_commits)
-            print(commits, len(commits))
 
 
 @require_torch
