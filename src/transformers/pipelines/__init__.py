@@ -611,7 +611,11 @@ def pipeline(
                 feature_extractor, revision=revision, _from_pipeline=task, **model_kwargs
             )
 
-            if feature_extractor._processor_class.endswith("WithLM") and isinstance(model_name, str):
+            if (
+                feature_extractor._processor_class
+                and feature_extractor._processor_class.endswith("WithLM")
+                and isinstance(model_name, str)
+            ):
                 try:
                     from pyctcdecode import BeamSearchDecoderCTC
 
