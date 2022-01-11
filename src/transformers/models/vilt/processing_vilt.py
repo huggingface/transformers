@@ -29,9 +29,8 @@ class ViltProcessor:
     r"""
     Constructs a ViLT processor which wraps a BERT tokenizer and ViLT feature extractor into a single processor.
 
-    [`ViltProcessor`] offers all the functionalities of [`ViltFeatureExtractor`]
-    and [`BertTokenizer`]. See the docstring of [`~ViltProcessor.__call__`] and
-    [`~ViltProcessor.decode`] for more information.
+    [`ViltProcessor`] offers all the functionalities of [`ViltFeatureExtractor`] and [`BertTokenizer`]. See the
+    docstring of [`~ViltProcessor.__call__`] and [`~ViltProcessor.decode`] for more information.
 
     Args:
         feature_extractor (`ViltFeatureExtractor`):
@@ -59,10 +58,9 @@ class ViltProcessor:
 
         <Tip>
 
-        This class method is simply calling
-        [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] and
-        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the
-        docstrings of the methods above for more information.
+        This class method is simply calling [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] and
+        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the docstrings of the methods
+        above for more information.
 
         </Tip>
 
@@ -84,8 +82,8 @@ class ViltProcessor:
 
         This class method is simply calling ViltFeatureExtractor's
         [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and BertTokenizer's
-        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the
-        docstrings of the methods above for more information.
+        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the docstrings of the methods
+        above for more information.
 
         </Tip>
 
@@ -97,8 +95,7 @@ class ViltProcessor:
                   huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a feature extractor file saved using the
-                  [`~SequenceFeatureExtractor.save_pretrained`] method, e.g.,
-                  `./my_model_directory/`.
+                  [`~SequenceFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             **kwargs
@@ -131,9 +128,8 @@ class ViltProcessor:
         **kwargs
     ) -> BatchEncoding:
         """
-        This method uses ViltFeatureExtractor's [`~ViltFeatureExtractor.__call__`] method to prepare
-        image(s) for the model, and BertTokenizer's [`~BertTokenizer.__call__`] to prepare text for
-        the model.
+        This method uses ViltFeatureExtractor's [`~ViltFeatureExtractor.__call__`] method to prepare image(s) for the
+        model, and BertTokenizer's [`~BertTokenizer.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
         """
@@ -164,15 +160,14 @@ class ViltProcessor:
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to BertTokenizer's
-        [`~PreTrainedTokenizer.batch_decode`]. Please refer to the docstring of this method for more
-        information.
+        This method forwards all its arguments to BertTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
+        to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to BertTokenizer's [`~PreTrainedTokenizer.decode`].
-        Please refer to the docstring of this method for more information.
+        This method forwards all its arguments to BertTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
+        docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)

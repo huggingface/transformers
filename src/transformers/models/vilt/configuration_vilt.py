@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" VilT model configuration """
+""" VilT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -27,23 +27,24 @@ VILT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ViltConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ViLTModel`]. It is used to
-    instantiate an ViLT model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the ViLT [google/vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224) architecture.
+    This is the configuration class to store the configuration of a [`ViLTModel`]. It is used to instantiate an ViLT
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the ViLT
+    [google/vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the text part of the model. Defines the number of different tokens that can be
             represented by the `inputs_ids` passed when calling [`ViltModel`].
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`ViltModel`].
-            This is used when encoding text.
+            The vocabulary size of the `token_type_ids` passed when calling [`ViltModel`]. This is used when encoding
+            text.
         modality_type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the modalities passed when calling [`ViltModel`].
-            This is used after concatening the embeddings of the text and image modalities.
+            The vocabulary size of the modalities passed when calling [`ViltModel`]. This is used after concatening the
+            embeddings of the text and image modalities.
         max_position_embeddings (`int`, *optional*, defaults to 40):
             The maximum sequence length that this model might ever be used with.
         hidden_size (`int`, *optional*, defaults to 768):
@@ -55,8 +56,8 @@ class ViltConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):

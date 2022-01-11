@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViLT model. """
+""" PyTorch ViLT model."""
 
 
 import collections.abc
@@ -601,8 +601,7 @@ VILT_START_DOCSTRING = r"""
     Parameters:
         config ([`ViltConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 VILT_INPUTS_DOCSTRING = r"""
@@ -629,8 +628,8 @@ VILT_INPUTS_DOCSTRING = r"""
             model's internal embedding lookup matrix.
 
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
-            Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation. This is
-            useful if you want more control over how to convert `pixel_values` into patch embeddings.
+            Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -702,11 +701,11 @@ class ViltModel(ViltPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViltFeatureExtractor.from_pretrained('dandelin/vilt-b32-mlm-itm')
-        >>> model = ViltModel.from_pretrained('dandelin/vilt-b32-mlm-itm')
+        >>> feature_extractor = ViltFeatureExtractor.from_pretrained("dandelin/vilt-b32-mlm-itm")
+        >>> model = ViltModel.from_pretrained("dandelin/vilt-b32-mlm-itm")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -842,8 +841,8 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         r"""
         labels (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in *[-100, 0, ...,
-            config.vocab_size]* (see *input_ids* docstring) Tokens with indices set to *-100* are ignored
-            (masked), the loss is only computed for the tokens with labels in *[0, ..., config.vocab_size]*
+            config.vocab_size]* (see *input_ids* docstring) Tokens with indices set to *-100* are ignored (masked), the
+            loss is only computed for the tokens with labels in *[0, ..., config.vocab_size]*
 
         Returns:
 
@@ -1128,7 +1127,7 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
         >>> for text in texts:
         ...     encoding = processor(image, text, return_tensors="pt")
         ...     outputs = model(**encoding)
-        ...     scores[text] = outputs.logits[0,:].item()
+        ...     scores[text] = outputs.logits[0, :].item()
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1234,9 +1233,10 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         >>> encoding_2 = processor(image2, text, return_tensors="pt")
 
         >>> # forward pass
-        >>> outputs = model(input_ids=encoding_1.input_ids,
-        ...                 pixel_values=encoding_1.pixel_values,
-        ...                 pixel_values_2=encoding_2.pixel_values_2
+        >>> outputs = model(
+        ...     input_ids=encoding_1.input_ids,
+        ...     pixel_values=encoding_1.pixel_values,
+        ...     pixel_values_2=encoding_2.pixel_values_2,
         ... )
         >>> logits = outputs.logits
         >>> idx = logits.argmax(-1).item()

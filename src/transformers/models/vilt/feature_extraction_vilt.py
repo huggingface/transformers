@@ -41,8 +41,8 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a ViLT feature extractor.
 
-    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
+    should refer to this superclass for more information regarding those methods.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -55,8 +55,8 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             The size by which to make sure both the height and width can be divided.
         resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`.
-            Only has an effect if `do_resize` is set to `True`.
+            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
+            if `do_resize` is set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
         image_mean (`List[int]`, defaults to `[0.5, 0.5, 0.5]`):
@@ -89,9 +89,8 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def _resize(self, image, shorter=800, longer=1333, size_divisor=32, resample=Image.BICUBIC):
         """
-        Resizes the shorter edge of `image` to `shorter` and limits the longer edge to under `longer`,
-        while preserving the aspect ratio. Also makes sure that both the height and width can be divided by
-        `size_divisor`.
+        Resizes the shorter edge of `image` to `shorter` and limits the longer edge to under `longer`, while preserving
+        the aspect ratio. Also makes sure that both the height and width can be divided by `size_divisor`.
 
         Based on original implementation:
         https://github.com/dandelin/ViLT/blob/3db8b5035464afee84d951bf6322e1b27f1d072d/vilt/transforms/utils.py#L5
@@ -148,8 +147,8 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             pixel_values_list (`List[torch.Tensor]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
-                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch
-                `torch.Tensor` objects.
+                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
+                objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -223,8 +222,8 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
-            - **pixel_mask** -- Pixel mask to be fed to a model (when `return_pixel_mask=True` or if
-              *"pixel_mask"* is in `self.model_input_names`).
+            - **pixel_mask** -- Pixel mask to be fed to a model (when `return_pixel_mask=True` or if *"pixel_mask"* is
+              in `self.model_input_names`).
         """
         # Input type checking for clearer error
         valid_images = False
