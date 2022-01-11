@@ -50,8 +50,6 @@ class SwinModelTester:
             batch_size=13,
             seq_length=7,
             is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
             use_labels=True,
             vocab_size=99,
             hidden_size=32,

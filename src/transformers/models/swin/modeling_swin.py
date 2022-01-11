@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 temp-swin-author The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Swin model. """
+""" PyTorch Swin Transformer model. """
 
 
 
@@ -52,7 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "swin-base"
 _CONFIG_FOR_DOC = "SwinConfig"
-_TOKENIZER_FOR_DOC = "SwinTokenizer"
 
 SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "swin-base",
@@ -61,6 +60,7 @@ SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # to_2tuple, drop_path, PatchEmbeddings, PatchMerging and DropPath are from the timm library.
 
+# Copied from transformers.models.vit.modeling_vit.to_2tuple
 def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
@@ -114,7 +114,7 @@ def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: b
 
 class SwinEmbeddings(nn.Module):
     """
-    Construct the Position and patch embeddings.
+    Construct the patch and position embeddings.
 
     """
 
@@ -208,7 +208,7 @@ class PatchMerging(nn.Module):
         return x
 
 class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     """
     def __init__(self, drop_prob=None, scale_by_keep=True):
         super(DropPath, self).__init__()
@@ -310,6 +310,7 @@ class SwinSelfAttention(nn.Module):
 
         return outputs 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Swin
 class SwinSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -322,6 +323,7 @@ class SwinSelfOutput(nn.Module):
 
         return hidden_states
 
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Swin
 class SwinAttention(nn.Module):
     def __init__(self, config, dim, num_heads):
         super().__init__()
@@ -364,6 +366,7 @@ class SwinAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->Swin
 class SwinIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -379,6 +382,7 @@ class SwinIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->Swin
 class SwinOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -467,7 +471,6 @@ class SwinBlock(nn.Module):
 
         attention_output = self_attention_outputs[0]
 
-        # if decoder, the last output is tuple of self-attn cache
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
@@ -491,10 +494,6 @@ class SwinBlock(nn.Module):
 
         return outputs
 
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
 
 class SwinLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
@@ -536,7 +535,6 @@ class SwinLayer(nn.Module):
             )
 
             hidden_states = layer_outputs[0]
-
 
         if self.downsample is not None:
             layer_outputs_list = list(layer_outputs)
@@ -669,43 +667,15 @@ SWIN_START_DOCSTRING = r"""
 
 SWIN_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`SwinTokenizer`].
-            See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range `[0, config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`SwinFeatureExtractor`]. See
+            [`SwinFeatureExtractor.__call__`] for details.
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert *input_ids* indices into associated vectors
-            than the model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.

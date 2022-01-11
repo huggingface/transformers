@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright temp-authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Swin model configuration """
+""" Swin Transformer model configuration """
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -22,7 +22,7 @@ from torch import nn
 logger = logging.get_logger(__name__)
 
 SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "swin-base": "https://huggingface.co/swin-base/resolve/main/config.json",
+    "microsoft/swin-base": "https://huggingface.co/microsoft/swin-base patch4-window12-384/resolve/main/config.json",
     # See all Swin models at https://huggingface.co/models?filter=swin
 }
 
