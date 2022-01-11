@@ -448,9 +448,11 @@ def filter_framework_files(
         return files
 
     framework_to_file = {}
+    others = []
     for f in files:
         parts = Path(f).name.split("_")
         if "modeling" not in parts:
+            others.append(f)
             continue
         if "tf" in parts:
             framework_to_file["tf"] = f
@@ -459,7 +461,7 @@ def filter_framework_files(
         else:
             framework_to_file["pt"] = f
 
-    return [framework_to_file[f] for f in frameworks]
+    return [framework_to_file[f] for f in frameworks] + others
 
 
 def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> Dict[str, Union[Path, List[Path]]]:
@@ -482,9 +484,6 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     model_module = TRANSFORMERS_PATH / "models" / module_name
     model_files = list(model_module.glob("*.py"))
     model_files = filter_framework_files(model_files, frameworks=frameworks)
-
-    if frameworks is not None:
-        model_files = []
 
     doc_file = REPO_PATH / "models" / "docs" / "source" / f"{model_type}.mdx"
 
