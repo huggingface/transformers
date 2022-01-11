@@ -619,7 +619,13 @@ def pipeline(
                 try:
                     from pyctcdecode import BeamSearchDecoderCTC
 
-                    decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name)
+            language_model_filenames os.path.join(BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*")
+            alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
+            allow_regex = [language_model_filenames, alphabet_filename]
+            
+            decoder = BeamSearchDecoderCTC.load_from_hf_hub(
+                pretrained_model_name_or_path, allow_regex=allow_regex, **kwargs
+            )
                     kwargs["decoder"] = decoder
                 except Exception as e:
                     logger.warning(
