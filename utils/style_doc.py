@@ -41,7 +41,8 @@ _re_args = re.compile("^\s*(Args?|Arguments?|Params?|Parameters?):\s*$")
 _re_returns = re.compile("^\s*Returns?:\s*$")
 # Matches the special tag to ignore some paragraphs.
 _re_doc_ignore = re.compile(r"(\.\.|#)\s*docstyle-ignore")
-
+# Re pattern that matches <Tip>, </Tip> and <Tip warning={true}> blocks.
+_re_tip = re.compile("^\s*</?Tip(>|\s+warning={true}>)\s*$")
 
 DOCTEST_PROMPTS = [">>>", "..."]
 
@@ -275,6 +276,8 @@ def style_docstring(docstring, max_len):
         new_paragraph = new_paragraph or list_search is not None
         # Code block beginning
         new_paragraph = new_paragraph or code_search is not None
+        # Beginning/end of tip
+        new_paragraph = new_paragraph or _re_tip.search(line)
 
         # In this case, we treat the current paragraph
         if not in_code and new_paragraph and current_paragraph is not None and len(current_paragraph) > 0:
@@ -318,6 +321,14 @@ def style_docstring(docstring, max_len):
         elif _re_args.search(line):
             new_lines.append(line)
             param_indent = find_indent(lines[idx + 1])
+        elif _re_tip.search(line):
+            # Add a new line before if not present
+            if not is_empty_line(new_lines[-1]):
+                new_lines.append("")
+            new_lines.append(line)
+            # Add a new line after if not present
+            if idx < len(lines) - 1 and not is_empty_line(lines[idx + 1]):
+                new_lines.append("")
         elif current_paragraph is None or find_indent(line) != current_indent:
             indent = find_indent(line)
             # Special behavior for parameters intros.
