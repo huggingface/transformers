@@ -339,7 +339,7 @@ _re_class_func = re.compile(r"^(?:class|def)\s+([^\s:\(]+)\s*(?:\(|\:)", flags=r
 
 
 def duplicate_module(
-    module_file: str,
+    module_file: Union[str, os.PathLike],
     old_model_patterns: ModelPatterns,
     new_model_patterns: ModelPatterns,
     dest_file: Optional[str] = None,
@@ -347,6 +347,14 @@ def duplicate_module(
 ):
     """
     Create a new module from an existing one and adapting all function and classes names from old patterns to new ones.
+
+    Args:
+        module_file (`str` or `os.PathLike`): Path to the module to duplicate.
+        old_model_patterns (`ModelPatterns`): The patterns for the old model.
+        new_model_patterns (`ModelPatterns`): The patterns for the new model.
+        dest_file (`str` or `os.PathLike`, *optional*): Path to the new module.
+        add_copied_from (`bool`, *optional*, defaults to `True`):
+            Whether or not to add `# Copied from` statements in the duplicated module.
     """
     if dest_file is None:
         dest_file = str(module_file).replace(
@@ -415,7 +423,7 @@ def duplicate_module(
             object_name = _re_class_func.search(content).groups()[0]
             module_name = get_module_from_file(module_file)
             obj = add_content_to_text(
-                obj, f"# Copied from {module_name} with {replacement}", add_before=_re_class_func
+                obj, f"# Copied from {module_name}.{object_name} with {replacement}", add_before=_re_class_func
             )
         elif not add_copied_from and has_copied_from:
             obj = re.sub("\n# Copied from [^\n]*\n", "\n", obj)
@@ -641,7 +649,7 @@ def clean_tokenization_in_init(init_file: Union[str, os.PathLike]):
 
 
 def add_model_to_main_init(
-    old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns, with_tokenizer: bool = Tru
+    old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns, with_tokenizer: bool = True
 ):
     """
     Add a model to the main init of Transformers.
@@ -796,6 +804,91 @@ def add_model_to_auto_classes(
     insert_tokenizer_in_auto_module(old_model_patterns, new_model_patterns)
 
 
+def duplicate_doc_file(
+    doc_file: Union[str, os.PathLike],
+    old_model_patterns: ModelPatterns,
+    new_model_patterns: ModelPatterns,
+    dest_file: Optional[Union[str, os.PathLike]] = None,
+    frameworks: Optional[List[str]] = None,
+):
+    """
+    Duplicate a documentation file and adapts it for a new model.
+
+    Args:
+        module_file (`str` or `os.PathLike`): Path to the doc file to duplicate.
+        old_model_patterns (`ModelPatterns`): The patterns for the old model.
+        new_model_patterns (`ModelPatterns`): The patterns for the new model.
+        dest_file (`str` or `os.PathLike`, *optional*): Path to the new doc file.
+            Will default to the a file named `{new_model_patterns.model_type}.mdx` in the same folder as `module_file`.
+        frameworks (`List[str]`, *optional*):
+            If passed, will only keep the model classes corresponding to this list of frameworks in the new doc file.
+    """
+    with open(doc_file, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    if frameworks is None:
+        frameworks = ["pt", "tf", "flax"]
+    if dest_file is None:
+        dest_file = Path(doc_file).parent / f"{new_model_patterns.model_type}.mdx"
+
+    # Parse the doc file in blocks. One block per section/header
+    lines = content.split("\n")
+    blocks = []
+    current_block = []
+
+    for line in lines:
+        if line.startswith("#"):
+            blocks.append("\n".join(current_block))
+            current_block = [line]
+        else:
+            current_block.append(line)
+    blocks.append("\n".join(current_block))
+
+    new_blocks = []
+    in_classes = False
+    for block in blocks:
+        # Copyright
+        if not block.startswith("#"):
+            new_blocks.append(block)
+        # Main title
+        elif re.search("^#\s+\S+", block) is not None:
+            new_blocks.append(f"# {new_model_patterns.model_name}\n")
+        # The config starts the part of the doc with the classes.
+        elif not in_classes and old_model_patterns.config_class in block.split("\n")[0]:
+            in_classes = True
+            new_blocks.append("## Overview\n\nFill me\n\n")
+            new_block, _ = replace_model_patterns(block, old_model_patterns, new_model_patterns)
+            new_blocks.append(new_block)
+        # In classes
+        elif in_classes:
+            in_classes = True
+            block_title = block.split("\n")[0]
+            block_class = re.search("^#+\s+(\S.*)$", block_title).groups()[0]
+            new_block, _ = replace_model_patterns(block, old_model_patterns, new_model_patterns)
+
+            if "Tokenizer" in block_class:
+                # We only add the tokenizer if necessary
+                if old_model_patterns.tokenizer_class != new_model_patterns.tokenizer_class:
+                    new_blocks.append(new_block)
+            elif block_class.startswith("Flax"):
+                # We only add Flax models if in the selected frameworks
+                if "flax" in frameworks:
+                    new_blocks.append(new_block)
+            elif block_class.startswith("TF"):
+                # We only add TF models if in the selected frameworks
+                if "tf" in frameworks:
+                    new_blocks.append(new_block)
+            elif len(block_class.split(" ")) == 1:
+                # We only add PyTorch models if in the selected frameworks
+                if "pt" in frameworks:
+                    new_blocks.append(new_block)
+            else:
+                new_blocks.append(new_block)
+
+    with open(dest_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(new_blocks))
+
+
 def create_new_model_like(model_type: str, new_model_patterns: ModelPatterns, add_copied_from: bool = True):
     """
     Creates a new model module like a given model of the Transformers library.
@@ -869,7 +962,25 @@ def create_new_model_like(model_type: str, new_model_patterns: ModelPatterns, ad
     # 4. Add model to auto classes
     add_model_to_auto_classes(old_model_patterns, new_model_patterns, model_classes)
 
-    # 5. TODO Add doc file
+    # 5. Add doc file
+    doc_file = REPO_PATH / "docs" / "source" / "model_doc" / f"{old_model_patterns.model_type}.mdx"
+    duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns)
+
+    # 6. Warn the user for duplicate patterns
+    if old_model_patterns.model_type == old_model_patterns.checkpoint:
+        print(
+            "The model you picked has the same name for the model type and the checkpoint name "
+            f"({old_model_patterns.model_type}). It's possible some checkpoints have been badly converted so search "
+            f"for all instances of {new_model_patterns.model_type} in the new modeling file to check they're not "
+            "badly used as checkpoints."
+        )
+    elif old_model_patterns.model_lower_cased == old_model_patterns.checkpoint:
+        print(
+            "The model you picked has the same name for the model type and the checkpoint name "
+            f"({old_model_patterns.model_lower_cased}). It's possible some checkpoints have been badly converted so "
+            f"search for all instances of {new_model_patterns.model_lower_cased} in the new modeling file to check "
+            "they're not badly used as checkpoints."
+        )
 
 
 def add_new_model_like_command_factory(args: Namespace):
