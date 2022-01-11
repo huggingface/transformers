@@ -1506,32 +1506,40 @@ class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
 FLAX_BART_CONDITIONAL_GENERATION_DOCSTRING = """
     Returns:
 
-    Summarization example::
+    Summarization example:
 
-        >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
+    ```python
+    >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
 
-        >>> model = FlaxBartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn') >>> tokenizer =
-        BartTokenizer.from_pretrained('facebook/bart-large-cnn')
+    >>> model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
+    >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs." >>> inputs =
-        tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='jax')
+    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="np")
 
-        >>> # Generate Summary >>> summary_ids = model.generate(inputs['input_ids']).sequences >>>
-        print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs["input_ids"]).sequences
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    ```
 
-    Mask filling example::
+    Mask filling example:
 
-        >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration >>> tokenizer =
-        BartTokenizer.from_pretrained('facebook/bart-large') >>> TXT = "My friends are <mask> but they eat too many
-        carbs."
+    ```python
+    >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
 
-        >>> model = FlaxBartForConditionalGeneration.from_pretrained('facebook/bart-large') >>> input_ids =
-        tokenizer([TXT], return_tensors='jax')['input_ids'] >>> logits = model(input_ids).logits
+    >>> model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large")
+    >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
 
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero()[0].item() >>> probs =
-        jax.nn.softmax(logits[0, masked_index], axis=0) >>> values, predictions = jax.lax.top_k(probs)
+    >>> TXT = "My friends are <mask> but they eat too many carbs."
+    >>> input_ids = tokenizer([TXT], return_tensors="jax")["input_ids"]
 
-        >>> tokenizer.decode(predictions).split()
+    >>> logits = model(input_ids).logits
+    >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero()[0].item()
+    >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
+    >>> values, predictions = jax.lax.top_k(probs)
+
+    >>> tokenizer.decode(predictions).split()
+    ```
 """
 
 overwrite_call_docstring(
