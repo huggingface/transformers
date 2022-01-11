@@ -19,7 +19,7 @@ from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import transformers.models.auto as auto_module
 from transformers.models.auto.configuration_auto import model_type_to_module_name
@@ -441,7 +441,7 @@ def get_model_files(model_type: str) -> Dict[str, Union[Path, List[Path]]]:
         - **model_files** -- All the files in the model module.
         - **test_files** -- The test files for the model.
     """
-    module_name = auto_module.configuration_auto.model_type_to_module_name(model_type)
+    module_name = model_type_to_module_name(model_type)
 
     model_module = TRANSFORMERS_PATH / "models" / module_name
     model_files = list(model_module.glob("*.py"))
