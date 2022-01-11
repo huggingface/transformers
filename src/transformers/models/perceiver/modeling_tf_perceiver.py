@@ -9,7 +9,7 @@ from ...modeling_tf_utils import TFPreTrainedModel
 from .configuration_perceiver import PerceiverConfig
 from typing import Dict, Mapping, Callable, Any, Optional, Tuple
 from ...file_utils import ModelOutput
-from ...modeling_tf_utils import get_initializer, TFMaskedLanguageModelingLoss
+from ...modeling_tf_utils import get_initializer, TFMaskedLanguageModelingLoss, TFSequenceClassificationLoss
 
 
 ModalitySizeType = Mapping[str, int]
@@ -73,6 +73,38 @@ class PerceiverDecoderOutput(ModelOutput):
     """
 
     logits: tf.Tensor = None
+    cross_attentions: Optional[Tuple[tf.Tensor]] = None
+
+
+@dataclass
+class TFPerceiverClassifierOutput(ModelOutput):
+    """
+    Base class for Perceiver's outputs of sequence/image classification models, optical flow and multimodal
+    autoencoding.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
+    """
+
+    loss: Optional[tf.Tensor] = None
+    logits: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
     cross_attentions: Optional[Tuple[tf.Tensor]] = None
 
 
@@ -677,8 +709,69 @@ class TFPerceiverForMaskedLM(TFPerceiverPreTrainedModel, TFMaskedLanguageModelin
         )
 
 
-class TFPerceiverForSequenceClassification:
-    pass
+class TFPerceiverForSequenceClassification(TFPerceiverPreTrainedModel, TFSequenceClassificationLoss):
+    def __init__(self, config):
+        super(TFPerceiverForSequenceClassification, self).__init__(config)
+
+        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+
+        self.num_labels = config.num_labels
+        self.perceiver = TFPerceiverModel(
+            config,
+            input_preprocessor=TFPerceiverTextPreprocessor(config),
+            decoder=TFPerceiverClassificationDecoder(
+                config,
+                num_channels=config.d_latents,
+                trainable_position_encoding_kwargs=trainable_position_encoding_kwargs_decoder,
+                use_query_residual=True,
+            ),
+        )
+    
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        return_dict=None,
+        input_ids=None,
+    ):
+        if inputs is not None and input_ids is not None:
+            raise ValueError("You cannot use both `inputs` and `input_ids`")
+        elif inputs is None and input_ids is not None:
+            inputs = input_ids
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            inputs=inputs,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        logits = outputs.logits if return_dict else outputs[0]
+
+        loss = None
+        if labels is not None:
+            loss = self.compute_loss(labels=labels, logits=logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFPerceiverClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
 
 
 class TFPerceiverForImageClassificationLearned:
@@ -888,8 +981,34 @@ class TFPerceiverBasicDecoder(TFPerceiverAbstractDecoder):
         return PerceiverDecoderOutput(logits=logits, cross_attentions=cross_attentions)
 
 
-class TFPerceiverClassificationDecoder:
-    pass
+class TFPerceiverClassificationDecoder(TFPerceiverAbstractDecoder):
+    def __init__(self, config, **decoder_kwargs):
+        super(TFPerceiverClassificationDecoder, self).__init__()
+
+        self.num_labels = config.num_labels
+        self.decoder = TFPerceiverBasicDecoder(
+            config,
+            output_num_channels=self.num_labels,
+            output_index_dims=1,  # Predict a single logit array.
+            **decoder_kwargs,
+        )
+
+    @property
+    def num_query_channels(self) -> int:
+        return self.decoder.num_query_channels
+
+    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
+        return self.decoder.decoder_query(
+            inputs, modality_sizes, inputs_without_pos, subsampled_points=subsampled_points
+        )
+
+    def call(self, query, z, query_mask=None, output_attentions=False):
+        decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
+
+        # B x 1 x num_classes -> B x num_classes
+        logits = decoder_outputs.logits[:, 0, :]
+
+        return PerceiverDecoderOutput(logits=logits, cross_attentions=decoder_outputs.cross_attentions)
 
 
 class TFPerceiverOpticalFlowDecoder:
