@@ -147,7 +147,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
             self.type = "seq2seq"
-        elif self.feature_extractor._processor_class.endswith("WithLM") and kwargs.get("decoder", None) is not None:
+        elif (
+            self.feature_extractor._processor_class
+            and self.feature_extractor._processor_class.endswith("WithLM")
+            and kwargs.get("decoder", None) is not None
+        ):
             self.decoder = kwargs["decoder"]
             self.type = "ctc_with_lm"
         else:
