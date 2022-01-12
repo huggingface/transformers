@@ -148,10 +148,10 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(ENCODER_DECODER_START_DOCSTRING)
 class TFEncoderDecoderModel(TFPreTrainedModel):
     r"""
-    [`TFEncoderDecoder`] is a generic model class that will be instantiated as a transformer architecture with one of
-    the base model classes of the library as encoder and another one as decoder when created with the
-    :meth*~transformers.TFAutoModel.from_pretrained* class method for the encoder and
-    :meth*~transformers.TFAutoModelForCausalLM.from_pretrained* class method for the decoder.
+    [`TFEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture with one
+    of the base model classes of the library as encoder and another one as decoder when created with the
+    [`~TFAutoModel.from_pretrained`] class method for the encoder and [`~TFAutoModelForCausalLM.from_pretrained`] class
+    method for the decoder.
     """
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
@@ -233,13 +233,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
         # Add `decoder_input_ids` because `self.decoder` requires it.
         input_ids = tf.constant(DUMMY_INPUTS)
         dummy = {"input_ids": input_ids, "decoder_input_ids": input_ids}
-        # Add `encoder_hidden_states` to make the cross-attention layers' weights initialized
-        if self.config.add_cross_attention:
-            batch_size, seq_len = input_ids.shape
-            shape = (batch_size, seq_len) + (self.config.hidden_size,)
-            h = tf.random.uniform(shape=shape)
-            dummy["encoder_hidden_states"] = h
-
         return dummy
 
     def get_encoder(self):
