@@ -71,6 +71,8 @@ jobs:
           git pull origin master
           cd ..
           WRITE=`cat /mnt/WRITE`
+          
+          rm -rf doc-build-dev
           git clone https://HuggingFaceDocBuilder:$WRITE@github.com/huggingface/doc-build-dev
 
       - name: Make documentation
