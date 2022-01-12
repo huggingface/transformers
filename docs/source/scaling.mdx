@@ -15,29 +15,22 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-Training ever larger models can become challenging even on modern GPUs. Due to their immense size we often run out of GPU memory and training can take very long. In this section we have a look at a few tricks to reduce the memory footprint and speed up training for large models and how they are integrated in the [`Trainer`] and `accelerate`. Before we start make sure you have installed the following libraries:
+Training ever larger models can become challenging even on modern GPUs. Due to their immense size we often run out of GPU memory and training can take very long. In this section we have a look at a few tricks to reduce the memory footprint and speed up training for large models and how they are integrated in the [`Trainer`] and [🤗 Accelerate](https://huggingface.co/docs/accelerate/). Before we start make sure you have installed the following libraries:
 
 ```bash
 pip install transformers datasets accelerate nvidia-ml-py3
 ```
 
-The `nvidia-ml-py3` library allows us to monitor the memory usage of the models from within Python. You might be familiar with the `nvidia-smi` command in the terminal - this library allows to access the same information in Python directly. Let's import it via `pynvml` along with a few other libraries that we'll use:
+The `nvidia-ml-py3` library allows us to monitor the memory usage of the models from within Python. You might be familiar with the `nvidia-smi` command in the terminal - this library allows to access the same information in Python directly.
+
+Then we create some dummy data. We create random token IDs between 100 and 30000 and binary labels for a classifier. In total we get 512 sequences each with length 512 and store them in a [`Dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=dataset#datasets.Dataset) with PyTorch format.
 
 
 ```py
-from pynvml import *
 import numpy as np
-
 from datasets import Dataset
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer, logging
-
-logging.set_verbosity_error()
-```
-
-Then we create some dummy data. We create random token IDs between 100 and 30000 and binary labels for a classifier. In total we get 512 sequences each with length 512 and store them in a `Dataset` with PyTorch format.
 
 
-```py
 seq_len, dataset_size = 512, 512
 dummy_data = {
     "input_ids": np.random.randint(100, 30000, (dataset_size, seq_len)),
@@ -50,6 +43,9 @@ ds.set_format("pt")
 We want to print some summary statistics for the GPU utilization and the training run with the [`Trainer`]. We setup a two helper functions to do just that:
 
 ```py
+from pynvml import *
+
+
 def print_gpu_utilization():
     nvmlInit()
     handle = nvmlDeviceGetHandleByIndex(0)
@@ -66,10 +62,9 @@ def print_summary(result):
 Let's verify that we start with a free GPU memory:
 
 ```py
-print_gpu_utilization()
+>>> print_gpu_utilization()
+GPU memory occupied: 0 MB.
 ```
-
-    GPU memory occupied: 0 MB.
 
 That looks good: the GPU memory is not occupied as we would expect before we load any models. If that's not the case on your machine make sure to stop all processes that are using GPU memory.
 
@@ -79,13 +74,13 @@ First, we load the `bert-large-uncased` model. We load the model weights directl
 
 
 ```py
-model = AutoModelForSequenceClassification.from_pretrained("bert-large-uncased").to("cuda")
+>>> from transformers import AutoModelForSequenceClassification
 
-print_gpu_utilization()
+
+>>> model = AutoModelForSequenceClassification.from_pretrained("bert-large-uncased").to("cuda")
+>>> print_gpu_utilization()
+GPU memory occupied: 2631 MB.
 ```
-
-    GPU memory occupied: 2631 MB.
-
 
 We can see that the model weights alone take up 2.6 GB of the GPU memory. The exact number depends on the specific GPU you are using. Note that on newer GPUs a model can sometimes take up more space since the weights are loaded in an optimized fashion that speeds up the usage of the model. Now we can also quickly check if we get the same result as with `nvidia-smi` CLI:
 
@@ -94,27 +89,28 @@ We can see that the model weights alone take up 2.6 GB of the GPU memory. The ex
 nvidia-smi
 ```
 
-    Tue Jan 11 08:58:05 2022       
-    +-----------------------------------------------------------------------------+
-    | NVIDIA-SMI 460.91.03    Driver Version: 460.91.03    CUDA Version: 11.2     |
-    |-------------------------------+----------------------+----------------------+
-    | GPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
-    | Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
-    |                               |                      |               MIG M. |
-    |===============================+======================+======================|
-    |   0  Tesla V100-SXM2...  On   | 00000000:00:04.0 Off |                    0 |
-    | N/A   37C    P0    39W / 300W |   2631MiB / 16160MiB |      0%      Default |
-    |                               |                      |                  N/A |
-    +-------------------------------+----------------------+----------------------+
-                                                                                   
-    +-----------------------------------------------------------------------------+
-    | Processes:                                                                  |
-    |  GPU   GI   CI        PID   Type   Process name                  GPU Memory |
-    |        ID   ID                                                   Usage      |
-    |=============================================================================|
-    |    0   N/A  N/A      3721      C   ...nvs/codeparrot/bin/python     2629MiB |
-    +-----------------------------------------------------------------------------+
-
+```bash
+Tue Jan 11 08:58:05 2022       
++-----------------------------------------------------------------------------+
+| NVIDIA-SMI 460.91.03    Driver Version: 460.91.03    CUDA Version: 11.2     |
+|-------------------------------+----------------------+----------------------+
+| GPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
+|                               |                      |               MIG M. |
+|===============================+======================+======================|
+|   0  Tesla V100-SXM2...  On   | 00000000:00:04.0 Off |                    0 |
+| N/A   37C    P0    39W / 300W |   2631MiB / 16160MiB |      0%      Default |
+|                               |                      |                  N/A |
++-------------------------------+----------------------+----------------------+
+                                                                            
++-----------------------------------------------------------------------------+
+| Processes:                                                                  |
+|  GPU   GI   CI        PID   Type   Process name                  GPU Memory |
+|        ID   ID                                                   Usage      |
+|=============================================================================|
+|    0   N/A  N/A      3721      C   ...nvs/codeparrot/bin/python     2629MiB |
++-----------------------------------------------------------------------------+
+```
 
 We get the same number as before and you can also see that we are using a V100 GPU with 16GB of memory. So now we can start training the model and see how the GPU memory consumption changes. First, we set up a few standard training arguments that we will use across all our experiments:
 
@@ -128,29 +124,38 @@ default_args = {
 }
 ```
 
-> Note: In order to properly clear the memory after experiments we need restart the Python kernel between experiments. Run all steps above and then just one of the experiments below.
+<Tip>
+
+ Note: In order to properly clear the memory after experiments we need restart the Python kernel between experiments. Run all steps above and then just one of the experiments below.
+
+</Tip>
 
 ## Vanilla Training
 
 As a first experiment we will use the [`Trainer`] and train the model without any further modifications and a batch size of 4:
 
 ```py
+from transformers import TrainingArguments, Trainer, logging
+
+logging.set_verbosity_error()
+
+
 training_args = TrainingArguments(per_device_train_batch_size=4, **default_args)
 trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
-
-    Time: 57.82
-    Samples/second: 8.86
-    GPU memory occupied: 14949 MB.
-
+```
+Time: 57.82
+Samples/second: 8.86
+GPU memory occupied: 14949 MB.
+```
 
 We see that already a relatively small batch size almost fills up our GPU's entire memory. However, a larger batch size can often result in faster model convergence or better end performance. So ideally we want to tune the batch size to our model's needs and not to the GPU limitations. A simple trick to effectively train larger batch size is gradient accumulation.
 
 ## Gradient Accumulation
 
-The idea behind gradient accumulation is to instead of calculating the gradients for the whole batch at once to do it in smaller steps. The way we do that is to calculate the gradients iteratively in smaller batches by doing a forward and backward pass through the model and accumulating the gradients in the process. When enough gradients are accumulated we run the model's optimization step. This way we can save GPU memory but in turn we are adding more forward and backward passes which can slow down the training.
+The idea behind gradient accumulation is to instead of calculating the gradients for the whole batch at once to do it in smaller steps. The way we do that is to calculate the gradients iteratively in smaller batches by doing a forward and backward pass through the model and accumulating the gradients in the process. When enough gradients are accumulated we run the model's optimization step. This way we can easily increase the overall batch size to numbers that would never fit into the GPU's memory. In turn, however, the added forward and backward passes can slow down the training a bit.
 
 We can use gradient accumulation in the [`Trainer`] by simply adding the `gradient_accumulation_steps` argument to [`TrainingArguments`]. Let's see how it impacts the models memory footprint:
 
@@ -161,11 +166,11 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
-
-    Time: 66.03
-    Samples/second: 7.75
-    GPU memory occupied: 8681 MB.
-
+```
+Time: 66.03
+Samples/second: 7.75
+GPU memory occupied: 8681 MB.
+```
 
 We can see that the memory footprint was dramatically reduced at the cost of being only slightly slower than the vanilla run. Of course, this would change as you increase the number of accumulation steps. In general you would want to max out the GPU usage as much as possible. So in our case, the batch_size of 4 was already pretty close to the GPU's limit. If we wanted to train with a batch size of 64 we should not use `per_device_train_batch_size=1` and `gradient_accumulation_steps=64` but instead `per_device_train_batch_size=4` and `gradient_accumulation_steps=16` which has the same effective batch size while making better use of the available GPU resources.
 
@@ -188,17 +193,17 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
+```
+Time: 85.47
+Samples/second: 5.99
+GPU memory occupied: 6775 MB.
+```
 
-    Time: 85.47
-    Samples/second: 5.99
-    GPU memory occupied: 6775 MB.
-
-
-We can see that this saved some more memory but at the same time training became a bit slower. A general rule of thumb is that gradient checkpointing slows down training by about 20%. Let's have a look at another method with which we can regain some speed and also reduce the memory footprint: mixed precision training.
+We can see that this saved some more memory but at the same time training became a bit slower. A general rule of thumb is that gradient checkpointing slows down training by about 20%. Let's have a look at another method with which we can regain some speed: mixed precision training.
 
 ## FP16 Training
 
-The idea of mixed precision training is that no all variables need to be stored in full (32-bit) floating point precision. If we can reduce the precision the variales and their computations are faster and use less memory. The main advantage comes from saving the activations in half (16-bit) precision. Although the gradients are also computed in half precision they are converted back to full precision for the optimization step so no memory is saved here. For this reason this approach is also called mixed precision training. Enabling mixed precision training is also just a matter of setting the `fp16` flag to `True`:
+The idea of mixed precision training is that no all variables need to be stored in full (32-bit) floating point precision. If we can reduce the precision the variales and their computations are faster. The main advantage comes from saving the activations in half (16-bit) precision. Although the gradients are also computed in half precision they are converted back to full precision for the optimization step so no memory is saved here. Since the model is present on the GPU in both 16-bit and 32-bit precision this can use more GPU memory (1.5x the original model is on the GPU), especially for small batch sizes. Since some computations are performed in full and some in half precision this approach is also called mixed precision training. Enabling mixed precision training is also just a matter of setting the `fp16` flag to `True`:
 
 ```py
 training_args = TrainingArguments(per_device_train_batch_size=4, fp16=True, **default_args)
@@ -207,14 +212,13 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
+```
+Time: 27.46
+Samples/second: 18.64
+GPU memory occupied: 13939 MB.
+```
 
-    Time: 27.46
-    Samples/second: 18.64
-    Loss: 0.02
-    GPU memory occupied: 13939 MB.
-
-
-We can see that this is almost twice as fast as the vanilla training while also requiring less GPU memory. Let's add it to the mix of the previous methods:
+We can see that this is almost twice as fast as the vanilla training. Let's add it to the mix of the previous methods:
 
 
 ```py
@@ -230,11 +234,11 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
-
-    Time: 50.76
-    Samples/second: 10.09
-    GPU memory occupied: 7275 MB.
-
+```
+Time: 50.76
+Samples/second: 10.09
+GPU memory occupied: 7275 MB.
+```
 
 We can see that with these tweaks we use about half the GPU memory as at the beginning while also being slightly faster. But we are not done, yet! There is another area where we can save GPU memory: the optimizer.
 
@@ -254,11 +258,11 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
-
-    Time: 64.31
-    Samples/second: 7.96
-    GPU memory occupied: 12295 MB.
-
+```
+Time: 64.31
+Samples/second: 7.96
+GPU memory occupied: 12295 MB.
+```
 
 We can see that this saves a few more GB on the GPU. Let's see how it looks when we add it to the other methods we introduced earlier:
 
@@ -277,11 +281,11 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
-
-    Time: 56.54
-    Samples/second: 9.06
-    GPU memory occupied: 4847 MB.
-
+```
+Time: 56.54
+Samples/second: 9.06
+GPU memory occupied: 4847 MB.
+```
 
 We went from 15 GB memory usage to 5 GB - a 3x improvement while maintaining the throughput! However, as mentioned before, the convergence of Adafactor can be worse than Adam. There is an alternative to Adafactor called 8-bit Adam that takes a slightly different approach.
 
@@ -318,7 +322,12 @@ optimizer_kwargs = {
     "eps": training_args.adam_epsilon,
 }
 optimizer_kwargs["lr"] = training_args.learning_rate
-adam_bnb_optim = bnb.optim.Adam8bit(optimizer_grouped_parameters, **optimizer_kwargs)
+adam_bnb_optim = bnb.optim.Adam8bit(
+    optimizer_grouped_parameters,
+    betas=(training_args.adam_beta1, training_args.adam_beta2),
+    eps=training_args.adam_epsilon,
+    lr=training_args.learning_rate,
+)
 ```
 
 We can now pass the custom optimizer as an argument to the `Trainer`:
@@ -327,11 +336,11 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds, optimizers=
 result = trainer.train()
 print_summary(result)
 ```
-
-    Time: 55.95
-    Samples/second: 9.15
-    GPU memory occupied: 13085 MB.
-
+```
+Time: 55.95
+Samples/second: 9.15
+GPU memory occupied: 13085 MB.
+```
 
 We can see that we get a similar memory improvement as with Adafactor while keeping the full rolling average of the gradients. Let's repeat the experiment with the full settings:
 
@@ -348,11 +357,11 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds, optimizers=
 result = trainer.train()
 print_summary(result)
 ```
-
-    Time: 49.46
-    Samples/second: 10.35
-    GPU memory occupied: 5363 MB.
-
+```
+Time: 49.46
+Samples/second: 10.35
+GPU memory occupied: 5363 MB.
+```
 
 Again, we get about a 3x memory improvement and even slightly higher throughput as using Adafactor. So we have seen how we can optimize the memory footprint of large models. The following plot summarizes all our experiments:
     
@@ -360,7 +369,7 @@ Again, we get about a 3x memory improvement and even slightly higher throughput 
 
 ## Using 🤗 Accelerate
 
-So far we have used the [`Trainer`] to run the experiments but a more flexible alternative to that approach is to use [`accelerate`](https://huggingface.co/docs/accelerate/). With 🤗 Accelerate you have full control over the training loop and can essentially write the loop in pure PyTorch with some minor modifications. In turn it allows you to easily scale across different infrastructures such as CPUs, GPUs, TPUs, or distributed multi-GPU setups without changing any code. Let's see what it takes to implement all of the above tweaks in accelerate. We can still use the [`TrainingArguments`] to wrap the training settings:
+So far we have used the [`Trainer`] to run the experiments but a more flexible alternative to that approach is to use 🤗 Accelerate. With 🤗 Accelerate you have full control over the training loop and can essentially write the loop in pure PyTorch with some minor modifications. In turn it allows you to easily scale across different infrastructures such as CPUs, GPUs, TPUs, or distributed multi-GPU setups without changing any code. Let's see what it takes to implement all of the above tweaks in 🤗 Accelerate. We can still use the [`TrainingArguments`] to wrap the training settings:
 
 
 ```py
@@ -398,16 +407,15 @@ for step, batch in enumerate(dataloader, start=1):
         optimizer.zero_grad()
 ```
 
-First we wrap the dataset in a `DataLoader`. Then we can enable gradient checkpointing by calling the model's `gradient_checkpointing_enable` method. When we initialize the `Accelerator` we can specifiy if we want to use mixed precision training and it will take care of it for us in the `prepare` call. During the `prepare` call the dataloader will also be distributed across workers should we use multiple GPUs. We use the same 8-bit optimizer from the earlier experiments.
+First we wrap the dataset in a [`DataLoader`](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader). Then we can enable gradient checkpointing by calling the model's [`~PreTrainedModel.gradient_checkpointing_enable`] method. When we initialize the [`Accelerator`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator) we can specifiy if we want to use mixed precision training and it will take care of it for us in the [`prepare`] call. During the [`prepare`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.prepare) call the dataloader will also be distributed across workers should we use multiple GPUs. We use the same 8-bit optimizer from the earlier experiments.
 
-Finally, we can write the main training loop. Note that the `backward` call is handled by accelerate. We can also see how gradient accumulation works: we normalize the loss so we get the average at the end of accumulation and once we have enough steps we run the optimization. Now the question is: does this use the same amount of memory as the previous steps? Let's check:
+Finally, we can write the main training loop. Note that the `backward` call is handled by 🤗 Accelerate. We can also see how gradient accumulation works: we normalize the loss so we get the average at the end of accumulation and once we have enough steps we run the optimization. Now the question is: does this use the same amount of memory as the previous steps? Let's check:
 
 
 ```py
-print_gpu_utilization()
+>>> print_gpu_utilization()
+GPU memory occupied: 5363 MB.
 ```
-
-    GPU memory occupied: 5363 MB.
 
 
 Indeed it does. Implementing these optimization techniques with 🤗 Accelerate only takes a handful of lines of code and comes with the benefit of more flexiblity in the training loop.

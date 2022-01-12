@@ -25,8 +25,7 @@
     title: Summary of the tokenizers
   - local: multilingual
     title: Multi-lingual models
-  - local: scaling
-    title: A Guide to Train Large Models
+
   title: "Using 🤗 Transformers"
 - sections:
   - local: examples
@@ -35,6 +34,8 @@
     title: Troubleshooting
   - local: custom_datasets
     title: Fine-tuning with custom datasets
+  - local: scaling
+    title: A Guide to Train Large Models
   - local: notebooks
     title: "🤗 Transformers Notebooks"
   - local: sagemaker
