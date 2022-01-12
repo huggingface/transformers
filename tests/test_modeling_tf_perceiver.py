@@ -220,7 +220,7 @@ class PerceiverModelTest(TFModelTesterMixin, unittest.TestCase):
         (
             TFPerceiverModel,
             TFPerceiverForMaskedLM,
-            # TFPerceiverForImageClassificationLearned,
+            TFPerceiverForImageClassificationLearned,
             # TFPerceiverForImageClassificationConvProcessing,
             # TFPerceiverForImageClassificationFourier,
             # TFPerceiverForOpticalFlow,

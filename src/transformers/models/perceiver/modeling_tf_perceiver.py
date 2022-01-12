@@ -1,4 +1,5 @@
 import abc
+import math
 from dataclasses import dataclass
 import tensorflow as tf
 import numpy as np
@@ -726,7 +727,7 @@ class TFPerceiverForSequenceClassification(TFPerceiverPreTrainedModel, TFSequenc
                 use_query_residual=True,
             ),
         )
-    
+
     def call(
         self,
         inputs=None,
@@ -773,9 +774,77 @@ class TFPerceiverForSequenceClassification(TFPerceiverPreTrainedModel, TFSequenc
         )
 
 
+class TFPerceiverForImageClassificationLearned(TFPerceiverPreTrainedModel, TFSequenceClassificationLoss):
+    def __init__(self, config):
+        super(TFPerceiverForImageClassificationLearned, self).__init__(config)
 
-class TFPerceiverForImageClassificationLearned:
-    pass
+        trainable_position_encoding_kwargs_preprocessor = dict(num_channels=256, index_dims=config.image_size ** 2)
+        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+
+        self.num_labels = config.num_labels
+        self.perceiver = TFPerceiverModel(
+            config,
+            input_preprocessor=TFPerceiverImagePreprocessor(
+                config,
+                prep_type="conv1x1",
+                spatial_downsample=1,
+                out_channels=256,
+                position_encoding_type="trainable",
+                concat_or_add_pos="concat",
+                project_pos_dim=256,
+                trainable_position_encoding_kwargs=trainable_position_encoding_kwargs_preprocessor,
+            ),
+            decoder=TFPerceiverClassificationDecoder(
+                config,
+                num_channels=config.d_latents,
+                trainable_position_encoding_kwargs=trainable_position_encoding_kwargs_decoder,
+                use_query_residual=True,
+            ),
+        )
+
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        return_dict=None,
+        pixel_values=None,
+    ):
+        if inputs is not None and pixel_values is not None:
+            raise ValueError("You cannot use both `inputs` and `pixel_values`")
+        elif inputs is None and pixel_values is not None:
+            inputs = pixel_values
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            inputs=inputs,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        logits = outputs.logits if return_dict else outputs[0]
+
+        loss = None
+        if labels is not None:
+            loss = self.compute_loss(labels=labels, logits=logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFPerceiverClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
 
 
 class TFPerceiverForImageClassificationFourier:
@@ -1224,8 +1293,278 @@ class TFPerceiverProjectionPostprocessor:
     pass
 
 
-class TFPerceiverImagePreprocessor:
-    pass
+def space_to_depth(frames: tf.Tensor, temporal_block_size: int = 1, spatial_block_size: int = 1) -> tf.Tensor:
+    """
+    Space to depth transform. Rearranges blocks of spatial data, into depth.
+
+    This function assumes the channels to be first, but will place the channels last after transformation.
+
+    Based on https://discuss.pytorch.org/t/is-there-any-layer-like-tensorflows-space-to-depth-function/3487/15.
+    """
+    frames_shape = shape_list(frames)
+    frames_dim = len(frames_shape)
+
+    if frames_dim == 4:
+        batch_size, num_channels, height, width = frames_shape
+        # split up dimensions (height by spatial_block_size, width by spatial_block_size)
+        frames = tf.transpose(
+            frames,
+            perm=[
+                batch_size,
+                num_channels,
+                height // spatial_block_size,
+                spatial_block_size,
+                width // spatial_block_size,
+                spatial_block_size,
+            ],
+        )
+        # move blocks to last dimension: (batch_size, H//bs, W//bs, bs, bs, C)
+        frames = tf.transpose(frames, perm=[0, 2, 4, 3, 5, 1])
+        # concatenate blocks along channel dimension: (batch_size, H//bs, W//bs, bs*bs*C)
+        frames = tf.transpose(
+            frames,
+            perm=[
+                batch_size,
+                height // spatial_block_size,
+                width // spatial_block_size,
+                (spatial_block_size ** 2) * num_channels,
+            ],
+        )
+        return frames
+    elif frames_dim == 5:
+        batch_size, time, num_channels, height, width = frames_shape
+        # split up dimensions (time by temporal_block_size, height by spatial_block_size, width by spatial_block_size)
+        frames = tf.transpose(
+            frames,
+            perm=[
+                batch_size,
+                time // temporal_block_size,
+                temporal_block_size,
+                num_channels,
+                height // spatial_block_size,
+                spatial_block_size,
+                width // spatial_block_size,
+                spatial_block_size,
+            ],
+        )
+        # move blocks to last dimension: (batch_size, T//ts, H//bs, W//bs, ts, bs, bs, C)
+        frames = tf.transpose(frames, perm=[0, 1, 4, 6, 2, 5, 7, 3])
+        # concatenate blocks along channel dimension: (batch_size, T//ts, H//bs, W//bs, ts*bs*bs*C)
+        frames = tf.transpose(
+            frames,
+            perm=[
+                batch_size,
+                time // temporal_block_size,
+                height // spatial_block_size,
+                width // spatial_block_size,
+                temporal_block_size * (spatial_block_size ** 2) * num_channels,
+            ],
+        )
+        return frames
+    else:
+        raise ValueError(
+            "Frames should be of rank 4 (batch, channels, height, width)"
+            " or rank 5 (batch, time, channels, height, width)"
+        )
+
+
+class TFPerceiverImagePreprocessor(TFAbstractPreprocessor):
+    def __init__(
+        self,
+        config,
+        prep_type="conv",
+        spatial_downsample: int = 4,
+        temporal_downsample: int = 1,
+        position_encoding_type: str = "fourier",
+        in_channels: int = 3,
+        out_channels: int = 64,
+        conv_after_patching: bool = False,
+        conv_after_patching_in_channels: int = 54,  # only relevant when conv_after_patching = True
+        conv2d_use_batchnorm: bool = True,
+        concat_or_add_pos: str = "concat",
+        project_pos_dim: int = -1,
+        **position_encoding_kwargs,
+    ):
+        super(TFPerceiverImagePreprocessor, self).__init__()
+        self.config = config
+
+        if prep_type not in ("conv", "patches", "pixels", "conv1x1"):
+            raise ValueError(f"Prep_type {prep_type} is invalid")
+
+        if concat_or_add_pos not in ["concat", "add"]:
+            raise ValueError(f"Invalid value {concat_or_add_pos} for concat_or_add_pos.")
+
+        self.in_channels = in_channels
+        self.prep_type = prep_type
+        self.spatial_downsample = spatial_downsample
+        self.temporal_downsample = temporal_downsample
+        self.position_encoding_type = position_encoding_type
+        self.concat_or_add_pos = concat_or_add_pos
+        self.conv_after_patching = conv_after_patching
+        self.out_channels = out_channels
+
+        if self.prep_type == "conv":
+            # Downsampling with conv is currently restricted
+            convnet_num_layers = math.log(spatial_downsample, 4)
+            convnet_num_layers_is_int = convnet_num_layers == np.round(convnet_num_layers)
+            if not convnet_num_layers_is_int or temporal_downsample != 1:
+                raise ValueError(
+                    "Only powers of 4 expected for spatial and 1 expected for temporal downsampling with conv."
+                )
+            self.convnet = TFConv2DDownsample(
+                in_channels=in_channels,
+                num_layers=int(convnet_num_layers),
+                out_channels=out_channels,
+                use_batchnorm=conv2d_use_batchnorm,
+            )
+        elif self.prep_type == "conv1x1":
+            if temporal_downsample != 1:
+                raise ValueError("Conv1x1 does not downsample in time.")
+            self.convnet_1x1 = tf.keras.Sequential(
+                [
+                    tf.keras.layers.Permute([2, 3, 1]),
+                    tf.keras.layers.Conv2D(
+                        filters=out_channels,
+                        kernel_size=1,
+                        # spatial_downsample is unconstrained for 1x1 convolutions.
+                        strides=(spatial_downsample, spatial_downsample),
+                    ),
+                    tf.keras.layers.Permute([3, 1, 2]),
+                ]
+            )
+
+        # Position embeddings
+        self.project_pos_dim = project_pos_dim
+        self.position_embeddings, self.positions_projection = build_position_encoding(
+            position_encoding_type=position_encoding_type,
+            out_channels=out_channels,
+            project_pos_dim=project_pos_dim,
+            **position_encoding_kwargs,
+        )
+
+        # Optional convolutional layer after patches.
+        self.conv_after_patches = tf.keras.layers.Dense(self.out_channels) if conv_after_patching else tf.identity
+
+    @property
+    def num_channels(self) -> int:
+        # Let's assume that the number of resolutions (in the context of image preprocessing)
+        # of the input data is 2 or 3 depending on whether we are processing image or video respectively.
+        # In this case, for convenience, we will declare is_temporal variable,
+        # which will show whether the data has a temporal dimension or not.
+        is_temporal = self.position_embeddings.num_dimensions > 2
+
+        # position embedding
+        if self.project_pos_dim > 0:
+            pos_dim = self.project_pos_dim
+        else:
+            pos_dim = self.position_embeddings.output_size()
+        if self.concat_or_add_pos == "add":
+            return pos_dim
+
+        # inputs
+        if self.conv_after_patching or self.prep_type in ("conv1x1", "conv"):
+            inp_dim = self.out_channels
+        elif self.prep_type == "pixels":
+            inp_dim = self.in_channels
+            if not is_temporal:
+                inp_dim = math.ceil(inp_dim / self.spatial_downsample)
+        elif self.prep_type == "patches":
+            if self.conv_after_patching:
+                inp_dim = self.out_channels
+            else:
+                inp_dim = self.in_channels * self.spatial_downsample ** 2
+                if is_temporal:
+                    inp_dim *= self.temporal_downsample
+
+        return inp_dim + pos_dim
+
+    def _build_network_inputs(self, inputs: tf.Tensor, pos: tf.Tensor, network_input_is_1d: bool = True):
+        """
+        Construct the final input, including position encoding.
+
+        This method expects the inputs to always have channels as last dimension.
+
+        """
+        inputs_shape = shape_list(inputs)
+        batch_size = inputs_shape[0]
+        index_dims = inputs_shape[1:-1]
+        indices = tf.reduce_prod(index_dims)
+
+        # Flatten input features to a 1D index dimension if necessary.
+        if len(inputs_shape) > 3 and network_input_is_1d:
+            inputs = tf.reshape(inputs, [batch_size, indices, -1])
+
+        # Construct the position encoding.
+        if self.position_encoding_type == "trainable":
+            pos_enc = self.position_embeddings(batch_size)
+        elif self.position_encoding_type == "fourier":
+            pos_enc = self.position_embeddings(index_dims, batch_size)
+
+        # Optionally project them to a target dimension.
+        pos_enc = self.positions_projection(pos_enc)
+
+        if not network_input_is_1d:
+            # Reshape pos to match the input feature shape
+            # if the network takes non-1D inputs
+            pos_enc = tf.reshape(pos_enc, inputs_shape[:-1] + [-1])
+        if self.concat_or_add_pos == "concat":
+            inputs_with_pos = tf.concat([inputs, pos_enc], axis=-1)
+        elif self.concat_or_add_pos == "add":
+            inputs_with_pos = tf.add(inputs, pos_enc)
+
+        return inputs_with_pos, inputs
+
+    def call(self, inputs: tf.Tensor, pos: Optional[tf.Tensor] = None, network_input_is_1d: bool = True):
+        inputs_shape = shape_list(inputs)
+        inputs_dim = len(inputs_shape)
+
+        if self.prep_type == "conv":
+            # Convnet image featurization.
+            # Downsamples spatially by a factor of 4
+            inputs = self.convnet(inputs)
+
+        elif self.prep_type == "conv1x1":
+            # map inputs to self.out_channels
+            inputs = self.convnet_1x1(inputs)
+
+        elif self.prep_type == "pixels":
+            # if requested, downsamples in the crudest way
+            if inputs_dim == 4:
+                inputs = inputs[:: self.spatial_downsample, :: self.spatial_downsample]
+            elif inputs_dim == 5:
+                inputs = inputs[
+                    :, :: self.temporal_downsample, :, :: self.spatial_downsample, :: self.spatial_downsample
+                ]
+            else:
+                raise ValueError("Unsupported data format for pixels.")
+
+        elif self.prep_type == "patches":
+            # Space2depth featurization.
+            # Video: B x T x C x H x W
+            inputs = space_to_depth(
+                inputs, temporal_block_size=self.temporal_downsample, spatial_block_size=self.spatial_downsample
+            )
+
+            if inputs_dim == 5 and inputs_shape[1] == 1:
+                # for flow
+                inputs = inputs.squeeze(dim=1)
+
+            # Optionally apply conv layer.
+            inputs = self.conv_after_patches(inputs)
+
+        if self.prep_type != "patches":
+            # move channels to last dimension, as the _build_network_inputs method below expects this
+            if inputs_dim == 4:
+                inputs = tf.transpose(inputs, perm=[0, 3, 2, 1])
+            elif inputs.ndim == 5:
+                inputs = tf.transpose(inputs, perm=[0, 1, 4, 3, 2])
+            else:
+                raise ValueError("Unsupported data format for conv1x1.")
+
+        inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
+        modality_sizes = None  # Size for each modality, only needed for multimodal
+
+        return inputs, modality_sizes, inputs_without_pos
 
 
 class TFPerceiverOneHotPreprocessor:
@@ -1238,3 +1577,31 @@ class TFPerceiverAudioPreprocessor:
 
 class TFPerceiverMultimodalPreprocessor:
     pass
+
+
+class TFConv2DDownsample(tf.keras.layers.Layer):
+    def __init__(
+        self,
+        num_layers: int = 1,
+        in_channels: int = 3,
+        out_channels: int = 64,
+        use_batchnorm: bool = True,
+    ):
+        super(TFConv2DDownsample, self).__init__()
+
+        # use channel_first to be same as pytroch !!!!!???
+        self.conv = tf.keras.layers.Conv2D(
+            filters=out_channels, kernel_size=7, strides=2, use_bias=False, padding="same"
+        )
+        self.batchnorm = tf.keras.layers.BatchNormalization() if use_batchnorm else tf.identity
+        self.relu = tf.keras.layers.ReLU()
+        self.max_pool = tf.keras.layers.MaxPool2D(pool_size=3, strides=2)
+
+    def call(self, inputs):
+        out = tf.transpose(inputs, perm=[0, 2, 3, 1])  # convert to NHWC, because NCHW not working on cpu :|
+        out = self.conv(inputs)
+        out = self.batchnorm(out)
+        out = self.relu(out)
+        out = self.max_pool(out)
+        out = tf.transpose(inputs, perm=[0, 3, 1, 2])  # back to NCHW
+        return out
