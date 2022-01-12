@@ -748,10 +748,9 @@ def add_model_to_main_init(
 
         # Skip if we are in a framework not wanted.
         if framework is not None and frameworks is not None and framework not in frameworks:
+            new_lines.append(lines[idx])
             idx += 1
-            continue
-
-        if f"models.{old_model_patterns.model_lower_cased}" in lines[idx]:
+        elif f"models.{old_model_patterns.model_lower_cased}" in lines[idx]:
             block = [lines[idx]]
             indent = find_indent(lines[idx])
             idx += 1
