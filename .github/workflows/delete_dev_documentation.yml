@@ -29,7 +29,7 @@ jobs:
       - name: Push to repositories
         run: |
           cd doc-build-dev
-          rm -rf $PR_NUMBER
+          rm -rf transformers/$PR_NUMBER
           if [[ `git status --porcelain` ]]; then
             git add build
             git commit -m "Closed PR ${GITHUB_REF##*/}"
