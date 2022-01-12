@@ -144,7 +144,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
 
         self.check_model_type(dict(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()))
-        self.is_ctc = self.model.__class__ in MODEL_FOR_CTC_MAPPING.values()
+
+        if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
+            self.type = "seq2seq"
+        elif (
+            self.feature_extractor._processor_class
+            and self.feature_extractor._processor_class.endswith("WithLM")
+            and kwargs.get("decoder", None) is not None
+        ):
+            self.decoder = kwargs["decoder"]
+            self.type = "ctc_with_lm"
+        else:
+            self.type = "ctc"
 
     def __call__(
         self,
@@ -222,8 +233,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
     def _forward(self, model_inputs):
         is_last = model_inputs.pop("is_last")
-        model_class = self.model.__class__
-        if model_class in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
+        if self.type == "seq2seq":
             encoder = self.model.get_encoder()
             # we need to pass `processed.get("attention_mask")` here since audio encoder
             # attention mask  length is different from expected text decoder `encoder_attention_mask` length
@@ -232,7 +242,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             tokens = self.model.generate(
                 encoder_outputs=encoder(**model_inputs), attention_mask=model_inputs.get("attention_mask")
             )
-        elif model_class in MODEL_FOR_CTC_MAPPING.values():
+            out = {"tokens": tokens}
+        elif self.type == "ctc_with_lm":
+            outputs = self.model(**model_inputs)
+            out = {"logits": outputs.logits}
+
+        elif self.type == "ctc":
             stride = model_inputs.pop("stride", None)
             outputs = self.model(**model_inputs)
             tokens = outputs.logits.argmax(dim=-1)
@@ -241,16 +256,22 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     stride = [stride]
 
                 apply_stride(tokens, stride)
+            out = {"tokens": tokens}
         else:
             logger.warning("This is an unknown class, treating it as CTC.")
             outputs = self.model(**model_inputs)
             tokens = outputs.logits.argmax(dim=-1)
-        return {"tokens": tokens, "is_last": is_last}
+            out = {"tokens": tokens}
+        return {"is_last": is_last, **out}
 
     def postprocess(self, model_outputs):
-        skip_special_tokens = False if "CTC" in self.tokenizer.__class__.__name__ else True
-        tokens = np.concatenate([outputs["tokens"].numpy() for outputs in model_outputs], axis=-1)
-        tokens = tokens.squeeze(0)
-
-        recognized_string = self.tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
-        return {"text": recognized_string}
+        if self.type == "ctc_with_lm":
+            logits = np.concatenate([outputs["logits"].numpy() for outputs in model_outputs], axis=1)
+            logits = logits.squeeze(0)
+            text = self.decoder.decode_beams(logits)[0][0]
+        else:
+            skip_special_tokens = self.type != "ctc"
+            tokens = np.concatenate([outputs["tokens"].numpy() for outputs in model_outputs], axis=-1)
+            tokens = tokens.squeeze(0)
+            text = self.tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
+        return {"text": text}
