@@ -46,13 +46,11 @@ class SwinConfig(PretrainedConfig):
             Size of patches.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels in input images.
-        num_labels (`int`, *optional*, defaults to 1000):
-            Number of classes for classification head
         embed_dim (`int`, *optional*, defaults to 96):
             Dimensionality of patch embedding.
-        depths (`tuple(int)`, *optional*, defaults to (2, 2, 6, 2)):
+        depths (`list(int)`, *optional*, defaults to [2, 2, 6, 2]):
             Depth of each layer in the Transformer encoder.
-        num_heads (`tuple(int)`, *optional*, defaults to (3, 6, 12, 24)):
+        num_heads (`list(int)`, *optional*, defaults to [3, 6, 12, 24]):
             Number of attention heads in each layer of the Transformer encoder.
         window_size (`int`, *optional*, defaults to 7):
             Size of windows.
@@ -71,7 +69,7 @@ class SwinConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        ape (`bool`, *optional*, defaults to False):
+        use_absolute_embeddings (`bool`, *optional*, defaults to False):
             Whether or not to add absolute position embedding to the patch embedding.
         patch_norm (`bool`, *optional*, defaults to True):
             Whether or not to add normalization after patch embedding.
@@ -104,8 +102,8 @@ class SwinConfig(PretrainedConfig):
         num_channels=3, 
         num_labels=1000,
         embed_dim=96, 
-        depths=(2, 2, 6, 2), 
-        num_heads=(3, 6, 12, 24),
+        depths=[2, 2, 6, 2], 
+        num_heads=[3, 6, 12, 24],
         window_size=7, 
         mlp_ratio=4., 
         qkv_bias=True,
@@ -114,7 +112,7 @@ class SwinConfig(PretrainedConfig):
         drop_path_rate=0.1,
         norm_layer=nn.LayerNorm,
         hidden_act="gelu",
-        ape=False, 
+        use_absolute_embeddings=False, 
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
@@ -137,7 +135,7 @@ class SwinConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.norm_layer = norm_layer
         self.hidden_act = hidden_act
-        self.ape = ape
+        self.use_absolute_embeddings = use_absolute_embeddings
         self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range

@@ -97,11 +97,6 @@ def window_reverse(windows, window_size, H, W):
 
 def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: bool = True):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
     """
     if drop_prob == 0. or not training:
         return x
@@ -130,7 +125,7 @@ class SwinEmbeddings(nn.Module):
         num_patches = self.patch_embeddings.num_patches
         self.patch_grid = self.patch_embeddings.grid_size
 
-        if config.ape:
+        if config.use_absolute_embeddings:
             self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.embed_dim))
         else:
             self.position_embeddings = None
@@ -174,9 +169,12 @@ class PatchEmbeddings(nn.Module):
 class PatchMerging(nn.Module):
     r""" Patch Merging Layer.
     Args:
-        input_resolution (tuple[int]): Resolution of input feature.
-        dim (int): Number of input channels.
-        norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
+        input_resolution (tuple[int]): 
+            Resolution of input feature.
+        dim (int): 
+            Number of input channels.
+        norm_layer (nn.Module, *optional*, defaults to nn.LayerNorm): 
+            Normalization layer.  
     """
 
     def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
@@ -186,24 +184,24 @@ class PatchMerging(nn.Module):
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
-    def forward(self, x):
+    def forward(self, input_feature):
         """
-        x: batch_size, height*width, num_channels
+        input_feature: batch_size, height*width, num_channels
         """
         height, width = self.input_resolution
-        batch_size, dim, num_channels = x.shape
+        batch_size, dim, num_channels = input_feature.shape
 
-        x = x.view(batch_size, height, width, num_channels)
+        input_feature = input_feature.view(batch_size, height, width, num_channels)
 
-        x0 = x[:, 0::2, 0::2, :]  # batch_size height/2 width/2 num_channels
-        x1 = x[:, 1::2, 0::2, :]  # batch_size height/2 width/2 num_channels
-        x2 = x[:, 0::2, 1::2, :]  # batch_size height/2 width/2 num_channels
-        x3 = x[:, 1::2, 1::2, :]  # batch_size height/2 width/2 num_channels
-        x = torch.cat([x0, x1, x2, x3], -1)  # batch_size height/2 width/2 4*num_channels
-        x = x.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
+        input_feature_0 = input_feature[:, 0::2, 0::2, :]  # batch_size height/2 width/2 num_channels
+        input_feature_1 = input_feature[:, 1::2, 0::2, :]  # batch_size height/2 width/2 num_channels
+        input_feature_2 = input_feature[:, 0::2, 1::2, :]  # batch_size height/2 width/2 num_channels
+        input_feature_3 = input_feature[:, 1::2, 1::2, :]  # batch_size height/2 width/2 num_channels
+        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)  # batch_size height/2 width/2 4*num_channels
+        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
 
-        x = self.norm(x)
-        x = self.reduction(x)
+        input_feature = self.norm(input_feature)
+        input_feature = self.reduction(input_feature)
 
         return x
 
@@ -474,17 +472,17 @@ class SwinBlock(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
-        shifted_x = window_reverse(attention_windows, self.window_size, height, width)  # B H' W' C
+        shifted_windows = window_reverse(attention_windows, self.window_size, height, width)  # B H' W' C
 
         # reverse cyclic shift
         if self.shift_size > 0:
-            x = torch.roll(shifted_x, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
+            attention_windows = torch.roll(shifted_windows, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
         else:
-            x = shifted_x
+            attention_windows = shifted_windows
         
-        x = x.view(batch_size, height * width, channels)
+        attention_windows = attention_windows.view(batch_size, height * width, channels)
 
-        hidden_states = shortcut + self.drop_path(x)
+        hidden_states = shortcut + self.drop_path(attention_windows)
 
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
