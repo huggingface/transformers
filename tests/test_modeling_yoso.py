@@ -375,6 +375,10 @@ class YosoModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    test_pruning = False
+    test_headmasking = False
+    test_torchscript = False
+
     all_generative_model_classes = (YosoForCausalLM,) if is_torch_available() else ()
 
     def setUp(self):
@@ -402,10 +406,6 @@ class YosoModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
@@ -418,62 +418,50 @@ class YosoModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
-    def test_model_as_decoder(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
-
-    def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
-
-        input_mask = None
-
-        self.model_tester.create_and_check_model_as_decoder(
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in YOSO_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = YosoModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_attention_outputs(self):
+        return
+
 
 @require_torch
 class YosoModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
-        model = YosoForMaskedLM.from_pretrained("yoso-base")
+    def test_inference_no_head(self):
+        model = YosoModel.from_pretrained("uw-madison/yoso-4096")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
 
-        # TODO Replace vocab size
-        vocab_size = 32000
+        with torch.no_grad():
+            output = model(input_ids)[0]
+
+        expected_shape = torch.Size((1, 6, 768))
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[[ 0.0127,  0.1156,  0.1064], [ 0.0468, -0.0202,  0.1110], [ 0.0355, -0.0110,  0.0851]]]
+        )
+
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_masked_lm(self):
+        model = YosoForMaskedLM.from_pretrained("uw-madison/yoso-4096")
+        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+
+        with torch.no_grad():
+            output = model(input_ids)[0]
+
+        vocab_size = 50265
 
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+            [[[-1.5499, -3.4972, -1.9477], [-2.5585, -3.3316, -2.3803], [ 0.5205, -2.4015,  0.2559]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

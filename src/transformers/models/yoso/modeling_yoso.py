@@ -51,160 +51,164 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_yoso import YosoConfig
-from torch.utils.cpp_extension import load
 
-src_folder = os.path.dirname(os.path.realpath(__file__))
-append_root = lambda files : [os.path.join(src_folder, file) for file in files]
-src_files = append_root(
-    ['fast_lsh_cumulation_torch.cpp',
-     'fast_lsh_cumulation.cu',
-     'fast_lsh_cumulation_cuda.cu'])
-fast_lsh_cumulation = load('fast_lsh_cumulation', src_files, verbose = True)
+def load_cuda_kernels():
+    try:
+        from torch.utils.cpp_extension import load
 
-import fast_lsh_cumulation as lsh_cumulation
+        src_folder = os.path.dirname(os.path.realpath(__file__))
+        append_root = lambda files : [os.path.join(src_folder, file) for file in files]
+        src_files = append_root(
+            ['fast_lsh_cumulation_torch.cpp',
+            'fast_lsh_cumulation.cu',
+            'fast_lsh_cumulation_cuda.cu'])
+
+        fast_lsh_cumulation = load('fast_lsh_cumulation', src_files, verbose = True)
+
+        import fast_lsh_cumulation as lsh_cumulation
+
+        return True
+    except Exception:
+        return False
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "yoso-base"
+_CHECKPOINT_FOR_DOC = "uw-madison/yoso-4096"
 _CONFIG_FOR_DOC = "YosoConfig"
 _TOKENIZER_FOR_DOC = "YosoTokenizer"
 
 YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "yoso-base",
+    "uw-madison/yoso-4096",
     # See all YOSO models at https://huggingface.co/models?filter=yoso
 ]
 
-def to_contiguous(inp):
-    if type(inp) is list:
+def to_contiguous(input):
+    if type(input) is list:
         out = []
-        for tensor in inp:
+        for tensor in input:
             if not tensor.is_contiguous():
                 tensor = tensor.contiguous()
             out.append(tensor)
         return out
     else:
-        if not inp.is_contiguous():
-            inp = inp.contiguous()
-        return inp
+        if not input.is_contiguous():
+            input = input.contiguous()
+        return input
 
-def normalize(inp):
-    if type(inp) is list:
+def normalize(input):
+    if type(input) is list:
         out = []
-        for tensor in inp:
+        for tensor in input:
             out.append(nn.functional.normalize(tensor, p = 2, dim = -1))
         return out
     else:
-        return nn.functional.normalize(inp, p = 2, dim = -1)
+        return nn.functional.normalize(input, p = 2, dim = -1)
 
-def hashing(X, Y, num_hash, hash_len):
+def hashing(query, key, num_hash, hash_len):
     
-    assert len(X.size()) == 3 # [b, s, d]
-    assert len(Y.size()) == 3 # [b, s, d]
+    assert len(query.size()) == 3 # [b, s, d]
+    assert len(key.size()) == 3 # [b, s, d]
 
-    rmat = torch.randn(X.size(0), X.size(2), num_hash * hash_len, device = X.device)
-    raise_pow = 2 ** torch.arange(hash_len, device = X.device)
+    rmat = torch.randn(query.size(0), query.size(2), num_hash * hash_len, device = query.device)
+    raise_pow = 2 ** torch.arange(hash_len, device = query.device)
 
-    Xp = torch.matmul(X, rmat).reshape(X.size(0), X.size(1), num_hash, hash_len)
-    Yp = torch.matmul(Y, rmat).reshape(Y.size(0), Y.size(1), num_hash, hash_len)
-    Xb = (Xp > 0).int()
-    Yb = (Yp > 0).int()
-    Xh = torch.sum(Xb * raise_pow, dim = -1)
-    Yh = torch.sum(Yb * raise_pow, dim = -1)
-    return Xh.int(), Yh.int()
+    query_projection = torch.matmul(query, rmat).reshape(query.size(0), query.size(1), num_hash, hash_len)
+    key_projection = torch.matmul(key, rmat).reshape(key.size(0), key.size(1), num_hash, hash_len)
+    query_binary = (query_projection > 0).int()
+    key_binary = (key_projection > 0).int()
+    query_hash = torch.sum(query_binary * raise_pow, dim = -1)
+    query_hash = torch.sum(key_binary * raise_pow, dim = -1)
+
+    return query_hash.int(), query_hash.int()
 
 class Cumulation(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, Q_mask, K_mask, Q, K, V, config):
-
+    def forward(ctx, query_mask, key_mask, query, key, value, config):
         hash_code_len = config["hash_code_len"] 
         hashtable_capacity = int(2 ** hash_code_len)
 
-        expectation = (1 - torch.acos(torch.matmul(Q, K.transpose(-1, -2))) / math.pi) ** hash_code_len
-        expectation = expectation * Q_mask[:, :, None] * K_mask[:, None, :]
-        cumulation_V = torch.matmul(expectation, V)
+        expectation = (1 - torch.acos(torch.matmul(query, key.transpose(-1, -2))) / math.pi) ** hash_code_len
+        expectation = expectation * query_mask[:, :, None] * key_mask[:, None, :]
+        cumulation_value = torch.matmul(expectation, value)
 
-        ctx.save_for_backward(Q_mask, K_mask, expectation, Q, K, V)
+        ctx.save_for_backward(query_mask, key_mask, expectation, query, key, value)
         ctx.config = config
 
-        return cumulation_V
+        return cumulation_value
 
     @staticmethod
     def backward(ctx, grad):
-
         grad = to_contiguous(grad)
 
-        Q_mask, K_mask, expectation, Q, K, V = ctx.saved_tensors
+        query_mask, key_mask, expectation, query, key, value = ctx.saved_tensors
         config = ctx.config
 
         hash_code_len = config["hash_code_len"] 
         hashtable_capacity = int(2 ** hash_code_len)
-        V_dim = grad.size(-1)
+        value_dim = grad.size(-1)
 
-        weighted_exp = torch.matmul(grad, V.transpose(-1, -2)) * expectation
-        grad_Q = torch.matmul(weighted_exp, (hash_code_len / 2) * K)
-        grad_K = torch.matmul(weighted_exp.transpose(-1, -2), (hash_code_len / 2) * Q)
-        grad_V = torch.matmul(expectation.transpose(-1, -2), grad)
+        weighted_exp = torch.matmul(grad, value.transpose(-1, -2)) * expectation
+        grad_query = torch.matmul(weighted_exp, (hash_code_len / 2) * key)
+        grad_key = torch.matmul(weighted_exp.transpose(-1, -2), (hash_code_len / 2) * query)
+        grad_value = torch.matmul(expectation.transpose(-1, -2), grad)
 
-        return None, None, grad_Q, grad_K, grad_V, None
+        return None, None, grad_query, grad_key, grad_value, None
 
 class LSHCumulation(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, Q_mask, K_mask, Q, K, V, config):
+    def forward(ctx, query_mask, key_mask, query, key, value, config):
+        assert query_mask.size(0) == key_mask.size(0)
+        assert query_mask.size(0) == query.size(0)
+        assert query_mask.size(0) == key.size(0)
+        assert query_mask.size(0) == value.size(0)
+        assert key.size(1) == value.size(1)
+        assert query.size(2) == key.size(2)
 
-        assert Q_mask.size(0) == K_mask.size(0)
-        assert Q_mask.size(0) == Q.size(0)
-        assert Q_mask.size(0) == K.size(0)
-        assert Q_mask.size(0) == V.size(0)
-        assert K.size(1) == V.size(1)
-        assert Q.size(2) == K.size(2)
+        query_mask, key_mask, query, key, value = to_contiguous([query_mask, key_mask, query, key, value])
 
-        Q_mask, K_mask, Q, K, V = to_contiguous([Q_mask, K_mask, Q, K, V])
-
-        use_cuda = Q_mask.is_cuda
+        use_cuda = query_mask.is_cuda
         num_hash = config["num_hash"]
         hash_code_len = config["hash_code_len"]
         hashtable_capacity = int(2 ** hash_code_len)
 
         if config["use_fast_hash"]:
-            Q_hash_code, K_hash_code = lsh_cumulation.fast_hash(Q_mask, Q, K_mask, K, num_hash, hash_code_len, use_cuda, 1)
+            query_hash_code, key_hash_code = lsh_cumulation.fast_hash(query_mask, query, key_mask, key, num_hash, hash_code_len, use_cuda, 1)
         else:
-            Q_hash_code, K_hash_code = hashing(Q, K, num_hash, hash_code_len)
+            query_hash_code, key_hash_code = hashing(query, key, num_hash, hash_code_len)
 
-        cumulation_V = lsh_cumulation.lsh_cumulation(Q_mask, Q_hash_code, K_mask, K_hash_code, V, hashtable_capacity, use_cuda, 1)
+        cumulation_value = lsh_cumulation.lsh_cumulation(query_mask, query_hash_code, key_mask, key_hash_code, value, hashtable_capacity, use_cuda, 1)
 
-        ctx.save_for_backward(Q_mask, K_mask, Q_hash_code, K_hash_code, Q, K, V)
+        ctx.save_for_backward(query_mask, key_mask, query_hash_code, key_hash_code, query, key, value)
         ctx.config = config
 
-        return cumulation_V
+        return cumulation_value
 
     @staticmethod
     def backward(ctx, grad):
-
         grad = to_contiguous(grad)
 
-        Q_mask, K_mask, Q_hash_code, K_hash_code, Q, K, V = ctx.saved_tensors
+        query_mask, key_mask, query_hash_code, key_hash_code, query, key, value = ctx.saved_tensors
         config = ctx.config
 
         use_cuda = grad.is_cuda
         hash_code_len = config["hash_code_len"]
         hashtable_capacity = int(2 ** hash_code_len)
-        V_dim = grad.size(-1)
 
-        if config["n2_backward"]:
-            expectation = (1 - torch.acos(torch.matmul(Q, K.transpose(-1, -2))) / math.pi) ** hash_code_len
-            expectation = expectation * Q_mask[:, :, None] * K_mask[:, None, :]
-            weighted_exp = torch.matmul(grad, V.transpose(-1, -2)) * expectation
-            grad_Q = torch.matmul(weighted_exp, (hash_code_len / 2) * K)
-            grad_K = torch.matmul(weighted_exp.transpose(-1, -2), (hash_code_len / 2) * Q)
-            grad_V = torch.matmul(expectation.transpose(-1, -2), grad)
+        if config["lsh_backward"]:
+            grad_value = lsh_cumulation.lsh_cumulation(key_mask, key_hash_code, query_mask, query_hash_code, grad, hashtable_capacity, use_cuda, 1)
+            grad_query = lsh_cumulation.lsh_weighted_cumulation(
+                query_mask, query_hash_code, grad, key_mask, key_hash_code, value, (hash_code_len / 2) * key, hashtable_capacity, use_cuda, 4)
+            grad_key = lsh_cumulation.lsh_weighted_cumulation(
+                key_mask, key_hash_code, value, query_mask, query_hash_code, grad, (hash_code_len / 2) * query, hashtable_capacity, use_cuda, 4)
         else:
-            grad_V = lsh_cumulation.lsh_cumulation(K_mask, K_hash_code, Q_mask, Q_hash_code, grad, hashtable_capacity, use_cuda, 1)
-            grad_Q = lsh_cumulation.lsh_weighted_cumulation(
-                Q_mask, Q_hash_code, grad, K_mask, K_hash_code, V, (hash_code_len / 2) * K, hashtable_capacity, use_cuda, 4)
-            grad_K = lsh_cumulation.lsh_weighted_cumulation(
-                K_mask, K_hash_code, V, Q_mask, Q_hash_code, grad, (hash_code_len / 2) * Q, hashtable_capacity, use_cuda, 4)
+            expectation = (1 - torch.acos(torch.matmul(query, key.transpose(-1, -2))) / math.pi) ** hash_code_len
+            expectation = expectation * query_mask[:, :, None] * key_mask[:, None, :]
+            weighted_exp = torch.matmul(grad, value.transpose(-1, -2)) * expectation
+            grad_query = torch.matmul(weighted_exp, (hash_code_len / 2) * key)
+            grad_key = torch.matmul(weighted_exp.transpose(-1, -2), (hash_code_len / 2) * query)
+            grad_value = torch.matmul(expectation.transpose(-1, -2), grad)
 
-        return None, None, grad_Q, grad_K, grad_V, None
+        return None, None, grad_query, grad_key, grad_value, None
 
 class YosoEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -212,7 +216,7 @@ class YosoEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings + 2, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
@@ -221,7 +225,7 @@ class YosoEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)) + 2)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         if version.parse(torch.__version__) > version.parse("1.6.0"):
             self.register_buffer(
@@ -292,13 +296,13 @@ class YosoSelfAttention(nn.Module):
         self.use_conv = config.conv_window is not None
         self.use_fast_hash = config.use_fast_hash
         self.num_hash = config.num_hash
-        self.n2_backward = config.n2_backward
+        self.lsh_backward = config.lsh_backward
 
         self.lsh_config = {
-            "hash_code_len":self.hash_code_len,
-            "use_fast_hash":self.use_fast_hash,
-            "num_hash":self.num_hash,
-            "n2_backward":self.n2_backward
+            "hash_code_len": self.hash_code_len,
+            "use_fast_hash": self.use_fast_hash,
+            "num_hash": self.num_hash,
+            "lsh_backward": self.lsh_backward
         }
 
         if config.conv_window is not None:
@@ -308,10 +312,17 @@ class YosoSelfAttention(nn.Module):
                 bias = False,
                 groups = config.num_attention_heads)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
+        if not self.use_expectation:
+            loaded = load_cuda_kernels()
+
+            assert loaded, """Failed to compile CUDA kernels. Ensure that the correct versions of PyTorch and cudatoolkit 
+                are installed and try again. Alternatively, avoid loading CUDA kernels by using YOSO Expectation by setting 
+                use_expectation=True."""
+
+    def transpose_for_scores(self, layer):
+        new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        layer = layer.view(*new_layer_shape)
+        return layer.permute(0, 2, 1, 3)
 
     def forward(
         self,
@@ -330,50 +341,50 @@ class YosoSelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         if self.use_conv:
-            conv_V = self.conv(value_layer * attention_mask[:, None, :, None])
-
-        mask = attention_mask.int()
+            conv_value_layer = self.conv(value_layer * attention_mask[:, None, :, None])
 
         batch_size, num_heads, seq_len, head_dim = query_layer.size()
 
-        Q = query_layer.reshape(batch_size * num_heads, seq_len, head_dim)
-        K = key_layer.reshape(batch_size * num_heads, seq_len, head_dim)
-        V = value_layer.reshape(batch_size * num_heads, seq_len, head_dim)
+        query_layer = query_layer.reshape(batch_size * num_heads, seq_len, head_dim)
+        key_layer = key_layer.reshape(batch_size * num_heads, seq_len, head_dim)
+        value_layer = value_layer.reshape(batch_size * num_heads, seq_len, head_dim)
 
-        mask = mask.squeeze().repeat(1, num_heads, 1).reshape(batch_size * num_heads, seq_len)
+        # revert changes made by get_extended_attention_mask
+        attention_mask = 1.0 + attention_mask / 10000.0
+        attention_mask = attention_mask.squeeze().repeat(1, num_heads, 1).reshape(batch_size * num_heads, seq_len)
 
         if (not self.use_expectation) and head_dim < 32:
-            Q = torch.cat([Q, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device = Q.device)], dim = -1)
-            K = torch.cat([K, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device = K.device)], dim = -1)
-            V = torch.cat([V, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device = V.device)], dim = -1)
+            query_layer = torch.cat([query_layer, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device = query_layer.device)], dim = -1)
+            key_layer = torch.cat([key_layer, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device = key_layer.device)], dim = -1)
+            value_layer = torch.cat([value_layer, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device = value_layer.device)], dim = -1)
 
         if self.use_expectation or self.training:
-            Q, K = normalize([Q, K])
-
+            query_layer, key_layer = normalize([query_layer, key_layer])
+  
         if self.use_expectation:            
-            X = Cumulation.apply(mask, mask, Q, K, V, self.lsh_config)
+            context_layer = Cumulation.apply(attention_mask, attention_mask, query_layer, key_layer, value_layer, self.lsh_config)
         else:
-            X = LSHCumulation.apply(mask, mask, Q, K, V, self.lsh_config)
+            context_layer = LSHCumulation.apply(attention_mask, attention_mask, query_layer, key_layer, value_layer, self.lsh_config)
 
         if (not self.use_expectation) and head_dim < 32:
-            X = X[:, :, :head_dim]
+            context_layer = context_layer[:, :, :head_dim]
 
-        X = normalize(X)
+        context_layer = normalize(context_layer)
 
-        context_layer = X.reshape(batch_size, num_heads, seq_len, head_dim)
+        context_layer = context_layer.reshape(batch_size, num_heads, seq_len, head_dim)
 
         if self.use_conv:
-            context_layer += conv_V
+            context_layer += conv_value_layer
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer,)
+        outputs = (context_layer, context_layer) if output_attentions else (context_layer,)
 
         return outputs
 
-
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class YosoSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -388,6 +399,7 @@ class YosoSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertAttention
 class YosoAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -436,7 +448,7 @@ class YosoAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
-
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class YosoIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -452,6 +464,7 @@ class YosoIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOutput
 class YosoOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -466,6 +479,7 @@ class YosoOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertLayer
 class YosoLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -489,7 +503,7 @@ class YosoLayer(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
-    ):
+    ):  
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
@@ -549,6 +563,7 @@ class YosoLayer(nn.Module):
         return layer_output
 
 
+# Copied from transformers.models.bert.modeling_bert.BertEncoder
 class YosoEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -646,6 +661,7 @@ class YosoEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertHeadTransform
 class YosoPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -663,6 +679,7 @@ class YosoPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead
 class YosoLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -683,6 +700,7 @@ class YosoLMPredictionHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead
 class YosoOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -941,6 +959,7 @@ class YosoModel(YosoPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
+
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -1153,10 +1172,10 @@ class YosoForCausalLM(YosoPreTrainedModel):
             >>> from transformers import YosoTokenizer, YosoForCausalLM, YosoConfig
             >>> import torch
 
-            >>> tokenizer = YosoTokenizer.from_pretrained('yoso-base')
-            >>> config = YosoConfig.from_pretrained("yoso-base")
+            >>> tokenizer = YosoTokenizer.from_pretrained('uw-madison/yoso-4096')
+            >>> config = YosoConfig.from_pretrained("uw-madison/yoso-4096")
             >>> config.is_decoder = True
-            >>> model = YosoForCausalLM.from_pretrained('yoso-base', config=config)
+            >>> model = YosoForCausalLM.from_pretrained('uw-madison/yoso-4096', config=config)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1347,7 +1366,7 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
         super().__init__(config)
 
         self.yoso = YosoModel(config)
-        self.sequence_summary = SequenceSummary(config)
+        self.pre_classifier = nn.Linear(config.hidden_size, config.hidden_size)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
@@ -1404,10 +1423,12 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
-
-        pooled_output = self.sequence_summary(sequence_output)
+        hidden_state = outputs[0]  # (bs * num_choices, seq_len, dim)
+        pooled_output = hidden_state[:, 0]  # (bs * num_choices, dim)
+        pooled_output = self.pre_classifier(pooled_output)  # (bs * num_choices, dim)
+        pooled_output = nn.ReLU()(pooled_output)  # (bs * num_choices, dim)
         logits = self.classifier(pooled_output)
+        
         reshaped_logits = logits.view(-1, num_choices)
 
         loss = None
