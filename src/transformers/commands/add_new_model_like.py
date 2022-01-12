@@ -660,7 +660,8 @@ def clean_frameworks_in_init(
     if frameworks is None:
         frameworks = ["pt", "tf", "flax"]
 
-    to_remove = [f for f in ["pt", "tf", "flax"] if f not in frameworks]
+    names = {"pt": "torch"}
+    to_remove = [names.get(f, f) for f in ["pt", "tf", "flax"] if f not in frameworks]
     if not keep_tokenizer:
         to_remove.extend(["sentencepiece", "tokenizers"])
 
@@ -697,6 +698,7 @@ def clean_frameworks_in_init(
             if len(line.strip()) > 0:
                 new_lines.append(line)
             idx += 1
+        # Otherwise we keep the line, except if it's a tokenizer import and we don't want to keep it.
         elif keep_tokenizer or (
             re.search('^\s*"tokenization', lines[idx]) is None
             and re.search("^\s*from .tokenization", lines[idx]) is None
@@ -711,7 +713,10 @@ def clean_frameworks_in_init(
 
 
 def add_model_to_main_init(
-    old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns, with_tokenizer: bool = True
+    old_model_patterns: ModelPatterns,
+    new_model_patterns: ModelPatterns,
+    frameworks: Optional[List[str]] = None,
+    with_tokenizer: bool = True,
 ):
     """
     Add a model to the main init of Transformers.
@@ -719,6 +724,8 @@ def add_model_to_main_init(
     Args:
         old_model_patterns (`ModelPatterns`): The patterns for the old model.
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
+        frameworks (`List[str]`, *optional*):
+            If specified, only the models implemented in those frameworks will be added.
         with_tokenizer (`bool`, *optional*, defaults to `True`):
             Whether the tokenizer of the model should also be added to the init or not.
     """
@@ -728,7 +735,21 @@ def add_model_to_main_init(
     lines = content.split("\n")
     idx = 0
     new_lines = []
+    framework = None
     while idx < len(lines):
+        if not is_empty_line(lines[idx]) and find_indent(lines[idx]) == 0:
+            framework = None
+        elif lines[idx].lstrip().startwith("if is_torch_available"):
+            framework = "pt"
+        elif lines[idx].lstrip().startwith("if is_tf_available"):
+            framework = "tf"
+        elif lines[idx].lstrip().startwith("if is_flax_available"):
+            framework = "flax"
+
+        # Skip if we are in a framework not wanted.
+        if framework is not None and framework not in frameworks:
+            continue
+
         if f"models.{old_model_patterns.model_lower_cased}" in lines[idx]:
             block = [lines[idx]]
             indent = find_indent(lines[idx])
