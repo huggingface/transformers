@@ -44,7 +44,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import (
     PreTrainedModel,
-    SequenceSummary,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -56,8 +55,10 @@ def load_cuda_kernels():
     try:
         from torch.utils.cpp_extension import load
 
-        src_folder = os.path.dirname(os.path.realpath(__file__))
-        append_root = lambda files : [os.path.join(src_folder, file) for file in files]
+        def append_root(files):
+            src_folder = os.path.dirname(os.path.realpath(__file__))
+            return [os.path.join(src_folder, file) for file in files]
+        
         src_files = append_root(
             ['fast_lsh_cumulation_torch.cpp',
             'fast_lsh_cumulation.cu',
@@ -124,7 +125,6 @@ class Cumulation(torch.autograd.Function):
     @staticmethod
     def forward(ctx, query_mask, key_mask, query, key, value, config):
         hash_code_len = config["hash_code_len"] 
-        hashtable_capacity = int(2 ** hash_code_len)
 
         expectation = (1 - torch.acos(torch.matmul(query, key.transpose(-1, -2))) / math.pi) ** hash_code_len
         expectation = expectation * query_mask[:, :, None] * key_mask[:, None, :]
@@ -143,8 +143,6 @@ class Cumulation(torch.autograd.Function):
         config = ctx.config
 
         hash_code_len = config["hash_code_len"] 
-        hashtable_capacity = int(2 ** hash_code_len)
-        value_dim = grad.size(-1)
 
         weighted_exp = torch.matmul(grad, value.transpose(-1, -2)) * expectation
         grad_query = torch.matmul(weighted_exp, (hash_code_len / 2) * key)
