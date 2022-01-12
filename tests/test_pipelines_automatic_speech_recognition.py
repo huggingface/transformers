@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
+    require_pyctcdecode,
     require_tf,
     require_torch,
     require_torchaudio,
@@ -96,6 +97,37 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "(Applaudissements)"})
+
+    @slow
+    @require_torch
+    @require_pyctcdecode
+    def test_large_model_pt_with_lm(self):
+        dataset = load_dataset("Narsil/asr_dummy")
+        filename = dataset["test"][3]["file"]
+
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm",
+            framework="pt",
+        )
+        self.assertEqual(speech_recognizer.type, "ctc_with_lm")
+
+        output = speech_recognizer(filename)
+        self.assertEqual(
+            output,
+            {"text": "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumaje"},
+        )
+
+        # Override back to pure CTC
+        speech_recognizer.type = "ctc"
+        output = speech_recognizer(filename)
+        # plumajre != plumaje
+        self.assertEqual(
+            output,
+            {
+                "text": "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumajre"
+            },
+        )
 
     @require_tf
     def test_small_model_tf(self):
