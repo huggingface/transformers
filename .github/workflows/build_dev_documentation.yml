@@ -82,11 +82,7 @@ jobs:
       - name: Push to repositories
         run: |
           cd doc-build-dev
-          if [[ `git status --porcelain` ]]; then
-            git add $PR_NUMBER
-            git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
-            git push origin main
-          else
-            echo "No diff in the documentation."
-          fi
-          cd ..
+          ls
+          git add $PR_NUMBER
+          git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
+          git push origin main
