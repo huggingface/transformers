@@ -109,7 +109,7 @@ which should show the following logs:
 
 ```bash
 Validating ONNX model...
-        -[✓] ONNX model outputs' name match reference model ({'last_hidden_state'})
+        -[✓] ONNX model output names match reference model ({'last_hidden_state'})
         - Validating ONNX Model output "last_hidden_state":
                 -[✓] (2, 8, 768) matches (2, 8, 768)
                 -[✓] all values close (atol: 1e-05)
@@ -189,7 +189,7 @@ which will display the following logs:
 
 ```bash
 Validating ONNX model...
-        -[✓] ONNX model outputs' name match reference model ({'logits'})
+        -[✓] ONNX model output names match reference model ({'logits'})
         - Validating ONNX Model output "logits":
                 -[✓] (2, 2) matches (2, 2)
                 -[✓] all values close (atol: 1e-05)
@@ -228,9 +228,9 @@ Let's start with the ONNX configuration object. We provide three abstract
 classes that you should inherit from, depending on the type of model
 architecture you wish to export:
 
-* Encoder-based models inherit from [`OnnxConfig`](https://github.com/huggingface/transformers/blob/c4fa908fa98c3d538462c537d29b7613dd71306e/src/transformers/onnx/config.py#L52)
-* Decoder-based models inherit from [`OnnxConfigWithPast`](https://github.com/huggingface/transformers/blob/c4fa908fa98c3d538462c537d29b7613dd71306e/src/transformers/onnx/config.py#L264)
-* Encoder-decoder models inherit from [`OnnxSeq2SeqConfigWithPast`](https://github.com/huggingface/transformers/blob/c4fa908fa98c3d538462c537d29b7613dd71306e/src/transformers/onnx/config.py#L399)
+* Encoder-based models inherit from [`~onnx.config.OnnxConfig`]
+* Decoder-based models inherit from [`~onnx.config.OnnxConfigWithPast`]
+* Encoder-decoder models inherit from [`~onnx.config.OnnxSeq2SeqConfigWithPast`]
 
 <Tip>
 
@@ -321,11 +321,9 @@ OrderedDict([('logits', {0: 'batch'})])
 
 <Tip>
 
-All of the base properties and methods associated with
-[`OnnxConfig`]
-and the other configuration classes can be overriden if needed. Check out
-[`BartOnnxConfig`]
-for an advanced example.
+All of the base properties and methods associated with [`~onnx.config.OnnxConfig`] and the
+other configuration classes can be overriden if needed. Check out
+[`BartOnnxConfig`] for an advanced example.
 
 </Tip>
 
@@ -400,10 +398,8 @@ to the library, you will need to:
 
 * Implement the ONNX configuration in the corresponding `configuration_<model_name>.py`
 file
-* Include the model architecture and corresponding features in
-[`onnx.features.FeatureManager`](https://github.com/huggingface/transformers/blob/c4fa908fa98c3d538462c537d29b7613dd71306e/src/transformers/onnx/features.py#L71)
-* Add your model architecture to the tests in
-`test_onnx_v2.py`
+* Include the model architecture and corresponding features in [`~onnx.features.FeatureManager`]
+* Add your model architecture to the tests in `test_onnx_v2.py`
 
 Check out how the configuration for [IBERT was
 contributed](https://github.com/huggingface/transformers/pull/14868/files) to
