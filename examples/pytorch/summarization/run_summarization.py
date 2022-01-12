@@ -231,9 +231,9 @@ class DataTrainingArguments:
     forced_bos_token: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The token to force as the first generated token after the :obj:`decoder_start_token_id`."
-            "Useful for multilingual models like :doc:`mBART <../model_doc/mbart>` where the first generated token "
-            "needs to be the target language token.(Usually it is the target language token)"
+            "help": "The token to force as the first generated token after the decoder_start_token_id."
+            "Useful for multilingual models like mBART where the first generated token"
+            "needs to be the target language token (Usually it is the target language token)"
         },
     )
 
@@ -446,10 +446,6 @@ def main():
             tokenizer.lang_code_to_id[data_args.forced_bos_token] if data_args.forced_bos_token is not None else None
         )
         model.config.forced_bos_token_id = forced_bos_token_id
-
-    # Get the language codes for input/target.
-    source_lang = data_args.lang.split("_")[0]
-    target_lang = data_args.lang.split("_")[0]
 
     # Get the column names for input/target.
     dataset_columns = summarization_name_mapping.get(data_args.dataset_name, None)
