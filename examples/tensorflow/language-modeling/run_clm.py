@@ -156,10 +156,6 @@ class DataTrainingArguments:
             "Default to the model max input length for single sentence inputs (take into account special tokens)."
         },
     )
-    pad_to_block_size: bool = field(
-        default=False,
-        metadata={"help": "Whether to pad all samples to `block_size`. "},
-    )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
@@ -257,10 +253,6 @@ def main():
     if training_args.output_dir is not None:
         training_args.output_dir = Path(training_args.output_dir)
         os.makedirs(training_args.output_dir, exist_ok=True)
-
-    if isinstance(training_args.strategy, tf.distribute.TPUStrategy) and not data_args.pad_to_block_size:
-        logger.warning("We are training on TPU - forcing pad_to_block_size")
-        data_args.pad_to_block_size = True
     # endregion
 
     # region Checkpoints
