@@ -83,6 +83,6 @@ jobs:
         run: |
           cd doc-build-dev
           ls
-          git add $PR_NUMBER
+          git add .
           git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
           git push origin main
