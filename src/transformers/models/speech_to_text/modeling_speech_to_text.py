@@ -1323,7 +1323,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         >>> input_features = processor(
         ...     ds["speech"][0], sampling_rate=16000, return_tensors="pt"
         >>> ).input_features  # Batch size 1
-        >>> generated_ids = model.generate(input_ids=input_features)
+        >>> generated_ids = model.generate(inputs=input_features)
 
         >>> transcription = processor.batch_decode(generated_ids)
         ```"""

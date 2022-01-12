@@ -2,3 +2,4 @@ datasets >= 1.13.3
 torch >= 1.5
 torchaudio
 librosa
+jiwer

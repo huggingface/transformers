@@ -77,6 +77,7 @@ from . import (
     mobilebert,
     mpnet,
     mt5,
+    nystromformer,
     openai,
     pegasus,
     perceiver,
