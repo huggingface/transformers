@@ -109,6 +109,24 @@ class TFPerceiverClassifierOutput(ModelOutput):
     cross_attentions: Optional[Tuple[tf.Tensor]] = None
 
 
+@dataclass
+class TFPerceiverDecoderOutput(ModelOutput):
+    """
+    Base class for Perceiver decoder outputs, with potential cross-attentions.
+
+    Args:
+        logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
+            Output of the basic decoder.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
+    """
+
+    logits: tf.Tensor = None
+    cross_attentions: Optional[Tuple[tf.Tensor]] = None
+
+
 class TFPerceiverSelfAttention(tf.keras.layers.Layer):
     def __init__(
         self, config, is_cross_attention=False, qk_channels=None, v_channels=None, num_heads=1, q_dim=None, kv_dim=None
@@ -974,7 +992,7 @@ class TFPerceiverForImageClassificationConvProcessing(TFPerceiverPreTrainedModel
         loss = None
         if labels is not None:
             loss = self.compute_loss(labels=labels, logits=logits)
-        
+
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
@@ -987,8 +1005,88 @@ class TFPerceiverForImageClassificationConvProcessing(TFPerceiverPreTrainedModel
             cross_attentions=outputs.cross_attentions,
         )
 
-class TFPerceiverForOpticalFlow:
-    pass
+
+class TFPerceiverForOpticalFlow(TFPerceiverPreTrainedModel):
+    def __init__(self, config):
+        super(TFPerceiverForOpticalFlow, self).__init__(config)
+
+        fourier_position_encoding_kwargs_preprocessor = dict(
+            num_bands=64,
+            max_resolution=config.train_size,
+            sine_only=False,
+            concat_pos=True,
+        )
+        fourier_position_encoding_kwargs_decoder = dict(
+            concat_pos=True, max_resolution=config.train_size, num_bands=64, sine_only=False
+        )
+
+        image_preprocessor = TFPerceiverImagePreprocessor(
+            config,
+            prep_type="patches",
+            spatial_downsample=1,
+            conv_after_patching=True,
+            conv_after_patching_in_channels=54,
+            temporal_downsample=2,
+            position_encoding_type="fourier",
+            # position_encoding_kwargs
+            fourier_position_encoding_kwargs=fourier_position_encoding_kwargs_preprocessor,
+        )
+
+        self.perceiver = TFPerceiverModel(
+            config,
+            input_preprocessor=image_preprocessor,
+            decoder=TFPerceiverOpticalFlowDecoder(
+                config,
+                num_channels=image_preprocessor.num_channels,
+                output_image_shape=config.train_size,
+                rescale_factor=100.0,
+                # decoder kwargs
+                use_query_residual=False,
+                output_num_channels=2,
+                # We query the decoder using the first frame features
+                # rather than a standard decoder position encoding.
+                position_encoding_type="fourier",
+                fourier_position_encoding_kwargs=fourier_position_encoding_kwargs_decoder,
+            ),
+        )
+
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        return_dict=None,
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            inputs=inputs,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        logits = outputs.logits if return_dict else outputs[0]
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Optical flow training is not yet supported")
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFPerceiverClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
 
 
 class TFPerceiverForMultimodalAutoencoding:
@@ -1212,8 +1310,31 @@ class TFPerceiverClassificationDecoder(TFPerceiverAbstractDecoder):
         return PerceiverDecoderOutput(logits=logits, cross_attentions=decoder_outputs.cross_attentions)
 
 
-class TFPerceiverOpticalFlowDecoder:
-    pass
+class TFPerceiverOpticalFlowDecoder(TFPerceiverAbstractDecoder):
+    def __init__(self, config, output_image_shape, output_num_channels=2, rescale_factor=100.0, **decoder_kwargs):
+        super(TFPerceiverOpticalFlowDecoder, self).__init__()
+
+        self.output_image_shape = output_image_shape
+        self.output_num_channels = output_num_channels
+        self.rescale_factor = rescale_factor
+        self.decoder = TFPerceiverBasicDecoder(config, output_num_channels=output_num_channels, **decoder_kwargs)
+
+    @property
+    def num_query_channels(self) -> int:
+        return self.decoder.num_query_channels
+
+    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
+        if subsampled_points is not None:
+            raise ValueError("FlowDecoder doesn't support subsampling yet.")
+        return inputs
+
+    def call(self, query, z, query_mask=None, output_attentions=False):
+        decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
+        preds = decoder_outputs.logits
+        # Output flow and rescale.
+        preds /= self.rescale_factor
+        preds = tf.reshape(preds, [preds.shape[0]] + list(self.output_image_shape) + [preds.shape[-1]])
+        return TFPerceiverDecoderOutput(logits=preds, cross_attentions=decoder_outputs.cross_attentions)
 
 
 class TFPerceiverBasicVideoAutoencodingDecoder:
