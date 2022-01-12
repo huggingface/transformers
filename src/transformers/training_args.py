@@ -338,7 +338,7 @@ class TrainingArguments:
             - `"tpu_metrics_debug"`: print debug metrics on TPU
 
             The options should be separated by whitespaces.
-        optim (`str`, *optional*, defaults to `adamw_hf`):
+        optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_hf"`):
             The optimizer to use: adam_hf, adam_torch, adam_apex_fused, or adafactor.
         adafactor (`bool`, *optional*, defaults to `False`):
             This argument is deprecated. Use `--optim adafactor` instead.
