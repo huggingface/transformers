@@ -222,7 +222,7 @@ class PerceiverModelTest(TFModelTesterMixin, unittest.TestCase):
             TFPerceiverForMaskedLM,
             TFPerceiverForImageClassificationLearned,
             TFPerceiverForImageClassificationFourier,
-            # TFPerceiverForImageClassificationConvProcessing,
+            TFPerceiverForImageClassificationConvProcessing,
             # TFPerceiverForOpticalFlow,
             # TFPerceiverForMultimodalAutoencoding,
             TFPerceiverForSequenceClassification,
