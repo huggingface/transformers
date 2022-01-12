@@ -382,7 +382,7 @@ class YosoSelfAttention(nn.Module):
 
         return outputs
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Yoso
 class YosoSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -397,7 +397,7 @@ class YosoSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Yoso
 class YosoAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -477,7 +477,7 @@ class YosoOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Yoso
 class YosoLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -561,7 +561,7 @@ class YosoLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Yoso
 class YosoEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -677,7 +677,7 @@ class YosoPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->Yoso
 class YosoLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -698,7 +698,7 @@ class YosoLMPredictionHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->Yoso
 class YosoOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
