@@ -540,6 +540,12 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
             encoder_inputs = input_processing(**encoder_processing_inputs)
 
+            # Handle the case where the inputs are passed as a single dict which contains `labels`.
+            # The `labels` shouldn't be passed to `self.encoder` below, because it is a based model without this
+            # parameter (otherwise, an error occurs when `input_processing` is called inside `self.encoder.call()`).
+            if "labels" in encoder_inputs:
+                labels = encoder_inputs.pop("labels")
+
             # handle the init case where `dummy_inputs` returns a dict containing `decoder_input_ids`.
             if "decoder_input_ids" in encoder_inputs:
                 decoder_input_ids = encoder_inputs.pop("decoder_input_ids")
