@@ -74,9 +74,9 @@ class OptimizerNames(Enum):
     Stores the acceptable string identifiers for optimizers.
     """
 
-    ADAM_HF = "adam_hf"
-    ADAM_TORCH = "adam_torch"
-    ADAM_APEX_FUSED = "adam_apex_fused"
+    ADAM_HF = "adamw_hf"
+    ADAM_TORCH = "adamw_torch"
+    ADAM_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
 
 
@@ -339,7 +339,7 @@ class TrainingArguments:
 
             The options should be separated by whitespaces.
         optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_hf"`):
-            The optimizer to use: adam_hf, adam_torch, adam_apex_fused, or adafactor.
+            The optimizer to use: adamw_hf, adamw_torch, adamw_apex_fused, or adafactor.
         adafactor (`bool`, *optional*, defaults to `False`):
             This argument is deprecated. Use `--optim adafactor` instead.
         group_by_length (`bool`, *optional*, defaults to `False`):
