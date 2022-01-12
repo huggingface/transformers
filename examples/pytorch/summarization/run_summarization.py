@@ -71,6 +71,7 @@ except (LookupError, OSError):
 # A list of all multilingual tokenizer which require lang attribute.
 MULTILINGUAL_TOKENIZERS = [MBartTokenizer, MBartTokenizerFast, MBart50Tokenizer, MBart50TokenizerFast]
 
+
 @dataclass
 class ModelArguments:
     """
@@ -389,7 +390,7 @@ def main():
     )
 
     model.resize_token_embeddings(len(tokenizer))
-    
+
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
         if isinstance(tokenizer, MBartTokenizer):
             model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.lang]
@@ -433,9 +434,9 @@ def main():
         return
 
     if isinstance(tokenizer, tuple(MULTILINGUAL_TOKENIZERS)):
-        assert data_args.lang is not None, (
-            f"{tokenizer.__class__.__name__} is a multilingual tokenizer which requires --lang argument"
-        )
+        assert (
+            data_args.lang is not None
+        ), f"{tokenizer.__class__.__name__} is a multilingual tokenizer which requires --lang argument"
 
         tokenizer.src_lang = data_args.lang
         tokenizer.tgt_lang = data_args.lang
@@ -478,13 +479,13 @@ def main():
 
     def preprocess_function(examples):
         # remove pairs where at least one record is None
-        
+
         inputs, targets = [], []
         for i in range(len(examples[text_column])):
             if examples[text_column][i] is not None and examples[summary_column][i] is not None:
                 inputs.append(examples[text_column][i])
                 targets.append(examples[summary_column][i])
-                
+
         inputs = examples[text_column]
         targets = examples[summary_column]
         inputs = [prefix + inp for inp in inputs]
@@ -679,7 +680,7 @@ def main():
             kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
         else:
             kwargs["dataset"] = data_args.dataset_name
-    
+
     if data_args.lang is not None:
         kwargs["language"] = data_args.lang
 
