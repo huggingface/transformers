@@ -655,8 +655,8 @@ class TrainingArguments:
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
     optim: OptimizerNames = field(
-        default=OptimizerNames.ADAMW_HF,
-        metadata={"help": "The optimizer to use.", "choices": [e.value for e in OptimizerNames]},
+        default=OptimizerNames.ADAMW_HF.value,
+        metadata={"help": "The optimizer to use."},
     )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
@@ -827,6 +827,7 @@ class TrainingArguments:
             if not (self.sharded_ddp == "" or not self.sharded_ddp):
                 raise ValueError("sharded_ddp is not supported with bf16")
 
+        self.optim = OptimizerNames(self.optim)
         if self.adafactor:
             warnings.warn(
                 "`--adafactor` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--optim adafactor` instead",

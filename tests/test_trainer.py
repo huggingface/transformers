@@ -1758,11 +1758,6 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         trainer = get_regression_trainer(optim=name)
         trainer.train()
 
-    def test_optim_unsupported(self):
-        args = TrainingArguments(optim="bogus", output_dir="None")
-        with self.assertRaises(ValueError):
-            Trainer.get_optimizer_cls_and_kwargs(args)
-
     def test_fused_adam(self):
         # Pretend that apex is installed and mock apex.optimizers.FusedAdam exists.
         # Trainer.get_optimizer_cls_and_kwargs does not use FusedAdam, but only has to return a
