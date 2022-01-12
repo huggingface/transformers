@@ -29,7 +29,7 @@ jobs:
         run: |
           cd doc-build-dev/transformers
           ls
-          rm -rf $PR_NUMBER
+          rm -rf pr_$PR_NUMBER
           ls
           git add .
           git commit -m "Closed PR ${GITHUB_REF##*/}"
