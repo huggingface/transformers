@@ -739,15 +739,16 @@ def add_model_to_main_init(
     while idx < len(lines):
         if not is_empty_line(lines[idx]) and find_indent(lines[idx]) == 0:
             framework = None
-        elif lines[idx].lstrip().startwith("if is_torch_available"):
+        elif lines[idx].lstrip().startswith("if is_torch_available"):
             framework = "pt"
-        elif lines[idx].lstrip().startwith("if is_tf_available"):
+        elif lines[idx].lstrip().startswith("if is_tf_available"):
             framework = "tf"
-        elif lines[idx].lstrip().startwith("if is_flax_available"):
+        elif lines[idx].lstrip().startswith("if is_flax_available"):
             framework = "flax"
 
         # Skip if we are in a framework not wanted.
-        if framework is not None and framework not in frameworks:
+        if framework is not None and frameworks is not None and framework not in frameworks:
+            idx += 1
             continue
 
         if f"models.{old_model_patterns.model_lower_cased}" in lines[idx]:
@@ -1049,7 +1050,7 @@ def create_new_model_like(
         add_after=f"    {old_module_name},",
         exact_match=True,
     )
-    add_model_to_main_init(old_model_patterns, new_model_patterns, with_tokenizer=not keep_old_tokenizer)
+    add_model_to_main_init(old_model_patterns, new_model_patterns, frameworks=frameworks, with_tokenizer=not keep_old_tokenizer)
 
     # 3. Add test files
     files_to_adapt = model_files["test_files"]
