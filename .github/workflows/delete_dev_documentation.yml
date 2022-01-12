@@ -23,18 +23,13 @@ jobs:
 
       - name: Setup git
         run: |
-          git config --global user.name "Hugging Face"
-          git config --global user.email transformers@huggingface.co
-          
+          git config --global user.name "Hugging Face Doc Builder"
+          git config --global user.email docs@huggingface.co
+
       - name: Push to repositories
         run: |
           cd doc-build-dev
           rm -rf transformers/$PR_NUMBER
-          if [[ `git status --porcelain` ]]; then
-            git add build
-            git commit -m "Closed PR ${GITHUB_REF##*/}"
-            git push origin main
-          else
-            echo "No diff in the documentation."
-          fi
-          cd ..
+          git add .
+          git commit -m "Closed PR ${GITHUB_REF##*/}"
+          git push origin main
