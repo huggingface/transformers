@@ -45,100 +45,102 @@ if is_vision_available():
 
 class SwinModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        image_size=224, 
+        patch_size=2, 
+        num_channels=3, 
+        num_labels=1000,
+        embed_dim=16, 
+        depths=(1,), 
+        num_heads=(2,),
+        window_size=2, 
+        mlp_ratio=2., 
+        qkv_bias=True,
+        drop_rate=0., 
+        attn_drop_rate=0., 
+        drop_path_rate=0.1,
+        norm_layer=nn.LayerNorm,
+        hidden_act="gelu",
+        ape=False, 
+        patch_norm=True,
+        initializer_range=0.02,
+        layer_norm_eps=1e-5,
+        is_training=True,
+        scope=None,
+        use_labels=True,
+        type_sequence_label_size=10,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
         self.num_labels = num_labels
-        self.num_choices = num_choices
+        self.embed_dim = embed_dim
+        self.depths = depths
+        self.num_heads = num_heads
+        self.window_size = window_size
+        self.mlp_ratio = mlp_ratio
+        self.qkv_bias = qkv_bias
+        self.drop_rate = drop_rate
+        self.attn_drop_rate = attn_drop_rate
+        self.drop_path_rate = drop_path_rate
+        self.norm_layer = norm_layer
+        self.hidden_act = hidden_act
+        self.ape = ape
+        self.patch_norm = patch_norm
+        self.layer_norm_eps = layer_norm_eps
+        self.initializer_range = initializer_range
+        self.is_training = is_training
         self.scope = scope
+        self.use_labels  = use_labels
+        self.type_sequence_label_size = type_sequence_label_size
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
+        labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
+            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, pixel_values, labels
 
     def get_config(self):
         return SwinConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            num_channels=self.num_channels,
+            num_labels=self.num_labels,
+            embed_dim=self.embed_dim,
+            depths=self.depths,
+            num_heads=self.num_heads,
+            window_size=self.window_size,
+            mlp_ratio=self.mlp_ratio,
+            qkv_bias=self.qkv_bias,
+            drop_rate=self.drop_rate,
+            attn_drop_rate=self.attn_drop_rate,
+            drop_path_rate=self.drop_path_rate,
+            norm_layer=self.norm_layer,
             hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
+            ape=self.ape,
+            path_norm=self.patch_norm,
+            layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
+    def create_and_check_model(self, config, pixel_values, labels):
         model = SwinModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        result = model(pixel_values)
+
+        num_features = int(config.embed_dim * 2 ** (len(config.depths) - 1))
+
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_features))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -152,14 +154,10 @@ class SwinModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
+            pixel_values,
+            labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
 
@@ -182,7 +180,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SwinModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SwinConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SwinConfig, embed_dim=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -224,7 +222,6 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        # in Swin, the seq_len equals the number of patches 
         image_size = to_2tuple(self.model_tester.image_size)
         patch_size = to_2tuple(self.model_tester.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
@@ -245,7 +242,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(attentions), len(self.model_tester.depths))
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -256,17 +253,17 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(attentions), len(self.model_tester.depths))
 
             if chunk_length is not None:
                 self.assertListEqual(
                     list(attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                    [self.model_tester.num_heads[0], encoder_seq_length, chunk_length, encoder_key_length],
                 )
             else:
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                    [self.model_tester.num_heads[0], 5, encoder_key_length],
                 )
             out_len = len(outputs)
 
@@ -289,16 +286,16 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(self_attentions), len(self.model_tester.depths))
             if chunk_length is not None:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                    [self.model_tester.num_heads[0], encoder_seq_length, chunk_length, encoder_key_length],
                 )
             else:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                    [self.model_tester.num_heads[0], encoder_seq_length, encoder_key_length],
                 )
 
     def test_hidden_states_output(self):
@@ -313,7 +310,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester, "expected_num_hidden_layers", len(self.model_tester.depths) + 1
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -321,11 +318,10 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             image_size = to_2tuple(self.model_tester.image_size)
             patch_size = to_2tuple(self.model_tester.patch_size)
             num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-            seq_length = num_patches + 1
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                [num_patches, self.model_tester.embed_dim],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

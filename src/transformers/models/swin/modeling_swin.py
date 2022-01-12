@@ -499,6 +499,7 @@ class SwinLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
         self.config = config
+        self.dim = dim
         self.blocks = nn.ModuleList([
             SwinBlock(
                 config=config, dim=dim, input_resolution=input_resolution, num_heads=num_heads, 
@@ -630,8 +631,8 @@ class SwinPreTrainedModel(PreTrainedModel):
 
     config_class = SwinConfig
     base_model_prefix = "swin"
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """

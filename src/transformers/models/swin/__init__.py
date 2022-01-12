@@ -23,7 +23,6 @@ from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_to
 
 _import_structure = {
     "configuration_swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
-    "tokenization_swin": ["SwinTokenizer"],
 }
 
 if is_vision_available():
