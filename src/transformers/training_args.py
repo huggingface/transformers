@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 from .debug_utils import DebugOption
 from .file_utils import (
+    ExplicitEnum,
     cached_property,
     get_full_repo_name,
     is_sagemaker_dp_enabled,
@@ -69,7 +70,7 @@ def default_logdir() -> str:
     return os.path.join("runs", current_time + "_" + socket.gethostname())
 
 
-class OptimizerNames(Enum):
+class OptimizerNames(ExplicitEnum):
     """
     Stores the acceptable string identifiers for optimizers.
     """
