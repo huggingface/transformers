@@ -349,6 +349,9 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_pretraining(self):
+        # make random mask reproducible
+        torch.manual_seed(2)
+
         # TODO replace nielsr by facebook
         model = ViTMAEForPreTraining.from_pretrained("nielsr/vit-mae-base").to(torch_device)
 
@@ -357,12 +360,15 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
 
         # verify the logits
         expected_shape = torch.Size((1, 196, 768))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
+        expected_slice = torch.tensor(
+            [[0.7366, -1.3663, -0.2844], [0.7919, -1.3839, -0.3241], [0.4313, -0.7168, -0.2878]]
+        ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))

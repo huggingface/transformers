@@ -552,20 +552,25 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
     """
 
     config_class = ViTMAEConfig
-    base_model_prefix = "vit"
+    base_model_prefix = "vit_mae"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # we use xavier_uniform following official JAX ViT:
-            torch.nn.init.xavier_uniform_(module.weight)
-            if isinstance(module, nn.Linear) and module.bias is not None:
-                nn.init.constant_(module.bias, 0)
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            nn.init.zeros_(module.bias)
-            nn.init.ones_(module.weight)
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ViTMAEEncoder):
