@@ -24,11 +24,7 @@ from ...file_utils import is_torch_available
 
 _import_structure = {
     "configuration_yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
-    "tokenization_yoso": ["YosoTokenizer"],
 }
-
-if is_tokenizers_available():
-    _import_structure["tokenization_yoso_fast"] = ["YosoTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_yoso"] = [
@@ -49,10 +45,6 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
-    from .tokenization_yoso import YosoTokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_yoso_fast import YosoTokenizerFast
 
     if is_torch_available():
         from .modeling_yoso import (

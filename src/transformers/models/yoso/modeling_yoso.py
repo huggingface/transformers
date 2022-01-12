@@ -75,7 +75,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "uw-madison/yoso-4096"
 _CONFIG_FOR_DOC = "YosoConfig"
-_TOKENIZER_FOR_DOC = "YosoTokenizer"
 
 YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uw-madison/yoso-4096",
@@ -759,7 +758,7 @@ YOSO_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.YosoTokenizer`.
+            Indices can be obtained using :class:`transformers.AutoTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
@@ -1169,10 +1168,10 @@ class YosoForCausalLM(YosoPreTrainedModel):
 
         Example::
 
-            >>> from transformers import YosoTokenizer, YosoForCausalLM, YosoConfig
+            >>> from transformers import AutoTokenizer, YosoForCausalLM, YosoConfig
             >>> import torch
 
-            >>> tokenizer = YosoTokenizer.from_pretrained('uw-madison/yoso-4096')
+            >>> tokenizer = AutoTokenizer.from_pretrained('uw-madison/yoso-4096')
             >>> config = YosoConfig.from_pretrained("uw-madison/yoso-4096")
             >>> config.is_decoder = True
             >>> model = YosoForCausalLM.from_pretrained('uw-madison/yoso-4096', config=config)
