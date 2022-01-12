@@ -78,19 +78,20 @@ class YosoConfig(PretrainedConfig):
         lsh_backward (`bool`, *optional*, defaults to `True`):
             Whether or not to perform backpropagation using Locality Sensitive Hashing.
 
-Example::
+    Example:
 
-        >>> from transformers import YosoModel, YosoConfig
+    ```python
+    >>> from transformers import YosoModel, YosoConfig
 
-        >>> # Initializing a YOSO uw-madison/yoso-4096 style configuration
-        >>> configuration = YosoConfig()
+    >>> # Initializing a YOSO uw-madison/yoso-4096 style configuration
+    >>> configuration = YosoConfig()
 
-        >>> # Initializing a model from the uw-madison/yoso-4096 style configuration
-        >>> model = YosoModel(configuration)
+    >>> # Initializing a model from the uw-madison/yoso-4096 style configuration
+    >>> model = YosoModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-    """
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "yoso"
 
     def __init__(
