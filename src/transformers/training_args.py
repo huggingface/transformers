@@ -654,7 +654,7 @@ class TrainingArguments:
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
-    optim: str = field(
+    optim: OptimizerNames = field(
         default=OptimizerNames.ADAM_HF.value,
         metadata={"help": "The optimizer to use.", "choices": [e.value for e in OptimizerNames]},
     )
