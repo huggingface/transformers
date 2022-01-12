@@ -1711,6 +1711,11 @@ if is_torch_available():
             default_adam_kwargs,
         ),
         (
+            OptimizerNames.ADAMW_HF.value,
+            transformers.optimization.AdamW,
+            default_adam_kwargs,
+        ),
+        (
             OptimizerNames.ADAMW_TORCH,
             torch.optim.AdamW,
             default_adam_kwargs,
