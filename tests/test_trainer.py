@@ -1706,17 +1706,17 @@ if is_torch_available():
 
     optim_test_params = [
         (
-            OptimizerNames.ADAM_HF.value,
+            OptimizerNames.ADAM_HF,
             transformers.optimization.AdamW,
             default_adam_kwargs,
         ),
         (
-            OptimizerNames.ADAM_TORCH.value,
+            OptimizerNames.ADAM_TORCH,
             torch.optim.AdamW,
             default_adam_kwargs,
         ),
         (
-            OptimizerNames.ADAFACTOR.value,
+            OptimizerNames.ADAFACTOR,
             transformers.optimization.Adafactor,
             {
                 "scale_parameter": False,
@@ -1730,7 +1730,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                OptimizerNames.ADAM_APEX_FUSED.value,
+                OptimizerNames.ADAM_APEX_FUSED,
                 apex.optimizers.FusedAdam,
                 default_adam_kwargs,
             )
@@ -1739,8 +1739,8 @@ if is_torch_available():
 
 @require_torch
 class TrainerOptimizerChoiceTest(unittest.TestCase):
-    def check_optim_and_kwargs(self, name, mandatory_kwargs, expected_cls):
-        args = TrainingArguments(optim=name, output_dir="None")
+    def check_optim_and_kwargs(self, optim: OptimizerNames, mandatory_kwargs, expected_cls):
+        args = TrainingArguments(optim=optim, output_dir="None")
         actual_cls, optim_kwargs = Trainer.get_optimizer_cls_and_kwargs(args)
         self.assertEqual(expected_cls, actual_cls)
         self.assertIsNotNone(optim_kwargs)
@@ -1776,13 +1776,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         }
         with patch.dict("sys.modules", modules):
             self.check_optim_and_kwargs(
-                OptimizerNames.ADAM_APEX_FUSED.value,
+                OptimizerNames.ADAM_APEX_FUSED,
                 default_adam_kwargs,
                 mock.optimizers.FusedAdam,
             )
 
     def test_fused_adam_no_apex(self):
-        args = TrainingArguments(optim=OptimizerNames.ADAM_APEX_FUSED.value, output_dir="None")
+        args = TrainingArguments(optim=OptimizerNames.ADAM_APEX_FUSED, output_dir="None")
 
         # Pretend that apex does not exist, even if installed. By setting apex to None, importing
         # apex will fail even if apex is installed.

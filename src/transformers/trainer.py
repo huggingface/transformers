@@ -851,20 +851,20 @@ class Trainer:
             "betas": (args.adam_beta1, args.adam_beta2),
             "eps": args.adam_epsilon,
         }
-        if args.optim == OptimizerNames.ADAFACTOR.value:
+        if args.optim == OptimizerNames.ADAFACTOR:
             optimizer_cls = Adafactor
             optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
-        elif args.optim == OptimizerNames.ADAM_HF.value:
+        elif args.optim == OptimizerNames.ADAM_HF:
             from .optimization import AdamW
 
             optimizer_cls = AdamW
             optimizer_kwargs.update(adam_kwargs)
-        elif args.optim == OptimizerNames.ADAM_TORCH.value:
+        elif args.optim == OptimizerNames.ADAM_TORCH:
             from torch.optim import AdamW
 
             optimizer_cls = AdamW
             optimizer_kwargs.update(adam_kwargs)
-        elif args.optim == OptimizerNames.ADAM_APEX_FUSED.value:
+        elif args.optim == OptimizerNames.ADAM_APEX_FUSED:
             try:
                 from apex.optimizers import FusedAdam
 
