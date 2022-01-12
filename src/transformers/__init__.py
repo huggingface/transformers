@@ -623,7 +623,6 @@ if is_torch_available():
             "YosoLayer",
             "YosoModel",
             "YosoPreTrainedModel",
-            "load_tf_weights_in_yoso",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -2614,7 +2613,6 @@ if TYPE_CHECKING:
             YosoLayer,
             YosoModel,
             YosoPreTrainedModel,
-            load_tf_weights_in_yoso,
         )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
