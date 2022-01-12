@@ -44,9 +44,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ViTMAEConfig"
 _CHECKPOINT_FOR_DOC = "facebook/vit-mae-base"
 
-VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/vit-mae-base",
-    # See all ViTMAE models at https://huggingface.co/models?filter=vit
+    # See all ViTMAE models at https://huggingface.co/models?filter=vit_mae
 ]
 
 
