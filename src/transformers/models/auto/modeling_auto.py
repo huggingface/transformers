@@ -261,7 +261,6 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
                 "PerceiverForImageClassificationConvProcessing",
             ),
         ),
-        ("vit_mae", "ViTMAEForImageClassification"),
     ]
 )
 

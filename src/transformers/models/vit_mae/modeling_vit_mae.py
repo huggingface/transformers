@@ -85,8 +85,8 @@ class ViTMAEDecoderOutput(ModelOutput):
     Class for ViTMAEDecoder's outputs, with potential hidden states and attentions.
 
     Args:
-        logits
-            ...
+        logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+            Pixel reconstruction logits.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
@@ -108,10 +108,10 @@ class ViTMAEForPreTrainingOutput(ModelOutput):
     Class for ViTMAEForPreTraining's outputs, with potential hidden states and attentions.
 
     Args:
-        loss
-            ...
-        logits
-            ...
+        loss (`torch.FloatTensor` of shape `(1,)`):
+            Pixel reconstruction loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+            Pixel reconstruction logits.
         mask
             ...
         ids_restore

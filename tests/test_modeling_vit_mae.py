@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 
 import inspect
+import math
 import unittest
 
 from transformers import ViTMAEConfig
@@ -31,7 +32,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ViTMAEForPreTraining, ViTMAEModel
-    from transformers.models.vit_mae.modeling_vit_mae import ViT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
 if is_vision_available():
@@ -112,19 +113,26 @@ class ViTMAEModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        # expected sequence length = (num_patches + 1) * (1 - config.mask_ratio), rounded above
+        # (we add 1 for the [CLS] token)
         image_size = to_2tuple(self.image_size)
         patch_size = to_2tuple(self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        expected_seq_len = int(math.ceil((1 - config.mask_ratio) * (num_patches + 1)))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, self.hidden_size))
 
     def create_and_check_for_pretraining(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
         model = ViTMAEForPreTraining(config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        result = model(pixel_values)
+        # expected sequence length = num_patches
+        image_size = to_2tuple(self.image_size)
+        patch_size = to_2tuple(self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        expected_seq_len = num_patches
+        expected_num_channels = self.patch_size ** 2 * self.num_channels
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, expected_seq_len, expected_num_channels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -194,15 +202,19 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_for_pretraining(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        # in ViTMAE, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # in ViTMAE, the seq_len equals (number of patches + 1) * (1 - mask_ratio), rounded above
         image_size = to_2tuple(self.model_tester.image_size)
         patch_size = to_2tuple(self.model_tester.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        seq_len = num_patches + 1
+        seq_len = int(math.ceil((1 - config.mask_ratio) * (num_patches + 1)))
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
         chunk_length = getattr(self.model_tester, "chunk_length", None)
@@ -295,7 +307,7 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
             image_size = to_2tuple(self.model_tester.image_size)
             patch_size = to_2tuple(self.model_tester.patch_size)
             num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-            seq_length = num_patches + 1
+            seq_length = int(math.ceil((1 - config.mask_ratio) * (num_patches + 1)))
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -314,13 +326,9 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ViT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in VIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ViTMAEModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -336,11 +344,13 @@ def prepare_img():
 class ViTMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return ViTMAEFeatureExtractor.from_pretrained("facebook/vit-mae-base") if is_vision_available() else None
+        # TODO replace nielsr by facebook
+        return ViTMAEFeatureExtractor.from_pretrained("nielsr/vit-mae-base") if is_vision_available() else None
 
     @slow
-    def test_inference_image_classification_head(self):
-        model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base").to(torch_device)
+    def test_inference_for_pretraining(self):
+        # TODO replace nielsr by facebook
+        model = ViTMAEForPreTraining.from_pretrained("nielsr/vit-mae-base").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -350,7 +360,7 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((1, 1000))
+        expected_shape = torch.Size((1, 196, 768))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
