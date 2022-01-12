@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import difflib
 import json
 import os
 import re
@@ -19,7 +20,7 @@ from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import Dict, List, Optional, Pattern, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 
 import transformers.models.auto as auto_module
 from transformers.models.auto.configuration_auto import model_type_to_module_name
@@ -1049,7 +1050,9 @@ def create_new_model_like(
         add_after=f"    {old_module_name},",
         exact_match=True,
     )
-    add_model_to_main_init(old_model_patterns, new_model_patterns, frameworks=frameworks, with_tokenizer=not keep_old_tokenizer)
+    add_model_to_main_init(
+        old_model_patterns, new_model_patterns, frameworks=frameworks, with_tokenizer=not keep_old_tokenizer
+    )
 
     # 3. Add test files
     files_to_adapt = model_files["test_files"]
@@ -1114,6 +1117,8 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             self.model_patterns = ModelPatterns(**config["new_model_patterns"])
             self.add_copied_from = config.get("add_copied_from", True)
             self.frameworks = config.get("frameworks", ["pt", "tf", "flax"])
+        else:
+            self.old_model_type, self.model_patterns, self.add_copied_from, self.frameworks = get_user_input()
 
     def run(self):
         create_new_model_like(
@@ -1122,3 +1127,163 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             add_copied_from=self.add_copied_from,
             frameworks=self.frameworks,
         )
+
+
+def get_user_field(
+    question: str,
+    default_value: Optional[str] = None,
+    is_valid_answer: Optional[Callable] = None,
+    convert_to: Optional[Callable] = None,
+    fallback_message: Optional[str] = None,
+) -> Any:
+    """
+    A utility function that asks a question to the user to get an answer, potentially looping until it gets a valid
+    answer.
+
+    Args:
+        question (`str`): The question to ask the user.
+        default_value (`str`, *optional*): A potential default value that will be used when the answer is empty.
+        is_valid_answer (`Callable`, *optional*):
+            If set, the question will be asked until this function returns `True` on the provided answer.
+        convert_to (`Callable`, *optional*):
+            If set, the answer will be passed to this function. If this function raises an error on the procided
+            answer, the question will be asked again.
+        fallback_message (`str`, *optional*):
+            A message that will be displayed each time the question is asked again to the user.
+
+    Returns:
+        `Any`: The answer provided by the user (or the default), passed through the potential conversion function.
+    """
+    if not question.endswith(" "):
+        question = question + " "
+    if default_value is not None:
+        question = f"{question} [{default_value}] "
+
+    valid_answer = False
+    while not valid_answer:
+        answer = input(question)
+        if default_value is not None and len(answer) == 0:
+            answer = default_value
+        if is_valid_answer is not None:
+            valid_answer = is_valid_answer(answer)
+        elif convert_to is not None:
+            try:
+                answer = convert_to(answer)
+                valid_answer = True
+            except Exception:
+                valid_answer = False
+        else:
+            valid_answer = True
+
+        if not valid_answer:
+            print(fallback_message)
+
+    return answer
+
+
+def convert_to_bool(x: str) -> bool:
+    """
+    Converts a string to a bool.
+    """
+    if x.lower() in ["1", "y", "yes", "true"]:
+        return True
+    if x.lower() in ["0", "n", "no", "false"]:
+        return False
+    raise ValueError(f"{x} is not a value that can be converted to a bool.")
+
+
+def get_user_input():
+    """
+    Ask the user for the necessary inputs to add the new model.
+    """
+    model_types = list(auto_module.configuration_auto.MODEL_NAMES_MAPPING.keys())
+
+    # Get old model type
+    valid_model_type = False
+    while not valid_model_type:
+        old_model_type = input("What is the model you would like to duplicate? ")
+        if old_model_type in model_types:
+            valid_model_type = True
+        else:
+            print(f"{old_model_type} is not a valid model type.")
+            near_choices = difflib.get_close_matches(old_model_type, model_types)
+            if len(near_choices) >= 1:
+                if len(near_choices) > 1:
+                    near_choices = " or ".join(near_choices)
+                print(f"Did you mean {near_choices}?")
+
+    old_model_info = retrieve_info_for_model(old_model_type)
+    old_tokenizer_class = old_model_info["model_patterns"].tokenizer_class
+    old_frameworks = old_model_info["frameworks"]
+
+    model_name = get_user_field("What is the name for your new model?")
+    default_patterns = ModelPatterns(model_name, model_name)
+
+    model_type = get_user_field(
+        "What identifier would you like to use for the model type of this model?",
+        default_value=default_patterns.model_type,
+    )
+    model_lower_cased = get_user_field(
+        "What name would you like to use for the module of this model?",
+        default_value=default_patterns.model_lower_cased,
+    )
+    model_camel_cased = get_user_field(
+        "What prefix (camel-cased) would you like to use for the model classes of this model?",
+        default_value=default_patterns.model_camel_cased,
+    )
+    model_upper_cased = get_user_field(
+        "What prefix (upper-cased) would you like to use for the constants relative to this model?",
+        default_value=default_patterns.model_upper_cased,
+    )
+    config_class = get_user_field(
+        "What will be the name of the config class for this model?", default_value=f"{model_camel_cased}Config"
+    )
+    checkpoint = get_user_field("Please give a checkpoint identifier (on the model Hub) for this new model.")
+
+    keep_tokenizer = get_user_field(
+        f"Will your new model use the same tokenizer class as {old_model_type}?",
+        convert_to=convert_to_bool,
+        fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
+    )
+    if keep_tokenizer:
+        tokenizer_class = old_tokenizer_class
+    else:
+        tokenizer_class = get_user_field(
+            "What will be the name of the tokenizer class for this model?",
+            default_value=f"{model_camel_cased}Tokenizer",
+        )
+
+    model_patterns = ModelPatterns(
+        model_name,
+        checkpoint,
+        model_type=model_type,
+        model_lower_cased=model_lower_cased,
+        model_camel_cased=model_camel_cased,
+        model_upper_cased=model_upper_cased,
+        config_class=config_class,
+        tokenizer_class=tokenizer_class,
+    )
+
+    add_copied_from = get_user_field(
+        "Should we add # Copied from statements when creating the new modeling file?",
+        convert_to=convert_to_bool,
+        default_value="yes",
+        fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
+    )
+
+    all_frameworks = get_user_field(
+        f"Should we add a version of your new model in all the frameworks implemented by {old_model_type} ({old_frameworks})?",
+        convert_to=convert_to_bool,
+        default_value="yes",
+        fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
+    )
+    if all_frameworks:
+        frameworks = None
+    else:
+        frameworks = get_user_field(
+            "Please enter the list of framworks you want (pt, tf, flax) separated by spaces",
+            is_valid_answer=lambda x: all(p in ["pt", "tf", "flax"] for p in x.split(" ")),
+        )
+        frameworks = list(set(frameworks.split(" ")))
+
+    return (old_model_type, model_patterns, add_copied_from, frameworks)
