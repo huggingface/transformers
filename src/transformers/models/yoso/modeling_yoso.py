@@ -12,9 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch YOSO model. """
-
-
+""" PyTorch YOSO model."""
 
 
 import math
@@ -51,6 +49,7 @@ from ...modeling_utils import (
 from ...utils import logging
 from .configuration_yoso import YosoConfig
 
+
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "uw-madison/yoso-4096"
@@ -62,6 +61,7 @@ YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all YOSO models at https://huggingface.co/models?filter=yoso
 ]
 
+
 def load_cuda_kernels():
     try:
         from torch.utils.cpp_extension import load
@@ -69,19 +69,19 @@ def load_cuda_kernels():
         def append_root(files):
             src_folder = os.path.dirname(os.path.realpath(__file__))
             return [os.path.join(src_folder, file) for file in files]
-        
-        src_files = append_root(
-            ['fast_lsh_cumulation_torch.cpp',
-            'fast_lsh_cumulation.cu',
-            'fast_lsh_cumulation_cuda.cu'])
 
-        fast_lsh_cumulation = load('fast_lsh_cumulation', src_files, verbose = True)
+        src_files = append_root(
+            ["fast_lsh_cumulation_torch.cpp", "fast_lsh_cumulation.cu", "fast_lsh_cumulation_cuda.cu"]
+        )
+
+        fast_lsh_cumulation = load("fast_lsh_cumulation", src_files, verbose=True)
 
         import fast_lsh_cumulation as lsh_cumulation
 
         return True
     except Exception:
         return False
+
 
 def to_contiguous(input):
     if type(input) is list:
@@ -96,36 +96,39 @@ def to_contiguous(input):
             input = input.contiguous()
         return input
 
+
 def normalize(input):
     if type(input) is list:
         out = []
         for tensor in input:
-            out.append(nn.functional.normalize(tensor, p = 2, dim = -1))
+            out.append(nn.functional.normalize(tensor, p=2, dim=-1))
         return out
     else:
-        return nn.functional.normalize(input, p = 2, dim = -1)
+        return nn.functional.normalize(input, p=2, dim=-1)
+
 
 def hashing(query, key, num_hash, hash_len):
-    
-    assert len(query.size()) == 3 # [b, s, d]
-    assert len(key.size()) == 3 # [b, s, d]
 
-    rmat = torch.randn(query.size(0), query.size(2), num_hash * hash_len, device = query.device)
-    raise_pow = 2 ** torch.arange(hash_len, device = query.device)
+    assert len(query.size()) == 3  # [b, s, d]
+    assert len(key.size()) == 3  # [b, s, d]
+
+    rmat = torch.randn(query.size(0), query.size(2), num_hash * hash_len, device=query.device)
+    raise_pow = 2 ** torch.arange(hash_len, device=query.device)
 
     query_projection = torch.matmul(query, rmat).reshape(query.size(0), query.size(1), num_hash, hash_len)
     key_projection = torch.matmul(key, rmat).reshape(key.size(0), key.size(1), num_hash, hash_len)
     query_binary = (query_projection > 0).int()
     key_binary = (key_projection > 0).int()
-    query_hash = torch.sum(query_binary * raise_pow, dim = -1)
-    query_hash = torch.sum(key_binary * raise_pow, dim = -1)
+    query_hash = torch.sum(query_binary * raise_pow, dim=-1)
+    query_hash = torch.sum(key_binary * raise_pow, dim=-1)
 
     return query_hash.int(), query_hash.int()
+
 
 class Cumulation(torch.autograd.Function):
     @staticmethod
     def forward(ctx, query_mask, key_mask, query, key, value, config):
-        hash_code_len = config["hash_code_len"] 
+        hash_code_len = config["hash_code_len"]
 
         expectation = (1 - torch.acos(torch.matmul(query, key.transpose(-1, -2))) / math.pi) ** hash_code_len
         expectation = expectation * query_mask[:, :, None] * key_mask[:, None, :]
@@ -143,7 +146,7 @@ class Cumulation(torch.autograd.Function):
         query_mask, key_mask, expectation, query, key, value = ctx.saved_tensors
         config = ctx.config
 
-        hash_code_len = config["hash_code_len"] 
+        hash_code_len = config["hash_code_len"]
 
         weighted_exp = torch.matmul(grad, value.transpose(-1, -2)) * expectation
         grad_query = torch.matmul(weighted_exp, (hash_code_len / 2) * key)
@@ -151,6 +154,7 @@ class Cumulation(torch.autograd.Function):
         grad_value = torch.matmul(expectation.transpose(-1, -2), grad)
 
         return None, None, grad_query, grad_key, grad_value, None
+
 
 class LSHCumulation(torch.autograd.Function):
     @staticmethod
@@ -170,11 +174,15 @@ class LSHCumulation(torch.autograd.Function):
         hashtable_capacity = int(2 ** hash_code_len)
 
         if config["use_fast_hash"]:
-            query_hash_code, key_hash_code = lsh_cumulation.fast_hash(query_mask, query, key_mask, key, num_hash, hash_code_len, use_cuda, 1)
+            query_hash_code, key_hash_code = lsh_cumulation.fast_hash(
+                query_mask, query, key_mask, key, num_hash, hash_code_len, use_cuda, 1
+            )
         else:
             query_hash_code, key_hash_code = hashing(query, key, num_hash, hash_code_len)
 
-        cumulation_value = lsh_cumulation.lsh_cumulation(query_mask, query_hash_code, key_mask, key_hash_code, value, hashtable_capacity, use_cuda, 1)
+        cumulation_value = lsh_cumulation.lsh_cumulation(
+            query_mask, query_hash_code, key_mask, key_hash_code, value, hashtable_capacity, use_cuda, 1
+        )
 
         ctx.save_for_backward(query_mask, key_mask, query_hash_code, key_hash_code, query, key, value)
         ctx.config = config
@@ -193,11 +201,33 @@ class LSHCumulation(torch.autograd.Function):
         hashtable_capacity = int(2 ** hash_code_len)
 
         if config["lsh_backward"]:
-            grad_value = lsh_cumulation.lsh_cumulation(key_mask, key_hash_code, query_mask, query_hash_code, grad, hashtable_capacity, use_cuda, 1)
+            grad_value = lsh_cumulation.lsh_cumulation(
+                key_mask, key_hash_code, query_mask, query_hash_code, grad, hashtable_capacity, use_cuda, 1
+            )
             grad_query = lsh_cumulation.lsh_weighted_cumulation(
-                query_mask, query_hash_code, grad, key_mask, key_hash_code, value, (hash_code_len / 2) * key, hashtable_capacity, use_cuda, 4)
+                query_mask,
+                query_hash_code,
+                grad,
+                key_mask,
+                key_hash_code,
+                value,
+                (hash_code_len / 2) * key,
+                hashtable_capacity,
+                use_cuda,
+                4,
+            )
             grad_key = lsh_cumulation.lsh_weighted_cumulation(
-                key_mask, key_hash_code, value, query_mask, query_hash_code, grad, (hash_code_len / 2) * query, hashtable_capacity, use_cuda, 4)
+                key_mask,
+                key_hash_code,
+                value,
+                query_mask,
+                query_hash_code,
+                grad,
+                (hash_code_len / 2) * query,
+                hashtable_capacity,
+                use_cuda,
+                4,
+            )
         else:
             expectation = (1 - torch.acos(torch.matmul(query, key.transpose(-1, -2))) / math.pi) ** hash_code_len
             expectation = expectation * query_mask[:, :, None] * key_mask[:, None, :]
@@ -207,6 +237,7 @@ class LSHCumulation(torch.autograd.Function):
             grad_value = torch.matmul(expectation.transpose(-1, -2), grad)
 
         return None, None, grad_query, grad_key, grad_value, None
+
 
 class YosoEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -255,7 +286,7 @@ class YosoEmbeddings(nn.Module):
                 token_type_ids = buffered_token_type_ids_expanded
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
-                
+
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
@@ -287,7 +318,9 @@ class YosoSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = position_embedding_type or getattr(config, "position_embedding_type", "absolute")
+        self.position_embedding_type = position_embedding_type or getattr(
+            config, "position_embedding_type", "absolute"
+        )
 
         self.use_expectation = config.use_expectation
         self.hash_code_len = config.hash_code_len
@@ -300,22 +333,25 @@ class YosoSelfAttention(nn.Module):
             "hash_code_len": self.hash_code_len,
             "use_fast_hash": self.use_fast_hash,
             "num_hash": self.num_hash,
-            "lsh_backward": self.lsh_backward
+            "lsh_backward": self.lsh_backward,
         }
 
         if config.conv_window is not None:
             self.conv = nn.Conv2d(
-                in_channels = config.num_attention_heads, out_channels = config.num_attention_heads,
-                kernel_size = (config.conv_window, 1), padding = (config.conv_window // 2, 0),
-                bias = False,
-                groups = config.num_attention_heads)
+                in_channels=config.num_attention_heads,
+                out_channels=config.num_attention_heads,
+                kernel_size=(config.conv_window, 1),
+                padding=(config.conv_window // 2, 0),
+                bias=False,
+                groups=config.num_attention_heads,
+            )
 
         if not self.use_expectation:
             loaded = load_cuda_kernels()
 
-            assert loaded, """Failed to compile CUDA kernels. Ensure that the correct versions of PyTorch and cudatoolkit 
-                are installed and try again. Alternatively, avoid loading CUDA kernels by using YOSO Expectation by setting 
-                use_expectation=True."""
+            assert loaded, """Failed to compile CUDA kernels. Ensure that the correct versions of PyTorch and cudatoolkit
+                are installed and try again. Alternatively, avoid loading CUDA kernels by using YOSO Expectation by
+                setting use_expectation=True."""
 
     def transpose_for_scores(self, layer):
         new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -352,17 +388,30 @@ class YosoSelfAttention(nn.Module):
         attention_mask = attention_mask.squeeze().repeat(1, num_heads, 1).reshape(batch_size * num_heads, seq_len)
 
         if (not self.use_expectation) and head_dim < 32:
-            query_layer = torch.cat([query_layer, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device = query_layer.device)], dim = -1)
-            key_layer = torch.cat([key_layer, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device = key_layer.device)], dim = -1)
-            value_layer = torch.cat([value_layer, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device = value_layer.device)], dim = -1)
+            query_layer = torch.cat(
+                [query_layer, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device=query_layer.device)],
+                dim=-1,
+            )
+            key_layer = torch.cat(
+                [key_layer, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device=key_layer.device)],
+                dim=-1,
+            )
+            value_layer = torch.cat(
+                [value_layer, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device=value_layer.device)],
+                dim=-1,
+            )
 
         if self.use_expectation or self.training:
             query_layer, key_layer = normalize([query_layer, key_layer])
-  
-        if self.use_expectation:            
-            context_layer = Cumulation.apply(attention_mask, attention_mask, query_layer, key_layer, value_layer, self.lsh_config)
+
+        if self.use_expectation:
+            context_layer = Cumulation.apply(
+                attention_mask, attention_mask, query_layer, key_layer, value_layer, self.lsh_config
+            )
         else:
-            context_layer = LSHCumulation.apply(attention_mask, attention_mask, query_layer, key_layer, value_layer, self.lsh_config)
+            context_layer = LSHCumulation.apply(
+                attention_mask, attention_mask, query_layer, key_layer, value_layer, self.lsh_config
+            )
 
         if (not self.use_expectation) and head_dim < 32:
             context_layer = context_layer[:, :, :head_dim]
@@ -381,6 +430,7 @@ class YosoSelfAttention(nn.Module):
         outputs = (context_layer, context_layer) if output_attentions else (context_layer,)
 
         return outputs
+
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Yoso
 class YosoSelfOutput(nn.Module):
@@ -446,6 +496,7 @@ class YosoAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class YosoIntermediate(nn.Module):
     def __init__(self, config):
@@ -487,7 +538,8 @@ class YosoLayer(nn.Module):
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
+            if not self.is_decoder:
+                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = YosoAttention(config, position_embedding_type="absolute")
         self.intermediate = YosoIntermediate(config)
         self.output = YosoOutput(config)
@@ -501,7 +553,7 @@ class YosoLayer(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
-    ):  
+    ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
@@ -522,9 +574,10 @@ class YosoLayer(nn.Module):
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+            if not hasattr(self, "crossattention"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+                )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -711,8 +764,8 @@ class YosoOnlyMLMHead(nn.Module):
 
 class YosoPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = YosoConfig
@@ -721,7 +774,7 @@ class YosoPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -742,14 +795,15 @@ class YosoPreTrainedModel(PreTrainedModel):
 
 
 YOSO_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.YosoConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 YOSO_INPUTS_DOCSTRING = r"""
@@ -757,9 +811,9 @@ YOSO_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.AutoTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.AutoTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
@@ -778,12 +832,13 @@ YOSO_INPUTS_DOCSTRING = r"""
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+        head_mask (:
+            obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`): Mask
+            to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -810,17 +865,15 @@ YOSO_INPUTS_DOCSTRING = r"""
 class YosoModel(YosoPreTrainedModel):
     """
 
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
+    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
+    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the
-    :obj:`is_decoder` argument of the configuration set to :obj:`True`.
-    To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
-    argument and :obj:`add_cross_attention` set to :obj:`True`; an
-    :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
+    To behave as an decoder the model needs to be initialized with the :obj:`is_decoder` argument of the configuration
+    set to :obj:`True`. To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
+    argument and :obj:`add_cross_attention` set to :obj:`True`; an :obj:`encoder_hidden_states` is then expected as an
+    input to the forward pass.
     """
 
     def __init__(self, config):
@@ -841,8 +894,7 @@ class YosoModel(YosoPreTrainedModel):
 
     def _prune_heads(self, heads_to_prune):
         """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -871,19 +923,21 @@ class YosoModel(YosoPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
+        encoder_hidden_states  (:
+            obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`): Sequence
+            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model
+            is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+        past_key_values (:
+            obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of
+            shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key
+            and value hidden states of the attention blocks. Can be used to speed up decoding. If
+            :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`):
@@ -915,7 +969,6 @@ class YosoModel(YosoPreTrainedModel):
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -984,7 +1037,7 @@ class YosoModel(YosoPreTrainedModel):
         )
 
 
-@add_start_docstrings("""YOSO Model with a `language modeling` head on top. """, YOSO_START_DOCSTRING)
+@add_start_docstrings("""YOSO Model with a `language modeling` head on top.""", YOSO_START_DOCSTRING)
 class YosoForMaskedLM(YosoPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1031,10 +1084,9 @@ class YosoForMaskedLM(YosoPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``.
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1087,7 +1139,7 @@ class YosoForMaskedLM(YosoPreTrainedModel):
 
 
 @add_start_docstrings(
-    """YOSO Model with a `language modeling` head on top for CLM fine-tuning. """, YOSO_START_DOCSTRING
+    """YOSO Model with a `language modeling` head on top for CLM fine-tuning.""", YOSO_START_DOCSTRING
 )
 class YosoForCausalLM(YosoPreTrainedModel):
 
@@ -1114,43 +1166,44 @@ class YosoForCausalLM(YosoPreTrainedModel):
     @add_start_docstrings_to_model_forward(YOSO_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            inputs_embeds=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            head_mask=None,
-            cross_attn_head_mask=None,
-            past_key_values=None,
-            labels=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        head_mask=None,
+        cross_attn_head_mask=None,
+        past_key_values=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
+        encoder_hidden_states  (:
+            obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`): Sequence
+            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model
+            is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            Tuple of :obj:`tuple(torch.FloatTensor)` of length :obj:`config.n_layers`, with each tuple having 2
-            tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
-            tensors of shape :obj:`(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two
-            additional tensors are only required when the model is used as a decoder in a Sequence to Sequence
-            model.
+        past_key_values (:
+            obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when
+            ``config.use_cache=True``): Tuple of :obj:`tuple(torch.FloatTensor)` of length :obj:`config.n_layers`, with
+            each tuple having 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+            and 2 additional tensors of shape :obj:`(batch_size, num_heads, encoder_sequence_length,
+            embed_size_per_head)`. The two additional tensors are only required when the model is used as a decoder in
+            a Sequence to Sequence model.
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-            cross-attention blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential
-            decoding.
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last ``decoder_input_ids``
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
@@ -1167,16 +1220,13 @@ class YosoForCausalLM(YosoPreTrainedModel):
 
         Example::
 
-            >>> from transformers import AutoTokenizer, YosoForCausalLM, YosoConfig
-            >>> import torch
+            >>> from transformers import AutoTokenizer, YosoForCausalLM, YosoConfig >>> import torch
 
-            >>> tokenizer = AutoTokenizer.from_pretrained('uw-madison/yoso-4096')
-            >>> config = YosoConfig.from_pretrained("uw-madison/yoso-4096")
-            >>> config.is_decoder = True
-            >>> model = YosoForCausalLM.from_pretrained('uw-madison/yoso-4096', config=config)
+            >>> tokenizer = AutoTokenizer.from_pretrained('uw-madison/yoso-4096') >>> config =
+            YosoConfig.from_pretrained("uw-madison/yoso-4096") >>> config.is_decoder = True >>> model =
+            YosoForCausalLM.from_pretrained('uw-madison/yoso-4096', config=config)
 
-            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> outputs = model(**inputs)
+            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt") >>> outputs = model(**inputs)
 
             >>> prediction_logits = outputs.logits
         """
@@ -1238,8 +1288,11 @@ class YosoForCausalLM(YosoPreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
         return reordered_past
+
 
 class YosoClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
@@ -1264,7 +1317,7 @@ class YosoClassificationHead(nn.Module):
 
 @add_start_docstrings(
     """YOSO Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    the pooled output) e.g. for GLUE tasks.""",
     YOSO_START_DOCSTRING,
 )
 class YosoForSequenceClassification(YosoPreTrainedModel):
@@ -1285,23 +1338,22 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1354,9 +1406,10 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """YOSO Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
     YOSO_START_DOCSTRING,
 )
 class YosoForMultipleChoice(YosoPreTrainedModel):
@@ -1378,23 +1431,23 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1426,7 +1479,7 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
         pooled_output = self.pre_classifier(pooled_output)  # (bs * num_choices, dim)
         pooled_output = nn.ReLU()(pooled_output)  # (bs * num_choices, dim)
         logits = self.classifier(pooled_output)
-        
+
         reshaped_logits = logits.view(-1, num_choices)
 
         loss = None
@@ -1448,7 +1501,7 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
 
 @add_start_docstrings(
     """YOSO Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
     YOSO_START_DOCSTRING,
 )
 class YosoForTokenClassification(YosoPreTrainedModel):
@@ -1485,8 +1538,8 @@ class YosoForTokenClassification(YosoPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1535,7 +1588,7 @@ class YosoForTokenClassification(YosoPreTrainedModel):
 
 @add_start_docstrings(
     """YOSO Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
     YOSO_START_DOCSTRING,
 )
 class YosoForQuestionAnswering(YosoPreTrainedModel):
@@ -1575,12 +1628,12 @@ class YosoForQuestionAnswering(YosoPreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

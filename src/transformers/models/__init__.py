@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    yoso,
     albert,
     auto,
     bart,
@@ -116,4 +115,5 @@ from . import (
     xlm_prophetnet,
     xlm_roberta,
     xlnet,
+    yoso,
 )

@@ -140,7 +140,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -317,6 +316,7 @@ _import_structure = {
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
+    "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
     "pipelines": [
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
@@ -611,20 +611,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.yoso"].extend(
-        [
-            "YOSO_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "YosoForMaskedLM",
-            "YosoForCausalLM",
-            "YosoForMultipleChoice",
-            "YosoForQuestionAnswering",
-            "YosoForSequenceClassification",
-            "YosoForTokenClassification",
-            "YosoLayer",
-            "YosoModel",
-            "YosoPreTrainedModel",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1460,6 +1446,20 @@ if is_torch_available():
             "load_tf_weights_in_xlnet",
         ]
     )
+    _import_structure["models.yoso"].extend(
+        [
+            "YOSO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "YosoForCausalLM",
+            "YosoForMaskedLM",
+            "YosoForMultipleChoice",
+            "YosoForQuestionAnswering",
+            "YosoForSequenceClassification",
+            "YosoForTokenClassification",
+            "YosoLayer",
+            "YosoModel",
+            "YosoPreTrainedModel",
+        ]
+    )
     _import_structure["optimization"] = [
         "Adafactor",
         "AdamW",
@@ -2249,7 +2249,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2398,6 +2397,7 @@ if TYPE_CHECKING:
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
     from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+    from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
 
     # Pipelines
     from .pipelines import (
@@ -2602,18 +2602,6 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
-        from .models.yoso import (
-            YOSO_PRETRAINED_MODEL_ARCHIVE_LIST,
-            YosoForMaskedLM,
-            YosoForCausalLM,
-            YosoForMultipleChoice,
-            YosoForQuestionAnswering,
-            YosoForSequenceClassification,
-            YosoForTokenClassification,
-            YosoLayer,
-            YosoModel,
-            YosoPreTrainedModel,
-        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -3351,6 +3339,18 @@ if TYPE_CHECKING:
             XLNetModel,
             XLNetPreTrainedModel,
             load_tf_weights_in_xlnet,
+        )
+        from .models.yoso import (
+            YOSO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            YosoForCausalLM,
+            YosoForMaskedLM,
+            YosoForMultipleChoice,
+            YosoForQuestionAnswering,
+            YosoForSequenceClassification,
+            YosoForTokenClassification,
+            YosoLayer,
+            YosoModel,
+            YosoPreTrainedModel,
         )
 
         # Optimization
