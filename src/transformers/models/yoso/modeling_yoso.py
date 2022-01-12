@@ -659,7 +659,7 @@ class YosoEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertHeadTransform
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform
 class YosoPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
