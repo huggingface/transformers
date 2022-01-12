@@ -27,6 +27,8 @@ from torch.nn import functional as F
 from einops import rearrange
 from einops.einops import repeat
 
+from transformers.modeling_utils import PreTrainedModel
+from dataclasses import dataclass
 from .configuration_maskformer import MaskFormerConfig
 from ...file_utils import (
     ModelOutput,
@@ -46,10 +48,442 @@ from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput
 from ...utils import logging
 
 logger = logging.get_logger(__name__)
+import torch.distributed as dist
 
 _CONFIG_FOR_DOC = "MaskFormerConfig"
 
+import torch
+import torch.nn.functional as F
+from scipy.optimize import linear_sum_assignment
+from torch import nn
 
+import torchvision
+from detectron2.utils.comm import get_world_size
+
+# copied from original implementation
+class NestedTensor(object):
+    def __init__(self, tensors, mask: Optional[Tensor]):
+        self.tensors = tensors
+        self.mask = mask
+
+    def to(self, device):
+        cast_tensor = self.tensors.to(device)
+        mask = self.mask
+        if mask is not None:
+            assert mask is not None
+            cast_mask = mask.to(device)
+        else:
+            cast_mask = None
+        return NestedTensor(cast_tensor, cast_mask)
+
+    def decompose(self):
+        return self.tensors, self.mask
+
+    def __repr__(self):
+        return str(self.tensors)
+
+
+# copied from original implementation
+# _onnx_nested_tensor_from_tensor_list() is an implementation of
+# nested_tensor_from_tensor_list() that is supported by ONNX tracing.
+@torch.jit.unused
+def _onnx_nested_tensor_from_tensor_list(tensor_list: List[Tensor]) -> NestedTensor:
+    max_size = []
+    for i in range(tensor_list[0].dim()):
+        max_size_i = torch.max(torch.stack([img.shape[i] for img in tensor_list]).to(torch.float32)).to(torch.int64)
+        max_size.append(max_size_i)
+    max_size = tuple(max_size)
+
+
+# copied from original implementation
+def _max_by_axis(the_list):
+    # type: (List[List[int]]) -> List[int]
+    maxes = the_list[0]
+    for sublist in the_list[1:]:
+        for index, item in enumerate(sublist):
+            maxes[index] = max(maxes[index], item)
+    return maxes
+
+
+# copied from original implementation
+def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
+    # TODO make this more general
+    if tensor_list[0].ndim == 3:
+        if torchvision._is_tracing():
+            # nested_tensor_from_tensor_list() does not export well to ONNX
+            # call _onnx_nested_tensor_from_tensor_list() instead
+            return _onnx_nested_tensor_from_tensor_list(tensor_list)
+
+        # TODO make it support different-sized images
+        max_size = _max_by_axis([list(img.shape) for img in tensor_list])
+        # min_size = tuple(min(s) for s in zip(*[img.shape for img in tensor_list]))
+        batch_shape = [len(tensor_list)] + max_size
+        b, c, h, w = batch_shape
+        dtype = tensor_list[0].dtype
+        device = tensor_list[0].device
+        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
+        mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
+        for img, pad_img, m in zip(tensor_list, tensor, mask):
+            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
+            m[: img.shape[1], : img.shape[2]] = False
+    else:
+        raise ValueError("not supported")
+    return NestedTensor(tensor, mask)
+
+
+# copied from original implementation
+def is_dist_avail_and_initialized():
+    if not dist.is_available():
+        return False
+    if not dist.is_initialized():
+        return False
+    return True
+
+
+# copied from original implementation
+def batch_dice_loss(inputs, targets):
+    """
+    Compute the DICE loss, similar to generalized IOU for masks
+    Args:
+        inputs: A float tensor of arbitrary shape.
+                The predictions for each example.
+        targets: A float tensor with the same shape as inputs. Stores the binary
+                 classification label for each element in inputs
+                (0 for the negative class and 1 for the positive class).
+    """
+    inputs = inputs.sigmoid()
+    inputs = inputs.flatten(1)
+    numerator = 2 * torch.einsum("nc,mc->nm", inputs, targets)
+    denominator = inputs.sum(-1)[:, None] + targets.sum(-1)[None, :]
+    loss = 1 - (numerator + 1) / (denominator + 1)
+    return loss
+
+
+# copied from original implementation
+def batch_sigmoid_focal_loss(inputs, targets, alpha: float = 0.25, gamma: float = 2):
+    """
+    Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+    Args:
+        inputs: A float tensor of arbitrary shape.
+                The predictions for each example.
+        targets: A float tensor with the same shape as inputs. Stores the binary
+                 classification label for each element in inputs
+                (0 for the negative class and 1 for the positive class).
+        alpha: (optional) Weighting factor in range (0,1) to balance
+                positive vs negative examples. Default = -1 (no weighting).
+        gamma: Exponent of the modulating factor (1 - p_t) to
+               balance easy vs hard examples.
+    Returns:
+        Loss tensor
+    """
+    hw = inputs.shape[1]
+
+    prob = inputs.sigmoid()
+    focal_pos = ((1 - prob) ** gamma) * F.binary_cross_entropy_with_logits(
+        inputs, torch.ones_like(inputs), reduction="none"
+    )
+    focal_neg = (prob ** gamma) * F.binary_cross_entropy_with_logits(
+        inputs, torch.zeros_like(inputs), reduction="none"
+    )
+    if alpha >= 0:
+        focal_pos = focal_pos * alpha
+        focal_neg = focal_neg * (1 - alpha)
+
+    loss = torch.einsum("nc,mc->nm", focal_pos, targets) + torch.einsum("nc,mc->nm", focal_neg, (1 - targets))
+
+    return loss / hw
+
+
+# copied from original implementation
+def dice_loss(inputs, targets, num_masks):
+    """
+    Compute the DICE loss, similar to generalized IOU for masks
+    Args:
+        inputs: A float tensor of arbitrary shape.
+                The predictions for each example.
+        targets: A float tensor with the same shape as inputs. Stores the binary
+                 classification label for each element in inputs
+                (0 for the negative class and 1 for the positive class).
+    """
+    inputs = inputs.sigmoid()
+    inputs = inputs.flatten(1)
+    numerator = 2 * (inputs * targets).sum(-1)
+    denominator = inputs.sum(-1) + targets.sum(-1)
+    loss = 1 - (numerator + 1) / (denominator + 1)
+    return loss.sum() / num_masks
+
+
+# copied from original implementation
+def sigmoid_focal_loss(inputs, targets, num_masks, alpha: float = 0.25, gamma: float = 2):
+    """
+    Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+    Args:
+        inputs: A float tensor of arbitrary shape.
+                The predictions for each example.
+        targets: A float tensor with the same shape as inputs. Stores the binary
+                 classification label for each element in inputs
+                (0 for the negative class and 1 for the positive class).
+        alpha: (optional) Weighting factor in range (0,1) to balance
+                positive vs negative examples. Default = -1 (no weighting).
+        gamma: Exponent of the modulating factor (1 - p_t) to
+               balance easy vs hard examples.
+    Returns:
+        Loss tensor
+    """
+    prob = inputs.sigmoid()
+    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    p_t = prob * targets + (1 - prob) * (1 - targets)
+    loss = ce_loss * ((1 - p_t) ** gamma)
+
+    if alpha >= 0:
+        alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
+        loss = alpha_t * loss
+
+    return loss.mean(1).sum() / num_masks
+
+
+# copied from original implementation
+class MaskFormerHungarianMatcher(nn.Module):
+    """This class computes an assignment between the targets and the predictions of the network
+
+    For efficiency reasons, the targets don't include the no_object. Because of this, in general,
+    there are more predictions than targets. In this case, we do a 1-to-1 matching of the best predictions,
+    while the others are un-matched (and thus treated as non-objects).
+    """
+
+    def __init__(self, cost_class: float = 1, cost_mask: float = 1, cost_dice: float = 1):
+        """Creates the matcher
+
+        Params:
+            cost_class: This is the relative weight of the classification error in the matching cost
+            cost_mask: This is the relative weight of the focal loss of the binary mask in the matching cost
+            cost_dice: This is the relative weight of the dice loss of the binary mask in the matching cost
+        """
+        super().__init__()
+        self.cost_class = cost_class
+        self.cost_mask = cost_mask
+        self.cost_dice = cost_dice
+        assert cost_class != 0 or cost_mask != 0 or cost_dice != 0, "all costs cant be 0"
+
+    @torch.no_grad()
+    def memory_efficient_forward(self, outputs, targets):
+        """More memory-friendly matching"""
+        bs, num_queries = outputs["pred_logits"].shape[:2]
+
+        # Work out the mask padding size
+        masks = [v["masks"] for v in targets]
+        h_max = max([m.shape[1] for m in masks])
+        w_max = max([m.shape[2] for m in masks])
+
+        indices = []
+
+        # Iterate through batch size
+        for b in range(bs):
+
+            out_prob = outputs["pred_logits"][b].softmax(-1)  # [num_queries, num_classes]
+            out_mask = outputs["pred_masks"][b]  # [num_queries, H_pred, W_pred]
+
+            tgt_ids = targets[b]["labels"]
+            # gt masks are already padded when preparing target
+            tgt_mask = targets[b]["masks"].to(out_mask)
+
+            # Compute the classification cost. Contrary to the loss, we don't use the NLL,
+            # but approximate it in 1 - proba[target class].
+            # The 1 is a constant that doesn't change the matching, it can be ommitted.
+            cost_class = -out_prob[:, tgt_ids]
+
+            # Downsample gt masks to save memory
+            tgt_mask = F.interpolate(tgt_mask[:, None], size=out_mask.shape[-2:], mode="nearest")
+
+            # Flatten spatial dimension
+            out_mask = out_mask.flatten(1)  # [batch_size * num_queries, H*W]
+            tgt_mask = tgt_mask[:, 0].flatten(1)  # [num_total_targets, H*W]
+
+            # Compute the focal loss between masks
+            cost_mask = batch_sigmoid_focal_loss(out_mask, tgt_mask)
+
+            # Compute the dice loss betwen masks
+            cost_dice = batch_dice_loss(out_mask, tgt_mask)
+
+            # Final cost matrix
+            C = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
+            C = C.reshape(num_queries, -1).cpu()
+
+            indices.append(linear_sum_assignment(C))
+        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+
+    @torch.no_grad()
+    def forward(self, outputs, targets):
+        """Performs the matching
+
+        Params:
+            outputs: This is a dict that contains at least these entries:
+                 "pred_logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
+                 "pred_masks": Tensor of dim [batch_size, num_queries, H_pred, W_pred] with the predicted masks
+
+            targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:
+                 "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
+                           objects in the target) containing the class labels
+                 "masks": Tensor of dim [num_target_boxes, H_gt, W_gt] containing the target masks
+
+        Returns:
+            A list of size batch_size, containing tuples of (index_i, index_j) where:
+                - index_i is the indices of the selected predictions (in order)
+                - index_j is the indices of the corresponding selected targets (in order)
+            For each batch element, it holds:
+                len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
+        """
+        return self.memory_efficient_forward(outputs, targets)
+
+    def __repr__(self):
+        head = "Matcher " + self.__class__.__name__
+        body = [
+            "cost_class: {}".format(self.cost_class),
+            "cost_mask: {}".format(self.cost_mask),
+            "cost_dice: {}".format(self.cost_dice),
+        ]
+        _repr_indent = 4
+        lines = [head] + [" " * _repr_indent + line for line in body]
+        return "\n".join(lines)
+
+
+# copied from original implementation
+class MaskFormerLoss(nn.Module):
+    """This class computes the loss for MaskFormer, heavily based on DETR.
+    The process happens in two steps:
+        1) we compute hungarian assignment between ground truth boxes and the outputs of the model
+        2) we supervise each pair of matched ground-truth / prediction (supervise class and box)
+    """
+
+    def __init__(
+        self,
+        num_classes: int,
+        matcher: MaskFormerHungarianMatcher,
+        weight_dict: Dict[str, float],
+        eos_coef: float,
+        losses: List[str],
+    ):
+        """Create the criterion.
+        Parameters:
+            num_classes: number of object categories, omitting the special no-object category
+            matcher: module able to compute a matching between targets and proposals
+            weight_dict: dict containing as key the names of the losses and as values their relative weight.
+            eos_coef: relative classification weight applied to the no-object category
+            losses: list of all the losses to be applied. See get_loss for list of available losses.
+        """
+        super().__init__()
+        requires_backends(self, ["scipy"])
+        self.num_classes = num_classes
+        self.matcher = matcher
+        self.weight_dict = weight_dict
+        self.eos_coef = eos_coef
+        self.losses = losses
+        empty_weight = torch.ones(self.num_classes + 1)
+        empty_weight[-1] = self.eos_coef
+        self.register_buffer("empty_weight", empty_weight)
+
+    def loss_labels(self, outputs, targets, indices, num_masks):
+        """Classification loss (NLL)
+        targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
+        """
+        assert "pred_logits" in outputs
+        src_logits = outputs["pred_logits"]
+
+        idx = self._get_src_permutation_idx(indices)
+        target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
+        target_classes = torch.full(
+            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+        )
+        target_classes[idx] = target_classes_o
+
+        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        losses = {"loss_ce": loss_ce}
+        return losses
+
+    def loss_masks(self, outputs, targets, indices, num_masks):
+        """Compute the losses related to the masks: the focal loss and the dice loss.
+        targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w]
+        """
+        assert "pred_masks" in outputs
+
+        src_idx = self._get_src_permutation_idx(indices)
+        tgt_idx = self._get_tgt_permutation_idx(indices)
+        src_masks = outputs["pred_masks"]
+        src_masks = src_masks[src_idx]
+        masks = [t["masks"] for t in targets]
+        # TODO use valid to mask invalid areas due to padding in loss
+        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
+        target_masks = target_masks.to(src_masks)
+        target_masks = target_masks[tgt_idx]
+
+        # upsample predictions to the target size
+        src_masks = F.interpolate(
+            src_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
+        )
+        src_masks = src_masks[:, 0].flatten(1)
+
+        target_masks = target_masks.flatten(1)
+        target_masks = target_masks.view(src_masks.shape)
+        losses = {
+            "loss_mask": sigmoid_focal_loss(src_masks, target_masks, num_masks),
+            "loss_dice": dice_loss(src_masks, target_masks, num_masks),
+        }
+        return losses
+
+    def _get_src_permutation_idx(self, indices):
+        # permute predictions following indices
+        batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
+        src_idx = torch.cat([src for (src, _) in indices])
+        return batch_idx, src_idx
+
+    def _get_tgt_permutation_idx(self, indices):
+        # permute targets following indices
+        batch_idx = torch.cat([torch.full_like(tgt, i) for i, (_, tgt) in enumerate(indices)])
+        tgt_idx = torch.cat([tgt for (_, tgt) in indices])
+        return batch_idx, tgt_idx
+
+    def get_loss(self, loss, outputs, targets, indices, num_masks):
+        loss_map = {"labels": self.loss_labels, "masks": self.loss_masks}
+        assert loss in loss_map, f"do you really want to compute {loss} loss?"
+        return loss_map[loss](outputs, targets, indices, num_masks)
+
+    def forward(self, outputs, targets):
+        """This performs the loss computation.
+        Parameters:
+             outputs: dict of tensors, see the output specification of the model for the format
+             targets: list of dicts, such that len(targets) == batch_size.
+                      The expected keys in each dict depends on the losses applied, see each loss' doc
+        """
+        outputs_without_aux = {k: v for k, v in outputs.items() if k != "aux_outputs"}
+
+        # Retrieve the matching between the outputs of the last layer and the targets
+        indices = self.matcher(outputs_without_aux, targets)
+
+        # Compute the average number of target boxes accross all nodes, for normalization purposes
+        num_masks = sum(len(t["labels"]) for t in targets)
+        num_masks = torch.as_tensor([num_masks], dtype=torch.float, device=next(iter(outputs.values())).device)
+        if is_dist_avail_and_initialized():
+            torch.distributed.all_reduce(num_masks)
+        num_masks = torch.clamp(num_masks / get_world_size(), min=1).item()
+
+        # Compute all the requested losses
+        losses = {}
+        for loss in self.losses:
+            losses.update(self.get_loss(loss, outputs, targets, indices, num_masks))
+
+        # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
+        if "aux_outputs" in outputs:
+            for i, aux_outputs in enumerate(outputs["aux_outputs"]):
+                indices = self.matcher(aux_outputs, targets)
+                for loss in self.losses:
+                    l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_masks)
+                    l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
+                    losses.update(l_dict)
+
+        return losses
+
+
+# copied from original implementation
 class Mlp(nn.Module):
     """Multilayer perceptron."""
 
@@ -71,6 +505,7 @@ class Mlp(nn.Module):
         return x
 
 
+# copied from original implementation
 def window_partition(x, window_size):
     """
     Args:
@@ -85,6 +520,7 @@ def window_partition(x, window_size):
     return windows
 
 
+# copied from original implementation
 def window_reverse(windows, window_size, H, W):
     """
     Args:
@@ -101,6 +537,7 @@ def window_reverse(windows, window_size, H, W):
     return x
 
 
+# copied from original implementation
 class WindowAttention(nn.Module):
     """Window based multi-head self attention (W-MSA) module with relative position bias.
     It supports both of shifted and non-shifted window.
@@ -193,6 +630,7 @@ class WindowAttention(nn.Module):
         return x
 
 
+# copied from original implementation
 class SwinTransformerBlock(nn.Module):
     """Swin Transformer Block.
     Args:
@@ -311,6 +749,7 @@ class SwinTransformerBlock(nn.Module):
         return x
 
 
+# copied from original implementation
 class PatchMerging(nn.Module):
     """Patch Merging Layer
     Args:
@@ -353,6 +792,7 @@ class PatchMerging(nn.Module):
         return x
 
 
+# copied from original implementation
 class BasicLayer(nn.Module):
     """A basic Swin Transformer layer for one stage.
     Args:
@@ -465,6 +905,7 @@ class BasicLayer(nn.Module):
             return x, H, W, x, H, W
 
 
+# copied from original implementation
 class PatchEmbed(nn.Module):
     """Image to Patch Embedding
     Args:
@@ -507,6 +948,7 @@ class PatchEmbed(nn.Module):
         return x
 
 
+# copied from original implementation
 class SwinTransformer(nn.Module):
     """Swin Transformer backbone.
         A PyTorch impl of : `Swin Transformer: Hierarchical Vision Transformer using Shifted Windows`  -
@@ -885,8 +1327,7 @@ class TransformerModule(nn.Module):
         )
         self.detr_decoder = DetrDecoder(config)
 
-    def forward(self, image_features: Tensor) -> Tensor:
-
+    def forward(self, image_features: Tensor) -> Tuple[Tensor]:
         image_features = self.input_proj(image_features)
         position_embeddings: Tensor = self.position_embedder(image_features)
         queries_embeddings: Tensor = repeat(self.queries_embedder.weight, "q c -> b q c", b=image_features.shape[0])
@@ -902,34 +1343,50 @@ class TransformerModule(nn.Module):
             position_embeddings=position_embeddings,
             query_position_embeddings=queries_embeddings,
             output_attentions=None,
-            output_hidden_states=None,
+            output_hidden_states=True,
             return_dict=None,
         )
-        last_hidden_state: Tensor = detr_output.last_hidden_state
-
-        return last_hidden_state
+        # TODO return a tuple is not a good idea, torch.summary will fail
+        return detr_output.hidden_states
 
 
 class SegmentationModule(nn.Module):
     def __init__(self, config: MaskFormerConfig):
         super().__init__()
         # + 1 because we add the "null" class
+        self.mask_classification = config.mask_classification
         self.class_predictor = nn.Linear(config.hidden_size, config.num_classes + 1)
         self.mask_embedder = MLP(config.hidden_size, config.hidden_size, config.mask_feature_size)
 
-    def forward(self, decoder_output: Tensor, pixel_embbeddings: Tensor) -> Tensor:
-        mask_embeddings: Tensor = self.mask_embedder(decoder_output)
+    def forward(self, decoder_outputs: Tuple[Tensor], pixel_embbeddings: Tensor) -> Dict[str, Tensor]:
+        last_decoder_output: Tensor = decoder_outputs[-1]
+        mask_embeddings: Tensor = self.mask_embedder(last_decoder_output)
+        out = {}
+
+        if self.mask_classification:
+            classes: Tensor = self.class_predictor(last_decoder_output)
+            out.update({"pred_logits": classes})
+
         # sum up over the channels
         binary_masks: Tensor = torch.einsum("bqc, bchw -> bqhw", mask_embeddings, pixel_embbeddings)
-        classes: Tensor = self.class_predictor(decoder_output)
+        out.update({"pred_masks": binary_masks})
+        return out
 
-        if not self.training:
-            pass
 
-        return binary_masks
+@dataclass
+class MaskFormerOutput(ModelOutput):
+
+    pred_logits: torch.FloatTensor = None
+    pred_masks: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[Dict] = None
 
 
 class MaskFormer(nn.Module):
+    # config_class = MaskFormerConfig
+    # base_model_prefix = "model"
+    # main_input_name = "pixel_values"
+
     def __init__(self, config: MaskFormerConfig):
         super().__init__()
         self.pixel_level_module = PixelLevelModule(config)
@@ -937,8 +1394,58 @@ class MaskFormer(nn.Module):
             in_features=self.pixel_level_module.backbone.get_outputs_shape()[-1], config=config
         )
         self.segmentation_module = SegmentationModule(config)
+        self.matcher = MaskFormerHungarianMatcher(
+            cost_class=1.0, cost_dice=config.dice_weight, cost_mask=config.mask_weight
+        )
 
-    def forward(self, x: Tensor):
+        losses = ["labels", "masks"]
+        self.weight_dict: Dict[str, float] = {
+            "loss_ce": 1.0,
+            "loss_mask": config.mask_weight,
+            "loss_dice": config.dice_weight,
+        }
+
+        self.criterion = MaskFormerLoss(
+            config.num_classes,
+            matcher=self.matcher,
+            weight_dict=self.weight_dict,
+            eos_coef=config.eos_coefficient,
+            losses=losses,
+        )
+
+    def forward(self, x: Tensor, targets: Optional[Dict[str, Tensor]] = None) -> MaskFormerOutput:
         image_features, pixel_embeddings = self.pixel_level_module(x)
         queries = self.transformer_module(image_features)
-        self.segmentation_module(queries, pixel_embeddings)
+        outputs = self.segmentation_module(queries, pixel_embeddings)
+
+        if targets:
+            loss_dict: Dict[str, Tensor] = self.get_loss_dict(outputs, targets)
+            loss = self.get_loss(loss_dict)
+
+        return MaskFormerOutput(**outputs, loss_dict=loss_dict, loss=loss)
+
+    def get_loss_dict(self, outputs: Dict[str, Tensor], targets: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        loss_dict: Dict[str, Tensor] = self.criterion(outputs, targets)
+        weighted_loss_dict: Dict[str, Tensor] = {k: v * self.weight_dict[k] for k, v in loss_dict.items()}
+        return weighted_loss_dict
+
+    def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
+        # probably an awkward way to reduce it
+        return torch.tensor(list(loss_dict.values()), dtype=torch.float).sum()
+
+
+# is this the correct way to defined a model for a custom task?
+class MaskFormerForSegmentation(nn.Module):
+    def __init__(self, config: MaskFormerConfig):
+        super().__init__()
+        self.model = MaskFormer(config)
+
+    def forward(self, *args, **kwargs):
+        outputs = self.model(*args, **kwargs)
+        # TODO!
+
+
+class MaskFormerForPanoptic(MaskFormerForSegmentation):
+       def forward(self, *args, **kwargs):
+        outputs = self.model(*args, **kwargs)
+        # TODO!

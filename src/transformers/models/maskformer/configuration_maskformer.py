@@ -51,6 +51,9 @@ class MaskFormerConfig(DetrConfig):
         swin_num_heads: Optional[List[int]] = None,
         swin_window_size: Optional[int] = 12,
         swin_drop_path_rate: Optional[float] = 0.3,
+        dice_weight: Optional[float] = 1.0,
+        mask_weight: Optional[float] = 20.0,
+        mask_classification: Optional[bool] = True,
     ):
         super().__init__()
         self.fpn_feature_size = fpn_feature_size
@@ -65,3 +68,8 @@ class MaskFormerConfig(DetrConfig):
         self.swin_num_heads = swin_num_heads or [4, 8, 16, 32]
         self.swin_window_size = swin_window_size
         self.swin_drop_path_rate = swin_drop_path_rate
+
+        self.dice_weight = dice_weight
+        self.mask_weight = mask_weight
+
+        self.mask_classification = mask_classification
