@@ -261,6 +261,10 @@ class TokenClassificationPipeline(Pipeline):
         """Fuse various numpy arrays into dicts with all the information needed for aggregation"""
         pre_entities = []
         for idx, token_scores in enumerate(scores):
+            # Some models (Perceiver) can have `scores.shape` > `input_ids.shape`
+            # So if that's the case, we simply need to stop further processing
+            if idx >= input_ids.shape[0]:
+                break
             # Filter special_tokens, they should only occur
             # at the sentence boundaries since we're not encoding pairs of
             # sentences so we don't have to keep track of those.
