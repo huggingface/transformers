@@ -60,7 +60,7 @@
   - local: debugging
     title: Debugging
   - local: serialization
-    title: Exporting transformers models
+    title: Exporting 🤗 Transformers models
   - local: pr_checks
     title: Checks on a Pull Request
   title: Advanced guides
@@ -86,6 +86,8 @@
       title: Logging
     - local: main_classes/model
       title: Models
+    - local: main_classes/onnx
+      title: ONNX
     - local: main_classes/optimizer_schedules
       title: Optimization
     - local: main_classes/output
