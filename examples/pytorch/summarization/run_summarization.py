@@ -68,7 +68,7 @@ except (LookupError, OSError):
     with FileLock(".lock") as lock:
         nltk.download("punkt", quiet=True)
 
-# A list of all multilingual tokenizer which require src_lang and tgt_lang attributes.
+# A list of all multilingual tokenizer which require lang attribute.
 MULTILINGUAL_TOKENIZERS = [MBartTokenizer, MBartTokenizerFast, MBart50Tokenizer, MBart50TokenizerFast]
 
 @dataclass
@@ -120,8 +120,7 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    source_lang: str = field(default=None, metadata={"help": "Source language id for summarization."})
-    target_lang: str = field(default=None, metadata={"help": "Target language id for summarization."})
+    lang: str = field(default=None, metadata={"help": "Language id for summarization."})
 
     dataset_name: Optional[str] = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
@@ -241,8 +240,8 @@ class DataTrainingArguments:
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
             raise ValueError("Need either a dataset name or a training/validation file.")
-        elif self.source_lang is None or self.target_lang is None:
-            raise ValueError("Need to specify the source language and the target language.")
+        elif self.lang is None:
+            raise ValueError("Need to specify the language.")
 
         else:
             if self.train_file is not None:
@@ -393,9 +392,9 @@ def main():
     
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
         if isinstance(tokenizer, MBartTokenizer):
-            model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
+            model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.lang]
         else:
-            model.config.decoder_start_token_id = tokenizer.convert_tokens_to_ids(data_args.target_lang)
+            model.config.decoder_start_token_id = tokenizer.convert_tokens_to_ids(data_args.lang)
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
@@ -434,13 +433,12 @@ def main():
         return
 
     if isinstance(tokenizer, tuple(MULTILINGUAL_TOKENIZERS)):
-        assert data_args.target_lang is not None and data_args.source_lang is not None, (
-            f"{tokenizer.__class__.__name__} is a multilingual tokenizer which requires --source_lang and "
-            "--target_lang arguments."
+        assert data_args.lang is not None, (
+            f"{tokenizer.__class__.__name__} is a multilingual tokenizer which requires --lang argument"
         )
 
-        tokenizer.src_lang = data_args.source_lang
-        tokenizer.tgt_lang = data_args.target_lang
+        tokenizer.src_lang = data_args.lang
+        tokenizer.tgt_lang = data_args.lang
 
         # For multilingual translation models like mBART-50 and M2M100 we need to force the target language token
         # as the first generated token. We ask the user to explicitly provide this as --forced_bos_token argument.
@@ -450,8 +448,8 @@ def main():
         model.config.forced_bos_token_id = forced_bos_token_id
 
     # Get the language codes for input/target.
-    source_lang = data_args.source_lang.split("_")[0]
-    target_lang = data_args.target_lang.split("_")[0]
+    source_lang = data_args.lang.split("_")[0]
+    target_lang = data_args.lang.split("_")[0]
 
     # Get the column names for input/target.
     dataset_columns = summarization_name_mapping.get(data_args.dataset_name, None)
@@ -483,6 +481,14 @@ def main():
         )
 
     def preprocess_function(examples):
+        # remove pairs where at least one record is None
+        
+        inputs, targets = [], []
+        for i in range(len(examples[text_column])):
+            if examples[text_column][i] is not None and examples[summary_column][i] is not None:
+                inputs.append(examples[text_column][i])
+                targets.append(examples[summary_column][i])
+                
         inputs = examples[text_column]
         targets = examples[summary_column]
         inputs = [prefix + inp for inp in inputs]
@@ -678,9 +684,8 @@ def main():
         else:
             kwargs["dataset"] = data_args.dataset_name
     
-    languages = [l for l in [data_args.source_lang, data_args.target_lang] if l is not None]
-    if len(languages) > 0:
-        kwargs["language"] = languages
+    if data_args.lang is not None:
+        kwargs["language"] = data_args.lang
 
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)
