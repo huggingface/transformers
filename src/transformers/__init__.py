@@ -84,6 +84,7 @@ _import_structure = {
         "DefaultDataCollator",
         "default_data_collator",
     ],
+    "deepspeed": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature"],
     "file_utils": [
