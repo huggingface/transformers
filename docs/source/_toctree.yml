@@ -25,6 +25,8 @@
     title: Summary of the tokenizers
   - local: multilingual
     title: Multi-lingual models
+  - local: scaling
+    title: A Guide to Train Large Models
   title: "Using 🤗 Transformers"
 - sections:
   - local: examples
