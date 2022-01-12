@@ -847,8 +847,74 @@ class TFPerceiverForImageClassificationLearned(TFPerceiverPreTrainedModel, TFSeq
         )
 
 
-class TFPerceiverForImageClassificationFourier:
-    pass
+class TFPerceiverForImageClassificationFourier(TFPerceiverPreTrainedModel, TFSequenceClassificationLoss):
+    def __init__(self, config):
+        super(TFPerceiverForImageClassificationFourier, self).__init__(config)
+
+        fourier_position_encoding_kwargs_preprocessor = dict(
+            concat_pos=True, max_resolution=(224, 224), num_bands=64, sine_only=False
+        )
+        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+
+        self.num_labels = config.num_labels
+        self.perceiver = TFPerceiverModel(
+            config,
+            input_preprocessor=TFPerceiverImagePreprocessor(
+                config,
+                prep_type="pixels",
+                spatial_downsample=1,
+                fourier_position_encoding_kwargs=fourier_position_encoding_kwargs_preprocessor,
+            ),
+            decoder=TFPerceiverClassificationDecoder(
+                config,
+                num_channels=config.d_latents,
+                trainable_position_encoding_kwargs=trainable_position_encoding_kwargs_decoder,
+                use_query_residual=True,
+            ),
+        )
+
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        return_dict=None,
+        pixel_values=None,
+    ):
+        if inputs is not None and pixel_values is not None:
+            raise ValueError("You cannot use both `inputs` and `pixel_values`")
+        elif inputs is None and pixel_values is not None:
+            inputs = pixel_values
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            inputs=inputs,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        logits = outputs.logits if return_dict else outputs[0]
+
+        loss = None
+        if labels is not None:
+            loss = self.compute_loss(labels=labels, logits=logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFPerceiverClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
 
 
 class TFPerceiverForImageClassificationConvProcessing:
@@ -1179,7 +1245,7 @@ def build_linear_positions(index_dims, output_range=(-1.0, 1.0)):
     dim_ranges = [_linspace(n_xels_per_dim) for n_xels_per_dim in index_dims]
     array_index_grid = tf.meshgrid(*dim_ranges)
 
-    return tf.stack(array_index_grid, dim=-1)
+    return tf.stack(array_index_grid, axis=-1)
 
 
 def _check_or_build_spatial_positions(pos, index_dims, batch_size):
