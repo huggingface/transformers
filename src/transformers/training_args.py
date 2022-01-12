@@ -74,9 +74,9 @@ class OptimizerNames(Enum):
     Stores the acceptable string identifiers for optimizers.
     """
 
-    ADAM_HF = "adamw_hf"
-    ADAM_TORCH = "adamw_torch"
-    ADAM_APEX_FUSED = "adamw_apex_fused"
+    ADAMW_HF = "adamw_hf"
+    ADAMW_TORCH = "adamw_torch"
+    ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
 
 
@@ -655,7 +655,7 @@ class TrainingArguments:
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
     optim: OptimizerNames = field(
-        default=OptimizerNames.ADAM_HF.value,
+        default=OptimizerNames.ADAMW_HF.value,
         metadata={"help": "The optimizer to use.", "choices": [e.value for e in OptimizerNames]},
     )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})

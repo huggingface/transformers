@@ -854,17 +854,17 @@ class Trainer:
         if args.optim == OptimizerNames.ADAFACTOR:
             optimizer_cls = Adafactor
             optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
-        elif args.optim == OptimizerNames.ADAM_HF:
+        elif args.optim == OptimizerNames.ADAMW_HF:
             from .optimization import AdamW
 
             optimizer_cls = AdamW
             optimizer_kwargs.update(adam_kwargs)
-        elif args.optim == OptimizerNames.ADAM_TORCH:
+        elif args.optim == OptimizerNames.ADAMW_TORCH:
             from torch.optim import AdamW
 
             optimizer_cls = AdamW
             optimizer_kwargs.update(adam_kwargs)
-        elif args.optim == OptimizerNames.ADAM_APEX_FUSED:
+        elif args.optim == OptimizerNames.ADAMW_APEX_FUSED:
             try:
                 from apex.optimizers import FusedAdam
 

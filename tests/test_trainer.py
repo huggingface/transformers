@@ -1706,12 +1706,12 @@ if is_torch_available():
 
     optim_test_params = [
         (
-            OptimizerNames.ADAM_HF,
+            OptimizerNames.ADAMW_HF,
             transformers.optimization.AdamW,
             default_adam_kwargs,
         ),
         (
-            OptimizerNames.ADAM_TORCH,
+            OptimizerNames.ADAMW_TORCH,
             torch.optim.AdamW,
             default_adam_kwargs,
         ),
@@ -1730,7 +1730,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                OptimizerNames.ADAM_APEX_FUSED,
+                OptimizerNames.ADAMW_APEX_FUSED,
                 apex.optimizers.FusedAdam,
                 default_adam_kwargs,
             )
@@ -1776,13 +1776,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         }
         with patch.dict("sys.modules", modules):
             self.check_optim_and_kwargs(
-                OptimizerNames.ADAM_APEX_FUSED,
+                OptimizerNames.ADAMW_APEX_FUSED,
                 default_adam_kwargs,
                 mock.optimizers.FusedAdam,
             )
 
     def test_fused_adam_no_apex(self):
-        args = TrainingArguments(optim=OptimizerNames.ADAM_APEX_FUSED, output_dir="None")
+        args = TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir="None")
 
         # Pretend that apex does not exist, even if installed. By setting apex to None, importing
         # apex will fail even if apex is installed.
