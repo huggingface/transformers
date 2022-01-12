@@ -1,0 +1,40 @@
+name: Delete dev documentation
+
+on:
+  pull_request:
+    types: [ closed ]
+
+
+jobs:
+  build_and_package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: 'huggingface/doc-build-dev'
+          path: doc-build-dev
+          token: ${{ secrets.HUGGINGFACE_PUSH }}
+
+      - name: Setup git
+        run: |
+          git config --global user.name "Hugging Face"
+          git config --global user.email transformers@huggingface.co
+          
+      - name: Push to repositories
+        run: |
+          cd doc-build-dev
+          rm -rf $PR_NUMBER
+          if [[ `git status --porcelain` ]]; then
+            git add build
+            git commit -m "Closed PR ${GITHUB_REF##*/}"
+            git push origin main
+          else
+            echo "No diff in the documentation."
+          fi
+          cd ..
