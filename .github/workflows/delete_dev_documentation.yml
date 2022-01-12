@@ -28,9 +28,9 @@ jobs:
 
       - name: Push to repositories
         run: |
-          cd doc-build-dev
+          cd doc-build-dev/transformers
           ls
-          rm -rf transformers/$PR_NUMBER
+          rm -rf $PR_NUMBER
           ls
           git add .
           git commit -m "Closed PR ${GITHUB_REF##*/}"
