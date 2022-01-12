@@ -832,7 +832,7 @@ class TrainingArguments:
                 "`--adafactor` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--optim adafactor` instead",
                 FutureWarning,
             )
-            self.optim = OptimizerNames.ADAFACTOR.value
+            self.optim = OptimizerNames.ADAFACTOR
 
         if (
             is_torch_available()
