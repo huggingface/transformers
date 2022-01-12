@@ -51,6 +51,17 @@ from ...modeling_utils import (
 from ...utils import logging
 from .configuration_yoso import YosoConfig
 
+logger = logging.get_logger(__name__)
+
+_CHECKPOINT_FOR_DOC = "uw-madison/yoso-4096"
+_CONFIG_FOR_DOC = "YosoConfig"
+_TOKENIZER_FOR_DOC = "NystromformerTokenizer"
+
+YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "uw-madison/yoso-4096",
+    # See all YOSO models at https://huggingface.co/models?filter=yoso
+]
+
 def load_cuda_kernels():
     try:
         from torch.utils.cpp_extension import load
@@ -71,16 +82,6 @@ def load_cuda_kernels():
         return True
     except Exception:
         return False
-
-logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "uw-madison/yoso-4096"
-_CONFIG_FOR_DOC = "YosoConfig"
-
-YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "uw-madison/yoso-4096",
-    # See all YOSO models at https://huggingface.co/models?filter=yoso
-]
 
 def to_contiguous(input):
     if type(input) is list:
