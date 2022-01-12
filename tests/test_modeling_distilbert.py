@@ -167,6 +167,7 @@ class DistilBertModelTester(object):
         model = DistilBertForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
+
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
