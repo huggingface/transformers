@@ -644,13 +644,34 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
     }
 
 
-_re_sentencepiece_tokenizers = re.compile(r"^\s*if is_(sentencepiece|tokenizers)_available\(\):\s*$")
-
-
-def clean_tokenization_in_init(init_file: Union[str, os.PathLike]):
+def clean_frameworks_in_init(
+    init_file: Union[str, os.PathLike], frameworks: Optional[List[str]] = None, keep_tokenizer: bool = True
+):
     """
-    Removes all the import lines for tokenization in an init.
+    Removes all the import lines that don't belong to a given list of frameworks or concern tokenizers in an init.
+
+    Args:
+        init_file (`str` or `os.PathLike`): The path to the init to treat.
+        frameworks (`List[str]`, *optional*):
+           If passed, this will remove all imports that are subject to a framework not in frameworks
+        keep_tokenizer (`bool`, *optional*, defaults to `True`):
+            Whether or not to keep the tokenizer imports in the init.
     """
+    if frameworks is None:
+        frameworks = ["pt", "tf", "flax"]
+
+    to_remove = [f for f in ["pt", "tf", "flax"] if f not in frameworks]
+    if not keep_tokenizer:
+        to_remove.extend(["sentencepiece", "tokenizers"])
+
+    if len(to_remove) == 0:
+        # Nothing to do
+        return
+
+    remove_pattern = "|".join(to_remove)
+    re_conditional_imports = re.compile(fr"^\s*if is_({remove_pattern})_available\(\):\s*$")
+    re_is_xxx_available = re.compile(fr"is_({remove_pattern})_available")
+
     with open(init_file, "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -659,7 +680,7 @@ def clean_tokenization_in_init(init_file: Union[str, os.PathLike]):
     idx = 0
     while idx < len(lines):
         # Conditional imports
-        if _re_sentencepiece_tokenizers.search(lines[idx]) is not None:
+        if re_conditional_imports.search(lines[idx]) is not None:
             idx += 1
             while is_empty_line(lines[idx]):
                 idx += 1
@@ -667,14 +688,16 @@ def clean_tokenization_in_init(init_file: Union[str, os.PathLike]):
             while find_indent(lines[idx]) >= indent or is_empty_line(lines[idx]):
                 idx += 1
         # Remove the import from file_utils
-        elif "is_tokenizers_available" in lines[idx] or "is_sentencepiece_available" in lines[idx]:
-            line = lines[idx].replace("is_tokenizers_available,", "").replace("is_sentencepiece_available,", "")
-            # In case the , was not there
-            line = line.replace("is_tokenizers_available,", "").replace("is_sentencepiece_available,", "")
+        elif re_is_xxx_available.search(lines[idx]) is not None:
+            line = lines[idx]
+            for framework in to_remove:
+                line = line.replace(f"is_{framework}_available,", "")
+                line = line.replace(f"is_{framework}_available", "")
+
             if len(line.strip()) > 0:
                 new_lines.append(line)
             idx += 1
-        elif (
+        elif keep_tokenizer or (
             re.search('^\s*"tokenization', lines[idx]) is None
             and re.search("^\s*from .tokenization", lines[idx]) is None
         ):
@@ -994,8 +1017,9 @@ def create_new_model_like(
             add_copied_from=add_copied_from and "modeling" in new_module_name,
         )
 
-    if keep_old_tokenizer:
-        clean_tokenization_in_init(module_folder / "__init__.py")
+    clean_frameworks_in_init(
+        module_folder / "__init__.py", frameworks=frameworks, keep_tokenizer=not keep_old_tokenizer
+    )
 
     # 2. We add our new model to the models init and the main init
     add_content_to_file(
