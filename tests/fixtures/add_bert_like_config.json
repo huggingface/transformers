@@ -1,5 +1,5 @@
 {
-    "add_copied_from": true,
+    "add_copied_from": false,
     "old_model_type": "bert",
     "new_model_patterns": {
         "model_name": "BERT New",
@@ -9,7 +9,7 @@
         "model_camel_cased": "BertNew",
         "model_upper_cased": "BERT_NEW",
         "config_class": "BertNewConfig",
-        "tokenizer_class": "BertTokenizer"
+        "tokenizer_class": "BertNewTokenizer"
     },
     "frameworks": [
         "pt",

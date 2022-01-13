@@ -752,7 +752,7 @@ def add_model_to_main_init(
         if framework is not None and frameworks is not None and framework not in frameworks:
             new_lines.append(lines[idx])
             idx += 1
-        elif f"models.{old_model_patterns.model_lower_cased}" in lines[idx]:
+        elif re.search(fr'models.{old_model_patterns.model_lower_cased}( |")', lines[idx]) is not None:
             block = [lines[idx]]
             indent = find_indent(lines[idx])
             idx += 1
@@ -766,7 +766,7 @@ def add_model_to_main_init(
             new_lines.append(block)
             if not with_tokenizer:
                 tokenizer_class = old_model_patterns.tokenizer_class
-                block = block.replace(f' "{tokenizer_class},"', "")
+                block = block.replace(f' "{tokenizer_class}",', "")
                 block = block.replace(f', "{tokenizer_class}"', "")
                 block = block.replace(f" {tokenizer_class},", "")
                 block = block.replace(f", {tokenizer_class}", "")
