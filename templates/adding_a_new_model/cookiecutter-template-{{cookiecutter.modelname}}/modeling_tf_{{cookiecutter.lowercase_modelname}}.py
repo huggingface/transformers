@@ -3088,19 +3088,20 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
         """
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
-            >>> import tensorflow as tf
-            >>> mname = '{{cookiecutter.checkpoint_identifier}}'
-            >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained(mname)
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-            >>> model = TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained(mname)
-            >>> batch = tokenizer([TXT], return_tensors='tf')
-            >>> logits = model(inputs=batch.input_ids).logits
-            >>> probs = tf.nn.softmax(logits[0])
-            >>> # probs[5] is associated with the mask token
-        """
+        ```python
+        >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+        >>> import tensorflow as tf
+        >>> mname = '{{cookiecutter.checkpoint_identifier}}'
+        >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained(mname)
+        >>> TXT = "My friends are <mask> but they eat too many carbs."
+        >>> model = TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained(mname)
+        >>> batch = tokenizer([TXT], return_tensors='tf')
+        >>> logits = model(inputs=batch.input_ids).logits
+        >>> probs = tf.nn.softmax(logits[0])
+        >>> # probs[5] is associated with the mask token
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
