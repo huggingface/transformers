@@ -302,11 +302,11 @@ class MaskFormerHungarianMatcher(nn.Module):
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
             # The 1 is a constant that doesn't change the matching, it can be ommitted.
-            cost_class = -pred_probs[:, labels]
+            cost_class: Tensor = -pred_probs[:, labels]
             # TODO this can be done in one gpu -> assuming the masks have the same dimensions
             # also weird to add a dimension there, why not in the first one?
             # downsample gt masks to save memory
-            target_mask = F.interpolate(target_mask[:, None], size=pred_mask.shape[-2:], mode="nearest")
+            target_mask: Tensor = F.interpolate(target_mask[:, None], size=pred_mask.shape[-2:], mode="nearest")
 
             # Flatten spatial dimension
             pred_mask_flat: Tensor = pred_mask.flatten(1)  # [batch_size * num_queries, H*W]
