@@ -260,8 +260,8 @@ class MaskFormerHungarianMatcher(nn.Module):
             inputs, torch.zeros_like(inputs), reduction="none"
         )
 
-        focal_pos = focal_pos * alpha
-        focal_neg = focal_neg * (1 - alpha)
+        focal_pos *= alpha
+        focal_neg *= 1 - alpha
 
         loss: Tensor = torch.einsum("nc,mc->nm", focal_pos, targets) + torch.einsum(
             "nc,mc->nm", focal_neg, (1 - targets)
@@ -272,12 +272,11 @@ class MaskFormerHungarianMatcher(nn.Module):
     @torch.no_grad()
     def memory_efficient_forward(self, outputs, targets):
         """More memory-friendly matching"""
-        bs, num_queries = outputs["pred_logits"].shape[:2]
-
-        # Work out the mask padding size
-        masks = [v["masks"] for v in targets]
-        h_max = max([m.shape[1] for m in masks])
-        w_max = max([m.shape[2] for m in masks])
+        # TODO unused below
+        # # Work out the mask padding size
+        # masks = [v["masks"] for v in targets]
+        # h_max = max([m.shape[1] for m in masks])
+        # w_max = max([m.shape[2] for m in masks])
 
         indices = []
 
@@ -311,13 +310,17 @@ class MaskFormerHungarianMatcher(nn.Module):
             cost_matrix: Tensor = (
                 self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
             )
-            print(cost_matrix.shape)
-            cost_matrix_flat: Tensor = cost_matrix.reshape(num_queries, -1).cpu()
-            print(cost_matrix.shape)
+            # TODO the following line is completely unnecesary, shape is already [NUM_QUERIES, CLASSES]
+            # cost_matrix_flat: Tensor = cost_matrix.reshape(num_queries, -1).cpu()
+            indices.append(linear_sum_assignment(cost_matrix))
+            # mmm the matching will be always ([NUM_QUERIES], [NUM_QUERIS])
+            # because we need num_queries matches
 
-            indices.append(linear_sum_assignment(cost_matrix_flat))
-
-        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+        # TODO this is a little weird, they can be stacked in one tensor
+        matched_indices = [
+            (torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices
+        ]
+        return matched_indices
 
     @torch.no_grad()
     def forward(self, outputs, targets):
