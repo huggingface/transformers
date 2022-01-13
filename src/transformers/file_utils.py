@@ -831,6 +831,11 @@ def requires_backends(obj, backends):
         raise ImportError("".join([BACKENDS_MAPPING[backend][1].format(name) for backend in backends]))
 
 
+class DummyObject(type):
+    def __getattr__(cls, key):
+        requires_backends(cls, cls._backends)
+
+
 def add_start_docstrings(*docstr):
     def docstring_decorator(fn):
         fn.__doc__ = "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
