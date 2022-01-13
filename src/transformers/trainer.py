@@ -1508,6 +1508,9 @@ class Trainer:
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, ignore_keys_for_eval):
         if self.control.should_log:
+            if is_torch_tpu_available():
+                xm.mark_step()
+
             logs: Dict[str, float] = {}
 
             # all_gather + mean() to get average loss over all processes
