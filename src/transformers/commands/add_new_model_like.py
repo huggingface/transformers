@@ -1097,6 +1097,13 @@ def create_new_model_like(
             f"search for all instances of {new_model_patterns.model_lower_cased} in the new modeling file to check "
             "they're not badly used as checkpoints."
         )
+    
+    if not keep_old_tokenizer:
+        print(
+            "The constants at the start of the new tokenizer file created needs to be manually fixed. If your new "
+            "model has a tokenizer fast, you will also need to manually add the converter in the "
+            "`SLOW_TO_FAST_CONVERTERS` constant of `convert_slow_tokenizer.py`."
+        )
 
 
 def add_new_model_like_command_factory(args: Namespace):
