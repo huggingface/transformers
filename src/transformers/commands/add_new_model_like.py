@@ -1134,14 +1134,16 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
         else:
             self.old_model_type, self.model_patterns, self.add_copied_from, self.frameworks = get_user_input()
         
-        if path_to_repo is not None:
+        self.path_to_repo = path_to_repo
+
+    def run(self):
+        if self.path_to_repo is not None:
             global TRANSFORMERS_PATH
             global REPO_PATH
 
-            REPO_PATH = Path(path_to_repo)
+            REPO_PATH = Path(self.path_to_repo)
             TRANSFORMERS_PATH = REPO_PATH / "src" / "transformers"
-
-    def run(self):
+        print(REPO_PATH.absolute(), TRANSFORMERS_PATH.absolute(), self.path_to_repo)
         create_new_model_like(
             model_type=self.old_model_type,
             new_model_patterns=self.model_patterns,
