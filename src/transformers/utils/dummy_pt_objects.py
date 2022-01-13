@@ -2037,6 +2037,10 @@ class EncoderDecoderModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
+    @classmethod
+    def from_encoder_decoder_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
     def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -4627,6 +4631,10 @@ class SpeechEncoderDecoderModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
+    @classmethod
+    def from_encoder_decoder_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
     def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -5086,6 +5094,10 @@ class VisionEncoderDecoderModel:
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
+    @classmethod
+    def from_encoder_decoder_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
     def forward(self, *args, **kwargs):

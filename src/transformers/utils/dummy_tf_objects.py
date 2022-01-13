@@ -1294,6 +1294,10 @@ class TFEncoderDecoderModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    @classmethod
+    def from_encoder_decoder_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
     def call(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
@@ -2699,6 +2703,10 @@ class TFVisionEncoderDecoderModel:
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    @classmethod
+    def from_encoder_decoder_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
     def call(self, *args, **kwargs):

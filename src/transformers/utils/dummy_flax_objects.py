@@ -964,6 +964,10 @@ class FlaxEncoderDecoderModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
+    @classmethod
+    def from_encoder_decoder_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
     def __call__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
@@ -1442,6 +1446,10 @@ class FlaxVisionEncoderDecoderModel:
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["flax"])
+
+    @classmethod
+    def from_encoder_decoder_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["flax"])
 
     def __call__(self, *args, **kwargs):
