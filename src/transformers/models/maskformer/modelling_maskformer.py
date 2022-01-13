@@ -15,21 +15,21 @@
 """ PyTorch MaskFormer model."""
 
 from __future__ import annotations
-import numpy as np
+
 import logging
-import random
+from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
+import torchvision
 
 from einops import rearrange
 from einops.einops import repeat
+from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 
-from ...modeling_utils import PreTrainedModel
-from dataclasses import dataclass
-from .configuration_maskformer import MaskFormerConfig
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
@@ -40,25 +40,22 @@ from ...file_utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from timm.models.layers import DropPath, to_2tuple, trunc_normal_
-
+from ...modeling_utils import PreTrainedModel
+from ...utils import logging
 from ..detr import DetrConfig
 from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput
+from .configuration_maskformer import MaskFormerConfig
 
-from ...utils import logging
 
 logger = logging.get_logger(__name__)
 import torch.distributed as dist
 
+
 _CONFIG_FOR_DOC = "MaskFormerConfig"
 
-import torch
-import torch.nn.functional as F
-from scipy.optimize import linear_sum_assignment
-from torch import nn
-
-import torchvision
 from detectron2.utils.comm import get_world_size
+from scipy.optimize import linear_sum_assignment
+
 
 # copied from original implementation
 class NestedTensor(object):
@@ -141,60 +138,6 @@ def is_dist_avail_and_initialized():
 
 
 # copied from original implementation
-def batch_dice_loss(inputs, targets):
-    """
-    Compute the DICE loss, similar to generalized IOU for masks
-    Args:
-        inputs: A float tensor of arbitrary shape.
-                The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs
-                (0 for the negative class and 1 for the positive class).
-    """
-    inputs = inputs.sigmoid()
-    inputs = inputs.flatten(1)
-    numerator = 2 * torch.einsum("nc,mc->nm", inputs, targets)
-    denominator = inputs.sum(-1)[:, None] + targets.sum(-1)[None, :]
-    loss = 1 - (numerator + 1) / (denominator + 1)
-    return loss
-
-
-# copied from original implementation
-def batch_sigmoid_focal_loss(inputs, targets, alpha: float = 0.25, gamma: float = 2):
-    """
-    Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
-    Args:
-        inputs: A float tensor of arbitrary shape.
-                The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs
-                (0 for the negative class and 1 for the positive class).
-        alpha: (optional) Weighting factor in range (0,1) to balance
-                positive vs negative examples. Default = -1 (no weighting).
-        gamma: Exponent of the modulating factor (1 - p_t) to
-               balance easy vs hard examples.
-    Returns:
-        Loss tensor
-    """
-    hw = inputs.shape[1]
-
-    prob = inputs.sigmoid()
-    focal_pos = ((1 - prob) ** gamma) * F.binary_cross_entropy_with_logits(
-        inputs, torch.ones_like(inputs), reduction="none"
-    )
-    focal_neg = (prob ** gamma) * F.binary_cross_entropy_with_logits(
-        inputs, torch.zeros_like(inputs), reduction="none"
-    )
-    if alpha >= 0:
-        focal_pos = focal_pos * alpha
-        focal_neg = focal_neg * (1 - alpha)
-
-    loss = torch.einsum("nc,mc->nm", focal_pos, targets) + torch.einsum("nc,mc->nm", focal_neg, (1 - targets))
-
-    return loss / hw
-
-
-# copied from original implementation
 def dice_loss(inputs, targets, num_masks):
     """
     Compute the DICE loss, similar to generalized IOU for masks
@@ -243,6 +186,7 @@ def sigmoid_focal_loss(inputs, targets, num_masks, alpha: float = 0.25, gamma: f
 
 
 # copied from original implementation
+# with some modifications
 class MaskFormerHungarianMatcher(nn.Module):
     """This class computes an assignment between the targets and the predictions of the network
 
@@ -251,7 +195,7 @@ class MaskFormerHungarianMatcher(nn.Module):
     while the others are un-matched (and thus treated as non-objects).
     """
 
-    def __init__(self, cost_class: float = 1, cost_mask: float = 1, cost_dice: float = 1):
+    def __init__(self, cost_class: float = 1.0, cost_mask: float = 1.0, cost_dice: float = 1.0):
         """Creates the matcher
 
         Params:
@@ -260,10 +204,69 @@ class MaskFormerHungarianMatcher(nn.Module):
             cost_dice: This is the relative weight of the dice loss of the binary mask in the matching cost
         """
         super().__init__()
+        assert cost_class != 0 or cost_mask != 0 or cost_dice != 0, "all costs cant be 0"
         self.cost_class = cost_class
         self.cost_mask = cost_mask
         self.cost_dice = cost_dice
-        assert cost_class != 0 or cost_mask != 0 or cost_dice != 0, "all costs cant be 0"
+
+    @staticmethod
+    def pair_wise_dice_loss(inputs: Tensor, targets: Tensor) -> Tensor:
+        """
+        Compute the DICE loss, similar to generalized IOU for masks
+        Args:
+            inputs: A float tensor of arbitrary shape.
+                    The predictions for each example.
+            targets: A float tensor with the same shape as inputs. Stores the binary
+                    classification label for each element in inputs
+                    (0 for the negative class and 1 for the positive class).
+        """
+        inputs: Tensor = inputs.sigmoid()
+        inputs: Tensor = inputs.flatten(1)
+        # TODO why 1 is not added to the number to avoid numerator = 0 in edge cases?
+        numerator: Tensor = 2 * torch.einsum("nc,mc->nm", inputs, targets)
+        denominator: Tensor = inputs.sum(-1)[:, None] + targets.sum(-1)[None, :]
+        loss = 1 - (numerator + 1) / (denominator + 1)
+        return loss
+
+    def pair_wise_sigmoid_focal_loss(
+        self, inputs: Tensor, targets: Tensor, alpha: float = 0.25, gamma: float = 2.0
+    ) -> Tensor:
+        """
+        Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+        Args:
+            inputs: A float tensor of arbitrary shape.
+                    The predictions for each example.
+            targets: A float tensor with the same shape as inputs. Stores the binary
+                    classification label for each element in inputs
+                    (0 for the negative class and 1 for the positive class).
+            alpha: (optional) Weighting factor in range (0,1) to balance
+                    positive vs negative examples. Default = -1 (no weighting).
+            gamma: Exponent of the modulating factor (1 - p_t) to
+                balance easy vs hard examples.
+        Returns:
+            Loss tensor
+        """
+        if alpha < 0:
+            raise ValueError(f"alpha must be positive")
+
+        hw: int = inputs.shape[1]
+
+        prob: Tensor = inputs.sigmoid()
+        focal_pos: Tensor = ((1 - prob) ** gamma) * F.binary_cross_entropy_with_logits(
+            inputs, torch.ones_like(inputs), reduction="none"
+        )
+        focal_neg: Tensor = (prob ** gamma) * F.binary_cross_entropy_with_logits(
+            inputs, torch.zeros_like(inputs), reduction="none"
+        )
+
+        focal_pos = focal_pos * alpha
+        focal_neg = focal_neg * (1 - alpha)
+
+        loss: Tensor = torch.einsum("nc,mc->nm", focal_pos, targets) + torch.einsum(
+            "nc,mc->nm", focal_neg, (1 - targets)
+        )
+
+        return loss / hw
 
     @torch.no_grad()
     def memory_efficient_forward(self, outputs, targets):
@@ -300,10 +303,10 @@ class MaskFormerHungarianMatcher(nn.Module):
             tgt_mask = tgt_mask[:, 0].flatten(1)  # [num_total_targets, H*W]
 
             # Compute the focal loss between masks
-            cost_mask = batch_sigmoid_focal_loss(out_mask, tgt_mask)
+            cost_mask = self.pair_wise_sigmoid_focal_loss(out_mask, tgt_mask)
 
             # Compute the dice loss betwen masks
-            cost_dice = batch_dice_loss(out_mask, tgt_mask)
+            cost_dice = self.pair_wise_dice_loss(out_mask, tgt_mask)
 
             # Final cost matrix
             C = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
@@ -1454,9 +1457,15 @@ class MaskFormerModel(PreTrainedModel):
         return torch.tensor(list(loss_dict.values()), dtype=torch.float).sum()
 
 
+@dataclass
+class MaskFormerForSemanticSegmentationOutput(MaskFormerOutput):
+
+    segmentation: torch.FloatTensor = None
+
+
 # is this the correct way to defined a model for a custom task?
 # this guy only works in inference/val mode
-class MaskFormerForSegmentation(nn.Module):
+class MaskFormerForSemanticSegmentation(nn.Module):
     def __init__(self, config: MaskFormerConfig):
         super().__init__()
         self.model = MaskFormerModel(config)
@@ -1471,15 +1480,14 @@ class MaskFormerForSegmentation(nn.Module):
         mask_classes: Tensor = outputs.pred_logits.softmax(dim=-1)[..., :-1]
         # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
         mask_probs: Tensor = outputs.pred_masks.sigmoid()
-        # now we want to sum over the queries size
+        # now we want to sum over the queries
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
         segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", mask_classes, mask_probs)
 
-        print(segmentation.shape)
-        # TODO!
+        return MaskFormerForSemanticSegmentationOutput(**outputs, segmentation=segmentation)
 
 
-class MaskFormerForPanoptic(MaskFormerForSegmentation):
+class MaskFormerForPanoptic(MaskFormerForSemanticSegmentation):
     def forward(self, *args, **kwargs):
         outputs = self.model(*args, **kwargs)
         # TODO!

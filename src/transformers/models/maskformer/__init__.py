@@ -43,7 +43,6 @@ if TYPE_CHECKING:
 
     # if is_vision_available():
     #     from .feature_extraction_detr import DetrFeatureExtractor
-
     # if is_timm_available():
     #     from .modeling_detr import (
     #         DETR_PRETRAINED_MODEL_ARCHIVE_LIST,

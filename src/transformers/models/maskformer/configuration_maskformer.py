@@ -15,8 +15,10 @@
 """ MaskFormer model configuration"""
 
 from typing import List, Optional
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+
 
 MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # "facebook/detr-resnet-50": "https://huggingface.co/facebook/detr-resnet-50/resolve/main/config.json",
