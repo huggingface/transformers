@@ -232,6 +232,7 @@ IGNORE_SUBMODULES = [
     "modeling_flax_pytorch_utils",
 ]
 
+
 def check_submodules():
     # This is to make sure the transformers module imported is the one in the repo.
     spec = importlib.util.spec_from_file_location(
@@ -242,7 +243,9 @@ def check_submodules():
     transformers = spec.loader.load_module()
 
     module_not_registered = [
-        module for module in get_transformers_submodules() if module not in IGNORE_SUBMODULES and module not in transformers._import_structure.keys()
+        module
+        for module in get_transformers_submodules()
+        if module not in IGNORE_SUBMODULES and module not in transformers._import_structure.keys()
     ]
     if len(module_not_registered) > 0:
         list_of_modules = "\n".join(f"- {module}" for module in module_not_registered)
