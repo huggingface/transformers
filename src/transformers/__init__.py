@@ -55,7 +55,6 @@ _import_structure = {
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
     "convert_graph_to_onnx": [],
-    "convert_pytorch_checkpoint_to_tf2": [],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "convert_tf_hub_seq_to_seq_bert_to_pytorch": [],
     "data": [
@@ -91,6 +90,7 @@ _import_structure = {
         "default_data_collator",
     ],
     "data.metrics": [],
+    "data.processors": [],
     "debug_utils": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
@@ -140,7 +140,6 @@ _import_structure = {
         "is_wandb_available",
     ],
     "modelcard": ["ModelCard"],
-    "modeling_flax_pytorch_utils": [],
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",
         "load_pytorch_checkpoint_in_tf2_model",
@@ -2148,6 +2147,7 @@ else:
     _import_structure["utils.dummy_flax_objects"] = [
         name for name in dir(dummy_flax_objects) if not name.startswith("_")
     ]
+
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
