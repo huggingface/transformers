@@ -15,29 +15,24 @@ jobs:
   run_tests_templates:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v1
-
-      - name: Install Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: 3.6
+      - uses: actions/checkout@v2
 
       - name: Loading cache.
         uses: actions/cache@v2
         id: cache
         with:
           path: ~/.cache/pip
-          key: v1.2-tests_templates
+          key: v1-tests_model_like
           restore-keys: |
-            v1.2-tests_templates-${{ hashFiles('setup.py') }}
-            v1.2-tests_templates
+            v1-tests_model_like-${{ hashFiles('setup.py') }}
+            v1-tests_model_like
 
       - name: Install dependencies
         run: |
           pip install --upgrade pip!=21.3
           sudo apt -y update && sudo apt install -y libsndfile1-dev
           pip install .[dev]
+
       - name: Create model files
         run: |
           transformers-cli add-new-model-like --config_file tests/fixtures/add_distilbert_like_config.json
