@@ -492,7 +492,7 @@ def main():
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-        level="NOTSET",
+        level=logging.INFO,
         datefmt="[%X]",
     )
 
