@@ -1097,7 +1097,7 @@ def create_new_model_like(
             f"search for all instances of {new_model_patterns.model_lower_cased} in the new modeling file to check "
             "they're not badly used as checkpoints."
         )
-    
+
     if not keep_old_tokenizer:
         print(
             "The constants at the start of the new tokenizer file created needs to be manually fixed. If your new "
