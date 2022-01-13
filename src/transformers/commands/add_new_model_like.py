@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import difflib
-from importlib.resources import path
 import json
 import os
 import re
@@ -1133,17 +1132,17 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             self.frameworks = config.get("frameworks", ["pt", "tf", "flax"])
         else:
             self.old_model_type, self.model_patterns, self.add_copied_from, self.frameworks = get_user_input()
-        
+
         self.path_to_repo = path_to_repo
 
     def run(self):
         if self.path_to_repo is not None:
+            # Adapt constants
             global TRANSFORMERS_PATH
             global REPO_PATH
 
             REPO_PATH = Path(self.path_to_repo)
             TRANSFORMERS_PATH = REPO_PATH / "src" / "transformers"
-        print(REPO_PATH.absolute(), TRANSFORMERS_PATH.absolute(), self.path_to_repo)
 
         create_new_model_like(
             model_type=self.old_model_type,
