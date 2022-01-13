@@ -656,7 +656,7 @@ class TrainingArguments:
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
     optim: OptimizerNames = field(
-        default=OptimizerNames.ADAMW_HF.value,
+        default="adamw_hf",
         metadata={"help": "The optimizer to use."},
     )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
