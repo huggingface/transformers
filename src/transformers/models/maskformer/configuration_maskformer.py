@@ -17,17 +17,16 @@
 from typing import List, Optional
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..detr import DetrConfig
 
 MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # "facebook/detr-resnet-50": "https://huggingface.co/facebook/detr-resnet-50/resolve/main/config.json",
-    # See all DETR models at https://huggingface.co/models?filter=detr
+    # See all MaskFormer models at https://huggingface.co/models?filter=detr
 }
 
 logger = logging.get_logger(__name__)
 
 
-class MaskFormerConfig(DetrConfig):
+class MaskFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormer`]. It is used to instantiate a MaskFormer
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -37,6 +36,8 @@ class MaskFormerConfig(DetrConfig):
     documentation from [`PretrainedConfig`] for more information.
     """
     model_type = "mask_former"
+
+    attribute_map = {"hidden_size": "d_model"}
 
     def __init__(
         self,
@@ -52,14 +53,35 @@ class MaskFormerConfig(DetrConfig):
         swin_window_size: Optional[int] = 12,
         swin_drop_path_rate: Optional[float] = 0.3,
         dice_weight: Optional[float] = 1.0,
+        ce_weight: Optional[float] = 1.0,
         mask_weight: Optional[float] = 20.0,
         mask_classification: Optional[bool] = True,
+        num_queries: Optional[int] = 100,
+        max_position_embeddings: Optional[int] = 1024,
+        encoder_layers: Optional[int] = 6,
+        encoder_ffn_dim: Optional[int] = 2048,
+        encoder_attention_heads: Optional[int] = 8,
+        decoder_layers: Optional[int] = 6,
+        decoder_ffn_dim: Optional[int] = 2048,
+        decoder_attention_heads: Optional[int] = 8,
+        encoder_layerdrop: Optional[int] = 0.0,
+        decoder_layerdrop: Optional[int] = 0.0,
+        d_model: Optional[int] = 256,
+        dropout: Optional[int] = 0.1,
+        attention_dropout: Optional[int] = 0.0,
+        activation_dropout: Optional[int] = 0.0,
+        init_std: Optional[int] = 0.02,
+        init_xavier_std: Optional[int] = 1.0,
+        scale_embedding: Optional[int] = False,
+        auxiliary_loss: Optional[int] = False,
+        dilation: Optional[int] = False,
+        **kwargs
     ):
-        super().__init__()
+
         self.fpn_feature_size = fpn_feature_size
         self.mask_feature_size = mask_feature_size
         self.num_classes = num_classes
-
+        # swin backbone parameters
         self.swin_pretrain_img_size = swin_pretrain_img_size
         self.swin_in_channels = swin_in_channels
         self.swin_patch_size = swin_patch_size
@@ -68,8 +90,36 @@ class MaskFormerConfig(DetrConfig):
         self.swin_num_heads = swin_num_heads or [4, 8, 16, 32]
         self.swin_window_size = swin_window_size
         self.swin_drop_path_rate = swin_drop_path_rate
-
+        # Hungarian matcher && loss
+        self.ce_weight = ce_weight
         self.dice_weight = dice_weight
         self.mask_weight = mask_weight
 
         self.mask_classification = mask_classification
+        # DETR parameters
+        self.detr_num_queries = num_queries
+        self.detr_max_position_embeddings = max_position_embeddings
+        self.detr_d_model = d_model
+        self.detr_encoder_ffn_dim = encoder_ffn_dim
+        self.detr_encoder_layers = encoder_layers
+        self.detr_encoder_attention_heads = encoder_attention_heads
+        self.detr_decoder_ffn_dim = decoder_ffn_dim
+        self.detr_decoder_layers = decoder_layers
+        self.detr_decoder_attention_heads = decoder_attention_heads
+        self.detr_dropout = dropout
+        self.detr_attention_dropout = attention_dropout
+        self.detr_activation_dropout = activation_dropout
+        self.detr_init_std = init_std
+        self.detr_init_xavier_std = init_xavier_std
+        self.detr_encoder_layerdrop = encoder_layerdrop
+        self.detr_decoder_layerdrop = decoder_layerdrop
+        self.detr_num_hidden_layers = encoder_layers
+        self.detr_scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.detr_auxiliary_loss = auxiliary_loss
+        self.detr_dilation = dilation
+
+        super().__init__(is_encoder_decoder=True, **kwargs)
+
+    @property
+    def hidden_size(self) -> int:
+        return self.d_model

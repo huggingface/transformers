@@ -1134,8 +1134,8 @@ class SwinTransformer(nn.Module):
         self._freeze_stages()
 
 
-class BackboneMixin:
-    def get_features(self, *args, **kwargs) -> List[Tensor]:
+class BackboneMixin(nn.Module):
+    def forward(self, *args, **kwargs) -> List[Tensor]:
         raise NotImplemented
 
     def outputs_shape(self) -> List[int]:
@@ -1143,9 +1143,6 @@ class BackboneMixin:
 
 
 class SwinTransformerBackbone(SwinTransformer, BackboneMixin):
-    def get_features(self, x: Tensor) -> List[Tensor]:
-        return self(x)
-
     def get_outputs_shape(self) -> List[int]:
         return self.num_features
 
@@ -1187,7 +1184,7 @@ class FPNLayer(nn.Module):
         return down
 
 
-class FPN(nn.Module):
+class FPNModel(nn.Module):
     def __init__(self, in_features: int, lateral_widths: List[int], feature_size: int = 256):
         """Feature Pyramid Network, given an input tensor and a set of features map of different feature/spatial size, it creates a list of features map with different the same feature size.
 
@@ -1200,16 +1197,17 @@ class FPN(nn.Module):
         self.stem = ConvLayer(in_features, feature_size)
         self.layers = nn.Sequential(*[FPNLayer(feature_size, lateral_width) for lateral_width in lateral_widths[::-1]])
 
-    def forward(self, x: Tensor, features: List[Tensor]) -> List[Tensor]:
+    def forward(self, features: List[Tensor]) -> List[Tensor]:
         fpn_features: List[Tensor] = []
-        x = self.stem(x)
+        last_feature: Tensor = features.pop()
+        x: Tensor = self.stem(last_feature)
         for layer, left in zip(self.layers, features[::-1]):
             x = layer(x, left)
             fpn_features.append(x)
         return fpn_features
 
 
-class PixelDecoder(nn.Module):
+class MaskFormerPixelDecoder(nn.Module):
     def __init__(self, *args, feature_size: int = 256, mask_feature_size: int = 256, **kwargs):
         """Pixel Decoder Module proposed in `Per-Pixel Classification is Not All You Need for Semantic Segmentation <https://arxiv.org/abs/2107.06278>`_. It first run the backbone's feature into a Feature Pyramid Network creating a list of features map. Then, it projects the last one to the correct `mask_size`
 
@@ -1218,7 +1216,7 @@ class PixelDecoder(nn.Module):
             mask_feature_size (int, optional): The features (channels) of the target masks size $C_{\epsilon}$ in the paper. Defaults to 256.
         """
         super().__init__()
-        self.fpn = FPN(*args, feature_size=feature_size, **kwargs)
+        self.fpn = FPNModel(*args, feature_size=feature_size, **kwargs)
         self.mask_proj = nn.Conv2d(feature_size, mask_feature_size, kernel_size=3, padding=1)
 
     def forward(self, x: Tensor, features: List[Tensor]) -> Tensor:
@@ -1235,7 +1233,9 @@ class PositionEmbeddingSine(nn.Module):
     used by the Attention is all you need paper, generalized to work on images.
     """
 
-    def __init__(self, num_pos_feats=64, temperature=10000, normalize=False, scale=None):
+    def __init__(
+        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
+    ):
         super().__init__()
         self.num_pos_feats = num_pos_feats
         self.temperature = temperature
@@ -1288,7 +1288,7 @@ class MLP(nn.Sequential):
         )
 
 
-class PixelLevelModule(nn.Module):
+class MaskFormerPixelLevelModule(nn.Module):
     def __init__(self, config: MaskFormerConfig):
         """Pixel Level Module proposed in `Per-Pixel Classification is Not All You Need for Semantic Segmentation <https://arxiv.org/abs/2107.06278>`_. It runs the input image trough a backbone and a pixel decoder, generating a image features and pixel embeddings."""
         super().__init__()
@@ -1301,7 +1301,7 @@ class PixelLevelModule(nn.Module):
             num_heads=config.swin_num_heads,
             window_size=config.swin_window_size,
         )
-        self.pixel_decoder = PixelDecoder(
+        self.pixel_decoder = MaskFormerPixelDecoder(
             in_features=self.backbone.get_outputs_shape()[-1],
             feature_size=config.fpn_feature_size,
             mask_feature_size=config.mask_feature_size,
@@ -1316,7 +1316,7 @@ class PixelLevelModule(nn.Module):
         return image_features, pixel_embeddings
 
 
-class TransformerModule(nn.Module):
+class MaskFormerTransformerModule(nn.Module):
     def __init__(self, in_features: int, config: MaskFormerConfig):
         super().__init__()
         self.position_embedder = PositionEmbeddingSine(num_pos_feats=config.hidden_size // 2, normalize=True)
@@ -1350,7 +1350,7 @@ class TransformerModule(nn.Module):
         return detr_output.hidden_states
 
 
-class SegmentationModule(nn.Module):
+class MaskFormerSegmentationModule(nn.Module):
     def __init__(self, config: MaskFormerConfig):
         super().__init__()
         # + 1 because we add the "null" class
@@ -1382,25 +1382,25 @@ class MaskFormerOutput(ModelOutput):
     loss_dict: Optional[Dict] = None
 
 
-class MaskFormer(nn.Module):
-    # config_class = MaskFormerConfig
-    # base_model_prefix = "model"
-    # main_input_name = "pixel_values"
+class MaskFormerModel(PreTrainedModel):
+    config_class = MaskFormerConfig
+    base_model_prefix = "model"
+    main_input_name = "pixel_values"
 
     def __init__(self, config: MaskFormerConfig):
-        super().__init__()
-        self.pixel_level_module = PixelLevelModule(config)
-        self.transformer_module = TransformerModule(
+        super().__init__(config)
+        self.pixel_level_module = MaskFormerPixelLevelModule(config)
+        self.transformer_module = MaskFormerTransformerModule(
             in_features=self.pixel_level_module.backbone.get_outputs_shape()[-1], config=config
         )
-        self.segmentation_module = SegmentationModule(config)
+        self.segmentation_module = MaskFormerSegmentationModule(config)
         self.matcher = MaskFormerHungarianMatcher(
             cost_class=1.0, cost_dice=config.dice_weight, cost_mask=config.mask_weight
         )
 
         losses = ["labels", "masks"]
         self.weight_dict: Dict[str, float] = {
-            "loss_ce": 1.0,
+            "loss_ce": config.ce_weight,
             "loss_mask": config.mask_weight,
             "loss_dice": config.dice_weight,
         }
@@ -1446,6 +1446,6 @@ class MaskFormerForSegmentation(nn.Module):
 
 
 class MaskFormerForPanoptic(MaskFormerForSegmentation):
-       def forward(self, *args, **kwargs):
+    def forward(self, *args, **kwargs):
         outputs = self.model(*args, **kwargs)
         # TODO!
