@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 from .debug_utils import DebugOption
 from .file_utils import (
+    ExplicitEnum,
     cached_property,
     get_full_repo_name,
     is_sagemaker_dp_enabled,
@@ -67,6 +68,17 @@ def default_logdir() -> str:
 
     current_time = datetime.now().strftime("%b%d_%H-%M-%S")
     return os.path.join("runs", current_time + "_" + socket.gethostname())
+
+
+class OptimizerNames(ExplicitEnum):
+    """
+    Stores the acceptable string identifiers for optimizers.
+    """
+
+    ADAMW_HF = "adamw_hf"
+    ADAMW_TORCH = "adamw_torch"
+    ADAMW_APEX_FUSED = "adamw_apex_fused"
+    ADAFACTOR = "adafactor"
 
 
 @dataclass
@@ -327,8 +339,10 @@ class TrainingArguments:
             - `"tpu_metrics_debug"`: print debug metrics on TPU
 
             The options should be separated by whitespaces.
+        optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_hf"`):
+            The optimizer to use: adamw_hf, adamw_torch, adamw_apex_fused, or adafactor.
         adafactor (`bool`, *optional*, defaults to `False`):
-            Whether or not to use the [`Adafactor`] optimizer instead of [`AdamW`].
+            This argument is deprecated. Use `--optim adafactor` instead.
         group_by_length (`bool`, *optional*, defaults to `False`):
             Whether or not to group together samples of roughly the same length in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
@@ -641,6 +655,10 @@ class TrainingArguments:
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
+    optim: OptimizerNames = field(
+        default="adamw_hf",
+        metadata={"help": "The optimizer to use."},
+    )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
         default=False,
@@ -809,6 +827,15 @@ class TrainingArguments:
                 )
             if not (self.sharded_ddp == "" or not self.sharded_ddp):
                 raise ValueError("sharded_ddp is not supported with bf16")
+
+        self.optim = OptimizerNames(self.optim)
+        if self.adafactor:
+            warnings.warn(
+                "`--adafactor` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--optim adafactor` instead",
+                FutureWarning,
+            )
+            self.optim = OptimizerNames.ADAFACTOR
+
         if (
             is_torch_available()
             and self.device.type != "cuda"
