@@ -5112,6 +5112,10 @@ class VisionTextDualEncoderModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
 
+    @classmethod
+    def from_vision_text_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["torch"])
+
     def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
