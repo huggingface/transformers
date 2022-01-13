@@ -9,7 +9,7 @@
         "model_camel_cased": "BertNew",
         "model_upper_cased": "BERT_NEW",
         "config_class": "BertNewConfig",
-        "tokenizer_class": "BertTokenizer"
+        "tokenizer_class": "DistilBertTokenizer"
     },
     "frameworks": [
         "pt",
