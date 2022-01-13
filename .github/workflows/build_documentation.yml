@@ -84,7 +84,7 @@ jobs:
         run: |
           cd doc-build
           if [[ `git status --porcelain` ]]; then
-            git add build
+            git add .
             git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
             git push origin main
           else
