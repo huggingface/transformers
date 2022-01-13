@@ -44,6 +44,8 @@ class MaskFormerConfig(PretrainedConfig):
         fpn_feature_size: Optional[int] = 256,
         mask_feature_size: Optional[int] = 256,
         num_classes: Optional[int] = 133,
+        no_object_weight: Optional[float] = 0.1,
+        num_queries: Optional[int] = 100,
         swin_pretrain_img_size: Optional[int] = 384,
         swin_in_channels: Optional[int] = 3,
         swin_patch_size: Optional[int] = 4,
@@ -56,7 +58,6 @@ class MaskFormerConfig(PretrainedConfig):
         ce_weight: Optional[float] = 1.0,
         mask_weight: Optional[float] = 20.0,
         mask_classification: Optional[bool] = True,
-        num_queries: Optional[int] = 100,
         max_position_embeddings: Optional[int] = 1024,
         encoder_layers: Optional[int] = 6,
         encoder_ffn_dim: Optional[int] = 2048,
@@ -81,6 +82,8 @@ class MaskFormerConfig(PretrainedConfig):
         self.fpn_feature_size = fpn_feature_size
         self.mask_feature_size = mask_feature_size
         self.num_classes = num_classes
+        self.num_queries = num_queries
+        self.no_object_weight = no_object_weight
         # swin backbone parameters
         self.swin_pretrain_img_size = swin_pretrain_img_size
         self.swin_in_channels = swin_in_channels
@@ -97,7 +100,6 @@ class MaskFormerConfig(PretrainedConfig):
 
         self.mask_classification = mask_classification
         # DETR parameters
-        self.detr_num_queries = num_queries
         self.detr_max_position_embeddings = max_position_embeddings
         self.detr_d_model = d_model
         self.detr_encoder_ffn_dim = encoder_ffn_dim
@@ -122,4 +124,9 @@ class MaskFormerConfig(PretrainedConfig):
 
     @property
     def hidden_size(self) -> int:
-        return self.d_model
+        return self.detr_d_model
+
+    @property
+    def d_model(self) -> int:
+        # DETR needs `.d_model`
+        return self.detr_d_model

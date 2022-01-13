@@ -27,7 +27,7 @@ from torch.nn import functional as F
 from einops import rearrange
 from einops.einops import repeat
 
-from transformers.modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from dataclasses import dataclass
 from .configuration_maskformer import MaskFormerConfig
 from ...file_utils import (
@@ -1219,8 +1219,8 @@ class MaskFormerPixelDecoder(nn.Module):
         self.fpn = FPNModel(*args, feature_size=feature_size, **kwargs)
         self.mask_proj = nn.Conv2d(feature_size, mask_feature_size, kernel_size=3, padding=1)
 
-    def forward(self, x: Tensor, features: List[Tensor]) -> Tensor:
-        fpn_features: List[Tensor] = self.fpn(x, features)
+    def forward(self, features: List[Tensor]) -> Tensor:
+        fpn_features: List[Tensor] = self.fpn(features)
         # we use the last feature map
         x = self.mask_proj(fpn_features[-1])
         return x
@@ -1309,10 +1309,10 @@ class MaskFormerPixelLevelModule(nn.Module):
         )
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
-        features: List[Tensor] = self.backbone.get_features(x)
+        features: List[Tensor] = self.backbone(x)
         # the last feature is actually the output from the last layer
-        image_features: Tensor = features.pop()
-        pixel_embeddings: Tensor = self.pixel_decoder(image_features, features)
+        image_features: Tensor = features[-1]
+        pixel_embeddings: Tensor = self.pixel_decoder(features)
         return image_features, pixel_embeddings
 
 
@@ -1325,7 +1325,10 @@ class MaskFormerTransformerModule(nn.Module):
         self.input_proj = (
             nn.Conv2d(in_features, config.hidden_size, kernel_size=1) if should_project else nn.Identity()
         )
-        self.detr_decoder = DetrDecoder(config)
+        # TODO hugly, ask!
+        self.detr_decoder = DetrDecoder(
+            DetrConfig(**{k: v for k, v in config.__dict__.items() if k.startswith("detr_")})
+        )
 
     def forward(self, image_features: Tensor) -> Tuple[Tensor]:
         image_features = self.input_proj(image_features)
@@ -1369,6 +1372,7 @@ class MaskFormerSegmentationModule(nn.Module):
 
         # sum up over the channels
         binary_masks: Tensor = torch.einsum("bqc, bchw -> bqhw", mask_embeddings, pixel_embbeddings)
+        # TODO add a MaskFormer<>Output for this module too! REVIEW -> ask!
         out.update({"pred_masks": binary_masks})
         return out
 
@@ -1380,6 +1384,17 @@ class MaskFormerOutput(ModelOutput):
     pred_masks: torch.FloatTensor = None
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
+
+
+def upsample_like(x: Tensor, like: Tensor, mode: str = "bilinear") -> Tensor:
+    _, _, h, w = like.shape
+    x = F.interpolate(
+        x,
+        size=(h, w),
+        mode=mode,
+        align_corners=False,
+    )
+    return x
 
 
 class MaskFormerModel(PreTrainedModel):
@@ -1409,18 +1424,23 @@ class MaskFormerModel(PreTrainedModel):
             config.num_classes,
             matcher=self.matcher,
             weight_dict=self.weight_dict,
-            eos_coef=config.eos_coefficient,
+            eos_coef=config.no_object_weight,
             losses=losses,
         )
 
-    def forward(self, x: Tensor, targets: Optional[Dict[str, Tensor]] = None) -> MaskFormerOutput:
-        image_features, pixel_embeddings = self.pixel_level_module(x)
+    def forward(self, pixel_values: Tensor, targets: Optional[Dict[str, Tensor]] = None) -> MaskFormerOutput:
+        image_features, pixel_embeddings = self.pixel_level_module(pixel_values)
         queries = self.transformer_module(image_features)
         outputs = self.segmentation_module(queries, pixel_embeddings)
 
+        loss_dict: Dict[str, Tensor] = {}
+        loss: Tensor = None
         if targets:
-            loss_dict: Dict[str, Tensor] = self.get_loss_dict(outputs, targets)
+            loss_dict = self.get_loss_dict(outputs, targets)
             loss = self.get_loss(loss_dict)
+        else:
+            # upsample the masks to match the input spatial dimension
+            outputs["pred_masks"] = upsample_like(outputs["pred_masks"], pixel_values)
 
         return MaskFormerOutput(**outputs, loss_dict=loss_dict, loss=loss)
 
@@ -1435,13 +1455,27 @@ class MaskFormerModel(PreTrainedModel):
 
 
 # is this the correct way to defined a model for a custom task?
+# this guy only works in inference/val mode
 class MaskFormerForSegmentation(nn.Module):
     def __init__(self, config: MaskFormerConfig):
         super().__init__()
-        self.model = MaskFormer(config)
+        self.model = MaskFormerModel(config)
 
-    def forward(self, *args, **kwargs):
-        outputs = self.model(*args, **kwargs)
+    def forward(
+        self,
+        pixel_values: Tensor,
+    ):
+        outputs: MaskFormerOutput = self.model(pixel_values)
+        # mask classes has shape [BATCH, QUERIES, CLASSES + 1]
+        # remove the null class `[..., :-1]`
+        mask_classes: Tensor = outputs.pred_logits.softmax(dim=-1)[..., :-1]
+        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
+        mask_probs: Tensor = outputs.pred_masks.sigmoid()
+        # now we want to sum over the queries size
+        # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
+        segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", mask_classes, mask_probs)
+
+        print(segmentation.shape)
         # TODO!
 
 
