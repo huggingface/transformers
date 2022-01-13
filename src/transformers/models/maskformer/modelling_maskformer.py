@@ -209,8 +209,7 @@ class MaskFormerHungarianMatcher(nn.Module):
         self.cost_mask = cost_mask
         self.cost_dice = cost_dice
 
-    @staticmethod
-    def pair_wise_dice_loss(inputs: Tensor, targets: Tensor) -> Tensor:
+    def pair_wise_dice_loss(self, inputs: Tensor, targets: Tensor) -> Tensor:
         """
         Compute the DICE loss, similar to generalized IOU for masks
         Args:
@@ -221,11 +220,13 @@ class MaskFormerHungarianMatcher(nn.Module):
                     (0 for the negative class and 1 for the positive class).
         """
         inputs: Tensor = inputs.sigmoid()
+        # TODO this .flatten seems to be unecessary because the shape is 2d
         inputs: Tensor = inputs.flatten(1)
         # TODO why 1 is not added to the number to avoid numerator = 0 in edge cases?
         numerator: Tensor = 2 * torch.einsum("nc,mc->nm", inputs, targets)
+        # using broadcasting to get a [NUM_QUERIES, NUM_CLASSES] matrix
         denominator: Tensor = inputs.sum(-1)[:, None] + targets.sum(-1)[None, :]
-        loss = 1 - (numerator + 1) / (denominator + 1)
+        loss: Tensor = 1 - (numerator + 1) / (denominator + 1)
         return loss
 
     def pair_wise_sigmoid_focal_loss(
@@ -280,39 +281,42 @@ class MaskFormerHungarianMatcher(nn.Module):
 
         indices = []
 
-        # Iterate through batch size
-        for b in range(bs):
-
-            out_prob = outputs["pred_logits"][b].softmax(-1)  # [num_queries, num_classes]
-            out_mask = outputs["pred_masks"][b]  # [num_queries, H_pred, W_pred]
-
-            tgt_ids = targets[b]["labels"]
+        # iterate through batch size
+        for i, (pred_logit, pred_mask) in enumerate(zip(outputs["pred_logits"], outputs["pred_masks"])):
+            pred_probs: Tensor = pred_logit.softmax(dim=-1)  # [num_queries, num_classes]
+            labels: Tensor = targets[i]["labels"]
             # gt masks are already padded when preparing target
-            tgt_mask = targets[b]["masks"].to(out_mask)
-
+            target_mask: Tensor = targets[i]["masks"].to(pred_mask)
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
             # The 1 is a constant that doesn't change the matching, it can be ommitted.
-            cost_class = -out_prob[:, tgt_ids]
-
-            # Downsample gt masks to save memory
-            tgt_mask = F.interpolate(tgt_mask[:, None], size=out_mask.shape[-2:], mode="nearest")
+            cost_class = -pred_probs[:, labels]
+            # TODO this can be done in one gpu -> assuming the masks have the same dimensions
+            # also weird to add a dimension there, why not in the first one?
+            # downsample gt masks to save memory
+            target_mask = F.interpolate(target_mask[:, None], size=pred_mask.shape[-2:], mode="nearest")
 
             # Flatten spatial dimension
-            out_mask = out_mask.flatten(1)  # [batch_size * num_queries, H*W]
-            tgt_mask = tgt_mask[:, 0].flatten(1)  # [num_total_targets, H*W]
+            pred_mask_flat: Tensor = pred_mask.flatten(1)  # [batch_size * num_queries, H*W]
+            # still not sure why we didn't add a batch dimension
+            target_mask_flat: Tensor = target_mask[:, 0].flatten(1)  # [num_total_targets, H*W]
 
-            # Compute the focal loss between masks
-            cost_mask = self.pair_wise_sigmoid_focal_loss(out_mask, tgt_mask)
+            # Compute the focal loss between masks pairs
+            cost_mask: Tensor = self.pair_wise_sigmoid_focal_loss(pred_mask_flat, target_mask_flat)
 
-            # Compute the dice loss betwen masks
-            cost_dice = self.pair_wise_dice_loss(out_mask, tgt_mask)
+            # Compute the dice loss betwen masks pairs
+            cost_dice: Tensor = self.pair_wise_dice_loss(pred_mask_flat, target_mask_flat)
 
-            # Final cost matrix
-            C = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
-            C = C.reshape(num_queries, -1).cpu()
+            # final cost matrix
+            cost_matrix: Tensor = (
+                self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
+            )
+            print(cost_matrix.shape)
+            cost_matrix_flat: Tensor = cost_matrix.reshape(num_queries, -1).cpu()
+            print(cost_matrix.shape)
 
-            indices.append(linear_sum_assignment(C))
+            indices.append(linear_sum_assignment(cost_matrix_flat))
+
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
     @torch.no_grad()
