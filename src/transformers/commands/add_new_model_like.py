@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import difflib
+from importlib.resources import path
 import json
 import os
 import re
@@ -1117,9 +1118,12 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
         add_new_model_like_parser.add_argument(
             "--config_file", type=str, help="A file with all the information for this model creation."
         )
+        add_new_model_like_parser.add_argument(
+            "--path_to_repo", type=str, help="When not using an editable install, the path to the Transformers repo."
+        )
         add_new_model_like_parser.set_defaults(func=add_new_model_like_command_factory)
 
-    def __init__(self, config_file=None, *args):
+    def __init__(self, config_file=None, path_to_repo=None, *args):
         if config_file is not None:
             with open(config_file, "r", encoding="utf-8") as f:
                 config = json.load(f)
@@ -1129,6 +1133,13 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             self.frameworks = config.get("frameworks", ["pt", "tf", "flax"])
         else:
             self.old_model_type, self.model_patterns, self.add_copied_from, self.frameworks = get_user_input()
+        
+        if path_to_repo is not None:
+            global TRANSFORMERS_PATH
+            global REPO_PATH
+
+            REPO_PATH = Path(path_to_repo)
+            TRANSFORMERS_PATH = REPO_PATH / "src" / "transformers"
 
     def run(self):
         create_new_model_like(
