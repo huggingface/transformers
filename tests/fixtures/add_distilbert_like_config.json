@@ -1,6 +1,6 @@
 {
     "add_copied_from": false,
-    "old_model_type": "bert",
+    "old_model_type": "distilbert",
     "new_model_patterns": {
         "model_name": "BERT New",
         "checkpoint": "huggingface/bert-new-base",
