@@ -183,7 +183,7 @@ def validate_model_outputs(
     ref_outputs_set, onnx_outputs_set = set(ref_outputs_dict.keys()), set(onnx_named_outputs)
     if not onnx_outputs_set.issubset(ref_outputs_set):
         logger.info(
-            f"\t-[x] ONNX model outputs' name {onnx_outputs_set} doesn't match reference model {ref_outputs_set}"
+            f"\t-[x] ONNX model output names {onnx_outputs_set} do not match reference model {ref_outputs_set}"
         )
 
         raise ValueError(
@@ -191,7 +191,7 @@ def validate_model_outputs(
             f"{onnx_outputs_set.difference(ref_outputs_set)}"
         )
     else:
-        logger.info(f"\t-[✓] ONNX model outputs' name match reference model ({onnx_outputs_set})")
+        logger.info(f"\t-[✓] ONNX model output names match reference model ({onnx_outputs_set})")
 
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):

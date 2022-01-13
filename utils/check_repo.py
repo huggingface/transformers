@@ -203,6 +203,7 @@ def get_model_modules():
         "modeling_tf_pytorch_utils",
         "modeling_tf_utils",
         "modeling_tf_transfo_xl_utilities",
+        "modeling_tf_vision_encoder_decoder",
         "modeling_vision_encoder_decoder",
     ]
     modules = []
@@ -665,7 +666,7 @@ def check_docstrings_are_in_md():
         raise ValueError(
             "The following files have docstrings written in rst:\n"
             + "\n".join([f"- {f}" for f in files_with_rst])
-            + "To fix this run `doc-builder convert path_to_py_file` after installing `doc-builder`\n"
+            + "\nTo fix this run `doc-builder convert path_to_py_file` after installing `doc-builder`\n"
             "(`pip install git+https://github.com/huggingface/doc-builder`)"
         )
 

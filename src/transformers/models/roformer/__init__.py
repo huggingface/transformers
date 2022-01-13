@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -59,6 +59,19 @@ if is_tf_available():
     ]
 
 
+if is_flax_available():
+    _import_structure["modeling_flax_roformer"] = [
+        "FLAX_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "FlaxRoFormerForMaskedLM",
+        "FlaxRoFormerForMultipleChoice",
+        "FlaxRoFormerForQuestionAnswering",
+        "FlaxRoFormerForSequenceClassification",
+        "FlaxRoFormerForTokenClassification",
+        "FlaxRoFormerModel",
+        "FlaxRoFormerPreTrainedModel",
+    ]
+
+
 if TYPE_CHECKING:
     from .configuration_roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig
     from .tokenization_roformer import RoFormerTokenizer
@@ -93,6 +106,18 @@ if TYPE_CHECKING:
             TFRoFormerLayer,
             TFRoFormerModel,
             TFRoFormerPreTrainedModel,
+        )
+
+    if is_flax_available():
+        from .modeling_flax_roformer import (
+            FLAX_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FlaxRoFormerForMaskedLM,
+            FlaxRoFormerForMultipleChoice,
+            FlaxRoFormerForQuestionAnswering,
+            FlaxRoFormerForSequenceClassification,
+            FlaxRoFormerForTokenClassification,
+            FlaxRoFormerModel,
+            FlaxRoFormerPreTrainedModel,
         )
 
 

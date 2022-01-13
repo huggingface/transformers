@@ -1460,6 +1460,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         >>> batch_size, raw_sequence_length = input_values.shape
         >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
         >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
+        >>> mask_time_indices = torch.tensor(mask_time_indices, device=input_values.device, dtype=torch.long)
 
         >>> with torch.no_grad():
         ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
@@ -1606,6 +1607,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForMaskedLM
         >>> from datasets import load_dataset
         >>> import soundfile as sf
+        >>> import torch
 
         >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
         >>> model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-base-960h")
