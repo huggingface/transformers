@@ -860,6 +860,8 @@ def add_model_to_auto_classes(
                             for cls in model_classes[framework]
                         ]
                     )
+            elif "{config_class}" in pattern:
+                new_patterns.append(pattern.replace("{config_class}", old_model_patterns.config_class))
             else:
                 new_patterns.append(pattern)
 
@@ -868,7 +870,7 @@ def add_model_to_auto_classes(
             file_name = TRANSFORMERS_PATH / "models" / "auto" / file
             old_model_line = pattern
             new_model_line = pattern
-            for attr in ["model_type", "model_name", "config_class"]:
+            for attr in ["model_type", "model_name"]:
                 old_model_line = old_model_line.replace("{" + attr + "}", getattr(old_model_patterns, attr))
                 new_model_line = new_model_line.replace("{" + attr + "}", getattr(new_model_patterns, attr))
             if "pretrained_archive_map" in pattern:
@@ -879,6 +881,8 @@ def add_model_to_auto_classes(
                     "{pretrained_archive_map}", f"{new_model_patterns.model_upper_cased}_PRETRAINED_CONFIG_ARCHIVE_MAP"
                 )
 
+            if file == "configuration_auto.py":
+                print(old_model_line, new_model_line, new_model_patterns.config_class)
             new_model_line = new_model_line.replace(
                 old_model_patterns.model_camel_cased, new_model_patterns.model_camel_cased
             )
