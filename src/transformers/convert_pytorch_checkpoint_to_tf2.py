@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Convert pytorch checkpoints to TensorFlow """
+""" Convert pytorch checkpoints to TensorFlow"""
 
 
 import argparse
@@ -76,6 +76,7 @@ from . import (
     TFLxmertForPreTraining,
     TFLxmertVisualFeatureEncoder,
     TFOpenAIGPTLMHeadModel,
+    TFRobertaForCausalLM,
     TFRobertaForMaskedLM,
     TFRobertaForSequenceClassification,
     TFT5ForConditionalGeneration,
@@ -215,6 +216,7 @@ MODEL_CLASSES = {
     ),
     "roberta": (
         RobertaConfig,
+        TFRobertaForCausalLM,
         TFRobertaForMaskedLM,
         RobertaForMaskedLM,
         ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -444,7 +446,7 @@ if __name__ == "__main__":
         type=str,
         help="The config json file corresponding to the pre-trained model. \n"
         "This specifies the model architecture. If not given and "
-        "--pytorch_checkpoint_path is not given or is a shortcut name"
+        "--pytorch_checkpoint_path is not given or is a shortcut name "
         "use the configuration associated to the shortcut name on the AWS",
     )
     parser.add_argument(

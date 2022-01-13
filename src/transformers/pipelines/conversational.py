@@ -19,41 +19,40 @@ logger = logging.get_logger(__name__)
 class Conversation:
     """
     Utility class containing a conversation and its history. This class is meant to be used as an input to the
-    :class:`~transformers.ConversationalPipeline`. The conversation contains a number of utility function to manage the
-    addition of new user input and generated model responses. A conversation needs to contain an unprocessed user input
-    before being passed to the :class:`~transformers.ConversationalPipeline`. This user input is either created when
-    the class is instantiated, or by calling :obj:`conversational_pipeline.append_response("input")` after a
-    conversation turn.
+    [`ConversationalPipeline`]. The conversation contains a number of utility function to manage the addition of new
+    user input and generated model responses. A conversation needs to contain an unprocessed user input before being
+    passed to the [`ConversationalPipeline`]. This user input is either created when the class is instantiated, or by
+    calling `conversational_pipeline.append_response("input")` after a conversation turn.
 
     Arguments:
-        text (:obj:`str`, `optional`):
+        text (`str`, *optional*):
             The initial user input to start the conversation. If not provided, a user input needs to be provided
-            manually using the :meth:`~transformers.Conversation.add_user_input` method before the conversation can
-            begin.
-        conversation_id (:obj:`uuid.UUID`, `optional`):
+            manually using the [`~Conversation.add_user_input`] method before the conversation can begin.
+        conversation_id (`uuid.UUID`, *optional*):
             Unique identifier for the conversation. If not provided, a random UUID4 id will be assigned to the
             conversation.
-        past_user_inputs (:obj:`List[str]`, `optional`):
+        past_user_inputs (`List[str]`, *optional*):
             Eventual past history of the conversation of the user. You don't need to pass it manually if you use the
-            pipeline interactively but if you want to recreate history you need to set both :obj:`past_user_inputs` and
-            :obj:`generated_responses` with equal length lists of strings
-        generated_responses (:obj:`List[str]`, `optional`):
+            pipeline interactively but if you want to recreate history you need to set both `past_user_inputs` and
+            `generated_responses` with equal length lists of strings
+        generated_responses (`List[str]`, *optional*):
             Eventual past history of the conversation of the model. You don't need to pass it manually if you use the
-            pipeline interactively but if you want to recreate history you need to set both :obj:`past_user_inputs` and
-            :obj:`generated_responses` with equal length lists of strings
+            pipeline interactively but if you want to recreate history you need to set both `past_user_inputs` and
+            `generated_responses` with equal length lists of strings
 
-    Usage::
+    Usage:
 
-        conversation = Conversation("Going to the movies tonight - any suggestions?")
+    ```python
+    conversation = Conversation("Going to the movies tonight - any suggestions?")
 
-        # Steps usually performed by the model when generating a response:
-        # 1. Mark the user input as processed (moved to the history)
-        conversation.mark_processed()
-        # 2. Append a mode response
-        conversation.append_response("The Big lebowski.")
+    # Steps usually performed by the model when generating a response:
+    # 1. Mark the user input as processed (moved to the history)
+    conversation.mark_processed()
+    # 2. Append a mode response
+    conversation.append_response("The Big lebowski.")
 
-        conversation.add_user_input("Is it good?")
-    """
+    conversation.add_user_input("Is it good?")
+    ```"""
 
     def __init__(
         self, text: str = None, conversation_id: uuid.UUID = None, past_user_inputs=None, generated_responses=None
@@ -83,12 +82,11 @@ class Conversation:
 
     def add_user_input(self, text: str, overwrite: bool = False):
         """
-        Add a user input to the conversation for the next round. This populates the internal :obj:`new_user_input`
-        field.
+        Add a user input to the conversation for the next round. This populates the internal `new_user_input` field.
 
         Args:
-            text (:obj:`str`): The user input for the next conversation round.
-            overwrite (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            text (`str`): The user input for the next conversation round.
+            overwrite (`bool`, *optional*, defaults to `False`):
                 Whether or not existing and unprocessed user input should be overwritten when this function is called.
         """
         if self.new_user_input:
@@ -108,8 +106,8 @@ class Conversation:
 
     def mark_processed(self):
         """
-        Mark the conversation as processed (moves the content of :obj:`new_user_input` to :obj:`past_user_inputs`) and
-        empties the :obj:`new_user_input` field.
+        Mark the conversation as processed (moves the content of `new_user_input` to `past_user_inputs`) and empties
+        the `new_user_input` field.
         """
         if self.new_user_input:
             self.past_user_inputs.append(self.new_user_input)
@@ -120,7 +118,7 @@ class Conversation:
         Append a response to the list of generated responses.
 
         Args:
-            response (:obj:`str`): The model generated response.
+            response (`str`): The model generated response.
         """
         self.generated_responses.append(response)
 
@@ -128,8 +126,8 @@ class Conversation:
         """
         Iterates over all blobs of the conversation.
 
-        Returns: Iterator of (is_user, text_chunk) in chronological order of the conversation. ``is_user`` is a
-        :obj:`bool`, ``text_chunks`` is a :obj:`str`.
+        Returns: Iterator of (is_user, text_chunk) in chronological order of the conversation. `is_user` is a `bool`,
+        `text_chunks` is a `str`.
         """
         for user_input, generated_response in zip(self.past_user_inputs, self.generated_responses):
             yield True, user_input
@@ -142,7 +140,7 @@ class Conversation:
         Generates a string representation of the conversation.
 
         Return:
-            :obj:`str`:
+            `str`:
 
             Example: Conversation id: 7d15686b-dc94-49f2-9c4b-c9eac6a1f114 user >> Going to the movies tonight - any
             suggestions? bot >> The Big Lebowski
@@ -157,9 +155,9 @@ class Conversation:
 @add_end_docstrings(
     PIPELINE_INIT_ARGS,
     r"""
-        min_length_for_response (:obj:`int`, `optional`, defaults to 32):
+        min_length_for_response (`int`, *optional*, defaults to 32):
             The minimum length (in number of tokens) for a response.
-        minimum_tokens (:obj:`int`, `optional`, defaults to 10):
+        minimum_tokens (`int`, *optional*, defaults to 10):
             The minimum length of tokens to leave for a response.
     """,
 )
@@ -167,28 +165,29 @@ class ConversationalPipeline(Pipeline):
     """
     Multi-turn conversational pipeline.
 
-    This conversational pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task
-    identifier: :obj:`"conversational"`.
+    This conversational pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"conversational"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a multi-turn conversational task,
-    currently: `'microsoft/DialoGPT-small'`, `'microsoft/DialoGPT-medium'`, `'microsoft/DialoGPT-large'`. See the
-    up-to-date list of available models on `huggingface.co/models
-    <https://huggingface.co/models?filter=conversational>`__.
+    currently: *'microsoft/DialoGPT-small'*, *'microsoft/DialoGPT-medium'*, *'microsoft/DialoGPT-large'*. See the
+    up-to-date list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=conversational).
 
-    Usage::
+    Usage:
 
-        conversational_pipeline = pipeline("conversational")
+    ```python
+    conversational_pipeline = pipeline("conversational")
 
-        conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
-        conversation_2 = Conversation("What's the last book you have read?")
+    conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
+    conversation_2 = Conversation("What's the last book you have read?")
 
-        conversational_pipeline([conversation_1, conversation_2])
+    conversational_pipeline([conversation_1, conversation_2])
 
-        conversation_1.add_user_input("Is it an action movie?")
-        conversation_2.add_user_input("What is the genre of this book?")
+    conversation_1.add_user_input("Is it an action movie?")
+    conversation_2.add_user_input("What is the genre of this book?")
 
-        conversational_pipeline([conversation_1, conversation_2])
-    """
+    conversational_pipeline([conversation_1, conversation_2])
+    ```"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -222,17 +221,17 @@ class ConversationalPipeline(Pipeline):
         Generate responses for the conversation(s) given as inputs.
 
         Args:
-            conversations (a :class:`~transformers.Conversation` or a list of :class:`~transformers.Conversation`):
+            conversations (a [`Conversation`] or a list of [`Conversation`]):
                 Conversations to generate responses for.
-            clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework `here <./model.html#generative-models>`__).
+                corresponding to your framework [here](./model#generative-models)).
 
         Returns:
-            :class:`~transformers.Conversation` or a list of :class:`~transformers.Conversation`: Conversation(s) with
-            updated generated responses for those containing a new user input.
+            [`Conversation`] or a list of [`Conversation`]: Conversation(s) with updated generated responses for those
+            containing a new user input.
         """
         # XXX: num_workers==0 is required to be backward compatible
         # Otherwise the threads will require a Conversation copy.
@@ -243,7 +242,7 @@ class ConversationalPipeline(Pipeline):
             return outputs[0]
         return outputs
 
-    def preprocess(self, conversation: Conversation) -> Dict[str, Any]:
+    def preprocess(self, conversation: Conversation, min_length_for_response=32) -> Dict[str, Any]:
         if not isinstance(conversation, Conversation):
             raise ValueError("ConversationalPipeline, expects Conversation as inputs")
         if conversation.new_user_input is None:
@@ -274,18 +273,18 @@ class ConversationalPipeline(Pipeline):
             if "attention_mask" in model_inputs:
                 model_inputs["attention_mask"] = model_inputs["attention_mask"][:, -trim:]
         conversation = model_inputs.pop("conversation")
-        model_inputs["max_length"] = max_length
+        generate_kwargs["max_length"] = max_length
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if self.model.config.is_encoder_decoder:
             start_position = 1
         else:
             start_position = n
-        return {"output_ids": output_ids[0, start_position:], "conversation": conversation}
+        return {"output_ids": output_ids[:, start_position:], "conversation": conversation}
 
     def postprocess(self, model_outputs, clean_up_tokenization_spaces=True):
         output_ids = model_outputs["output_ids"]
         answer = self.tokenizer.decode(
-            output_ids,
+            output_ids[0],
             skip_special_tokens=True,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
         )

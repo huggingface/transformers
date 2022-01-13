@@ -5,7 +5,7 @@ import numpy as np
 from ..file_utils import add_end_docstrings
 from ..tokenization_utils import TruncationStrategy
 from ..utils import logging
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
 
 logger = logging.get_logger(__name__)
@@ -44,21 +44,21 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
-class ZeroShotClassificationPipeline(Pipeline):
+class ZeroShotClassificationPipeline(ChunkPipeline):
     """
-    NLI-based zero-shot classification pipeline using a :obj:`ModelForSequenceClassification` trained on NLI (natural
+    NLI-based zero-shot classification pipeline using a `ModelForSequenceClassification` trained on NLI (natural
     language inference) tasks.
 
     Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
-    pair and passed to the pretrained model. Then, the logit for `entailment` is taken as the logit for the candidate
-    label being valid. Any NLI model can be used, but the id of the `entailment` label must be included in the model
-    config's :attr:`~transformers.PretrainedConfig.label2id`.
+    pair and passed to the pretrained model. Then, the logit for *entailment* is taken as the logit for the candidate
+    label being valid. Any NLI model can be used, but the id of the *entailment* label must be included in the model
+    config's :attr:*~transformers.PretrainedConfig.label2id*.
 
-    This NLI pipeline can currently be loaded from :func:`~transformers.pipeline` using the following task identifier:
-    :obj:`"zero-shot-classification"`.
+    This NLI pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"zero-shot-classification"`.
 
     The models that this pipeline can use are models that have been fine-tuned on an NLI task. See the up-to-date list
-    of available models on `huggingface.co/models <https://huggingface.co/models?search=nli>`__.
+    of available models on [huggingface.co/models](https://huggingface.co/models?search=nli).
     """
 
     def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
@@ -84,48 +84,37 @@ class ZeroShotClassificationPipeline(Pipeline):
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
         return_tensors = self.framework
-        if getattr(self.tokenizer, "pad_token", None) is None:
-            # XXX some tokenizers do not have a padding token, we use simple lists
-            # and no padding then
-            logger.warning("The tokenizer {self.tokenizer} does not have a pad token, we're not running it as a batch")
-            padding = False
-            inputs = []
-            for sequence_pair in sequence_pairs:
-                model_input = self.tokenizer(
-                    text=sequence_pair[0],
-                    text_pair=sequence_pair[1],
-                    add_special_tokens=add_special_tokens,
-                    return_tensors=return_tensors,
-                    padding=padding,
-                    truncation=truncation,
-                )
-                inputs.append(model_input)
-        else:
-            try:
+        if self.tokenizer.pad_token is None:
+            # Override for tokenizers not supporting padding
+            logger.error(
+                "Tokenizer was not supporting padding necessary for zero-shot, attempting to use  `pad_token=eos_token`"
+            )
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        try:
+            inputs = self.tokenizer(
+                sequence_pairs,
+                add_special_tokens=add_special_tokens,
+                return_tensors=return_tensors,
+                padding=padding,
+                truncation=truncation,
+            )
+        except Exception as e:
+            if "too short" in str(e):
+                # tokenizers might yell that we want to truncate
+                # to a value that is not even reached by the input.
+                # In that case we don't want to truncate.
+                # It seems there's not a really better way to catch that
+                # exception.
+
                 inputs = self.tokenizer(
                     sequence_pairs,
                     add_special_tokens=add_special_tokens,
                     return_tensors=return_tensors,
                     padding=padding,
-                    truncation=truncation,
+                    truncation=TruncationStrategy.DO_NOT_TRUNCATE,
                 )
-            except Exception as e:
-                if "too short" in str(e):
-                    # tokenizers might yell that we want to truncate
-                    # to a value that is not even reached by the input.
-                    # In that case we don't want to truncate.
-                    # It seems there's not a really better way to catch that
-                    # exception.
-
-                    inputs = self.tokenizer(
-                        sequence_pairs,
-                        add_special_tokens=add_special_tokens,
-                        return_tensors=return_tensors,
-                        padding=padding,
-                        truncation=TruncationStrategy.DO_NOT_TRUNCATE,
-                    )
-                else:
-                    raise e
+            else:
+                raise e
 
         return inputs
 
@@ -154,36 +143,35 @@ class ZeroShotClassificationPipeline(Pipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the :obj:`~transformers.ZeroShotClassificationPipeline`
-        documentation for more information.
+        Classify the sequence(s) given as inputs. See the [`ZeroShotClassificationPipeline`] documentation for more
+        information.
 
         Args:
-            sequences (:obj:`str` or :obj:`List[str]`):
+            sequences (`str` or `List[str]`):
                 The sequence(s) to classify, will be truncated if the model input is too large.
-            candidate_labels (:obj:`str` or :obj:`List[str]`):
+            candidate_labels (`str` or `List[str]`):
                 The set of possible class labels to classify each sequence into. Can be a single label, a string of
                 comma-separated labels, or a list of labels.
-            hypothesis_template (:obj:`str`, `optional`, defaults to :obj:`"This example is {}."`):
+            hypothesis_template (`str`, *optional*, defaults to `"This example is {}."`):
                 The template used to turn each label into an NLI-style hypothesis. This template must include a {} or
                 similar syntax for the candidate label to be inserted into the template. For example, the default
-                template is :obj:`"This example is {}."` With the candidate label :obj:`"sports"`, this would be fed
-                into the model like :obj:`"<cls> sequence to classify <sep> This example is sports . <sep>"`. The
-                default template works well in many cases, but it may be worthwhile to experiment with different
-                templates depending on the task setting.
-            multi_label (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not multiple candidate labels can be true. If :obj:`False`, the scores are normalized such
-                that the sum of the label likelihoods for each sequence is 1. If :obj:`True`, the labels are considered
+                template is `"This example is {}."` With the candidate label `"sports"`, this would be fed into the
+                model like `"<cls> sequence to classify <sep> This example is sports . <sep>"`. The default template
+                works well in many cases, but it may be worthwhile to experiment with different templates depending on
+                the task setting.
+            multi_label (`bool`, *optional*, defaults to `False`):
+                Whether or not multiple candidate labels can be true. If `False`, the scores are normalized such that
+                the sum of the label likelihoods for each sequence is 1. If `True`, the labels are considered
                 independent and probabilities are normalized for each candidate by doing a softmax of the entailment
                 score vs. the contradiction score.
 
         Return:
-            A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the following keys:
+            A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
 
-            - **sequence** (:obj:`str`) -- The sequence for which this is the output.
-            - **labels** (:obj:`List[str]`) -- The labels sorted by order of likelihood.
-            - **scores** (:obj:`List[float]`) -- The probabilities for each of the labels.
+            - **sequence** (`str`) -- The sequence for which this is the output.
+            - **labels** (`List[str]`) -- The labels sorted by order of likelihood.
+            - **scores** (`List[float]`) -- The probabilities for each of the labels.
         """
-
         if len(args) == 0:
             pass
         elif len(args) == 1 and "candidate_labels" not in kwargs:
@@ -191,52 +179,39 @@ class ZeroShotClassificationPipeline(Pipeline):
         else:
             raise ValueError(f"Unable to understand extra arguments {args}")
 
-        result = super().__call__(sequences, **kwargs)
-        if len(result) == 1:
-            return result[0]
-        return result
+        return super().__call__(sequences, **kwargs)
 
     def preprocess(self, inputs, candidate_labels=None, hypothesis_template="This example is {}."):
         sequence_pairs, sequences = self._args_parser(inputs, candidate_labels, hypothesis_template)
-        model_inputs = self._parse_and_tokenize(sequence_pairs)
 
-        prepared_inputs = {
-            "candidate_labels": candidate_labels,
-            "sequences": sequences,
-            "inputs": model_inputs,
-        }
-        return prepared_inputs
+        for i, (candidate_label, sequence_pair) in enumerate(zip(candidate_labels, sequence_pairs)):
+            model_input = self._parse_and_tokenize([sequence_pair])
+
+            yield {
+                "candidate_label": candidate_label,
+                "sequence": sequences[0],
+                "is_last": i == len(candidate_labels) - 1,
+                **model_input,
+            }
 
     def _forward(self, inputs):
-        candidate_labels = inputs["candidate_labels"]
-        sequences = inputs["sequences"]
-        model_inputs = inputs["inputs"]
-        if isinstance(model_inputs, list):
-            outputs = []
-            for input_ in model_inputs:
-                prediction = self.model(**input_)[0].cpu()
-                outputs.append(prediction)
-        else:
-            outputs = self.model(**model_inputs)
+        candidate_label = inputs["candidate_label"]
+        sequence = inputs["sequence"]
+        model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
+        outputs = self.model(**model_inputs)
 
-        model_outputs = {"candidate_labels": candidate_labels, "sequences": sequences, "outputs": outputs}
+        model_outputs = {
+            "candidate_label": candidate_label,
+            "sequence": sequence,
+            "is_last": inputs["is_last"],
+            **outputs,
+        }
         return model_outputs
 
     def postprocess(self, model_outputs, multi_label=False):
-        candidate_labels = model_outputs["candidate_labels"]
-        sequences = model_outputs["sequences"]
-        outputs = model_outputs["outputs"]
-
-        if self.framework == "pt":
-            if isinstance(outputs, list):
-                logits = np.concatenate([output.cpu().numpy() for output in outputs], axis=0)
-            else:
-                logits = outputs["logits"].cpu().numpy()
-        else:
-            if isinstance(outputs, list):
-                logits = np.concatenate([output.numpy() for output in outputs], axis=0)
-            else:
-                logits = outputs["logits"].numpy()
+        candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
+        sequences = [outputs["sequence"] for outputs in model_outputs]
+        logits = np.concatenate([output["logits"].numpy() for output in model_outputs])
         N = logits.shape[0]
         n = len(candidate_labels)
         num_sequences = N // n
@@ -254,14 +229,9 @@ class ZeroShotClassificationPipeline(Pipeline):
             entail_logits = reshaped_outputs[..., self.entailment_id]
             scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
 
-        result = []
-        for iseq in range(num_sequences):
-            top_inds = list(reversed(scores[iseq].argsort()))
-            result.append(
-                {
-                    "sequence": sequences[iseq],
-                    "labels": [candidate_labels[i] for i in top_inds],
-                    "scores": scores[iseq, top_inds].tolist(),
-                }
-            )
-        return result
+        top_inds = list(reversed(scores[0].argsort()))
+        return {
+            "sequence": sequences[0],
+            "labels": [candidate_labels[i] for i in top_inds],
+            "scores": scores[0, top_inds].tolist(),
+        }

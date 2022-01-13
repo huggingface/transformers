@@ -51,6 +51,9 @@ with ExtendSysPath(tests_dir):
 
 set_seed(42)
 
+# default torch.distributed port
+DEFAULT_MASTER_PORT = "10999"
+
 T5_SMALL = "t5-small"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 GPT2_TINY = "sshleifer/tiny-gpt2"
@@ -59,6 +62,28 @@ GPT2_TINY = "sshleifer/tiny-gpt2"
 def load_json(path):
     with open(path) as f:
         return json.load(f)
+
+
+def get_master_port(real_launcher=False):
+    """
+    When using a single gpu launcher emulation (i.e. not deepspeed or python -m torch.distributed)
+    the issue is that once the port is tied it can't be used anywhere else outside of this process,
+    since torch.dist doesn't free the port until the process exits. Therefore for the sake of being
+    able to run both emulated launcher and normal launcher tests we need 2 distinct ports.
+
+    This function will give the right port in the right context. For real launcher it'll give the
+    base port, for emulated launcher it'll give the base port + 1. In both cases a string is
+    returned.
+
+    Args:
+        `real_launcher`: whether a real launcher is going to be used, or the emulated one
+
+    """
+
+    master_port_base = os.environ.get("DS_TEST_PORT", DEFAULT_MASTER_PORT)
+    if not real_launcher:
+        master_port_base = str(int(master_port_base) + 1)
+    return master_port_base
 
 
 def require_deepspeed_aio(test_case):
@@ -89,7 +114,8 @@ def get_launcher(distributed=False):
     # 2. for now testing with just 2 gpus max (since some quality tests may give different
     # results with mode gpus because we use very little data)
     num_gpus = min(2, get_gpu_count()) if distributed else 1
-    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+    master_port = get_master_port(real_launcher=True)
+    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus} --master_port {master_port}".split()
 
 
 ZERO2 = "zero2"
@@ -107,8 +133,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def setUp(self):
         super().setUp()
 
+        master_port = get_master_port(real_launcher=False)
         self.dist_env_1_gpu = dict(
-            MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
+            MASTER_ADDR="localhost", MASTER_PORT=master_port, RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
 
     def test_init_zero3(self):
@@ -176,8 +203,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.n_epochs = args.num_train_epochs
         self.batch_size = args.train_batch_size
 
+        master_port = get_master_port(real_launcher=False)
         self.dist_env_1_gpu = dict(
-            MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
+            MASTER_ADDR="localhost", MASTER_PORT=master_port, RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
 
         self.ds_config_file = dict(
@@ -574,6 +602,11 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
+            # Finally, should be able to resume with the same trainer/same deepspeed engine instance
+            # XXX: but currently this not possible due DS bug: https://github.com/microsoft/DeepSpeed/issues/1612
+            # trainer.train(resume_from_checkpoint=checkpoint)
+            # a workaround needs to be used that re-creates the deepspeed engine
+
     @parameterized.expand(stages)
     def test_load_state_dict_from_zero_checkpoint(self, stage):
         # test that we can load fp32 weights directly from the zero checkpoint into the current model
@@ -669,11 +702,10 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     def test_basic_distributed(self, stage):
         self.run_and_check(stage=stage, distributed=True)
 
-    @parameterized.expand(stages)
-    def test_do_eval_no_train(self, stage):
-        # we should not fail if train is skipped
+    def test_do_eval_no_train(self):
+        # testing only zero3 since zero2 makes no sense with inference
         self.run_and_check(
-            stage=stage,
+            stage=ZERO3,
             eval_steps=1,
             distributed=False,
             do_train=False,
@@ -726,6 +758,22 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         output_dir = self.run_trainer(**kwargs, model_name=output_dir)
 
         self.do_checks(output_dir, do_train=do_train, do_eval=do_eval)
+
+    @require_torch_multi_gpu
+    @parameterized.expand(["fp16", "fp32"])
+    def test_inference(self, dtype):
+        # this is just inference, so no optimizer should be loaded
+        # it only works for z3 (makes no sense with z1-z2)
+        fp16 = True if dtype == "fp16" else False
+        self.run_and_check(
+            stage=ZERO3,
+            model_name=T5_TINY,
+            distributed=True,
+            do_train=False,
+            do_eval=True,
+            quality_checks=False,
+            fp16=fp16,
+        )
 
     def do_checks(self, output_dir, do_train=True, do_eval=True, quality_checks=True):
 
@@ -924,4 +972,50 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         with CaptureStderr() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
+        assert "Detected DeepSpeed ZeRO-3" in cs.err
+
+    @parameterized.expand(stages)
+    def test_load_best_model(self, stage):
+        # this test exercises --load_best_model_at_end - the key is being able to resume after some training
+
+        data_dir = self.tests_dir / "fixtures/tests_samples/wmt_en_ro"
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"""
+            --model_name_or_path {T5_TINY}
+            --tokenizer_name {T5_TINY}
+            --train_file {data_dir}/train.json
+            --validation_file {data_dir}/val.json
+            --output_dir {output_dir}
+            --overwrite_output_dir
+            --source_lang en
+            --target_lang ro
+            --do_train
+            --max_train_samples 3
+            --do_eval
+            --max_eval_samples 1
+            --logging_strategy steps
+            --logging_steps 1
+            --evaluation_strategy steps
+            --eval_steps 1
+            --save_strategy steps
+            --save_steps 1
+            --load_best_model_at_end
+            --per_device_train_batch_size 1
+            --per_device_eval_batch_size 1
+            --num_train_epochs 1
+            --fp16
+            --report_to none
+            """.split()
+        args.extend(["--source_prefix", "translate English to Romanian: "])
+
+        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_zero3.json".split()
+        script = [f"{self.examples_dir_str}/pytorch/translation/run_translation.py"]
+        launcher = get_launcher(distributed=False)
+
+        cmd = launcher + script + args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        with CaptureStderr() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+        # enough to test it didn't fail
         assert "Detected DeepSpeed ZeRO-3" in cs.err

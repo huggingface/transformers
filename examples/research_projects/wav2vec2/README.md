@@ -1,11 +1,11 @@
+**NOTE**: This example is outdated and is not longer actively maintained. Please 
+follow the new instructions of fine-tuning Wav2Vec2 [here](https://github.com/huggingface/transformers/blob/master/examples/pytorch/speech-recognition/README.md)
+
 ## Fine-tuning Wav2Vec2
 
 The `run_asr.py` script allows one to fine-tune pretrained Wav2Vec2 models that can be found [here](https://huggingface.co/models?search=facebook/wav2vec2).
 
 This finetuning script can also be run as a google colab [TODO: here]( ).
-
-The script is actively maintained by [Patrick von Platen](https://github.com/patrickvonplaten).
-Feel free to ask a question on the [Forum](https://discuss.huggingface.co/) or post an issue on [GitHub](https://github.com/huggingface/transformers/issues/new/choose) and adding `@patrickvonplaten` as a tag.
 
 ### Fine-Tuning with TIMIT
 Let's take a look at the [script](./finetune_base_timit_asr.sh) used to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base)
@@ -155,7 +155,7 @@ run_asr.py \
 --per_device_eval_batch_size=2 --evaluation_strategy=steps --save_steps=500 --eval_steps=100 \
 --logging_steps=5 --learning_rate=5e-4 --warmup_steps=3000 \
 --model_name_or_path=patrickvonplaten/wav2vec2_tiny_random_robust \
---dataset_name=patrickvonplaten/librispeech_asr_dummy --dataset_config_name=clean \
+--dataset_name=hf-internal-testing/librispeech_asr_dummy --dataset_config_name=clean \
 --train_split_name=validation --validation_split_name=validation --orthography=timit \
 --preprocessing_num_workers=1 --group_by_length --freeze_feature_extractor --verbose_logging \
 --deepspeed ds_config_wav2vec2_zero2.json
@@ -179,7 +179,7 @@ run_asr.py \
 --per_device_eval_batch_size=2 --evaluation_strategy=steps --save_steps=500 --eval_steps=100 \
 --logging_steps=5 --learning_rate=5e-4 --warmup_steps=3000 \
 --model_name_or_path=patrickvonplaten/wav2vec2_tiny_random_robust \
---dataset_name=patrickvonplaten/librispeech_asr_dummy --dataset_config_name=clean \
+--dataset_name=hf-internal-testing/librispeech_asr_dummy --dataset_config_name=clean \
 --train_split_name=validation --validation_split_name=validation --orthography=timit \
 --preprocessing_num_workers=1 --group_by_length --freeze_feature_extractor --verbose_logging \
 --deepspeed ds_config_wav2vec2_zero3.json

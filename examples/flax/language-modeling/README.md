@@ -33,32 +33,10 @@ in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
-Let's start by creating a model repository to save the trained model and logs.
-Here we call the model `"norwegian-roberta-base"`, but you can change the model name as you like.
-
-You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
-you are logged in) or via the command line:
-
-```
-huggingface-cli repo create norwegian-roberta-base
-```
-
-Next we clone the model repository to add the tokenizer and model files.
-
-```
-git clone https://huggingface.co/<your-username>/norwegian-roberta-base
-```
-
-To setup all relevant files for training, let's go into the cloned model directory.
+To setup all relevant files for training, let's create a directory.
 
 ```bash
-cd norwegian-roberta-base
-```
-
-Next, let's add a symbolic link to the `run_mlm_flax.py`.
-
-```bash
-ln -s ~/transformers/examples/flax/language-modeling/run_mlm_flax.py run_mlm_flax.py
+mkdir ./norwegian-roberta-base
 ```
 
 ### Train tokenizer
@@ -92,7 +70,7 @@ tokenizer.train_from_iterator(batch_iterator(), vocab_size=50265, min_frequency=
 ])
 
 # Save files to disk
-tokenizer.save("./tokenizer.json")
+tokenizer.save("./norwegian-roberta-base/tokenizer.json")
 ```
 
 ### Create configuration
@@ -105,7 +83,7 @@ in the local model folder:
 from transformers import RobertaConfig
 
 config = RobertaConfig.from_pretrained("roberta-base", vocab_size=50265)
-config.save_pretrained("./")
+config.save_pretrained("./norwegian-roberta-base")
 ```
 
 Great, we have set up our model repository. During training, we will automatically
@@ -116,11 +94,11 @@ push the training logs and model weights to the repo.
 Next we can run the example script to pretrain the model:
 
 ```bash
-./run_mlm_flax.py \
-    --output_dir="./" \
+python run_mlm_flax.py \
+    --output_dir="./norwegian-roberta-base" \
     --model_type="roberta" \
-    --config_name="./" \
-    --tokenizer_name="./" \
+    --config_name="./norwegian-roberta-base" \
+    --tokenizer_name="./norwegian-roberta-base" \
     --dataset_name="oscar" \
     --dataset_config_name="unshuffled_deduplicated_no" \
     --max_seq_length="128" \
@@ -157,32 +135,11 @@ in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
 
-Let's start by creating a model repository to save the trained model and logs.
-Here we call the model `"norwegian-gpt2"`, but you can change the model name as you like.
 
-You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
-you are logged in) or via the command line:
-
-```
-huggingface-cli repo create norwegian-gpt2
-```
-
-Next we clone the model repository to add the tokenizer and model files.
-
-```
-git clone https://huggingface.co/<your-username>/norwegian-gpt2
-```
-
-To setup all relevant files for training, let's go into the cloned model directory.
+To setup all relevant files for training, let's create a directory.
 
 ```bash
-cd norwegian-gpt2
-```
-
-Next, let's add a symbolic link to the training script `run_clm_flax.py`.
-
-```bash
-ln -s ~/transformers/examples/flax/language-modeling/run_clm_flax.py run_clm_flax.py
+mkdir ./norwegian-gpt2
 ```
 
 ### Train tokenizer
@@ -216,7 +173,7 @@ tokenizer.train_from_iterator(batch_iterator(), vocab_size=50257, min_frequency=
 ])
 
 # Save files to disk
-tokenizer.save("./tokenizer.json")
+tokenizer.save("./norwegian-gpt2/tokenizer.json")
 ```
 
 ### Create configuration
@@ -229,7 +186,7 @@ in the local model folder:
 from transformers import GPT2Config
 
 config = GPT2Config.from_pretrained("gpt2", resid_pdrop=0.0, embd_pdrop=0.0, attn_pdrop=0.0, vocab_size=50257)
-config.save_pretrained("./")
+config.save_pretrained("./norwegian-gpt2")
 ```
 
 Great, we have set up our model repository. During training, we will now automatically
@@ -240,11 +197,11 @@ push the training logs and model weights to the repo.
 Finally, we can run the example script to pretrain the model:
 
 ```bash
-./run_clm_flax.py \
-    --output_dir="./" \
+python run_clm_flax.py \
+    --output_dir="./norwegian-gpt2" \
     --model_type="gpt2" \
-    --config_name="./" \
-    --tokenizer_name="./" \
+    --config_name="./norwegian-gpt2" \
+    --tokenizer_name="./norwegian-gpt2" \
     --dataset_name="oscar" \
     --dataset_config_name="unshuffled_deduplicated_no" \
     --do_train --do_eval \
@@ -282,30 +239,10 @@ The example script uses the 🤗 Datasets library. You can easily customize them
 Let's start by creating a model repository to save the trained model and logs.
 Here we call the model `"norwegian-t5-base"`, but you can change the model name as you like.
 
-You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
-you are logged in) or via the command line:
-
-```
-huggingface-cli repo create norwegian-t5-base
-```
-
-Next we clone the model repository to add the tokenizer and model files.
-
-```
-git clone https://huggingface.co/<your-username>/norwegian-t5-base
-```
-
-To setup all relevant files for trairing, let's go into the cloned model directory.
+To setup all relevant files for trairing, let's create a directory.
 
 ```bash
-cd norwegian-t5-base
-```
-
-Next, let's add a symbolic link to the `run_t5_mlm_flax.py` and `t5_tokenizer_model` scripts.
-
-```bash
-ln -s ~/transformers/examples/flax/language-modeling/run_t5_mlm_flax.py run_t5_mlm_flax.py
-ln -s ~/transformers/examples/flax/language-modeling/t5_tokenizer_model.py t5_tokenizer_model.py
+cd ./norwegian-t5-base
 ```
 
 ### Train tokenizer
@@ -351,7 +288,7 @@ tokenizer.train_from_iterator(
 )
 
 # Save files to disk
-tokenizer.save("./tokenizer.json")
+tokenizer.save("./norwegian-t5-base/tokenizer.json")
 ```
 
 ### Create configuration
@@ -364,7 +301,7 @@ in the local model folder:
 from transformers import T5Config
 
 config = T5Config.from_pretrained("google/t5-v1_1-base", vocab_size=tokenizer.get_vocab_size())
-config.save_pretrained("./")
+config.save_pretrained("./norwegian-t5-base")
 ```
 
 Great, we have set up our model repository. During training, we will automatically
@@ -375,11 +312,11 @@ push the training logs and model weights to the repo.
 Next we can run the example script to pretrain the model:
 
 ```bash
-./run_t5_mlm_flax.py \
-	--output_dir="./" \
+python run_t5_mlm_flax.py \
+	--output_dir="./norwegian-t5-base" \
 	--model_type="t5" \
-	--config_name="./" \
-	--tokenizer_name="./" \
+	--config_name="./norwegian-t5-base" \
+	--tokenizer_name="./norwegian-t5-base" \
 	--dataset_name="oscar" \
 	--dataset_config_name="unshuffled_deduplicated_no" \
 	--max_seq_length="512" \

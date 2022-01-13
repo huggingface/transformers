@@ -1,0 +1,36 @@
+name: Update Transformers metadata
+
+on:
+  push:
+    branches:
+      - master
+      - update_transformers_metadata
+
+jobs:
+  build_and_package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: ~/.cache/pip
+          key: v1-metadata
+          restore-keys: |
+            v1-metadata-${{ hashFiles('setup.py') }}
+            v1-metadata
+
+      - name: Setup environment
+        run: |
+          pip install git+https://github.com/huggingface/transformers#egg=transformers[dev]
+
+      - name: Update metadata
+        run: |
+          python utils/update_metadata.py --token ${{ secrets.SYLVAIN_HF_TOKEN }} --commit_sha ${{ github.sha }}
+

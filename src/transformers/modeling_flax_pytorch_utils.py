@@ -21,6 +21,7 @@ from typing import Dict, Tuple
 
 import numpy as np
 
+import jax
 import jax.numpy as jnp
 import transformers
 from flax.serialization import from_bytes
@@ -68,7 +69,7 @@ def rename_key_and_reshape_tensor(
     """Rename PT weight names to corresponding Flax weight names and reshape tensor if necessary"""
 
     def is_key_or_prefix_key_in_dict(key: Tuple[str]) -> bool:
-        """Checks if ``key`` of ``(prefix,) + key`` is in random_flax_state_dict"""
+        """Checks if `key` of `(prefix,) + key` is in random_flax_state_dict"""
         return len(set(random_flax_state_dict) & set([key, (model_prefix,) + key])) > 0
 
     # layer norm
@@ -189,6 +190,19 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         )
         raise
 
+    # check if we have bf16 weights
+    is_type_bf16 = flatten_dict(jax.tree_map(lambda x: x.dtype == jnp.bfloat16, flax_state)).values()
+    if any(is_type_bf16):
+        # convert all weights to fp32 if the are bf16 since torch.from_numpy can-not handle bf16
+        # and bf16 is not fully supported in PT yet.
+        logger.warning(
+            "Found ``bfloat16`` weights in Flax model. Casting all ``bfloat16`` weights to ``float32`` "
+            "before loading those in PyTorch model."
+        )
+        flax_state = jax.tree_map(
+            lambda params: params.astype(np.float32) if params.dtype == jnp.bfloat16 else params, flax_state
+        )
+
     flax_state_dict = flatten_dict(flax_state)
     pt_model_dict = pt_model.state_dict()
 
@@ -230,7 +244,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         if flax_key in pt_model_dict:
             if flax_tensor.shape != pt_model_dict[flax_key].shape:
                 raise ValueError(
-                    f"Flax checkpoint seems to be incorrect. Weight {flax_key_tuple} was expected"
+                    f"Flax checkpoint seems to be incorrect. Weight {flax_key_tuple} was expected "
                     f"to be of shape {pt_model_dict[flax_key].shape}, but is {flax_tensor.shape}."
                 )
             else:

@@ -155,7 +155,7 @@ class TestDeepSpeedWav2Vec2(TestCasePlus):
         output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
         args = f"""
             --model_name_or_path {model_name}
-            --dataset_name patrickvonplaten/librispeech_asr_dummy
+            --dataset_name hf-internal-testing/librispeech_asr_dummy
             --dataset_config_name clean
             --train_split_name validation
             --validation_split_name validation

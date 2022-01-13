@@ -16,6 +16,11 @@ def tf_top_k_top_p_filtering(*args, **kwargs):
     requires_backends(tf_top_k_top_p_filtering, ["tf"])
 
 
+class PushToHubCallback:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -27,6 +32,9 @@ class TFLayoutLMForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFLayoutLMForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -36,6 +44,9 @@ class TFLayoutLMForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFLayoutLMForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -44,6 +55,9 @@ class TFLayoutLMForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFLayoutLMMainLayer:
@@ -59,6 +73,9 @@ class TFLayoutLMModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFLayoutLMPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -68,6 +85,9 @@ class TFLayoutLMPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -76,6 +96,9 @@ class TFPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFSequenceSummary:
@@ -103,6 +126,9 @@ class TFAlbertForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFAlbertForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -111,6 +137,9 @@ class TFAlbertForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFAlbertForPreTraining:
@@ -126,6 +155,9 @@ class TFAlbertForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFAlbertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -135,6 +167,9 @@ class TFAlbertForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFAlbertForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -143,6 +178,9 @@ class TFAlbertForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFAlbertMainLayer:
@@ -158,6 +196,9 @@ class TFAlbertModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFAlbertPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -167,8 +208,14 @@ class TFAlbertPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = None
+
+
+TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 
 
 TF_MODEL_FOR_MASKED_LM_MAPPING = None
@@ -192,7 +239,13 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = None
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
 
 
+TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
+
+
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
+
+
+TF_MODEL_FOR_VISION_2_SEQ_MAPPING = None
 
 
 TF_MODEL_MAPPING = None
@@ -209,6 +262,9 @@ class TFAutoModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFAutoModelForCausalLM:
     def __init__(self, *args, **kwargs):
@@ -217,6 +273,21 @@ class TFAutoModelForCausalLM:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFAutoModelForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFAutoModelForMaskedLM:
@@ -227,6 +298,9 @@ class TFAutoModelForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFAutoModelForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -235,6 +309,9 @@ class TFAutoModelForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFAutoModelForPreTraining:
@@ -245,6 +322,9 @@ class TFAutoModelForPreTraining:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFAutoModelForQuestionAnswering:
     def __init__(self, *args, **kwargs):
@@ -253,6 +333,9 @@ class TFAutoModelForQuestionAnswering:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFAutoModelForSeq2SeqLM:
@@ -263,6 +346,9 @@ class TFAutoModelForSeq2SeqLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFAutoModelForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -271,6 +357,21 @@ class TFAutoModelForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFAutoModelForTableQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFAutoModelForTokenClassification:
@@ -281,6 +382,21 @@ class TFAutoModelForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFAutoModelForVision2Seq:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFAutoModelWithLMHead:
     def __init__(self, *args, **kwargs):
@@ -289,6 +405,9 @@ class TFAutoModelWithLMHead:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFBartForConditionalGeneration:
@@ -299,6 +418,9 @@ class TFBartForConditionalGeneration:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFBartModel:
     def __init__(self, *args, **kwargs):
@@ -308,6 +430,9 @@ class TFBartModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFBartPretrainedModel:
     def __init__(self, *args, **kwargs):
@@ -316,6 +441,9 @@ class TFBartPretrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -334,6 +462,9 @@ class TFBertForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFBertForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -343,9 +474,19 @@ class TFBertForMultipleChoice:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFBertForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
 
@@ -362,6 +503,9 @@ class TFBertForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFBertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -370,6 +514,9 @@ class TFBertForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFBertForTokenClassification:
@@ -380,6 +527,9 @@ class TFBertForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFBertLMHeadModel:
     def __init__(self, *args, **kwargs):
@@ -388,6 +538,9 @@ class TFBertLMHeadModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFBertMainLayer:
@@ -403,6 +556,9 @@ class TFBertModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFBertPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -411,6 +567,9 @@ class TFBertPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFBlenderbotForConditionalGeneration:
@@ -421,6 +580,9 @@ class TFBlenderbotForConditionalGeneration:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFBlenderbotModel:
     def __init__(self, *args, **kwargs):
@@ -429,6 +591,9 @@ class TFBlenderbotModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFBlenderbotPreTrainedModel:
@@ -439,6 +604,9 @@ class TFBlenderbotPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFBlenderbotSmallForConditionalGeneration:
     def __init__(self, *args, **kwargs):
@@ -447,6 +615,9 @@ class TFBlenderbotSmallForConditionalGeneration:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFBlenderbotSmallModel:
@@ -457,6 +628,9 @@ class TFBlenderbotSmallModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFBlenderbotSmallPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -465,6 +639,9 @@ class TFBlenderbotSmallPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -478,6 +655,9 @@ class TFCamembertForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFCamembertForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -486,6 +666,9 @@ class TFCamembertForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFCamembertForQuestionAnswering:
@@ -496,6 +679,9 @@ class TFCamembertForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFCamembertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -504,6 +690,9 @@ class TFCamembertForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFCamembertForTokenClassification:
@@ -514,6 +703,9 @@ class TFCamembertForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFCamembertModel:
     def __init__(self, *args, **kwargs):
@@ -522,6 +714,60 @@ class TFCamembertModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFCLIPModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFCLIPPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFCLIPTextModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFCLIPVisionModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -535,6 +781,9 @@ class TFConvBertForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFConvBertForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -543,6 +792,9 @@ class TFConvBertForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFConvBertForQuestionAnswering:
@@ -553,6 +805,9 @@ class TFConvBertForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFConvBertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -562,6 +817,9 @@ class TFConvBertForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFConvBertForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -570,6 +828,9 @@ class TFConvBertForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFConvBertLayer:
@@ -585,6 +846,9 @@ class TFConvBertModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFConvBertPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -593,6 +857,9 @@ class TFConvBertPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -606,6 +873,9 @@ class TFCTRLForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFCTRLLMHeadModel:
     def __init__(self, *args, **kwargs):
@@ -614,6 +884,9 @@ class TFCTRLLMHeadModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFCTRLModel:
@@ -624,6 +897,9 @@ class TFCTRLModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFCTRLPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -632,6 +908,9 @@ class TFCTRLPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -645,6 +924,9 @@ class TFDebertaForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFDebertaForQuestionAnswering:
     def __init__(self, *args, **kwargs):
@@ -653,6 +935,9 @@ class TFDebertaForQuestionAnswering:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFDebertaForSequenceClassification:
@@ -663,6 +948,9 @@ class TFDebertaForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFDebertaForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -671,6 +959,9 @@ class TFDebertaForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFDebertaModel:
@@ -681,6 +972,9 @@ class TFDebertaModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFDebertaPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -689,6 +983,9 @@ class TFDebertaPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -702,6 +999,9 @@ class TFDebertaV2ForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFDebertaV2ForQuestionAnswering:
     def __init__(self, *args, **kwargs):
@@ -710,6 +1010,9 @@ class TFDebertaV2ForQuestionAnswering:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFDebertaV2ForSequenceClassification:
@@ -720,6 +1023,9 @@ class TFDebertaV2ForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFDebertaV2ForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -728,6 +1034,9 @@ class TFDebertaV2ForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFDebertaV2Model:
@@ -738,6 +1047,9 @@ class TFDebertaV2Model:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFDebertaV2PreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -746,6 +1058,9 @@ class TFDebertaV2PreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -759,6 +1074,9 @@ class TFDistilBertForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFDistilBertForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -767,6 +1085,9 @@ class TFDistilBertForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFDistilBertForQuestionAnswering:
@@ -777,6 +1098,9 @@ class TFDistilBertForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFDistilBertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -786,6 +1110,9 @@ class TFDistilBertForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFDistilBertForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -794,6 +1121,9 @@ class TFDistilBertForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFDistilBertMainLayer:
@@ -809,6 +1139,9 @@ class TFDistilBertModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFDistilBertPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -817,6 +1150,9 @@ class TFDistilBertPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -869,6 +1205,9 @@ class TFElectraForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFElectraForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -877,6 +1216,9 @@ class TFElectraForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFElectraForPreTraining:
@@ -892,6 +1234,9 @@ class TFElectraForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFElectraForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -900,6 +1245,9 @@ class TFElectraForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFElectraForTokenClassification:
@@ -910,6 +1258,9 @@ class TFElectraForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFElectraModel:
     def __init__(self, *args, **kwargs):
@@ -919,6 +1270,9 @@ class TFElectraModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFElectraPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -927,6 +1281,21 @@ class TFElectraPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFEncoderDecoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -940,6 +1309,9 @@ class TFFlaubertForMultipleChoice:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFFlaubertForQuestionAnsweringSimple:
     def __init__(self, *args, **kwargs):
@@ -948,6 +1320,9 @@ class TFFlaubertForQuestionAnsweringSimple:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFFlaubertForSequenceClassification:
@@ -958,6 +1333,9 @@ class TFFlaubertForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFFlaubertForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -966,6 +1344,9 @@ class TFFlaubertForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFFlaubertModel:
@@ -976,6 +1357,9 @@ class TFFlaubertModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFFlaubertPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -985,6 +1369,9 @@ class TFFlaubertPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFFlaubertWithLMHeadModel:
     def __init__(self, *args, **kwargs):
@@ -993,6 +1380,9 @@ class TFFlaubertWithLMHeadModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1006,6 +1396,9 @@ class TFFunnelBaseModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFFunnelForMaskedLM:
     def __init__(self, *args, **kwargs):
@@ -1015,6 +1408,9 @@ class TFFunnelForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFFunnelForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -1023,6 +1419,9 @@ class TFFunnelForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFFunnelForPreTraining:
@@ -1038,6 +1437,9 @@ class TFFunnelForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFFunnelForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1046,6 +1448,9 @@ class TFFunnelForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFFunnelForTokenClassification:
@@ -1056,6 +1461,9 @@ class TFFunnelForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFFunnelModel:
     def __init__(self, *args, **kwargs):
@@ -1065,6 +1473,9 @@ class TFFunnelModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFFunnelPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1073,6 +1484,9 @@ class TFFunnelPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1086,6 +1500,9 @@ class TFGPT2DoubleHeadsModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFGPT2ForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1095,6 +1512,9 @@ class TFGPT2ForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFGPT2LMHeadModel:
     def __init__(self, *args, **kwargs):
@@ -1103,6 +1523,9 @@ class TFGPT2LMHeadModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFGPT2MainLayer:
@@ -1118,6 +1541,9 @@ class TFGPT2Model:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFGPT2PreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1126,6 +1552,9 @@ class TFGPT2PreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1144,6 +1573,9 @@ class TFHubertModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFHubertPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1152,6 +1584,9 @@ class TFHubertPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFLEDForConditionalGeneration:
@@ -1162,6 +1597,9 @@ class TFLEDForConditionalGeneration:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFLEDModel:
     def __init__(self, *args, **kwargs):
@@ -1171,6 +1609,9 @@ class TFLEDModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFLEDPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1179,6 +1620,9 @@ class TFLEDPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1192,6 +1636,9 @@ class TFLongformerForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFLongformerForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -1200,6 +1647,9 @@ class TFLongformerForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFLongformerForQuestionAnswering:
@@ -1210,6 +1660,9 @@ class TFLongformerForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFLongformerForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1218,6 +1671,9 @@ class TFLongformerForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFLongformerForTokenClassification:
@@ -1228,6 +1684,9 @@ class TFLongformerForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFLongformerModel:
     def __init__(self, *args, **kwargs):
@@ -1237,6 +1696,9 @@ class TFLongformerModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFLongformerPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1245,6 +1707,9 @@ class TFLongformerPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFLongformerSelfAttention:
@@ -1273,6 +1738,9 @@ class TFLxmertModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFLxmertPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1281,6 +1749,9 @@ class TFLxmertPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFLxmertVisualFeatureEncoder:
@@ -1296,6 +1767,9 @@ class TFMarianModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMarianMTModel:
     def __init__(self, *args, **kwargs):
@@ -1304,6 +1778,9 @@ class TFMarianMTModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFMarianPreTrainedModel:
@@ -1314,6 +1791,9 @@ class TFMarianPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMBartForConditionalGeneration:
     def __init__(self, *args, **kwargs):
@@ -1322,6 +1802,9 @@ class TFMBartForConditionalGeneration:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFMBartModel:
@@ -1332,6 +1815,9 @@ class TFMBartModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMBartPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1340,6 +1826,9 @@ class TFMBartPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1353,6 +1842,9 @@ class TFMobileBertForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMobileBertForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -1362,9 +1854,19 @@ class TFMobileBertForMultipleChoice:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMobileBertForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
 
@@ -1381,6 +1883,9 @@ class TFMobileBertForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMobileBertForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1390,6 +1895,9 @@ class TFMobileBertForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMobileBertForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -1398,6 +1906,9 @@ class TFMobileBertForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFMobileBertMainLayer:
@@ -1413,6 +1924,9 @@ class TFMobileBertModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMobileBertPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1421,6 +1935,9 @@ class TFMobileBertPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1434,6 +1951,9 @@ class TFMPNetForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMPNetForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -1442,6 +1962,9 @@ class TFMPNetForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFMPNetForQuestionAnswering:
@@ -1452,6 +1975,9 @@ class TFMPNetForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMPNetForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1461,6 +1987,9 @@ class TFMPNetForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMPNetForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -1469,6 +1998,9 @@ class TFMPNetForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFMPNetMainLayer:
@@ -1484,6 +2016,9 @@ class TFMPNetModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMPNetPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1492,6 +2027,9 @@ class TFMPNetPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFMT5EncoderModel:
@@ -1502,6 +2040,9 @@ class TFMT5EncoderModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMT5ForConditionalGeneration:
     def __init__(self, *args, **kwargs):
@@ -1511,6 +2052,9 @@ class TFMT5ForConditionalGeneration:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFMT5Model:
     def __init__(self, *args, **kwargs):
@@ -1519,6 +2063,9 @@ class TFMT5Model:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1532,6 +2079,9 @@ class TFOpenAIGPTDoubleHeadsModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFOpenAIGPTForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1541,6 +2091,9 @@ class TFOpenAIGPTForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFOpenAIGPTLMHeadModel:
     def __init__(self, *args, **kwargs):
@@ -1549,6 +2102,9 @@ class TFOpenAIGPTLMHeadModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFOpenAIGPTMainLayer:
@@ -1564,6 +2120,9 @@ class TFOpenAIGPTModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFOpenAIGPTPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1572,6 +2131,9 @@ class TFOpenAIGPTPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFPegasusForConditionalGeneration:
@@ -1582,6 +2144,9 @@ class TFPegasusForConditionalGeneration:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFPegasusModel:
     def __init__(self, *args, **kwargs):
@@ -1590,6 +2155,9 @@ class TFPegasusModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFPegasusPreTrainedModel:
@@ -1600,6 +2168,9 @@ class TFPegasusPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRagModel:
     def __init__(self, *args, **kwargs):
@@ -1609,6 +2180,9 @@ class TFRagModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRagPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1617,6 +2191,9 @@ class TFRagPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFRagSequenceForGeneration:
@@ -1640,6 +2217,9 @@ class TFRemBertForCausalLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRemBertForMaskedLM:
     def __init__(self, *args, **kwargs):
@@ -1648,6 +2228,9 @@ class TFRemBertForMaskedLM:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFRemBertForMultipleChoice:
@@ -1658,6 +2241,9 @@ class TFRemBertForMultipleChoice:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRemBertForQuestionAnswering:
     def __init__(self, *args, **kwargs):
@@ -1666,6 +2252,9 @@ class TFRemBertForQuestionAnswering:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFRemBertForSequenceClassification:
@@ -1676,6 +2265,9 @@ class TFRemBertForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRemBertForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -1684,6 +2276,9 @@ class TFRemBertForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFRemBertLayer:
@@ -1699,6 +2294,9 @@ class TFRemBertModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRemBertPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1708,8 +2306,23 @@ class TFRemBertPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFRobertaForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFRobertaForMaskedLM:
@@ -1720,6 +2333,9 @@ class TFRobertaForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRobertaForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -1728,6 +2344,9 @@ class TFRobertaForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFRobertaForQuestionAnswering:
@@ -1738,6 +2357,9 @@ class TFRobertaForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRobertaForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -1747,6 +2369,9 @@ class TFRobertaForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRobertaForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -1755,6 +2380,9 @@ class TFRobertaForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFRobertaMainLayer:
@@ -1770,6 +2398,9 @@ class TFRobertaModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRobertaPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1778,6 +2409,9 @@ class TFRobertaPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1791,6 +2425,9 @@ class TFRoFormerForCausalLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRoFormerForMaskedLM:
     def __init__(self, *args, **kwargs):
@@ -1799,6 +2436,9 @@ class TFRoFormerForMaskedLM:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFRoFormerForMultipleChoice:
@@ -1809,6 +2449,9 @@ class TFRoFormerForMultipleChoice:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRoFormerForQuestionAnswering:
     def __init__(self, *args, **kwargs):
@@ -1817,6 +2460,9 @@ class TFRoFormerForQuestionAnswering:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFRoFormerForSequenceClassification:
@@ -1827,6 +2473,9 @@ class TFRoFormerForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRoFormerForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -1835,6 +2484,9 @@ class TFRoFormerForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFRoFormerLayer:
@@ -1850,6 +2502,9 @@ class TFRoFormerModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFRoFormerPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1858,6 +2513,9 @@ class TFRoFormerPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1871,6 +2529,9 @@ class TFT5EncoderModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFT5ForConditionalGeneration:
     def __init__(self, *args, **kwargs):
@@ -1879,6 +2540,9 @@ class TFT5ForConditionalGeneration:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFT5Model:
@@ -1889,6 +2553,9 @@ class TFT5Model:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFT5PreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1897,6 +2564,72 @@ class TFT5PreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFTapasForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFTapasForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFTapasForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFTapasModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFTapasPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1915,6 +2648,9 @@ class TFTransfoXLForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFTransfoXLLMHeadModel:
     def __init__(self, *args, **kwargs):
@@ -1923,6 +2659,9 @@ class TFTransfoXLLMHeadModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFTransfoXLMainLayer:
@@ -1938,6 +2677,9 @@ class TFTransfoXLModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFTransfoXLPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1946,6 +2688,50 @@ class TFTransfoXLPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFVisionEncoderDecoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFViTForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFViTModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFViTPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1964,6 +2750,9 @@ class TFWav2Vec2Model:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFWav2Vec2PreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -1972,6 +2761,9 @@ class TFWav2Vec2PreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1985,6 +2777,9 @@ class TFXLMForMultipleChoice:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFXLMForQuestionAnsweringSimple:
     def __init__(self, *args, **kwargs):
@@ -1993,6 +2788,9 @@ class TFXLMForQuestionAnsweringSimple:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFXLMForSequenceClassification:
@@ -2003,6 +2801,9 @@ class TFXLMForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFXLMForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -2011,6 +2812,9 @@ class TFXLMForTokenClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFXLMMainLayer:
@@ -2026,6 +2830,9 @@ class TFXLMModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFXLMPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -2035,6 +2842,9 @@ class TFXLMPreTrainedModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFXLMWithLMHeadModel:
     def __init__(self, *args, **kwargs):
@@ -2043,6 +2853,9 @@ class TFXLMWithLMHeadModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -2056,6 +2869,9 @@ class TFXLMRobertaForMaskedLM:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFXLMRobertaForMultipleChoice:
     def __init__(self, *args, **kwargs):
@@ -2064,6 +2880,9 @@ class TFXLMRobertaForMultipleChoice:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFXLMRobertaForQuestionAnswering:
@@ -2074,6 +2893,9 @@ class TFXLMRobertaForQuestionAnswering:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFXLMRobertaForSequenceClassification:
     def __init__(self, *args, **kwargs):
@@ -2082,6 +2904,9 @@ class TFXLMRobertaForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFXLMRobertaForTokenClassification:
@@ -2092,6 +2917,9 @@ class TFXLMRobertaForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFXLMRobertaModel:
     def __init__(self, *args, **kwargs):
@@ -2100,6 +2928,9 @@ class TFXLMRobertaModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -2113,6 +2944,9 @@ class TFXLNetForMultipleChoice:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFXLNetForQuestionAnsweringSimple:
     def __init__(self, *args, **kwargs):
@@ -2121,6 +2955,9 @@ class TFXLNetForQuestionAnsweringSimple:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFXLNetForSequenceClassification:
@@ -2131,6 +2968,9 @@ class TFXLNetForSequenceClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFXLNetForTokenClassification:
     def __init__(self, *args, **kwargs):
@@ -2140,6 +2980,9 @@ class TFXLNetForTokenClassification:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFXLNetLMHeadModel:
     def __init__(self, *args, **kwargs):
@@ -2148,6 +2991,9 @@ class TFXLNetLMHeadModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class TFXLNetMainLayer:
@@ -2163,6 +3009,9 @@ class TFXLNetModel:
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
 
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
 
 class TFXLNetPreTrainedModel:
     def __init__(self, *args, **kwargs):
@@ -2171,6 +3020,9 @@ class TFXLNetPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["tf"])
+
+    def call(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
 
 
 class AdamWeightDecay:

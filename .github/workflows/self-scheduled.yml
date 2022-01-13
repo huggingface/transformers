@@ -33,16 +33,15 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev git
+          apt -y update && apt install -y libsndfile1-dev git espeak-ng
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
+          python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
-          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-          python -c "import torch; print('Cuda version:', torch.version.cuda)"
-          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+          utils/print_env_pt.py
 
       - name: Run all tests on GPU
         run: |
@@ -51,6 +50,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_gpu_durations.txt
 
       - name: Run examples tests on GPU
         if: ${{ always() }}
@@ -68,6 +71,10 @@ jobs:
         if: ${{ always() }}
         run: cat reports/examples_torch_gpu_failures_short.txt
 
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/examples_torch_gpu_durations.txt
+
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
@@ -78,6 +85,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_pipeline_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_pipeline_gpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -105,6 +116,7 @@ jobs:
           pip install --upgrade pip
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
           pip install .[flax,integrations,sklearn,testing,sentencepiece,flax-speech,vision]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -118,6 +130,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_flax_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_flax_gpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -141,9 +157,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev git
+          apt -y update && apt install -y libsndfile1-dev git espeak-ng
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech]
+          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech,vision]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
+
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -161,6 +179,10 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_tf_gpu_failures_short.txt
 
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_tf_gpu_durations.txt
+
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
@@ -174,11 +196,58 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_tf_pipeline_gpu_failures_short.txt
 
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_tf_pipeline_gpu_durations.txt
+
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: run_all_tests_tf_gpu_test_reports
+          path: reports
+
+  run_all_examples_torch_xla_tpu:
+    runs-on: [self-hosted, docker-tpu-test, tpu-v3-8]
+    container:
+      image: gcr.io/tpu-pytorch/xla:nightly_3.8_tpuvm
+      options: --privileged -v "/lib/libtpu.so:/lib/libtpu.so" -v /mnt/cache/.cache/huggingface:/mnt/cache/ --shm-size 16G
+    steps:
+      - name: Launcher docker
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install .[testing]
+
+      - name: Are TPUs recognized by our DL frameworks
+        env:
+          XRT_TPU_CONFIG: localservice;0;localhost:51011
+        run: |
+          python -c "import torch_xla.core.xla_model as xm; print(xm.xla_device())"
+
+      - name: Run example tests on TPU
+        env:
+          XRT_TPU_CONFIG: "localservice;0;localhost:51011"
+          MKL_SERVICE_FORCE_INTEL: "1"  # See: https://github.com/pytorch/pytorch/issues/37377
+
+        run: |
+          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_xla_tpu examples/pytorch/test_xla_examples.py
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_torch_xla_tpu_failures_short.txt
+
+      - name: Tests durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_xla_tpu_durations.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_examples_torch_xla_tpu
           path: reports
 
   run_all_tests_torch_multi_gpu:
@@ -197,16 +266,15 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev git
+          apt -y update && apt install -y libsndfile1-dev git espeak-ng
           pip install --upgrade pip
           pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
+          python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
-          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-          python -c "import torch; print('Cuda version:', torch.version.cuda)"
-          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+          utils/print_env_pt.py
 
       - name: Run all tests on GPU
         env:
@@ -218,6 +286,10 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_torch_multi_gpu_failures_short.txt
 
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_multi_gpu_durations.txt
+
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
@@ -228,6 +300,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_pipeline_multi_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_pipeline_multi_gpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -252,9 +328,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev git
+          apt -y update && apt install -y libsndfile1-dev git espeak-ng
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech]
+          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech,vision]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -272,6 +349,10 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_tf_multi_gpu_failures_short.txt
 
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_tf_multi_gpu_durations.txt
+
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
@@ -284,6 +365,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_tf_pipeline_multi_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_tf_pipeline_multi_gpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -352,10 +437,7 @@ jobs:
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
-          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-          python -c "import torch; print('Cuda version:', torch.version.cuda)"
-          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+          utils/print_env_pt.py
 
       - name: Run all tests on GPU
         run: |
@@ -364,6 +446,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_cuda_extensions_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_cuda_extensions_gpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -390,14 +476,12 @@ jobs:
         run: |
           apt -y update && apt install -y libaio-dev
           pip install --upgrade pip
+          rm -rf ~/.cache/torch_extensions/ # shared between conflicting builds
           pip install .[testing,deepspeed,fairscale]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
-          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
-          python -c "import torch; print('Cuda version:', torch.version.cuda)"
-          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
-          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+          utils/print_env_pt.py
 
       - name: Run all tests on GPU
         run: |
@@ -406,6 +490,10 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_cuda_extensions_multi_gpu_failures_short.txt
+
+      - name: Test durations
+        if: ${{ always() }}
+        run: cat reports/tests_torch_cuda_extensions_multi_gpu_durations.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
