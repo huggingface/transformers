@@ -759,7 +759,7 @@ def add_model_to_main_init(
             while find_indent(lines[idx]) > indent:
                 block.append(lines[idx])
                 idx += 1
-            if lines[idx].strip() == ")":
+            if lines[idx].strip() in [")", "]", "],"]:
                 block.append(lines[idx])
                 idx += 1
             block = "\n".join(block)
