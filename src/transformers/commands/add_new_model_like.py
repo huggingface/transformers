@@ -881,8 +881,6 @@ def add_model_to_auto_classes(
                     "{pretrained_archive_map}", f"{new_model_patterns.model_upper_cased}_PRETRAINED_CONFIG_ARCHIVE_MAP"
                 )
 
-            if file == "configuration_auto.py":
-                print(old_model_line, new_model_line, new_model_patterns.config_class)
             new_model_line = new_model_line.replace(
                 old_model_patterns.model_camel_cased, new_model_patterns.model_camel_cased
             )
