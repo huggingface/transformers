@@ -7,7 +7,7 @@ jobs:
   build_and_package:
     runs-on: [self-hosted, doc-builder]
     container:
-      image: lysandrejik/doc-builder-transformers
+      image: huggingface/doc-builder-transformers
       options: "-v /home/github_actions:/mnt"
     env:
       PR_NUMBER: ${{ github.event.number }}
