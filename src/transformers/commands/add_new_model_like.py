@@ -813,7 +813,7 @@ def insert_tokenizer_in_auto_module(old_model_patterns: ModelPatterns, new_model
         idx += 1
 
         # If we find the model type and tokenizer class in that block, we have the old model tokenizer block
-        if old_model_patterns.model_type in block and old_model_patterns.tokenizer_class in block:
+        if f'"{old_model_patterns.model_type}"' in block and old_model_patterns.tokenizer_class in block:
             break
 
     new_block = block.replace(old_model_patterns.model_type, new_model_patterns.model_type)
