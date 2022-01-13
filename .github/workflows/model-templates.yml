@@ -21,11 +21,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v1
 
-      - name: Install Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: 3.6
-
       - name: Loading cache.
         uses: actions/cache@v2
         id: cache
