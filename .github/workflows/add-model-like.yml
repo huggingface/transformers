@@ -17,6 +17,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Debug
+        run: |
+          ls
+          ls docs
+          ls docs/source
+          ls docs/source/model_doc
+
       - name: Loading cache.
         uses: actions/cache@v2
         id: cache
