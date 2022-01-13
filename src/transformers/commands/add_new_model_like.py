@@ -1108,7 +1108,7 @@ def create_new_model_like(
 
 
 def add_new_model_like_command_factory(args: Namespace):
-    return AddNewModelLikeCommand(config_file=args.config_file)
+    return AddNewModelLikeCommand(config_file=args.config_file, path_to_repo=args.path_to_repo)
 
 
 class AddNewModelLikeCommand(BaseTransformersCLICommand):
@@ -1144,6 +1144,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             REPO_PATH = Path(self.path_to_repo)
             TRANSFORMERS_PATH = REPO_PATH / "src" / "transformers"
         print(REPO_PATH.absolute(), TRANSFORMERS_PATH.absolute(), self.path_to_repo)
+
         create_new_model_like(
             model_type=self.old_model_type,
             new_model_patterns=self.model_patterns,
