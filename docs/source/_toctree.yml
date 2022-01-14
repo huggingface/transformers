@@ -11,12 +11,16 @@
     title: Glossary
   title: Get started
 - sections:
+  - local: pipeline_tutorial
+    title: Pipeline
+  - local: autoclass_tutorial
+    title: AutoClasses
+  - local: preprocessing
+    title: Preprocess
   - local: task_summary
     title: Summary of the tasks
   - local: model_summary
     title: Summary of the models
-  - local: preprocessing
-    title: Preprocessing data
   - local: training
     title: Fine-tuning a pretrained model
   - local: model_sharing
@@ -25,7 +29,7 @@
     title: Summary of the tokenizers
   - local: multilingual
     title: Multi-lingual models
-  title: "Using 🤗 Transformers"
+  title: "Tutorials"
 - sections:
   - local: examples
     title: Examples
