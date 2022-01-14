@@ -301,21 +301,24 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
     def test_change_tokenize_chinese_chars(self):
-        list_of_commun_chinese_char = ["的", "是", "人", "有"]
+        list_of_commun_chinese_char = ["的", "人", "有"]
         text_with_chinese_char = "".join(list_of_commun_chinese_char)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
 
                 kwargs["tokenize_chinese_chars"] = True
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-                ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
                 ids_without_spe_char_p = tokenizer_p.encode(text_with_chinese_char, add_special_tokens=False)
+                ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
 
-                # Here, it is expected that there will be a returned id for each Chinese character
-                self.assertEqual(len(ids_without_spe_char_r), len(list_of_commun_chinese_char))
-                self.assertEqual(len(ids_without_spe_char_p), len(list_of_commun_chinese_char))
+                tokens_without_spe_char_r = tokenizer_r.convert_ids_to_tokens(ids_without_spe_char_r)
+                tokens_without_spe_char_p = tokenizer_p.convert_ids_to_tokens(ids_without_spe_char_p)
+
+                # it is expected that each Chinese character is not preceded by "##"
+                self.assertListEqual(tokens_without_spe_char_p, list_of_commun_chinese_char)
+                self.assertListEqual(tokens_without_spe_char_r, list_of_commun_chinese_char)
 
                 kwargs["tokenize_chinese_chars"] = False
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
@@ -324,7 +327,12 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
                 ids_without_spe_char_p = tokenizer_p.encode(text_with_chinese_char, add_special_tokens=False)
 
-                # Here as the Chinese characters have not been separated from each other, it is too likely to be a
-                # token unknown to the tokenizer
-                self.assertListEqual(ids_without_spe_char_p, [tokenizer_p.unk_token_id])
-                self.assertListEqual(ids_without_spe_char_r, [tokenizer_p.unk_token_id])
+                tokens_without_spe_char_r = tokenizer_r.convert_ids_to_tokens(ids_without_spe_char_r)
+                tokens_without_spe_char_p = tokenizer_p.convert_ids_to_tokens(ids_without_spe_char_p)
+
+                # it is expected that only the first Chinese character is not preceded by "##".
+                expected_tokens = [
+                    f"##{token}" if idx != 0 else token for idx, token in enumerate(list_of_commun_chinese_char)
+                ]
+                self.assertListEqual(tokens_without_spe_char_p, expected_tokens)
+                self.assertListEqual(tokens_without_spe_char_r, expected_tokens)
