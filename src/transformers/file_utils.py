@@ -52,6 +52,7 @@ from filelock import FileLock
 from huggingface_hub import HfFolder, Repository, create_repo, list_repo_files, whoami
 from requests.exceptions import HTTPError
 from transformers.utils.versions import importlib_metadata
+from transformers.utils.tqdm_utils import is_progress_bar_enabled
 
 from . import __version__
 from .utils import logging
@@ -1918,7 +1919,7 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
         total=total,
         initial=resume_size,
         desc="Downloading",
-        disable=bool(logging.get_verbosity() == logging.NOTSET),
+        disable=(not is_progress_bar_enabled()),
     )
     for chunk in r.iter_content(chunk_size=1024):
         if chunk:  # filter out keep-alive new chunks
