@@ -21,7 +21,7 @@ from typing import Optional, Tuple
 
 import tensorflow as tf
 
-from ...activations_tf import ACT2FN
+from ...activations_tf import glu
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -108,9 +108,6 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-## done up to here
-
-
 class TFConv1dSubsampler(tf.keras.layers.Layer):
     """
     Convolutional subsampler: a stack of 1D convolution (along temporal dimension) followed by non-linear activation
@@ -139,20 +136,15 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
         hidden_states = tf.transpose(input_features, perm=[0, 2, 1, 3]) # -> B x (C x D) x T
         for conv in self.conv_layers:
             hidden_states = conv(hidden_states)
-            hidden_states = nn.functional.glu(hidden_states, dim=1)
-
-        hidden_states = input_features.transpose(1, 2).contiguous()  # -> B x (C x D) x T
-        for conv in self.conv_layers:
-            hidden_states = conv(hidden_states)
-            hidden_states = nn.functional.glu(hidden_states, dim=1)
-        hidden_states = hidden_states.transpose(1, 2).contiguous()  # -> T x B x (C x D)
+            hidden_states = glu(hidden_states, axis=1)
+        hidden_states = tf.transpose(hidden_states, perm=[0, 2, 1, 3])  # -> T x B x (C x D)
         return hidden_states
 
 
-## partially done up to here
+## done up to here
 
 
-class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
+class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -160,17 +152,7 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
         self.offset = 2
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
-        self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
-
-    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
-        if hasattr(self, "weights"):
-            # in forward put the weights on the correct dtype and device of the param
-            emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
-
-        self.weights = nn.Parameter(emb_weights)
-        self.weights.requires_grad = False
-        self.weights.detach_()
+        self.weights = self.get_embedding(num_positions + self.offset, embedding_dim, padding_idx)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -179,19 +161,19 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
         description in Section 3.5 of "Attention Is All You Need".
         """
         half_dim = embedding_dim // 2
-        emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
-        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
-        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
+        emb = tf.math.log(10000.) / (half_dim - 1)
+        emb = tf.math.exp(tf.range(half_dim, dtype=tf.float32) * -emb)
+        emb = tf.expand_dims(tf.range(num_embeddings, dtype=tf.float32), axis=1) * tf.expand_dims(emb, axis=0)
+        emb = tf.reshape(tf.concat([tf.math.sin(emb), tf.math.cos(emb)], axis=1), shape=[num_embeddings, -1])
         if embedding_dim % 2 == 1:
             # zero pad
-            emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
+            emb = tf.concat([emb, tf.zeros(num_embeddings, 1)], axis=1)
         if padding_idx is not None:
+            #### stopped here!
             emb[padding_idx, :] = 0
         return emb
 
-    @torch.no_grad()
-    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
+    def call(self, input_ids: tf.Tensor, past_key_values_length: int = 0):
         bsz, seq_len = input_ids.size()
         # Create the position ids from the input token ids. Any padded tokens remain padded.
         position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
@@ -220,6 +202,9 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
         mask = input_ids.ne(padding_idx).int()
         incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
         return incremental_indices.long() + padding_idx
+
+
+## partially done up to here
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Speech2Text
