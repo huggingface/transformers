@@ -88,24 +88,24 @@ def window_reverse(windows, window_size, H, W):
         H (int): Height of image
         W (int): Width of image
     Returns:
-        x: (B, H, W, C)
+        windows: (B, H, W, C)
     """
     B = int(windows.shape[0] / (H * W / window_size / window_size))
-    x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
-    return x
+    windows = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
+    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
+    return windows
 
-def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: bool = True):
+def drop_path(input, drop_prob = 0., training = False, scale_by_keep = True):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     """
     if drop_prob == 0. or not training:
-        return x
+        return input
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = input.new_empty(shape).bernoulli_(keep_prob)
     if keep_prob > 0.0 and scale_by_keep:
         random_tensor.div_(keep_prob)
-    return x * random_tensor
+    return input * random_tensor
 
 class SwinEmbeddings(nn.Module):
     """
@@ -120,17 +120,17 @@ class SwinEmbeddings(nn.Module):
             image_size=config.image_size,
             patch_size=config.patch_size,
             num_channels=config.num_channels,
-            embed_dim=config.embed_dim,
+            embed_dim=config.hidden_size,
         )
         num_patches = self.patch_embeddings.num_patches
         self.patch_grid = self.patch_embeddings.grid_size
 
         if config.use_absolute_embeddings:
-            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.embed_dim))
+            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         else:
             self.position_embeddings = None
 
-        self.norm = config.norm_layer(config.embed_dim)
+        self.norm = nn.LayerNorm(config.hidden_size)
         self.dropout = nn.Dropout(config.drop_rate)
 
     def forward(self, pixel_values):
@@ -163,8 +163,8 @@ class PatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values):
-        x = self.projection(pixel_values).flatten(2).transpose(1, 2)
-        return x
+        pixel_values = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        return pixel_values
 
 class PatchMerging(nn.Module):
     r""" Patch Merging Layer.
@@ -203,7 +203,7 @@ class PatchMerging(nn.Module):
         input_feature = self.norm(input_feature)
         input_feature = self.reduction(input_feature)
 
-        return x
+        return input_feature
 
 class DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -213,8 +213,8 @@ class DropPath(nn.Module):
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
 
-    def forward(self, x):
-        return drop_path(x, self.drop_prob, self.training, self.scale_by_keep)
+    def forward(self, input):
+        return drop_path(input, self.drop_prob, self.training, self.scale_by_keep)
 
 class SwinSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads):
@@ -506,7 +506,7 @@ class SwinLayer(nn.Module):
 
         # patch merging layer
         if downsample is not None:
-            self.downsample = downsample(input_resolution, dim=dim, norm_layer=config.norm_layer)
+            self.downsample = downsample(input_resolution, dim=dim, norm_layer=nn.LayerNorm)
         else:
             self.downsample = None
 
@@ -550,7 +550,7 @@ class SwinEncoder(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         self.layers = nn.ModuleList([SwinLayer(
                 config=config,
-                dim=int(config.embed_dim * 2 ** i_layer),
+                dim=int(config.hidden_size * 2 ** i_layer),
                 input_resolution=(grid_size[0] // (2 ** i_layer), grid_size[1] // (2 ** i_layer)),
                 depth=config.depths[i_layer],
                 num_heads=config.num_heads[i_layer],
@@ -695,7 +695,7 @@ class SwinModel(SwinPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.num_layers = len(config.depths)
-        self.num_features = int(config.embed_dim * 2 ** (self.num_layers - 1))
+        self.num_features = int(config.hidden_size * 2 ** (self.num_layers - 1))
 
         self.embeddings = SwinEmbeddings(config)
         self.encoder = SwinEncoder(config, self.embeddings.patch_grid)
@@ -873,7 +873,7 @@ class SwinForImageClassification(SwinPreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(

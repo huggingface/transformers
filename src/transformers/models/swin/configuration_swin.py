@@ -46,7 +46,7 @@ class SwinConfig(PretrainedConfig):
             Size of patches.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels in input images.
-        embed_dim (`int`, *optional*, defaults to 96):
+        hidden_size (`int`, *optional*, defaults to 96):
             Dimensionality of patch embedding.
         depths (`list(int)`, *optional*, defaults to [2, 2, 6, 2]):
             Depth of each layer in the Transformer encoder.
@@ -64,8 +64,6 @@ class SwinConfig(PretrainedConfig):
             Attention dropout rate.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             Stochastic depth rate.
-        norm_layer (`nn.Module`, *optional*, defaults to nn.LayerNorm):
-            Normalization layer.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
@@ -101,7 +99,7 @@ class SwinConfig(PretrainedConfig):
         patch_size=4, 
         num_channels=3, 
         num_labels=1000,
-        embed_dim=96, 
+        hidden_size=96, 
         depths=[2, 2, 6, 2], 
         num_heads=[3, 6, 12, 24],
         window_size=7, 
@@ -110,7 +108,6 @@ class SwinConfig(PretrainedConfig):
         drop_rate=0., 
         attn_drop_rate=0., 
         drop_path_rate=0.1,
-        norm_layer=nn.LayerNorm,
         hidden_act="gelu",
         use_absolute_embeddings=False, 
         patch_norm=True,
@@ -124,7 +121,7 @@ class SwinConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.num_labels = num_labels
-        self.embed_dim = embed_dim
+        self.hidden_size = hidden_size
         self.depths = depths
         self.num_heads = num_heads
         self.window_size = window_size
@@ -133,7 +130,6 @@ class SwinConfig(PretrainedConfig):
         self.drop_rate = drop_rate
         self.attn_drop_rate = attn_drop_rate
         self.drop_path_rate = drop_path_rate
-        self.norm_layer = norm_layer
         self.hidden_act = hidden_act
         self.use_absolute_embeddings = use_absolute_embeddings
         self.path_norm = patch_norm

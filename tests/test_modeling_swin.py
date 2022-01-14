@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Swin model. """
 
+import copy
 import inspect
 import unittest
 
@@ -43,27 +44,34 @@ if is_vision_available():
 
     from transformers import SwinFeatureExtractor
 
+def _config_zero_init(config):
+    configs_no_init = copy.deepcopy(config)
+    for key in configs_no_init.__dict__.keys():
+        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+            setattr(configs_no_init, key, 1e-10)
+    return configs_no_init
+
+
 class SwinModelTester:
     def __init__(
         self,
         parent,
         batch_size=13,
-        image_size=224, 
+        image_size=32, 
         patch_size=2, 
         num_channels=3, 
         num_labels=1000,
-        embed_dim=16, 
-        depths=(1,), 
-        num_heads=(2,),
+        hidden_size=16, 
+        depths=[1], 
+        num_heads=[2],
         window_size=2, 
         mlp_ratio=2., 
         qkv_bias=True,
         drop_rate=0., 
         attn_drop_rate=0., 
         drop_path_rate=0.1,
-        norm_layer=nn.LayerNorm,
         hidden_act="gelu",
-        ape=False, 
+        use_absolute_embeddings=False, 
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
@@ -78,7 +86,7 @@ class SwinModelTester:
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.num_labels = num_labels
-        self.embed_dim = embed_dim
+        self.hidden_size = hidden_size
         self.depths = depths
         self.num_heads = num_heads
         self.window_size = window_size
@@ -87,9 +95,8 @@ class SwinModelTester:
         self.drop_rate = drop_rate
         self.attn_drop_rate = attn_drop_rate
         self.drop_path_rate = drop_path_rate
-        self.norm_layer = norm_layer
         self.hidden_act = hidden_act
-        self.ape = ape
+        self.use_absolute_embeddings = use_absolute_embeddings
         self.patch_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
@@ -115,7 +122,7 @@ class SwinModelTester:
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             num_labels=self.num_labels,
-            embed_dim=self.embed_dim,
+            hidden_size=self.hidden_size,
             depths=self.depths,
             num_heads=self.num_heads,
             window_size=self.window_size,
@@ -124,9 +131,8 @@ class SwinModelTester:
             drop_rate=self.drop_rate,
             attn_drop_rate=self.attn_drop_rate,
             drop_path_rate=self.drop_path_rate,
-            norm_layer=self.norm_layer,
             hidden_act=self.hidden_act,
-            ape=self.ape,
+            use_absolute_embeddings=self.use_absolute_embeddings,
             path_norm=self.patch_norm,
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
@@ -138,7 +144,7 @@ class SwinModelTester:
         model.eval()
         result = model(pixel_values)
 
-        num_features = int(config.embed_dim * 2 ** (len(config.depths) - 1))
+        num_features = int(config.hidden_size * 2 ** (len(config.depths) - 1))
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_features))
 
@@ -180,7 +186,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SwinModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SwinConfig, embed_dim=37)
+        self.config_tester = ConfigTester(self, config_class=SwinConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -247,6 +253,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
+            window_size_squared = config.window_size ** 2
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -258,12 +265,12 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             if chunk_length is not None:
                 self.assertListEqual(
                     list(attentions[0].shape[-4:]),
-                    [self.model_tester.num_heads[0], encoder_seq_length, chunk_length, encoder_key_length],
+                    [self.model_tester.num_heads[0], window_size_squared, chunk_length, window_size_squared],
                 )
             else:
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_heads[0], 5, encoder_key_length],
+                    [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
                 )
             out_len = len(outputs)
 
@@ -290,12 +297,12 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             if chunk_length is not None:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_heads[0], encoder_seq_length, chunk_length, encoder_key_length],
+                    [self.model_tester.num_heads[0], window_size_squared, chunk_length, window_size_squared],
                 )
             else:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_heads[0], encoder_seq_length, encoder_key_length],
+                    [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
                 )
 
     def test_hidden_states_output(self):
@@ -321,7 +328,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [num_patches, self.model_tester.embed_dim],
+                [num_patches, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -345,6 +352,20 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = SwinModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if 'embeddings' not in name and param.requires_grad:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
 @require_vision
 @require_torch
