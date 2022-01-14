@@ -175,12 +175,12 @@ except importlib_metadata.PackageNotFoundError:
     _sympy_available = False
 
 
-_keras2onnx_available = importlib.util.find_spec("keras2onnx") is not None
+_tf2onnx_available = importlib.util.find_spec("tf2onnx") is not None
 try:
-    _keras2onnx_version = importlib_metadata.version("keras2onnx")
-    logger.debug(f"Successfully imported keras2onnx version {_keras2onnx_version}")
+    _tf2onnx_version = importlib_metadata.version("tf2onnx")
+    logger.debug(f"Successfully imported tf2onnx version {_tf2onnx_version}")
 except importlib_metadata.PackageNotFoundError:
-    _keras2onnx_available = False
+    _tf2onnx_available = False
 
 _onnx_available = importlib.util.find_spec("onnxruntime") is not None
 try:
@@ -429,8 +429,8 @@ def is_coloredlogs_available():
     return _coloredlogs_available
 
 
-def is_keras2onnx_available():
-    return _keras2onnx_available
+def is_tf2onnx_available():
+    return _tf2onnx_available
 
 
 def is_onnx_available():
