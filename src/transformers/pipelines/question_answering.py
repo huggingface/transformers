@@ -439,7 +439,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 # the left hand side, since now we have different offsets
                 # everywhere.
                 if self.tokenizer.padding_side == "left":
-                    offset = (output["input_ids"] == self.tokenizer.pad_token_id).sum().item()
+                    offset = (output["input_ids"] == self.tokenizer.pad_token_id).numpy().sum()
                 else:
                     offset = 0
 
