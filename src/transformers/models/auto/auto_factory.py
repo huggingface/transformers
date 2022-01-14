@@ -528,6 +528,7 @@ def get_values(model_mapping):
 
 
 def getattribute_from_module(module, attr):
+    print(attr)
     if attr is None:
         return None
     if isinstance(attr, tuple):
