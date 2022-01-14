@@ -28,6 +28,14 @@ jobs:
           repository: 'huggingface/notebooks'
           path: notebooks
 
+      - name: Comment PR
+        uses: thollander/actions-comment-pull-request@v1
+        if: github.event.pull_request.action == 'opened'
+
+        with:
+          message: 'Thank you for your PR! The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_15110).\n\nAll of your documentation changes will be reflected on that endpoint.'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Loading cache.
         uses: actions/cache@v2
         id: cache
