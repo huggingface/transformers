@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          repository: 'huggingface/doc-builder'
-          path: doc-builder
+          repository: 'huggingface/doc-build'
+          path: doc-build
           token: ${{ secrets.HUGGINGFACE_PUSH }}
       
       - uses: actions/checkout@v2
@@ -64,10 +64,10 @@ jobs:
 
       - name: Setup git
         run: |
-          git config --global user.name "Hugging Face"
-          git config --global user.email transformers@huggingface.co
+          git config --global user.name "Hugging Face Doc Builder"
+          git config --global user.email docs@huggingface.co
           
-          cd doc-builder
+          cd doc-build
           git pull origin main
           cd ..
 
@@ -77,13 +77,13 @@ jobs:
 
       - name: Make documentation
         run: |
-          doc-builder build transformers transformers/docs/source --build_dir doc-builder/build --notebook_dir notebooks/transformers_doc --clean
+          doc-builder build transformers transformers/docs/source --build_dir doc-build --notebook_dir notebooks/transformers_doc --clean
 
       - name: Push to repositories
         run: |
-          cd doc-builder
+          cd doc-build
           if [[ `git status --porcelain` ]]; then
-            git add build
+            git add .
             git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
             git push origin main
           else
