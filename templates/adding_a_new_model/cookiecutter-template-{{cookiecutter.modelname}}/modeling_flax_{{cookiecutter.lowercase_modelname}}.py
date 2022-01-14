@@ -2119,17 +2119,18 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+        ```python
+        >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 
-            >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
-            >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
-        """
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
+        >>> encoder_outputs = model.encode(**inputs)
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2184,23 +2185,24 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+        ```python
+        >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 
-            >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
-            >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
+        >>> encoder_outputs = model.encode(**inputs)
 
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> last_decoder_hidden_states = outputs.last_hidden_state
-        """
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> last_decoder_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2450,23 +2452,24 @@ class Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(Flax{{coo
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+        ```python
+        >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 
-            >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
-            >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
+        >>> encoder_outputs = model.encode(**inputs)
 
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> logits = outputs.logits
-        """
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
