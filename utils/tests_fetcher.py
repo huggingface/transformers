@@ -243,6 +243,7 @@ def create_reverse_dependency_map():
 # Any module file that has a test name which can't be inferred automatically from its name should go here. A better
 # approach is to (re-)name the test file accordingly, and second best to add the correspondence map here.
 SPECIAL_MODULE_TO_TEST_MAP = {
+    "commands/add_new_model_like.py": "test_add_new_model_like.py",
     "configuration_utils.py": "test_configuration_common.py",
     "convert_graph_to_onnx.py": "test_onnx.py",
     "data/data_collator.py": "test_data_collator.py",

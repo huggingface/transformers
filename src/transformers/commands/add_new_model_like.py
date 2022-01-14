@@ -487,7 +487,7 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     model_files = list(model_module.glob("*.py"))
     model_files = filter_framework_files(model_files, frameworks=frameworks)
 
-    doc_file = REPO_PATH / "models" / "docs" / "source" / f"{model_type}.mdx"
+    doc_file = REPO_PATH / "docs" / "source" / "model_doc" / f"{model_type}.mdx"
 
     # Basic pattern for test files
     test_files = [
