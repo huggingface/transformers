@@ -24,7 +24,9 @@ Install 🤗 Transformers for whichever deep learning library you're working wit
 * [TensorFlow 2.0](https://www.tensorflow.org/install/pip) installation instructions.
 * [Flax](https://flax.readthedocs.io/en/latest/) installation instructions.
 
-You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, take a look at this [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). A virtual environment makes it easier to manage different projects, and avoid compatibility issues between dependencies.
+## Install with pip
+
+You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, take a look at this [guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). A virtual environment makes it easier to manage different projects, and avoid compatibility issues between dependencies.
 
 Start by creating a virtual environment in your project directory:
 
@@ -38,11 +40,7 @@ Activate the virtual environment:
 source .env/bin/activate
 ```
 
-Now you're ready to install 🤗 Transformers! If you'd like to experiment with the source code, you must install it from source.
-
-## Install with pip
-
-Install 🤗 Transformers with the following command:
+Now you're ready to install 🤗 Transformers with the following command:
 
 ```bash
 pip install transformers
@@ -72,7 +70,7 @@ Finally, check if 🤗 Transformers has been properly installed by running the f
 python -c "from transformers import pipeline; print(pipeline('sentiment-analysis')('we love you'))"
 ```
 
-Then print out a label and score:
+Then print out the label and score:
 
 ```bash
 [{'label': 'POSITIVE', 'score': 0.9998704791069031}]
@@ -86,7 +84,7 @@ Install 🤗 Transformers from source with the following command:
 pip install git+https://github.com/huggingface/transformers
 ```
 
-This command installs the bleeding edge `master` version rather than the latest `stable` version. The `master` version is useful for staying up-to-date with the latest developments. For instance, if a bug has been fixed since the last official release but a new release hasn't been rolled out yet. However, this means the `master` version may not always be stable. We strive to keep the `master` version operational, and most issues are usually resolved within a few hours or a day. If you encounter an issue, please open an [Issue](https://github.com/huggingface/transformers/issues) so we can fix it even sooner!
+This command installs the bleeding edge `master` version rather than the latest `stable` version. The `master` version is useful for staying up-to-date with the latest developments. For instance, if a bug has been fixed since the last official release but a new release hasn't been rolled out yet. However, this means the `master` version may not always be stable. We strive to keep the `master` version operational, and most issues are usually resolved within a few hours or a day. If you run into a problem, please open an [Issue](https://github.com/huggingface/transformers/issues) so we can fix it even sooner!
 
 Check if 🤗 Transformers has been properly installed by running the following command:
 
@@ -109,13 +107,13 @@ cd transformers
 pip install -e .
 ```
 
-These commands will link the folder you cloned the repository to and your Python library paths. Python will now look inside this folder in addition to the normal library paths. For example, if your Python packages are typically installed in `~/anaconda3/envs/main/lib/python3.7/site-packages/`, Python will also search the folder you cloned to: `~/transformers/`.
+These commands will link the folder you cloned the repository to and your Python library paths. Python will now look inside the folder you cloned to in addition to the normal library paths. For example, if your Python packages are typically installed in `~/anaconda3/envs/main/lib/python3.7/site-packages/`, Python will also search the folder you cloned to: `~/transformers/`.
 
 <Tip warning={true}>
 You must keep the `transformers` folder if you want to keep using the library.
 </Tip>
 
-Now you can easily update your clone to the latest version of 🤗 Transformers with the following commands:
+Now you can easily update your clone to the latest version of 🤗 Transformers with the following command:
 
 ```bash
 cd ~/transformers/
@@ -134,16 +132,14 @@ conda install -c huggingface transformers
 
 ## Cache setup
 
-Pretrained models are downloaded and locally cached at: `~/.cache/huggingface/transformers/`. This is the default directory given by the shell environment variable `TRANSFORMERS_CACHE`. You can change the shell environment variables shown below - in order of priority - to specify a different cache directory:
+Pretrained models are downloaded and locally cached at: `~/.cache/huggingface/transformers/`. This is the default directory given by the shell environment variable `TRANSFORMERS_CACHE`. On Windows, the default directory is given by `C:\Users\username\.cache\huggingface\transformers`. You can change the shell environment variables shown below - in order of priority - to specify a different cache directory:
 
 1. Shell environment variable (default): `TRANSFORMERS_CACHE`.
-2. Shell environment variable: `HF_HOME`.
-3. Shell environment variable: `XDG_CACHE_HOME` + `/huggingface/`.
-
-On Windows, the default directory is given by `C:\Users\username\.cache\huggingface\transformers`.
+2. Shell environment variable: `HF_HOME` + `transformers/`.
+3. Shell environment variable: `XDG_CACHE_HOME` + `/huggingface/transformers`.
 
 <Tip>
-🤗 Transformers will use the shell environment variables `PYTORCH_TRANSFORMERS_CACHE` or `PYTORCH_PRETRAINED_BERT_CACHE` if you are coming from an earlier iteration of this library unless you specify the shell environment variable `TRANSFORMERS_CACHE`.
+🤗 Transformers will use the shell environment variables `PYTORCH_TRANSFORMERS_CACHE` or `PYTORCH_PRETRAINED_BERT_CACHE` if you are coming from an earlier iteration of this library and have set those environment variables, unless you specify the shell environment variable `TRANSFORMERS_CACHE`.
 </Tip>
 
 ## Offline mode
@@ -205,17 +201,17 @@ Another option for using 🤗 Transformers offline is to download the files ahea
 
     1. Install the `huggingface_hub` library in your virtual environment:
 
-        ```bash
-        python -m pip install huggingface_hub
-        ```
+    ```bash
+    python -m pip install huggingface_hub
+    ```
 
     2. Use the [`hf_hub_download`](https://huggingface.co/docs/hub/adding-a-library#download-files-from-the-hub) function to download a file to a specific path. For example, the following command downloads the `config.json` file from the [T0](https://huggingface.co/bigscience/T0_3B) model to your desired path:
 
-        ```python
-        >>> from huggingface_hub import hf_hub_download
+    ```python
+    >>> from huggingface_hub import hf_hub_download
 
-        >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./your/path/bigscience_t0")
-        ```
+    >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./your/path/bigscience_t0")
+    ```
 
 Once your file is downloaded and locally cached, specify it's local path to load and use it:
 

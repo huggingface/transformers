@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-Get up and running with 🤗 Transformers! Start using the [`pipeline`] for rapid inference, and quickly load a pretrained model and tokenizer with [AutoClasses](./model_doc/auto) to solve your text, vision or audio task.
+Get up and running with 🤗 Transformers! Start using the [`pipeline`] for rapid inference, and quickly load a pretrained model and tokenizer with an [AutoClass](./model_doc/auto) to solve your text, vision or audio task.
 
 <Tip>
 All code examples presented in the documentation have a toggle on the top left for PyTorch and TensorFlow. If
@@ -75,7 +75,7 @@ Import [`pipeline`] and specify the task you want to complete:
 The pipeline downloads and caches a default [pretrained model](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) and tokenizer for sentiment analysis. Now you can use the `classifier` on your target text:
 
 ```py
->>> classifier("We are very happy to show you the 🤗 Transformers library."")
+>>> classifier("We are very happy to show you the 🤗 Transformers library.")
 [{"label": "POSITIVE", "score": 0.9998}]
 ```
 
@@ -84,7 +84,7 @@ For more than one sentence, pass a list of sentences to the [`pipeline`] which r
 ```py
 >>> results = classifier(["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."])
 >>> for result in results:
-...     print(f"label: {result["label"]}, with score: {round(result["score"], 4)}")
+...     print(f"label: {result['label']}, with score: {round(result['score'], 4)}")
 label: POSITIVE, with score: 0.9998
 label: NEGATIVE, with score: 0.5309
 ```
@@ -103,7 +103,7 @@ Create a [`pipeline`] with the task you want to solve for and the model you want
 >>> speech_recognizer = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
 ```
 
-Next, load a dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html#) for more details) you'd like to iterate over. For example, let's load the [SUPERB](https://huggingface.co/datasets/superb) dataset:
+Next, load a dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) for more details) you'd like to iterate over. For example, let's load the [SUPERB](https://huggingface.co/datasets/superb) dataset:
 
 ```py
 >>> import datasets
@@ -115,21 +115,19 @@ Now you can iterate over the dataset with the pipeline. `KeyDataset` retrieves t
 
 ```py
 >>> for out in tqdm.tqdm(speech_recognizer(KeyDataset(dataset, "file"))):
-        print(out)
-        # {"text": "HE HOPED THERE WOULD BE STEW FOR DINNER TURNIPS AND CARROTS AND BRUISED POTATOES AND FAT MUTTON PIECES TO BE LADLED OUT IN THICK PEPPERED FLOWER FAT AND SAUCE"}
-        # {"text": ....}
-        # ....
+...     print(out)
+{"text": "HE HOPED THERE WOULD BE STEW FOR DINNER TURNIPS AND CARROTS AND BRUISED POTATOES AND FAT MUTTON PIECES TO BE LADLED OUT IN THICK PEPPERED FLOWER FAT AND SAUCE"}
 ```
 
 ### Use another model and tokenizer in the pipeline
 
-The [`pipeline`] can accommodate any model from the Model Hub, making it easy to adapt the [`pipeline`] for other use-cases. For example, if you'd like a model capable of handling French text, use the tags on the [Model Hub](https://huggingface.co/models) to filter for an appropriate model. The top filtered result returns a multilingual [BERT model](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) fine-tuned for sentiment analysis. Great, let's use this model!
+The [`pipeline`] can accommodate any model from the [Model Hub](https://huggingface.co/models), making it easy to adapt the [`pipeline`] for other use-cases. For example, if you'd like a model capable of handling French text, use the tags on the Model Hub to filter for an appropriate model. The top filtered result returns a multilingual [BERT model](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) fine-tuned for sentiment analysis. Great, let's use this model!
 
 ```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
-Use the [`AutoModel`] and ['AutoTokenizer'] to load the pretrained model and it's associated tokenizer (more on the `AutoClasses` below):
+Use the [`AutoModelForSequenceClassification`] and ['AutoTokenizer'] to load the pretrained model and it's associated tokenizer (more on an `AutoClass` below):
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -153,27 +151,22 @@ Then you can specify the model and tokenizer in the [`pipeline`], and apply the 
 
 If you can't find a model for your use-case, you will need to fine-tune a pretrained model on your data. Take a look at our [fine-tuning tutorial](./training) to learn how. Finally, after you've fine-tuned your pretrained model, please consider sharing it (see tutorial [here](./model_sharing)) with the community on the Model Hub to democratize NLP for everyone! 🤗
 
-## AutoClasses
+## AutoClass
 
 <Youtube id="AhChOFRegn4"/>
 
-Under the hood, the [`AutoModel`] and [`AutoTokenizer`] classes work together to power the [`pipeline`]. The [`AutoClasses`](./model_doc/auto) are shortcuts that automatically retrieves the model architecture of a pretrained model from it's name or path. You only need to select the appropriate [`AutoModel`] for your task and it's associated tokenizer with [`AutoTokenizer`]. 
+Under the hood, the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] classes work together to power the [`pipeline`]. An [`AutoClass`](./model_doc/auto) is a shortcut that automatically retrieves the architecture of a pretrained model from it's name or path. You only need to select the appropriate `AutoClass` for your task and it's associated tokenizer with [`AutoTokenizer`]. 
 
-Let's return to our example and see how we can use the `AutoClasses` to replicate the results of the [`pipeline`].
+Let's return to our example and see how we can use an `AutoClass` to replicate the results of the [`pipeline`].
 
 ### Using the AutoTokenizer
 
-A tokenizer is responsible for preprocessing text in a way that is understandable by the model. First, the tokenizer will split a given text into words called *tokens*. There are multiple rules that govern the tokenization process, including how to split a word and at what level (learn more [here](./tokenizer_summary)). The most important thing to remember though is you need to instantiate the tokenizer with the name of the model to ensure you're using the same tokenization rules a model was pretrained with.
+A tokenizer is responsible for preprocessing text in a way that is understandable by the model. First, the tokenizer will split the text into words called *tokens*. There are multiple rules that govern the tokenization process, including how to split a word and at what level (learn more [here](./tokenizer_summary)). The most important thing to remember though is you need to instantiate the tokenizer with the same model name to ensure you're using the same tokenization rules a model was pretrained with.
 
 Load a tokenizer with [`AutoTokenizer`]:
 
 ```py
->>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
-
->>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-===PT-TF-SPLIT===
->>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+>>> from transformers import AutoTokenizer
 
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -219,12 +212,16 @@ Read the [preprocessing](./preprocessing) tutorial for more details about tokeni
 
 ### Using the AutoModel
 
-🤗 Transformers provides a simple and unified way to load pretrained instances, which means you can load an [`AutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`AutoModel`] for the task. Since we are doing text - or sequence - classification, load [`AutoModelForSequenceClassification`]. The TensorFlow equivalent is simply [`TFAutoModelForSequenceClassification`]:
+🤗 Transformers provides a simple and unified way to load pretrained instances. This means you can load an [`AutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`AutoModel`] for the task. Since we are doing text - or sequence - classification, load [`AutoModelForSequenceClassification`]. The TensorFlow equivalent is simply [`TFAutoModelForSequenceClassification`]:
 
 ```py
+>>> from transformers import AutoModelForSequenceClassification
+
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
 ===PT-TF-SPLIT===
+>>> from transformers import TFAutoModelForSequenceClassification
+
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> # This model only exists in PyTorch, so we use the _from_pt_ flag to import that model in TensorFlow.
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True)
@@ -255,7 +252,7 @@ tensor([[2.2043e-04, 9.9978e-01],
 >>> import tensorflow as tf
 
 >>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
->>> print(tf_predictios)
+>>> print(tf_predictions)
 tf.Tensor(
 [[2.2043e-04 9.9978e-01]
  [5.3086e-01 4.6914e-01]], shape=(2, 2), dtype=float32)
@@ -269,7 +266,7 @@ function (like softmax) because the final activation function is often fused wit
 Models are standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) so you can use them in your usual training loop. However, to make things easier, 🤗 Transformers provides a [`Trainer`] class for PyTorch that adds functionality for distributed training, mixed precision, and more. For TensorFlow, you can use the `fit()` method from [Keras](https://keras.io/). Refer to the [training tutorial](./training) for more details.
 
 <Tip>
-PyTorch model outputs are special dataclasses so their attributes are autocompleted in an IDE.
+🤗 Transformers model outputs are special dataclasses so their attributes are autocompleted in an IDE.
 The model outputs also behave like a tuple or a dictionary (e.g., you can index with an integer, a slice or a string) in which
 case the attributes that are `None` are ignored.
 </Tip>
