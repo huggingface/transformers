@@ -35,6 +35,7 @@ from transformers.commands.add_new_model_like import (
     retrieve_info_for_model,
     retrieve_model_classes,
 )
+from transformers.testing_utils import require_flax, require_tf, require_torch
 
 
 BERT_MODEL_FILES = {
@@ -53,6 +54,9 @@ BERT_MODEL_FILES = {
 REPO_PATH = Path(transformers.__path__[0]).parent.parent
 
 
+@require_torch
+@require_tf
+@require_flax
 class TestAddNewModelLike(unittest.TestCase):
     def init_file(self, file_name, content):
         with open(file_name, "w", encoding="utf-8") as f:
