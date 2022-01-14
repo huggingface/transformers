@@ -120,17 +120,17 @@ class SwinEmbeddings(nn.Module):
             image_size=config.image_size,
             patch_size=config.patch_size,
             num_channels=config.num_channels,
-            embed_dim=config.hidden_size,
+            embed_dim=config.embed_dim,
         )
         num_patches = self.patch_embeddings.num_patches
         self.patch_grid = self.patch_embeddings.grid_size
 
         if config.use_absolute_embeddings:
-            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.embed_dim))
         else:
             self.position_embeddings = None
 
-        self.norm = nn.LayerNorm(config.hidden_size)
+        self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.drop_rate)
 
     def forward(self, pixel_values):
@@ -550,7 +550,7 @@ class SwinEncoder(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         self.layers = nn.ModuleList([SwinLayer(
                 config=config,
-                dim=int(config.hidden_size * 2 ** i_layer),
+                dim=int(config.embed_dim * 2 ** i_layer),
                 input_resolution=(grid_size[0] // (2 ** i_layer), grid_size[1] // (2 ** i_layer)),
                 depth=config.depths[i_layer],
                 num_heads=config.num_heads[i_layer],
@@ -695,7 +695,7 @@ class SwinModel(SwinPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.num_layers = len(config.depths)
-        self.num_features = int(config.hidden_size * 2 ** (self.num_layers - 1))
+        self.num_features = int(config.embed_dim * 2 ** (self.num_layers - 1))
 
         self.embeddings = SwinEmbeddings(config)
         self.encoder = SwinEncoder(config, self.embeddings.patch_grid)

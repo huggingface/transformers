@@ -60,8 +60,7 @@ class SwinModelTester:
         image_size=32, 
         patch_size=2, 
         num_channels=3, 
-        num_labels=1000,
-        hidden_size=16, 
+        embed_dim=16, 
         depths=[1], 
         num_heads=[2],
         window_size=2, 
@@ -85,8 +84,7 @@ class SwinModelTester:
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-        self.num_labels = num_labels
-        self.hidden_size = hidden_size
+        self.embed_dim = embed_dim
         self.depths = depths
         self.num_heads = num_heads
         self.window_size = window_size
@@ -121,8 +119,7 @@ class SwinModelTester:
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
-            num_labels=self.num_labels,
-            hidden_size=self.hidden_size,
+            embed_dim=self.embed_dim,
             depths=self.depths,
             num_heads=self.num_heads,
             window_size=self.window_size,
@@ -144,7 +141,7 @@ class SwinModelTester:
         model.eval()
         result = model(pixel_values)
 
-        num_features = int(config.hidden_size * 2 ** (len(config.depths) - 1))
+        num_features = int(config.embed_dim * 2 ** (len(config.depths) - 1))
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_features))
 
@@ -186,10 +183,19 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SwinModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SwinConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SwinConfig, embed_dim=37)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+
+    def create_and_test_config_common_properties(self):
+        return
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -328,7 +334,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [num_patches, self.model_tester.hidden_size],
+                [num_patches, self.model_tester.embed_dim],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

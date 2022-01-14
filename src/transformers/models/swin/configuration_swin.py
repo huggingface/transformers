@@ -45,7 +45,7 @@ class SwinConfig(PretrainedConfig):
             Size of patches.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels in input images.
-        hidden_size (`int`, *optional*, defaults to 96):
+        embed_dim (`int`, *optional*, defaults to 96):
             Dimensionality of patch embedding.
         depths (`list(int)`, *optional*, defaults to [2, 2, 6, 2]):
             Depth of each layer in the Transformer encoder.
@@ -97,8 +97,7 @@ class SwinConfig(PretrainedConfig):
         image_size=224, 
         patch_size=4, 
         num_channels=3, 
-        num_labels=1000,
-        hidden_size=96, 
+        embed_dim=96, 
         depths=[2, 2, 6, 2], 
         num_heads=[3, 6, 12, 24],
         window_size=7, 
@@ -119,8 +118,7 @@ class SwinConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-        self.num_labels = num_labels
-        self.hidden_size = hidden_size
+        self.embed_dim = embed_dim
         self.depths = depths
         self.num_heads = num_heads
         self.window_size = window_size
