@@ -2,8 +2,9 @@ from unittest.mock import patch
 
 from transformers import AutoModel
 from transformers.utils.tqdm_utils import set_progress_bar_enabled
+from transformers.testing_utils import require_torch
 
-
+@require_torch
 def test_set_progress_bar_enabled():
     with patch("tqdm.auto.tqdm") as mock_tqdm:
         set_progress_bar_enabled(True)
