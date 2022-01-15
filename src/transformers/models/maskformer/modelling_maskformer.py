@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from numbers import Number
+from pprint import pprint
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -138,7 +140,7 @@ def is_dist_avail_and_initialized():
 
 
 # copied from original implementation
-def dice_loss(inputs, targets, num_masks):
+def dice_loss(inputs: Tensor, targets: Tensor, num_masks: float) -> Tensor:
     """
     Compute the DICE loss, similar to generalized IOU for masks
     Args:
@@ -148,16 +150,18 @@ def dice_loss(inputs, targets, num_masks):
                  classification label for each element in inputs
                 (0 for the negative class and 1 for the positive class).
     """
-    inputs = inputs.sigmoid()
-    inputs = inputs.flatten(1)
-    numerator = 2 * (inputs * targets).sum(-1)
-    denominator = inputs.sum(-1) + targets.sum(-1)
-    loss = 1 - (numerator + 1) / (denominator + 1)
-    return loss.sum() / num_masks
+    probs: Tensor = inputs.sigmoid().flatten(1)
+    numerator = 2 * (probs * targets).sum(-1)
+    denominator = probs.sum(-1) + targets.sum(-1)
+    loss: Tensor = 1 - (numerator + 1) / (denominator + 1)
+    loss = loss.sum() / num_masks
+    return loss
 
 
 # copied from original implementation
-def sigmoid_focal_loss(inputs, targets, num_masks, alpha: float = 0.25, gamma: float = 2):
+def sigmoid_focal_loss(
+    inputs: Tensor, targets: Tensor, num_masks: int, alpha: float = 0.25, gamma: float = 2
+) -> Tensor:
     """
     Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
     Args:
@@ -173,16 +177,17 @@ def sigmoid_focal_loss(inputs, targets, num_masks, alpha: float = 0.25, gamma: f
     Returns:
         Loss tensor
     """
-    prob = inputs.sigmoid()
-    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-    p_t = prob * targets + (1 - prob) * (1 - targets)
-    loss = ce_loss * ((1 - p_t) ** gamma)
+    probs: Tensor = inputs.sigmoid()
+    ce_loss: Tensor = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    p_t: Tensor = probs * targets + (1 - probs) * (1 - targets)
+    loss: Tensor = ce_loss * ((1 - p_t) ** gamma)
 
     if alpha >= 0:
-        alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
+        alpha_t: Tensor = alpha * targets + (1 - alpha) * (1 - targets)
         loss = alpha_t * loss
 
-    return loss.mean(1).sum() / num_masks
+    loss = loss.mean(1).sum() / num_masks
+    return loss
 
 
 # copied from original implementation
@@ -380,7 +385,7 @@ class MaskFormerLoss(nn.Module):
         self.register_buffer("empty_weight", empty_weight)
 
     def loss_labels(
-        self, outputs: Dict[str, Tensor], targets: List[Dict[str, Tensor]], indices: Tensor, num_masks: int
+        self, outputs: Dict[str, Tensor], targets: List[Dict[str, Tensor]], indices: Tuple[np.array], num_masks: float
     ) -> Dict[str, Tensor]:
         """Classification loss (NLL)
         # TODO this doc was copied by the authors
@@ -402,7 +407,9 @@ class MaskFormerLoss(nn.Module):
         losses: Tensor = {"loss_ce": loss_ce}
         return losses
 
-    def loss_masks(self, outputs, targets, indices, num_masks):
+    def loss_masks(
+        self, outputs: Dict[str, Tensor], targets: List[Dict[str, Tensor]], indices: Tuple[np.array], num_masks: int
+    ) -> Dict[str, Tensor]:
         """Compute the losses related to the masks: the focal loss and the dice loss.
         targets dicts must contain the key "masks" containing a tensor of dim [nb_target_masks, h, w]
         """
@@ -410,27 +417,26 @@ class MaskFormerLoss(nn.Module):
 
         src_idx = self._get_src_permutation_idx(indices)
         tgt_idx = self._get_tgt_permutation_idx(indices)
-        src_masks = outputs["pred_masks"]
-        src_masks = src_masks[src_idx]
+        pred_masks = outputs["pred_masks"]
+        pred_masks = pred_masks[src_idx]
         masks = [t["masks"] for t in targets]
         # TODO use valid to mask invalid areas due to padding in loss
         target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
-        target_masks = target_masks.to(src_masks)
+        target_masks = target_masks.to(pred_masks)
         # if masks are the same size always
         # target_masks = masks
         target_masks = target_masks[tgt_idx]
-
         # upsample predictions to the target size
-        src_masks = F.interpolate(
-            src_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
+        pred_masks = F.interpolate(
+            pred_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
         )
-        src_masks = src_masks[:, 0].flatten(1)
+        pred_masks = pred_masks[:, 0].flatten(1)
 
         target_masks = target_masks.flatten(1)
-        target_masks = target_masks.view(src_masks.shape)
+        target_masks = target_masks.view(pred_masks.shape)
         losses = {
-            "loss_mask": sigmoid_focal_loss(src_masks, target_masks, num_masks),
-            "loss_dice": dice_loss(src_masks, target_masks, num_masks),
+            "loss_mask": sigmoid_focal_loss(pred_masks, target_masks, num_masks),
+            "loss_dice": dice_loss(pred_masks, target_masks, num_masks),
         }
         return losses
 
@@ -448,10 +454,10 @@ class MaskFormerLoss(nn.Module):
 
     def get_loss(self, loss, outputs, targets, indices, num_masks):
         loss_map = {"labels": self.loss_labels, "masks": self.loss_masks}
-        assert loss in loss_map, f"do you really want to compute {loss} loss?"
+        assert loss in loss_map, f"{loss} not in loss_map"
         return loss_map[loss](outputs, targets, indices, num_masks)
 
-    def forward(self, outputs, targets):
+    def forward(self, outputs: Dict[str, Tensor], targets: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
         """This performs the loss computation.
         Parameters:
              outputs: dict of tensors, see the output specification of the model for the format
@@ -463,15 +469,11 @@ class MaskFormerLoss(nn.Module):
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
 
-        # Compute the average number of target boxes accross all nodes, for normalization purposes
-        num_masks = sum(len(t["labels"]) for t in targets)
-        num_masks = torch.as_tensor([num_masks], dtype=torch.float, device=next(iter(outputs.values())).device)
-        if is_dist_avail_and_initialized():
-            torch.distributed.all_reduce(num_masks)
-        num_masks = torch.clamp(num_masks / get_world_size(), min=1).item()
+        # Compute the average number of target masks accross all nodes, for normalization purposes
+        num_masks: Number = self.get_num_masks(targets, device=next(iter(outputs.values())).device)
 
         # Compute all the requested losses
-        losses = {}
+        losses: Dict[str, Tensor] = {}
         for loss in self.losses:
             losses.update(self.get_loss(loss, outputs, targets, indices, num_masks))
 
@@ -485,6 +487,15 @@ class MaskFormerLoss(nn.Module):
                     losses.update(l_dict)
 
         return losses
+
+    def get_num_masks(self, targets: List[Dict[str, Tensor]], device: torch.device) -> Number:
+        # Compute the average number of target masks accross all nodes, for normalization purposes
+        num_masks: int = sum(len(t["labels"]) for t in targets)
+        num_masks_pt: Tensor = torch.as_tensor([num_masks], dtype=torch.float, device=device)
+        if is_dist_avail_and_initialized():
+            torch.distributed.all_reduce(num_masks_pt)
+        num_masks_clamped: Number = torch.clamp(num_masks_pt / get_world_size(), min=1).item()
+        return num_masks_clamped
 
 
 # copied from original implementation
@@ -1488,7 +1499,80 @@ class MaskFormerForSemanticSegmentation(nn.Module):
         return MaskFormerForSemanticSegmentationOutput(**outputs, segmentation=segmentation)
 
 
-class MaskFormerForPanoptic(MaskFormerForSemanticSegmentation):
+class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
+
+    def __init__(self, object_mask_threshold: float, config: MaskFormerConfig):
+        super().__init__(config)
+        self.object_mask_threshold = object_mask_threshold
+
     def forward(self, *args, **kwargs):
         outputs = self.model(*args, **kwargs)
-        # TODO!
+        pred_logits: Tensor = outputs.pred_logits
+        pred_masks: Tensor = outputs.pred_masks 
+        
+        b, q, h, w = pred_masks.shape
+
+        scores, labels = F.softmax(pred_logits, dim=-1).max(-1)
+
+        mask_probs = pred_logits.sigmoid()
+        # we need to filter out low score predictions
+        # and the background class
+        to_keep = labels.ne(self.model.config.num_classes) & (
+            scores > self.object_mask_threshold
+        )  
+
+        cur_scores = scores[to_keep]
+        cur_classes = labels[to_keep]
+        cur_masks = mask_probs[to_keep]
+        cur_mask_cls = pred_logits[to_keep]
+        # remove the null class
+        cur_mask_cls = cur_mask_cls[:, :-1]
+        # weight each mask by its score
+        cur_prob_masks = cur_scores.view(-1, 1, 1) * cur_masks
+
+        we_detect_something = cur_masks.shape[0] > 0
+
+        panoptic_seg = torch.zeros((h, w), dtype=torch.int32, device=cur_masks.device)
+        segments_info = []
+
+        current_segment_id = 0
+
+        if we_detect_something:
+            # take argmax
+            cur_mask_ids = cur_prob_masks.argmax(0)
+            stuff_memory_list = {}
+            for k in range(cur_classes.shape[0]):
+                pred_class = cur_classes[k].item()
+                isthing = (
+                    pred_class
+                    in self.metadata.thing_dataset_id_to_contiguous_id.values()
+                )
+                mask = cur_mask_ids == k
+                mask_area = mask.sum().item()
+                original_area = (cur_masks[k] >= 0.5).sum().item()
+
+                if mask_area > 0 and original_area > 0:
+                    if mask_area / original_area < self.overlap_threshold:
+                        continue
+
+                    # merge stuff regions
+                    if not isthing:
+                        if int(pred_class) in stuff_memory_list.keys():
+                            panoptic_seg[mask] = stuff_memory_list[int(pred_class)]
+                            continue
+                        else:
+                            stuff_memory_list[int(pred_class)] = current_segment_id + 1
+
+                    current_segment_id += 1
+                    panoptic_seg[mask] = current_segment_id
+
+                    segments_info.append(
+                        {
+                            "id": current_segment_id,
+                            "isthing": bool(isthing),
+                            "category_id": int(pred_class),
+                        }
+                    )
+
+            return panoptic_seg, segments_info
+
