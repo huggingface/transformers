@@ -45,14 +45,13 @@ from zipfile import ZipFile, is_zipfile
 
 import numpy as np
 from packaging import version
-from tqdm.auto import tqdm
 
 import requests
 from filelock import FileLock
 from huggingface_hub import HfFolder, Repository, create_repo, list_repo_files, whoami
 from requests.exceptions import HTTPError
 from transformers.utils.versions import importlib_metadata
-from transformers.utils.tqdm_utils import is_progress_bar_enabled
+from transformers.utils.tqdm_utils import tqdm
 
 from . import __version__
 from .utils import logging
@@ -1919,7 +1918,6 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
         total=total,
         initial=resume_size,
         desc="Downloading",
-        disable=(not is_progress_bar_enabled()),
     )
     for chunk in r.iter_content(chunk_size=1024):
         if chunk:  # filter out keep-alive new chunks
