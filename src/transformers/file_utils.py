@@ -50,8 +50,8 @@ import requests
 from filelock import FileLock
 from huggingface_hub import HfFolder, Repository, create_repo, list_repo_files, whoami
 from requests.exceptions import HTTPError
-from transformers.utils.versions import importlib_metadata
 from transformers.utils.tqdm_utils import tqdm
+from transformers.utils.versions import importlib_metadata
 
 from . import __version__
 from .utils import logging
