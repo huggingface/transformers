@@ -307,25 +307,22 @@ class MaskFormerHungarianMatcher(nn.Module):
             # also weird to add a dimension there, why not in the first one?
             # downsample gt masks to save memory
             target_mask: Tensor = F.interpolate(target_mask[:, None], size=pred_mask.shape[-2:], mode="nearest")
-
             # Flatten spatial dimension
-            pred_mask_flat: Tensor = pred_mask.flatten(1)  # [batch_size * num_queries, H*W]
+            pred_mask_flat: Tensor = rearrange(pred_mask, "q h w -> q (h w)")  # [batch_size * num_queries, H*W]
             # still not sure why we didn't add a batch dimension
-            target_mask_flat: Tensor = target_mask[:, 0].flatten(1)  # [num_total_targets, H*W]
-
-            # Compute the focal loss between masks pairs
+            target_mask_flat: Tensor = rearrange(target_mask[:, 0], "c h w -> c (h w)")  # [num_total_targets, H*W]
+            # compute the focal loss between each mask pairs -> shape [NUM_QUERIES, CLASSES]
             cost_mask: Tensor = self.pair_wise_sigmoid_focal_loss(pred_mask_flat, target_mask_flat)
-
-            # Compute the dice loss betwen masks pairs
+            # Compute the dice loss betwen each mask pairs -> shape [NUM_QUERIES, CLASSES]
             cost_dice: Tensor = self.pair_wise_dice_loss(pred_mask_flat, target_mask_flat)
-
             # final cost matrix
             cost_matrix: Tensor = (
                 self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
             )
             # TODO the following line is completely unnecesary, shape is already [NUM_QUERIES, CLASSES]
             # cost_matrix_flat: Tensor = cost_matrix.reshape(num_queries, -1).cpu()
-            indices.append(linear_sum_assignment(cost_matrix))
+            assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
+            indices.append(assigned_indices)
             # mmm the matching will be always ([NUM_QUERIES], [NUM_QUERIS])
             # because we need num_queries matches
 
@@ -334,8 +331,6 @@ class MaskFormerHungarianMatcher(nn.Module):
             (torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices
         ]
         return matched_indices
-
-
 
     def __repr__(self):
         head = "Matcher " + self.__class__.__name__
@@ -353,8 +348,8 @@ class MaskFormerHungarianMatcher(nn.Module):
 class MaskFormerLoss(nn.Module):
     """This class computes the loss for MaskFormer, heavily based on DETR.
     The process happens in two steps:
-        1) we compute hungarian assignment between ground truth boxes and the outputs of the model
-        2) we supervise each pair of matched ground-truth / prediction (supervise class and box)
+        1) we compute hungarian assignment between ground truth masks and the outputs of the model
+        2) we supervise each pair of matched ground-truth / prediction (supervise class and mask)
     """
 
     def __init__(
@@ -384,27 +379,32 @@ class MaskFormerLoss(nn.Module):
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
 
-    def loss_labels(self, outputs, targets, indices, num_masks):
+    def loss_labels(
+        self, outputs: Dict[str, Tensor], targets: List[Dict[str, Tensor]], indices: Tensor, num_masks: int
+    ) -> Dict[str, Tensor]:
         """Classification loss (NLL)
-        targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
+        # TODO this doc was copied by the authors
+        targets dicts must contain the key "labels" containing a tensor of dim [nb_target_masks]
         """
         assert "pred_logits" in outputs
-        src_logits = outputs["pred_logits"]
+        pred_logits: Tensor = outputs["pred_logits"]
+        b, q, _ = pred_logits.shape
 
         idx = self._get_src_permutation_idx(indices)
-        target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(
-            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+        # shape = [BATCH, N_QUERIES]
+        target_classes_o: Tensor = torch.cat([target["labels"][j] for target, (_, j) in zip(targets, indices)])
+        # shape = [BATCH, N_QUERIES]
+        target_classes: Tensor = torch.full(
+            (b, q), fill_value=self.num_classes, dtype=torch.int64, device=pred_logits.device
         )
         target_classes[idx] = target_classes_o
-
-        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
-        losses = {"loss_ce": loss_ce}
+        loss_ce: Tensor = F.cross_entropy(rearrange(pred_logits, "b q c -> b c q"), target_classes, self.empty_weight)
+        losses: Tensor = {"loss_ce": loss_ce}
         return losses
 
     def loss_masks(self, outputs, targets, indices, num_masks):
         """Compute the losses related to the masks: the focal loss and the dice loss.
-        targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w]
+        targets dicts must contain the key "masks" containing a tensor of dim [nb_target_masks, h, w]
         """
         assert "pred_masks" in outputs
 
@@ -416,6 +416,8 @@ class MaskFormerLoss(nn.Module):
         # TODO use valid to mask invalid areas due to padding in loss
         target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
         target_masks = target_masks.to(src_masks)
+        # if masks are the same size always
+        # target_masks = masks
         target_masks = target_masks[tgt_idx]
 
         # upsample predictions to the target size
