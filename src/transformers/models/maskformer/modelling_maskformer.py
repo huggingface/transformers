@@ -1492,7 +1492,10 @@ class MaskFormerForSemanticSegmentation(nn.Module):
         mask_classes: Tensor = outputs.pred_logits.softmax(dim=-1)[..., :-1]
         # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
         mask_probs: Tensor = outputs.pred_masks.sigmoid()
-        # now we want to sum over the queries
+        # now we want to sum over the queries, 
+        # out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} 
+        # where $ softmax(p) \in R^{q, c} is the mask classes 
+        # and $sigmoid(m) \in R^{q, h, w} is the mask probabilities
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
         segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", mask_classes, mask_probs)
 
