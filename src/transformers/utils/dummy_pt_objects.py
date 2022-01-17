@@ -2786,44 +2786,51 @@ class RagTokenForGeneration(metaclass=DummyObject):
 REALM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class RealmEmbedder:
+class RealmEmbedder(metaclass=DummyObject):
+    _backends = ["torch"]
+
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RealmForOpenQA:
+class RealmForOpenQA(metaclass=DummyObject):
+    _backends = ["torch"]
+
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RealmKnowledgeAugEncoder:
+class RealmKnowledgeAugEncoder(metaclass=DummyObject):
+    _backends = ["torch"]
+
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RealmPreTrainedModel:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+class RealmPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class RealmReader:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RealmRetriever:
+class RealmReader(metaclass=DummyObject):
+    _backends = ["torch"]
+
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RealmScorer:
+class RealmRetriever(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RealmScorer(metaclass=DummyObject):
+    _backends = ["torch"]
+
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
