@@ -1383,7 +1383,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         if inputs["labels"] is not None:
             inputs["labels"] = tf.where(
                 inputs["labels"] == self.config.pad_token_id,
-                tf.fill(shape_list(inputs["labels"]), -100),
+                tf.cast(tf.fill(shape_list(inputs["labels"]), -100), inputs["labels"].dtype),
                 inputs["labels"],
             )
             inputs["use_cache"] = False
