@@ -498,7 +498,6 @@ if is_vision_available():
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
-    _import_structure["models.vit_mae"].append("ViTMAEFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
 
@@ -2550,7 +2549,6 @@ if TYPE_CHECKING:
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
         from .models.vit import ViTFeatureExtractor
-        from .models.vit_mae import ViTMAEFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
 

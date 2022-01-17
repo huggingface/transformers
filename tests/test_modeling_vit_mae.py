@@ -38,7 +38,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTMAEFeatureExtractor
+    from transformers import ViTFeatureExtractor
 
 
 class ViTMAEModelTester:
@@ -152,14 +152,7 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            ViTMAEModel,
-            ViTMAEForPreTraining,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (ViTMAEModel, ViTMAEForPreTraining) if is_torch_available() else ()
 
     test_pruning = False
     test_torchscript = False
@@ -344,16 +337,14 @@ def prepare_img():
 class ViTMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        # TODO replace nielsr by facebook
-        return ViTMAEFeatureExtractor.from_pretrained("nielsr/vit-mae-base") if is_vision_available() else None
+        return ViTFeatureExtractor.from_pretrained("facebook/vit-mae-base") if is_vision_available() else None
 
     @slow
     def test_inference_for_pretraining(self):
         # make random mask reproducible
         torch.manual_seed(2)
 
-        # TODO replace nielsr by facebook
-        model = ViTMAEForPreTraining.from_pretrained("nielsr/vit-mae-base").to(torch_device)
+        model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
