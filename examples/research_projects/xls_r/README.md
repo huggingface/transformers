@@ -1,58 +1,80 @@
-# Speech recognition community week - version 2 🤗
+# Robust Speech Challange 🤗
 
-Welcome to the 2nd version of the speech recognition community event🎙️ !
-The goal of this event is to build **robust**, **real-world** speech recognition (ASR) models in as many languages as possible🌏🌍🌎.
+Welcome to the robust speech recognition challenge 🎙️ !
 
-If necessary and available, free access to a V100 32 GB GPU will kindly be provided by the [OVH team](https://us.ovhcloud.com/) 🚀.
+The goal of this event is to build **robust**, **real-world** speech recognition (ASR) systems in as many languages as possible 🌏🌍🌎.
+If necessary and available, free access to a V100 32 GB GPU will kindly be provided by the [OVHcloud team](https://us.ovhcloud.com/) 🚀.
+This document summarizes all the relevant information required for the speech community event 📋.
 
-This document summarizes all the relevant information required for the speech community event📋.
-
-Don't forget to sign up [here](TODO: Create google from)🤗.
+To sign-up, please see [this forum post](https://discuss.huggingface.co/t/open-to-the-community-robust-speech-recognition-challenge/13614) 🤗.
 
 ## Table of Contents
 
-- [Organization](#organization)
+- [TLDR;](#tldr;)
 - [Important dates](#important-dates)
 - [How to install pytorch, transformers, datasets](#how-to-install-relevant-libraries)
-- [How to fine-tune a speech recognition model](#how-to-finetune-a-model)
+- [How to fine-tune an acoustic model](#how-to-finetune-an-acoustic-model)
+- [How to combine n-gram language models with acoustic model](#how-to-combine-n-gram-with-model)
+- [Communication and Issues](#communition-and-issues)
 - [Talks](#talks)
 - [Project evaluation](#project-evaluation)
 - [General Tips & Tricks](#general-tips-and-tricks)
 - [FAQ](#faq)
 
-## Organization
+## TLDR;
 
 Participants are encouraged to leverage pre-trained speech recognition checkpoints,
-preferably [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53), to train a speech recognition system in a language of their 
-choice.
+preferably [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53), 
+to train a speech recognition system in a language of their choice.
 
 Participants can make use of whatever data they think is useful to build a 
-**robust** speech recognition system for **real-world** audio data. We strongly 
-recommend making use of [Mozilla's diverse Common Voice dataset](https://huggingface.co/datasets/mozilla-foundation/common_voice_7_0) when training the model.
-Please do **not** use the `"test"` split of the Common Voice datasets for training
-as we will likely use this split for the final evaluation of your model.
-We kindly ask you to make sure that the dataset that you are using for training 
-has the appropriate licensing - see [here](TODO: ) for more information.
+speech recognition system for **real-world** audio data - 
+**except** the Common Voice `"test"` split of their chosen language.
+The section [Data and preprocessing](#data-and-preprocessing) explains 
+in more detail what audio data can be used, how to find suitable audio data, and 
+how the audio data can be processed.
 
-During the event, the fine-tuned models will regularly be tested on a **development 
-dataset** provided by the Hugging Face team and at the end of the event, all models 
-will be tested on a **test dataset**. For each language, 
-the best performing model will receive a prize 🏆 - more information regarding 
-the testing [here](TODO: ) and prizes [here](TODO: ). We believe that framing the 
-event as a competition is more fun, but at the core, we strongly encourage 
-participants to work together by helping each other to solve bugs, share important findings, etc...🤗
+Speech recognition systems should be trained using **PyTorch**, **🤗 Transformers**, and, **🤗 Datasets**.
+For more information on how to install the above libraries, please read through 
+[How to install pytorch, transformers, datasets](#how-to-install-relevant-libraries).
 
-If possible it is encouraged to fine-tune the models on local GPU machines, but 
-if those are not available, the OVH cloud team kindly provides a limited 
-number of GPUs for the event. For more information on how to get access to the GPU - see [here](TODO: ).
+For training, it is recommended to use the [official training script](https://github.com/huggingface/transformers/blob/master/examples/pytorch/speech-recognition/run_speech_recognition_ctc.py) or a modification thereof. A step-by-step guide on how to fine-tune 
+an acoustic model for a speech recognition system can be found under [How to fine-tune an acoustic model](#how-to-finetune-an-acoustic-model).
+If possible it is encouraged to fine-tune the acoustic models on local GPU machines, but 
+if those are not available, the OVHcloud team kindly provides a limited 
+number of GPUs for the event. Simply fill out [this google form](https://forms.gle/GFZkMkKLiufi75g28) to get access to a GPU.
+For more information on how to train an acoustic model on one of OVH's GPU - see [How to fine-tune a speech recognition model with OVHcould](#how-to-fine-tune-with-ovh-cloud).
 
+The performance of speech recognition system can often significantly be improved by adding a 
+language model for decoding. For more information on how to add a language model, please 
+take a look at [How to combine n-gram language models with speech recognition models](#how-to-combine-n-gram-with-model).
 
-**Please note**:
+During the event, the speech recognition system will be evaluated on both the Common Voice `"test"` split 
+of the participants' chosen language as well as the *real-world* `"dev"` data provided by 
+the Hugging Face team. 
+At the end of the robust speech recognition challenge, the speech recognition system will also be evaluated on the
+*real-world* `"test"` data provided by the Hugging Face team. Each participant should add a 
+`eval.py` script to her/his model repository in a specific format that let's one easily 
+evaluate the speech recognition system on both Common Voice's `"test"` data as well as the *real-world* audio 
+data. Please read through the [Evaluation](how-to-write-the-eval-script) section in order
+to make sure your evaluation script is in the correct format. Speech recognition systems
+with evaluation scripts in an incorrect format can sadly not be considered for the Challenge.
+
+At the end of the event, the best performing speech recognition system 
+will receive a prize 🏆 - more information regarding the prizes can be found under [Prizes](#prizes).
+
+We believe that framing the event as a competition is more fun, but at the core, the event is about
+creating speech recognition systems in as many languages as possible as a community.
+This can be achieved by working together, helping each other to solve bugs, share important findings, etc...🤗
+
+**Note**:
+Please, read through the section on [Communication & Problems](#communication-and-problems) to make sure you 
+know how to ask for help, etc...
 All important announcements will be made on discord. Please make sure that 
-you've joined the following discord server: TODO: fill out.
-Please make sure that you have been added to the [Speech Event Organization](https://huggingface.co/speech-recognition-community-v2). You should have received an 
-invite by email. If you didn't receive an invite, please contact the organizers, *e.g.* Anton, Patrick, or Omar on discord.
+you've joined [this discord channel](https://discord.gg/SHr5wC7m)
 
+Also, please make sure that you have been added to the [Speech Event Organization](https://huggingface.co/speech-recognition-community-v2). 
+You should have received an invite by email. If you didn't receive an invite, please contact the organizers, *e.g.* Anton, Patrick, or Omar directly on discord.
 
 ## Important dates
 
@@ -393,3 +415,26 @@ error rate of 27% as can be seen on the automatically generated [model card](htt
 The above-chosen hyperparameters probably work quite well on a range of different 
 datasets and languages, but are by no means optimal. It is up to you to find a good set of 
 hyperparameters.
+
+## How to combine n gram with model
+
+Having trained a speech recognition model with CTC as shown in the section above, 
+one can further improve the model's performance by adding an **n-gram language model**
+to the decoding process of the model. By doing so, we are replacing the naive greedy decoding 
+by **n-gram-boosted** beam search decoding.
+
+N-gram language models can be built on CPU in just a few minutes. *N-gram-boosted* beam search decoding noticebly slows down the 
+inference time, but also yields significant word error rates improvements - usually between 10-40 %.
+
+You can find an in-detail blog post on how to build an *n-gram* [here](https://huggingface.co/blog/wav2vec2-with-ngram).
+The blog post can be opened in a google colab and by adapting three lines of the example for your use case, one can directly
+create an *n-gram* in the google colab.
+The blog post gives in-detail instructions on: how to built an n-gram and how to add it to your trained speech recognition model.
+
+- why one should add an *n-gram* to her/his speech recognition system,
+- how to build an *n-gram*, and,
+- how to add the built *n-gram* the speech recognition system for seamless decoding
+
+Our previously trained model - [xls-r-300m-sv](https://huggingface.co/hf-test/xls-r-300m-sv) - enjoys a 30% word error rate reduction after 
+having added an n-gram. As shown in the example of the blog post, we strongly advise participants to upload all files required for combining 
+the *n-gram* with a trained speech recognition model directly into the same model repository.
