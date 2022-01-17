@@ -90,24 +90,57 @@ You should have received an invite by email. If you didn't receive an invite, pl
 
 ## Data and preprocessing
 
-To begin with, we will quickly go over how to find suitable training data and 
+In this section, we will quickly go over how to find suitable training data and 
 how to preprocess it.
-In this section, we will quickly go over what data is allowed to be used as training 
-data, what kind of data preprocessing is allowed be used, and how the model should be evaluated.
 
-To make it very simple regarding the first point: **All data except the official common voice `test` data set can be used as training data**. For models trained in a language that is not included in Common Voice, the author of the model is responsible to 
-leave a reasonable amount of data for evaluation.
+To begin with, **all data except Common Voice's `"test"` data can be used as training data.**
+The exception includes all Common Voice versions as the test data split of later Common Voice versions often
+overlaps with the one of previous versions, *e.g.* the test data of Common Voice 7 in English is 
+to a big part identical to the test data of Common Voice 6 in English:
 
-Second, the rules regarding the preprocessing are not that as straight-forward. It is allowed (and recommended) to 
-normalize the data to only have lower-case characters. It is also allowed (and recommended) to remove typographical 
-symbols and punctuation marks. A list of such symbols can *e.g.* be fonud [here](https://en.wikipedia.org/wiki/List_of_typographical_symbols_and_punctuation_marks) - however here we already must be careful. We should **not** remove a symbol that 
-would change the meaning of the words, *e.g.* in English, we should not remove the single quotation mark `'` since it 
-would change the meaning of the word `"it's"` to `"its"` which would then be incorrect. So the golden rule here is to 
-not remove any characters that could change the meaning of a word into another word. This is not always obvious and should 
+```python
+load_dataset("mozilla-foundation/common_voice_7_0", "en", split="test") 
+```
+
+includes more or less the same data as
+
+```python
+load_dataset("mozilla-foundation/common_voice_6_1", "en", split="test") 
+```
+
+However, we strongly encourage participants to make use of Common Voice's other splits, *e.g.* `"train"` and `"validation"`.
+For most languages, the Common Voice dataset offers already a decent amount of training data. It is usually 
+always advantageous to collect additional data. To do so, the participants are in a first step encouraged to search the
+Hugging Face Hub for additional audio data, for example by selecting the category 
+["speech-processing"](https://huggingface.co/datasets?task_categories=task_categories:speech-processing&sort=downloads).
+All datasets that are available on the Hub can be downloaded via the 🤗 Datasets library in the exact same way Common Voice is downloaded.
+If one wants to combine multiple datasets for training, it might make sense to take a look at 
+the [`interleave_datasets`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=interleave#datasets.interleave_datasets) function.
+
+In addition, participants can also make use of the own audio data. Here, please make sure that you **are allowed to use the audio data**. E.g., if audio data 
+is taken from a media platforms, such as YouTube, it should be verified that the media platform and the owner of the data has given her/his approval to use the audio 
+data in the context of machine learning research. If you are not sure whether the data you want to use has the appropriate licensing, please contact the Hugging Face 
+team on discord.
+
+Next, let's talk about preprocessing. Audio data and transcriptions have to be brough into the correct format when 
+training the acoustic model (example shown in [How to fine-tune an acoustic model](#how-to-finetune-an-acoustic-model)).
+It is recommended that this is done by using 🤗 Datasets `.map()` function as shown 
+[here](https://github.com/huggingface/transformers/blob/9a2dabae7002258e41419491c73dd43ad61b5de7/examples/pytorch/speech-recognition/run_speech_recognition_ctc.py#L444). As can be 
+see we can pass some characters that will be removed from the transcriptions, *e.g.*: `--chars_to_ignore , ? . ! - \; \: \" “ % ‘ ” � \`
+on the official ["Single GPU Example"](https://github.com/huggingface/transformers/tree/master/examples/pytorch/speech-recognition#single-gpu-ctc).
+The participants are free to modify this preprocessing by removing more characters or even replacing characters as 
+it is done in the [official blog post](https://github.com/huggingface/transformers/blob/9a2dabae7002258e41419491c73dd43ad61b5de7/examples/pytorch/speech-recognition/run_speech_recognition_ctc.py#L444).
+**However**, there are some rules regarding what characters are allowed to be removed/replaced and which are not.
+These rules are not this straight-forward and therefore often have to be evaluated case-by-case.
+It is allowed (and recommended) to normalize the data to only have lower-case characters. It is also allowed (and recommended) to remove typographical 
+symbols and punctuation marks. A list of such symbols can *e.g.* be fonud [here](https://en.wikipedia.org/wiki/List_of_typographical_symbols_and_punctuation_marks) - however here we already must be careful. We should **not** remove a symbol that would change the meaning of the words, *e.g.* in English, 
+we should not remove the single quotation mark `'` since it would change the meaning of the word `"it's"` to `"its"` which would then be incorrect. 
+So the golden rule here is to not remove any characters that could change the meaning of a word into another word. This is not always obvious and should 
 be given some consideration. As another example, it is fine to remove the "Hypen-minus" sign "`-`" since it doesn't change the 
-meaninng of a word to another one. *E.g.* "`fine-tuning`" would be changed to "`finetuning`" which has still the same meaning.
+meaning of a word to another one. *E.g.* "`fine-tuning`" would be changed to "`finetuning`" which has still the same meaning.
 
-Since those choices are not always obvious when in doubt feel free to ask on Slack or even better post on the forum, as was 
+Since those choices are not always obvious when in doubt feel free to ask on Discord or even better post your quesiton on the forum, as was 
+done, *e.g.* [here](https://discuss.huggingface.co/t/spanish-asr-fine-tuning-wav2vec2/4586).
 
 ## How to install relevant libraries
 
@@ -441,6 +474,8 @@ hyperparameters.
 
 ## How to finetune with OVH cloud
 
+TODO(Anton)
+
 ## How to combine n gram with acoustic model
 
 Having trained a speech recognition model with CTC as shown in the section above, 
@@ -466,15 +501,37 @@ the *n-gram* with a trained speech recognition model directly into the same mode
 
 ## Evaluation
 
+TODO(Patrick)
 
 ## Prizes
 
-To be filled out soon...
+TODO(Patrick, Omar, ...)
 
 ## Communication and Problems
 
+If you encounter any problems or have any questions, you should use one of the following platforms
+depending on your type of problem. Hugging Face is a "open-source-first" organization meaning 
+that we'll try to solve all problems in the most public and most transparent way possible so that everybody
+in the community profits.
+
+The following table summarizes what platform to use for which problem.
+
+- Problem/question/bug with the 🤗 Datasets library that you think is a general problems that also impacts other people, please open an [Issues on Datasets](https://github.com/huggingface/datasets/issues/new?assignees=&labels=bug&template=bug-report.md&title=) and ping @anton-l and @patrickvonplaten.
+- Problem/question/bug with the 🤗 Transformers library that you think is a general problems that also impacts other people, please open an [Issues on Transformers](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title=) and ping @anton-l and @patrickvonplaten.
+- Problem/question with a modified, customized training script that is less likely to impact other people, please post your problem/question [on the forum](https://discuss.huggingface.co/) and ping @anton-l and @patrickvonplaten.
+- Questions regarding access to the OVHcloud GPU, please ask in the Discord channel **#ovh-support**.
+- Other question regarding the event, rules of the event, or if you are not sure where to post your question, please ask in the Discord channel **#sprint-discussions**.
 
 ## Talks
 
+TODO(Patrick)
 
 ## General Tips and Tricks
+
+- Memory efficient training:
+
+TODO(Patrick)
+
+- Dataset streaming
+
+TODO(Patrick)
