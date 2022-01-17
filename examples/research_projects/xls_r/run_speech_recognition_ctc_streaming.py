@@ -23,6 +23,9 @@ import warnings
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
+import torchaudio
+import torchaudio.functional as F
+
 import datasets
 import numpy as np
 import torch
@@ -272,6 +275,7 @@ class DataCollatorCTCWithPadding:
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lenghts and need
         # different padding methods
+        import ipdb; ipdb.set_trace()
         input_features = [{"input_values": feature["input_values"]} for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
@@ -390,7 +394,7 @@ def main():
         if data_args.max_eval_samples is not None:
             raw_datasets["eval"] = raw_datasets["eval"].select(range(data_args.max_eval_samples))
 
-    dataset_sampling_rate = raw_datasets["train"].features[data_args.audio_column_name].sampling_rate
+    original_sampling_rate = raw_datasets["train"].features[data_args.audio_column_name].sampling_rate
 
     # 2. Next, let's load the config as we might need it to create
     # the tokenizer
@@ -457,8 +461,7 @@ def main():
         model.freeze_feature_encoder()
 
     # make sure that dataset decodes audio with correct sampling rate
-    if dataset_sampling_rate != feature_extractor.sampling_rate:
-        import ipdb; ipdb.set_trace()
+    if original_sampling_rate != feature_extractor.sampling_rate:
         raw_datasets = {k: v.cast_column(data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)) for k, v in raw_datasets.items()}
 
     # 5. We remove some special characters from the datasets
@@ -471,17 +474,15 @@ def main():
     text_column_name = data_args.text_column_name
 
     def remove_special_characters(batch):
-        batch["input_audio"] = batch["audio"]
-
+        import ipdb; ipdb.set_trace()
         if chars_to_ignore_regex is not None:
             batch["target_text"] = re.sub(chars_to_ignore_regex, "", batch[text_column_name]).lower() + " "
         else:
             batch["target_text"] = batch[text_column_name].lower() + " "
         return batch
 
-    with training_args.main_process_first(desc="dataset map special characters removal"):
-        # map all iterable datasets
-        raw_datasets = {k: v.map(remove_special_characters) for k, v in raw_datasets.items()}
+    # map all iterable datasets
+    raw_datasets = {k: v.map(remove_special_characters) for k, v in raw_datasets.items()}
 
     # 6. Now we preprocess the datasets including loading the audio, resampling and normalization
     # Thankfully, `datasets` takes care of automatically loading and resampling the audio,
@@ -492,25 +493,18 @@ def main():
     max_input_length = data_args.max_duration_in_seconds * feature_extractor.sampling_rate
     min_input_length = data_args.min_duration_in_seconds * feature_extractor.sampling_rate
 
-    # `phoneme_language` is only relevant if the model is fine-tuned on phoneme classification
-    phoneme_language = data_args.phoneme_language
-
     # Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
     def prepare_dataset(batch):
         # load audio
-        sample = batch["input_audio"]
+        audio, orig_sampling_rate = torchaudio.load(batch["audio"]["path"])
 
-        inputs = feature_extractor(sample["array"], sampling_rate=sample["sampling_rate"])
+        resampled_audio = F.resample(torch.tensor(audio), orig_sampling_rate, target_sampling_rate).numpy()
+        inputs = feature_extractor(resampled_audio, sampling_rate=target_sampling_rate)
         batch["input_values"] = inputs.input_values[0]
         batch["input_length"] = len(batch["input_values"])
 
-        # encode targets
-        additional_kwargs = {}
-        if phoneme_language is not None:
-            additional_kwargs["phonemizer_lang"] = phoneme_language
-
-        batch["labels"] = tokenizer(batch["target_text"], **additional_kwargs).input_ids
+        batch["labels"] = tokenizer(batch["target_text"]).input_ids
         return batch
 
     with training_args.main_process_first(desc="dataset map preprocessing"):
@@ -568,6 +562,9 @@ def main():
 
     # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor)
+
+    # make sure stream-able dataset is in `torch` format
+    vectorized_datasets = {k: v.with_format("torch") for k, v in vectorized_datasets.items()}
 
     # Initialize Trainer
     trainer = Trainer(
