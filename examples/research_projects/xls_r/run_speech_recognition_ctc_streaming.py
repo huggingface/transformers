@@ -565,6 +565,7 @@ def main():
 
     # make sure stream-able dataset is in `torch` format
     vectorized_datasets = {k: v.with_format("torch") for k, v in vectorized_datasets.items()}
+    import ipdb; ipdb.set_trace()
 
     # Initialize Trainer
     trainer = Trainer(
