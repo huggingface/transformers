@@ -301,7 +301,7 @@ class DataCollatorForWav2Vec2Pretraining:
         device = batch["input_values"].device
         batch_size = batch["input_values"].shape[0]
 
-        mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
+        mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1]).item()
 
         # make sure that no loss is computed on padded inputs
         if batch.get("attention_mask") is not None:
