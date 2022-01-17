@@ -522,6 +522,7 @@ UNDOCUMENTED_OBJECTS = [
     "BasicTokenizer",  # Internal, should never have been in the main init.
     "CharacterTokenizer",  # Internal, should never have been in the main init.
     "DPRPretrainedReader",  # Like an Encoder.
+    "DummyObject",  # Just picked by mistake sometimes.
     "MecabTokenizer",  # Internal, should never have been in the main init.
     "ModelCard",  # Internal type.
     "SqueezeBertModule",  # Internal building block (should have been called SqueezeBertLayer)

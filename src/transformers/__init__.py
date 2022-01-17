@@ -50,7 +50,12 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
+    "benchmark": [],
+    "commands": [],
     "configuration_utils": ["PretrainedConfig"],
+    "convert_graph_to_onnx": [],
+    "convert_slow_tokenizers_checkpoints_to_fast": [],
+    "convert_tf_hub_seq_to_seq_bert_to_pytorch": [],
     "data": [
         "DataProcessor",
         "InputExample",
@@ -83,6 +88,11 @@ _import_structure = {
         "DefaultDataCollator",
         "default_data_collator",
     ],
+    "data.metrics": [],
+    "data.processors": [],
+    "debug_utils": [],
+    "dependency_versions_check": [],
+    "dependency_versions_table": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature"],
     "file_utils": [
@@ -178,6 +188,7 @@ _import_structure = {
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
     ],
+    "models.bort": [],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
@@ -195,6 +206,7 @@ _import_structure = {
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
+    "models.dialogpt": [],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dpr": [
         "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -235,6 +247,7 @@ _import_structure = {
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
+    "models.megatron_gpt2": [],
     "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
@@ -315,6 +328,7 @@ _import_structure = {
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
+    "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
@@ -342,6 +356,7 @@ _import_structure = {
         "ZeroShotClassificationPipeline",
         "pipeline",
     ],
+    "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
         "AddedToken",
@@ -566,6 +581,7 @@ else:
 
 # PyTorch-backed objects
 if is_torch_available():
+    _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
     _import_structure["data.datasets"] = [
@@ -579,6 +595,7 @@ if is_torch_available():
         "TextDataset",
         "TextDatasetForNextSentencePrediction",
     ]
+    _import_structure["deepspeed"] = []
     _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer"]
     _import_structure["generation_logits_process"] = [
         "ForcedBOSTokenLogitsProcessor",
@@ -1455,6 +1472,7 @@ if is_torch_available():
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
     ]
+    _import_structure["sagemaker"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
     _import_structure["trainer_seq2seq"] = ["Seq2SeqTrainer"]
@@ -1465,6 +1483,7 @@ else:
 
 # TensorFlow-backed objects
 if is_tf_available():
+    _import_structure["activations_tf"] = []
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
@@ -2128,6 +2147,7 @@ else:
     _import_structure["utils.dummy_flax_objects"] = [
         name for name in dir(dummy_flax_objects) if not name.startswith("_")
     ]
+
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
