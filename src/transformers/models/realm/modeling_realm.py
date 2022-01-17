@@ -1173,6 +1173,21 @@ class RealmEmbedder(RealmPreTrainedModel):
     ):
         r"""
         Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import RealmTokenizer, RealmEmbedder
+        >>> import torch
+
+        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-embedder")
+        >>> model = RealmEmbedder.from_pretrained("qqaatw/realm-cc-news-pretrained-embedder")
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> projected_score = outputs.projected_score
+        ```
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
