@@ -853,7 +853,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             logger.warning(
                 "No loss specified in compile() - the model's internal loss computation will be used as the "
                 "loss. Don't panic - this is a common way to train TensorFlow models in Transformers! "
-                "Please ensure your labels are passed as the 'labels' key of the input dict so that they are "
+                "Please ensure your labels are passed as keys in the input dict so that they are "
                 "accessible to the model during the forward pass. To disable this behaviour, please pass a "
                 "loss argument, or explicitly pass loss=None if you do not want your model to compute a loss."
             )
@@ -920,6 +920,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # the input dict (and loss is computed internally)
         if y is None and "labels" in x:
             y = x["labels"]  # Stops confusion with metric computations
+        elif y is None and "input_ids" in x:
+            # Just make any kind of dummy array to make loss work
+            y = tf.zeros(tf.shape(x["input_ids"])[0], dtype=tf.int64)
         y_pred = self(x, training=False)
         self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         # Updates stateful loss metrics.
@@ -1938,16 +1941,19 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         return output
 
 
-def shape_list(tensor: tf.Tensor) -> List[int]:
+def shape_list(tensor: Union[tf.Tensor, np.ndarray]) -> List[int]:
     """
     Deal with dynamic shape in tensorflow cleanly.
 
     Args:
-        tensor (`tf.Tensor`): The tensor we want the shape of.
+        tensor (`tf.Tensor` or `np.ndarray`): The tensor we want the shape of.
 
     Returns:
         `List[int]`: The shape of the tensor as a list.
     """
+    if isinstance(tensor, np.ndarray):
+        return list(tensor.shape)
+
     dynamic = tf.shape(tensor)
 
     if tensor.shape == tf.TensorShape(None):

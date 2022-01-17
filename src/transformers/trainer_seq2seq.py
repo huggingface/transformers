@@ -73,7 +73,7 @@ class Seq2SeqTrainer(Trainer):
         self,
         test_dataset: Dataset,
         ignore_keys: Optional[List[str]] = None,
-        metric_key_prefix: str = "eval",
+        metric_key_prefix: str = "test",
         max_length: Optional[int] = None,
         num_beams: Optional[int] = None,
     ) -> PredictionOutput:

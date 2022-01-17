@@ -99,7 +99,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_torch_and_tf_all:
         working_directory: ~/transformers
         docker:
@@ -169,7 +169,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_torch_and_flax_all:
         working_directory: ~/transformers
         docker:
@@ -237,7 +237,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_torch_all:
         working_directory: ~/transformers
         docker:
@@ -304,7 +304,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_tf_all:
         working_directory: ~/transformers
         docker:
@@ -370,7 +370,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_flax_all:
         working_directory: ~/transformers
         docker:
@@ -437,7 +437,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_pipelines_torch_all:
         working_directory: ~/transformers
         docker:
@@ -549,7 +549,7 @@ jobs:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[ja,testing,sentencepiece,jieba]
+            - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy]
             - run: python -m unidic download
             - save_cache:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
@@ -557,7 +557,7 @@ jobs:
                       - '~/.cache/pip'
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
+                    python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py ./tests/test_tokenization_openai.py | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -662,7 +662,7 @@ jobs:
                   path: ~/transformers/flax_examples_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_examples_flax_all:
         working_directory: ~/transformers
         docker:
@@ -729,7 +729,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_hub_all:
         working_directory: ~/transformers
         docker:
@@ -795,7 +795,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-    
+
     run_tests_onnxruntime_all:
         working_directory: ~/transformers
         docker:

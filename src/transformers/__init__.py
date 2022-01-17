@@ -51,7 +51,12 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
+    "benchmark": [],
+    "commands": [],
     "configuration_utils": ["PretrainedConfig"],
+    "convert_graph_to_onnx": [],
+    "convert_slow_tokenizers_checkpoints_to_fast": [],
+    "convert_tf_hub_seq_to_seq_bert_to_pytorch": [],
     "data": [
         "DataProcessor",
         "InputExample",
@@ -84,6 +89,11 @@ _import_structure = {
         "DefaultDataCollator",
         "default_data_collator",
     ],
+    "data.metrics": [],
+    "data.processors": [],
+    "debug_utils": [],
+    "dependency_versions_check": [],
+    "dependency_versions_table": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature"],
     "file_utils": [
@@ -179,6 +189,7 @@ _import_structure = {
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
     ],
+    "models.bort": [],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
@@ -196,6 +207,7 @@ _import_structure = {
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
+    "models.dialogpt": [],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dpr": [
         "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -236,11 +248,16 @@ _import_structure = {
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
+    "models.megatron_gpt2": [],
     "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
+    "models.nystromformer": [
+        "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "NystromformerConfig",
+    ],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
@@ -312,6 +329,7 @@ _import_structure = {
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
+    "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
@@ -339,6 +357,7 @@ _import_structure = {
         "ZeroShotClassificationPipeline",
         "pipeline",
     ],
+    "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
         "AddedToken",
@@ -563,6 +582,7 @@ else:
 
 # PyTorch-backed objects
 if is_torch_available():
+    _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
     _import_structure["data.datasets"] = [
@@ -576,6 +596,7 @@ if is_torch_available():
         "TextDataset",
         "TextDatasetForNextSentencePrediction",
     ]
+    _import_structure["deepspeed"] = []
     _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer"]
     _import_structure["generation_logits_process"] = [
         "ForcedBOSTokenLogitsProcessor",
@@ -1122,6 +1143,19 @@ if is_torch_available():
         ]
     )
     _import_structure["models.mt5"].extend(["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"])
+    _import_structure["models.nystromformer"].extend(
+        [
+            "NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "NystromformerForMaskedLM",
+            "NystromformerForMultipleChoice",
+            "NystromformerForQuestionAnswering",
+            "NystromformerForSequenceClassification",
+            "NystromformerForTokenClassification",
+            "NystromformerLayer",
+            "NystromformerModel",
+            "NystromformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.openai"].extend(
         [
             "OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1438,6 +1472,7 @@ if is_torch_available():
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
     ]
+    _import_structure["sagemaker"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
     _import_structure["trainer_seq2seq"] = ["Seq2SeqTrainer"]
@@ -1448,6 +1483,7 @@ else:
 
 # TensorFlow-backed objects
 if is_tf_available():
+    _import_structure["activations_tf"] = []
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
@@ -1487,6 +1523,7 @@ if is_tf_available():
             "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
             "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+            "TF_MODEL_FOR_VISION_2_SEQ_MAPPING",
             "TF_MODEL_MAPPING",
             "TF_MODEL_WITH_LM_HEAD_MAPPING",
             "TFAutoModel",
@@ -1500,6 +1537,7 @@ if is_tf_available():
             "TFAutoModelForSequenceClassification",
             "TFAutoModelForTableQuestionAnswering",
             "TFAutoModelForTokenClassification",
+            "TFAutoModelForVision2Seq",
             "TFAutoModelWithLMHead",
         ]
     )
@@ -1838,6 +1876,7 @@ if is_tf_available():
             "TFTransfoXLPreTrainedModel",
         ]
     )
+    _import_structure["models.vision_encoder_decoder"].extend(["TFVisionEncoderDecoderModel"])
     _import_structure["models.vit"].extend(
         [
             "TFViTForImageClassification",
@@ -2109,6 +2148,7 @@ else:
         name for name in dir(dummy_flax_objects) if not name.startswith("_")
     ]
 
+
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # Configuration
@@ -2305,6 +2345,7 @@ if TYPE_CHECKING:
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
+    from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
@@ -3038,6 +3079,17 @@ if TYPE_CHECKING:
             MPNetPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
+        from .models.nystromformer import (
+            NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NystromformerForMaskedLM,
+            NystromformerForMultipleChoice,
+            NystromformerForQuestionAnswering,
+            NystromformerForSequenceClassification,
+            NystromformerForTokenClassification,
+            NystromformerLayer,
+            NystromformerModel,
+            NystromformerPreTrainedModel,
+        )
         from .models.openai import (
             OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OpenAIGPTDoubleHeadsModel,
@@ -3354,6 +3406,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
             TF_MODEL_MAPPING,
             TF_MODEL_WITH_LM_HEAD_MAPPING,
             TFAutoModel,
@@ -3367,6 +3420,7 @@ if TYPE_CHECKING:
             TFAutoModelForSequenceClassification,
             TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
+            TFAutoModelForVision2Seq,
             TFAutoModelWithLMHead,
         )
         from .models.bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
@@ -3636,6 +3690,7 @@ if TYPE_CHECKING:
             TFTransfoXLModel,
             TFTransfoXLPreTrainedModel,
         )
+        from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
