@@ -22,8 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.16.0.dev0"
-
+__version__ = "4.16.0"
 
 from typing import TYPE_CHECKING
 
@@ -1012,6 +1011,7 @@ if is_torch_available():
             "LayoutLMv2ForQuestionAnswering",
             "LayoutLMv2ForSequenceClassification",
             "LayoutLMv2ForTokenClassification",
+            "LayoutLMv2ForRelationExtraction",
             "LayoutLMv2Model",
             "LayoutLMv2PreTrainedModel",
         ]
@@ -2964,6 +2964,7 @@ if TYPE_CHECKING:
             LayoutLMv2ForQuestionAnswering,
             LayoutLMv2ForSequenceClassification,
             LayoutLMv2ForTokenClassification,
+            LayoutLMv2ForRelationExtraction,
             LayoutLMv2Model,
             LayoutLMv2PreTrainedModel,
         )

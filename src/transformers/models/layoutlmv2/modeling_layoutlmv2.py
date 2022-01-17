@@ -36,10 +36,12 @@ from ...modeling_outputs import (
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
+    ReOutput,
 )
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...utils import logging
 from .configuration_layoutlmv2 import LayoutLMv2Config
+from .re import REDecoder
 
 
 # soft dependency
@@ -1223,6 +1225,86 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+
+class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.layoutlmv2 = LayoutLMv2Model(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.extractor = REDecoder(config)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.layoutlmv2.embeddings.word_embeddings
+
+    @add_start_docstrings_to_model_forward(LAYOUTLMV2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=ReOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids,
+        bbox,
+        entities,
+        relations,
+        image=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+    ):
+        r"""
+        entities: (Dict), the content of dict is {"start":[], "end":[], "label":[]}.
+            "start"/"end" correspond the start/end index of text token in all tokens of image
+            label is in [0, 1, 2], which correspond to ["HEADER", "QUESTION", "ANSWER"]
+        relations: (Dict), the content of dict is {"head":[], "tail":[], "start_index":[], "end_index":[]}.
+            "head"/"tail" correspond the entity index in all entities of image.
+            "start_index"/"end_index" is the min/max value of "head" and "tail" entity's "start" and "end".
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import LayoutLMv2Processor, LayoutLMv2Tokenizer, LayoutLMv2ForRelationExtraction
+        >>> from PIL import Image
+        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
+        >>> model = LayoutLMv2ForRelationExtraction.from_pretrained("microsoft/layoutlmv2-base-uncased")
+
+        >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+        >>> words = ["hello", "world"]
+        >>> boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
+
+        >>> encoding = processor(image, words, boxes=boxes, return_tensors="pt")
+        >>> print('encoding image: ', encoding['image'].shape)
+        >>> # encoding['relations'] and encoding['entities'] are taken from the result of ner
+        >>> encoding['relations'] = [{"end_index": [], "head":[], "start_index":[], "tail":[]}]
+        >>> encoding['entities'] = {"start": [], "end": [], "label": []}
+        >>> outputs = model(**encoding)
+        >>> print(outputs)
+        ```"""
+
+        outputs = self.layoutlmv2(
+            input_ids=input_ids,
+            bbox=bbox,
+            image=image,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+        )
+
+        seq_length = input_ids.size(1)
+        sequence_output, image_output = outputs[0][:, :seq_length], outputs[0][:, seq_length:]
+        sequence_output = self.dropout(sequence_output)
+        loss, pred_relations = self.extractor(sequence_output, entities, relations)
+
+        return ReOutput(
+            loss=loss,
+            entities=entities,
+            relations=relations,
+            pred_relations=pred_relations,
+            hidden_states=outputs[0],
         )
 
 
