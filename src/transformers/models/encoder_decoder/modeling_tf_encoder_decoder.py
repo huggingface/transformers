@@ -15,8 +15,8 @@
 """ Classes to support TF Encoder-Decoder architectures"""
 
 
-import warnings
 import tempfile
+import warnings
 from typing import Optional
 
 import tensorflow as tf
@@ -30,7 +30,13 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, input_processing, shape_list
+from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
+    TFPreTrainedModel,
+    get_initializer,
+    input_processing,
+    shape_list,
+)
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_tf_auto import TFAutoModel, TFAutoModelForCausalLM
