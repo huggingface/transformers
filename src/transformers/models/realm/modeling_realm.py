@@ -1271,7 +1271,31 @@ class RealmScorer(RealmPreTrainedModel):
             into associated vectors than the model's internal embedding lookup matrix.
 
         Returns:
-        """
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import RealmTokenizer, RealmScorer
+
+        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-scorer")
+        >>> model = RealmScorer.from_pretrained("qqaatw/realm-cc-news-pretrained-scorer", num_candidates=2)
+
+        >>> # batch_size = 2, num_candidates = 2
+        >>> input_texts = ["How are you?", "What is the item in the picture?"]
+        >>> candidates_texts = [["Hello world!", "Nice to meet you!"], ["A cute cat.", "An adorable dog."]]
+
+        >>> inputs = tokenizer(input_texts, return_tensors="pt")
+        >>> candidates_inputs = tokenizer.batch_encode_candidates(candidates_texts, max_length=10, return_tensors="pt")
+
+        >>> outputs = model(
+        ...     **inputs,
+        ...     candidate_input_ids=candidates_inputs.input_ids,
+        ...     candidate_attention_mask=candidates_inputs.attention_mask,
+        ...     candidate_token_type_ids=candidates_inputs.token_type_ids,
+        ... )
+        >>> relevance_score = outputs.relevance_score
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1478,10 +1502,7 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "The reader of REALM.",
-    REALM_START_DOCSTRING,
-)
+@add_start_docstrings("The reader of REALM.", REALM_START_DOCSTRING)
 class RealmReader(RealmPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler", "cls"]
