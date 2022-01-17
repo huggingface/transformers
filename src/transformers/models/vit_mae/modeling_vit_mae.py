@@ -112,10 +112,10 @@ class ViTMAEForPreTrainingOutput(ModelOutput):
             Pixel reconstruction loss.
         logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
             Pixel reconstruction logits.
-        mask
-            ...
-        ids_restore
-            ...
+        mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Tensor indicating which patches are masked (1) and which are not (0).
+        ids_restore (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Tensor containing the original index of the (shuffled) masked patches.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
@@ -143,10 +143,21 @@ def to_2tuple(x):
     return (x, x)
 
 
-def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
+def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
     """
-    grid_size: int of the grid height and width return: pos_embed: [grid_size*grid_size, embed_dim] or
-    [1+grid_size*grid_size, embed_dim] (w/ or w/o cls_token)
+    Create 2D sin/cos positional embeddings.
+
+    Args:
+        embed_dim (`int`):
+            Embedding dimension.
+        grid_size (`int`):
+            The grid height and width.
+        add_cls_token (`bool`, *optional*, defaults to `False`):
+            Whether or not to add a classification (CLS) token.
+
+    Returns:
+        (`torch.FloatTensor` of shape (grid_size*grid_size, embed_dim) or (1+grid_size*grid_size, embed_dim): the
+        position embeddings (with or without classification token)
     """
     grid_h = np.arange(grid_size, dtype=np.float32)
     grid_w = np.arange(grid_size, dtype=np.float32)
@@ -155,13 +166,14 @@ def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
 
     grid = grid.reshape([2, 1, grid_size, grid_size])
     pos_embed = get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
-    if cls_token:
+    if add_cls_token:
         pos_embed = np.concatenate([np.zeros([1, embed_dim]), pos_embed], axis=0)
     return pos_embed
 
 
 def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
-    assert embed_dim % 2 == 0
+    if embed_dim % 2 != 0:
+        raise ValueError("embed_dim must be even")
 
     # use half of dimensions to encode grid_h
     emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0])  # (H*W, D/2)
@@ -175,7 +187,9 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     """
     embed_dim: output dimension for each position pos: a list of positions to be encoded: size (M,) out: (M, D)
     """
-    assert embed_dim % 2 == 0
+    if embed_dim % 2 != 0:
+        raise ValueError("embed_dim must be even")
+
     omega = np.arange(embed_dim // 2, dtype=np.float)
     omega /= embed_dim / 2.0
     omega = 1.0 / 10000 ** omega  # (D/2,)
@@ -218,7 +232,7 @@ class ViTMAEEmbeddings(nn.Module):
         # initialization
         # initialize (and freeze) pos_embed by sin-cos embedding
         pos_embed = get_2d_sincos_pos_embed(
-            self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches ** 0.5), cls_token=True
+            self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches ** 0.5), add_cls_token=True
         )
         self.position_embeddings.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
@@ -739,7 +753,7 @@ class ViTMAEDecoder(nn.Module):
 
     def initialize_weights(self, num_patches):
         decoder_pos_embed = get_2d_sincos_pos_embed(
-            self.decoder_pos_embed.shape[-1], int(num_patches ** 0.5), cls_token=True
+            self.decoder_pos_embed.shape[-1], int(num_patches ** 0.5), add_cls_token=True
         )
         self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
 
