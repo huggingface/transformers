@@ -302,8 +302,8 @@ class DataCollatorForWav2Vec2Pretraining:
         batch_size = batch["input_values"].shape[0]
 
         mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
-
-        mask_indices_seq_length = mask_indices_seq_length.item() if torch.is_tensor(mask_indices_seq_length) else mask_indices_seq_length
+        # make sure masked sequence length is a Python scalar
+        mask_indices_seq_length = int(mask_indices_seq_length)
 
         # make sure that no loss is computed on padded inputs
         if batch.get("attention_mask") is not None:
