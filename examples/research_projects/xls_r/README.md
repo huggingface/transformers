@@ -525,6 +525,27 @@ The following table summarizes what platform to use for which problem.
 ## Talks
 
 TODO(Patrick)
+We are very excited to be hosting 2 days of talks from:
+
+### Thursday, January 20th
+
+- [Watch the talks on YouTube](TODO)
+- [Chat history](TODO)
+
+ Speaker        | Topic                           | Time                  |  Video |
+|-------------|---------------------------------|------------------------|------------------------|
+| <someone from hf>, Hugging Face | TODO | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
+| Raymond Grossman and Jeremy Lopez, Kensho-Technologies | TODO | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
+
+### Friday, January 21th
+
+- [Watch the talks on YouTube](TODO)
+- [Chat history](TODO)
+
+ Speaker        | Topic                           | Time                  | Video |
+|-------------|---------------------------------|------------------------|------------------------|
+| Gabriel Habayeb, Mozilla Common Voice | TODO | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
+| Changhan Wang, Meta AI Research | TODO | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
 
 ## General Tips and Tricks
 
