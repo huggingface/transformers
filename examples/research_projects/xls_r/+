@@ -3,7 +3,7 @@
 Welcome to the robust speech recognition challenge 🎙️ !
 
 The goal of this event is to build **robust**, **real-world** speech recognition (ASR) systems in as many languages as possible 🌏🌍🌎.
-If necessary and available, free access to a V100 32 GB GPU will kindly be provided by the [OVH could team](https://us.ovhcloud.com/) 🚀.
+If necessary and available, free access to a V100 32 GB GPU will kindly be provided by the [OVHcloud team](https://us.ovhcloud.com/) 🚀.
 This document summarizes all the relevant information required for the speech community event 📋.
 
 To sign-up, please see [this forum post](https://discuss.huggingface.co/t/open-to-the-community-robust-speech-recognition-challenge/13614) 🤗.
@@ -15,11 +15,11 @@ To sign-up, please see [this forum post](https://discuss.huggingface.co/t/open-t
 - [How to install pytorch, transformers, datasets](#how-to-install-relevant-libraries)
 - [Data and Preprocessing](#data-and-preprocessing)
 - [How to fine-tune an acoustic model](#how-to-finetune-an-acoustic-model)
-- [How to fine-tune with OVH could](#how-to-finetune-with-ovh-cloud)
+- [How to fine-tune with OVHcloud](#how-to-fine-tune-with-ovh-cloud)
 - [How to combine n-gram language models with acoustic model](#how-to-combine-n-gram-with-acoustic-model)
 - [Evaluation](#evaluation)
 - [Prizes](#prizes)
-- [Communication and Problems](#communication-and-problems)
+- [Communication and Problems](#communition-and-problems)
 - [Talks](#talks)
 - [General Tips & Tricks](#general-tips-and-tricks)
 
@@ -43,7 +43,7 @@ how the audio data can be processed.
 For training, it is recommended to use the [official training script](https://github.com/huggingface/transformers/blob/master/examples/pytorch/speech-recognition/run_speech_recognition_ctc.py) or a modification thereof. A step-by-step guide on how to fine-tune 
 an acoustic model for a speech recognition system can be found under [How to fine-tune an acoustic model](#how-to-finetune-an-acoustic-model).
 If possible it is encouraged to fine-tune the acoustic models on local GPU machines, but 
-if those are not available, the OVH could team kindly provides a limited 
+if those are not available, the OVHcloud team kindly provides a limited 
 number of GPUs for the event. Simply fill out [this google form](https://forms.gle/GFZkMkKLiufi75g28) to get access to a GPU.
 For more information on how to train an acoustic model on one of OVH's GPU - see [How to fine-tune a speech recognition model with OVHcould](#how-to-fine-tune-with-ovh-cloud).
 
@@ -90,24 +90,7 @@ You should have received an invite by email. If you didn't receive an invite, pl
 
 ## Data and preprocessing
 
-To begin with, we will quickly go over how to find suitable training data and 
-how to preprocess it.
-In this section, we will quickly go over what data is allowed to be used as training 
-data, what kind of data preprocessing is allowed be used, and how the model should be evaluated.
-
-To make it very simple regarding the first point: **All data except the official common voice `test` data set can be used as training data**. For models trained in a language that is not included in Common Voice, the author of the model is responsible to 
-leave a reasonable amount of data for evaluation.
-
-Second, the rules regarding the preprocessing are not that as straight-forward. It is allowed (and recommended) to 
-normalize the data to only have lower-case characters. It is also allowed (and recommended) to remove typographical 
-symbols and punctuation marks. A list of such symbols can *e.g.* be fonud [here](https://en.wikipedia.org/wiki/List_of_typographical_symbols_and_punctuation_marks) - however here we already must be careful. We should **not** remove a symbol that 
-would change the meaning of the words, *e.g.* in English, we should not remove the single quotation mark `'` since it 
-would change the meaning of the word `"it's"` to `"its"` which would then be incorrect. So the golden rule here is to 
-not remove any characters that could change the meaning of a word into another word. This is not always obvious and should 
-be given some consideration. As another example, it is fine to remove the "Hypen-minus" sign "`-`" since it doesn't change the 
-meaninng of a word to another one. *E.g.* "`fine-tuning`" would be changed to "`finetuning`" which has still the same meaning.
-
-Since those choices are not always obvious when in doubt feel free to ask on Slack or even better post on the forum, as was 
+TODO:
 
 ## How to install relevant libraries
 
@@ -386,15 +369,17 @@ Following the above steps we first create the model:
 huggingface-cli repo create xls-r-300m-sv
 ```
 
-, clone it locally (assuming the `<username>` is `hf-test`)
+and then clone it locally:
 
 ```bash
-git clone hf-test/xls-r-300m-sv
-```
 
-, and, define the following hyperparameters for training
+
+and we define the following 
+
+hyperparameters for training
 
 ```bash
+
 echo '''python run_speech_recognition_ctc.py \
 	--dataset_name="mozilla-foundation/common_voice_7_0" \
 	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
@@ -438,9 +423,6 @@ The above-chosen hyperparameters probably work quite well on a range of differen
 datasets and languages, but are by no means optimal. It is up to you to find a good set of 
 hyperparameters.
 
-
-## How to finetune with OVH cloud
-
 ## How to combine n gram with acoustic model
 
 Having trained a speech recognition model with CTC as shown in the section above, 
@@ -469,12 +451,8 @@ the *n-gram* with a trained speech recognition model directly into the same mode
 
 ## Prizes
 
-To be filled out soon...
 
 ## Communication and Problems
 
 
 ## Talks
-
-
-## General Tips and Tricks
