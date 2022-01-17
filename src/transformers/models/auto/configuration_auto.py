@@ -31,6 +31,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
         ("realm", "RealmConfig"),
+        ("nystromformer", "NystromformerConfig"),
         ("imagegpt", "ImageGPTConfig"),
         ("qdqbert", "QDQBertConfig"),
         ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
@@ -118,6 +119,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
         ("realm", "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("nystromformer", "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -193,6 +195,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("realm", "Realm"),
+        ("nystromformer", "Nystromformer"),
         ("imagegpt", "ImageGPT"),
         ("qdqbert", "QDQBert"),
         ("vision-encoder-decoder", "Vision Encoder decoder"),
