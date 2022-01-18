@@ -1903,9 +1903,6 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
 def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers: Optional[Dict[str, str]] = None):
     """
     Download remote file. Do not gobble up errors.
-
-    `tqdm` behavior is determined by `transformers.utils.tqdm_utils.is_progress_bar_enabled`, and can be set using
-    `transformers.utils.tqdm_utils.set_progress_bar_enabled`.
     """
     headers = copy.deepcopy(headers)
     if resume_size > 0:
@@ -1914,6 +1911,8 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
     r.raise_for_status()
     content_length = r.headers.get("Content-Length")
     total = resume_size + int(content_length) if content_length is not None else None
+    # `tqdm` behavior is determined by `utils.tqdm_utils.is_progress_bar_enabled()`
+    # and can be set using `utils.tqdm_utils.enable/disable_progress_bar()`
     progress = tqdm(
         unit="B",
         unit_scale=True,
