@@ -50,7 +50,7 @@ from .configuration_swin import SwinConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "swin-base"
+_CHECKPOINT_FOR_DOC = "microsoft/swin-tiny-patch4-window7-224"
 _CONFIG_FOR_DOC = "SwinConfig"
 
 SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -740,8 +740,8 @@ class SwinModel(SwinPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = SwinFeatureExtractor.from_pretrained("swin-base")
-        >>> model = SwinModel.from_pretrained("swin-base")
+        >>> feature_extractor = SwinFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+        >>> model = SwinModel.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -837,8 +837,8 @@ class SwinForImageClassification(SwinPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = SwinFeatureExtractor.from_pretrained("swin-base")
-        >>> model = SwinForImageClassification.from_pretrained("swin-base")
+        >>> feature_extractor = SwinFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+        >>> model = SwinForImageClassification.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

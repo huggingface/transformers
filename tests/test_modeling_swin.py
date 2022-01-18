@@ -378,25 +378,24 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 class SwinModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return SwinFeatureExtractor.from_pretrained("swin-base") if is_vision_available() else None
+        return SwinFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = SwinForImageClassification.from_pretrained("swin-base").to(torch_device)
-
+        model = SwinForImageClassification.from_pretrained("microsoft/swin-tiny-patch4-window7-224").to(torch_device)
         feature_extractor = self.default_feature_extractor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
 
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
+        expected_slice = torch.tensor([-0.2952, -0.4777,  0.2025]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

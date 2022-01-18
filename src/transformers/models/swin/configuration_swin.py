@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/swin-base": "https://huggingface.co/microsoft/swin-base patch4-window12-384/resolve/main/config.json",
+    "microsoft/microsoft/swin-tiny-patch4-window7-224": "https://huggingface.co/microsoft/microsoft/swin-tiny-patch4-window7-224 patch4-window12-384/resolve/main/config.json",
     # See all Swin models at https://huggingface.co/models?filter=swin
 }
 
@@ -80,10 +80,10 @@ class SwinConfig(PretrainedConfig):
     ```python
     >>> from transformers import SwinModel, SwinConfig
 
-    >>> # Initializing a Swin swin-base style configuration
+    >>> # Initializing a Swin microsoft/swin-tiny-patch4-window7-224 style configuration
     >>> configuration = SwinConfig()
 
-    >>> # Initializing a model from the swin-base style configuration
+    >>> # Initializing a model from the microsoft/swin-tiny-patch4-window7-224 style configuration
     >>> model = SwinModel(configuration)
 
     >>> # Accessing the model configuration
