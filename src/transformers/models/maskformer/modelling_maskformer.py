@@ -15,9 +15,10 @@
 """ PyTorch MaskFormer model."""
 
 from __future__ import annotations
-
+import math
 import logging
 from dataclasses import dataclass
+import math
 from numbers import Number
 from pprint import pprint
 from typing import Callable, Dict, List, Optional, Tuple, Union
@@ -1163,7 +1164,7 @@ class SwinTransformerBackbone(SwinTransformer, BackboneMixin):
 
 
 class ConvLayer(nn.Sequential):
-    def __init__(self, in_features: int, out_features: int):
+    def __init__(self, in_features: int, out_features: int, kernel_size: int = 3, padding: int = 1):
         """A basic module that executs conv - act - norm in sequence
         used in MaskFormer
 
@@ -1172,9 +1173,9 @@ class ConvLayer(nn.Sequential):
             out_features (int): The number of outputs features (channels)
         """
         super().__init__(
-            nn.Conv2d(in_features, out_features, kernel_size=3, padding=1, bias=False),
-            nn.ReLU(inplace=True),
+            nn.Conv2d(in_features, out_features, kernel_size=kernel_size, padding=padding, bias=False),
             nn.GroupNorm(32, out_features),
+            nn.ReLU(inplace=True),
         )
 
 
@@ -1188,7 +1189,11 @@ class FPNLayer(nn.Module):
             lateral_features (int): The number of lateral features (channels)
         """
         super().__init__()
-        self.proj = nn.Conv2d(lateral_features, in_features, kernel_size=1, bias=False)
+        self.proj = nn.Sequential(
+            nn.Conv2d(lateral_features, in_features, kernel_size=1, padding=0, bias=False),
+            nn.GroupNorm(32, in_features),
+        )
+
         self.block = ConvLayer(in_features, in_features)
 
     def forward(self, down: Tensor, left: Tensor) -> Tensor:
@@ -1261,7 +1266,7 @@ class PositionEmbeddingSine(nn.Module):
             scale = 2 * torch.pi
         self.scale = scale
 
-    def forward(self, x, mask=None):
+    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
             mask = torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool)
         not_mask = ~mask
@@ -1295,12 +1300,16 @@ class MLP(nn.Sequential):
         """
         in_dims: List[int] = [input_dim] + [hidden_dim] * (num_layers - 1)
         out_dims: List[int] = [hidden_dim] * (num_layers - 1) + [output_dim]
-        super().__init__(
-            *[
-                nn.Sequential(nn.Linear(in_dim, out_dim), nn.ReLU(inplace=True))
-                for in_dim, out_dim in zip(in_dims, out_dims)
-            ]
-        )
+
+        layers: List[nn.Module] = []
+        for i, (in_dim, out_dim) in enumerate(zip(in_dims, out_dims)):
+            # TODO should name them, e.g. fc, act ...
+            layer: nn.Module = nn.Sequential(
+                nn.Linear(in_dim, out_dim), nn.ReLU(inplace=True) if i < num_layers - 1 else nn.Identity()
+            )
+            layers.append(layer)
+
+        super().__init__(*layers)
 
 
 class MaskFormerPixelLevelModule(nn.Module):
@@ -1379,7 +1388,7 @@ class MaskFormerSegmentationModule(nn.Module):
     def forward(self, decoder_outputs: Tuple[Tensor], pixel_embbeddings: Tensor) -> Dict[str, Tensor]:
         last_decoder_output: Tensor = decoder_outputs[-1]
         mask_embeddings: Tensor = self.mask_embedder(last_decoder_output)
-        out = {}
+        out: Dict[str, Tensor] = {}
 
         if self.mask_classification:
             classes: Tensor = self.class_predictor(last_decoder_output)
@@ -1492,9 +1501,9 @@ class MaskFormerForSemanticSegmentation(nn.Module):
         mask_classes: Tensor = outputs.pred_logits.softmax(dim=-1)[..., :-1]
         # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
         mask_probs: Tensor = outputs.pred_masks.sigmoid()
-        # now we want to sum over the queries, 
-        # out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} 
-        # where $ softmax(p) \in R^{q, c} is the mask classes 
+        # now we want to sum over the queries,
+        # out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w}
+        # where $ softmax(p) \in R^{q, c} is the mask classes
         # and $sigmoid(m) \in R^{q, h, w} is the mask probabilities
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
         segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", mask_classes, mask_probs)
@@ -1503,7 +1512,6 @@ class MaskFormerForSemanticSegmentation(nn.Module):
 
 
 class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
-
     def __init__(self, object_mask_threshold: float, config: MaskFormerConfig):
         super().__init__(config)
         self.object_mask_threshold = object_mask_threshold
@@ -1511,18 +1519,18 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
     def forward(self, *args, **kwargs):
         outputs = self.model(*args, **kwargs)
         pred_logits: Tensor = outputs.pred_logits
-        pred_masks: Tensor = outputs.pred_masks 
-        
+        pred_masks: Tensor = outputs.pred_masks
+
         b, q, h, w = pred_masks.shape
 
         scores, labels = F.softmax(pred_logits, dim=-1).max(-1)
-
+        # for each query, the best score and its index
         mask_probs = pred_logits.sigmoid()
         # we need to filter out low score predictions
         # and the background class
-        to_keep = labels.ne(self.model.config.num_classes) & (
-            scores > self.object_mask_threshold
-        )  
+        to_keep = labels.ne(self.model.config.num_classes) & (scores > self.object_mask_threshold)
+        # NOTE we can't do it in a batch-wise fashion
+        # since to_keep may have differnt size for each prediction
 
         cur_scores = scores[to_keep]
         cur_classes = labels[to_keep]
@@ -1531,6 +1539,9 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
         # remove the null class
         cur_mask_cls = cur_mask_cls[:, :-1]
         # weight each mask by its score
+        # why we collapse the batch class?
+        # oops we don't have to! original implementation is
+        # batch wise!!!
         cur_prob_masks = cur_scores.view(-1, 1, 1) * cur_masks
 
         we_detect_something = cur_masks.shape[0] > 0
@@ -1546,10 +1557,7 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
             stuff_memory_list = {}
             for k in range(cur_classes.shape[0]):
                 pred_class = cur_classes[k].item()
-                isthing = (
-                    pred_class
-                    in self.metadata.thing_dataset_id_to_contiguous_id.values()
-                )
+                isthing = pred_class in self.metadata.thing_dataset_id_to_contiguous_id.values()
                 mask = cur_mask_ids == k
                 mask_area = mask.sum().item()
                 original_area = (cur_masks[k] >= 0.5).sum().item()
@@ -1578,4 +1586,3 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                     )
 
             return panoptic_seg, segments_info
-
