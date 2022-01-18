@@ -78,16 +78,19 @@ class ViltConfig(PretrainedConfig):
             The maximum number of patches to take as input for the Transformer encoder. If set to a positive integer,
             the encoder will sample `max_image_length` patches at maximum. If set to -1, will not be taken into
             account.
+        num_images (`int`, *optional*, defaults to -1):
+            The number of images to use for natural language visual reasoning. If set to a positive integer, will be
+            used by [`ViltForImagesAndTextClassification`] for defining the classifier head.
 
     Example:
 
     ```python
     >>> from transformers import ViLTModel, ViLTConfig
 
-    >>> # Initializing a ViLT vit-base-patch16-224 style configuration
+    >>> # Initializing a ViLT dandelin/vilt-b32-mlm style configuration
     >>> configuration = ViLTConfig()
 
-    >>> # Initializing a model from the vit-base-patch16-224 style configuration
+    >>> # Initializing a model from the dandelin/vilt-b32-mlm style configuration
     >>> model = ViLTModel(configuration)
 
     >>> # Accessing the model configuration
@@ -117,6 +120,7 @@ class ViltConfig(PretrainedConfig):
         qkv_bias=True,
         max_image_length=-1,
         tie_word_embeddings=False,
+        num_images=-1,
         **kwargs
     ):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
@@ -141,3 +145,4 @@ class ViltConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.max_image_length = max_image_length
+        self.num_images = num_images

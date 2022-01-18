@@ -75,6 +75,7 @@ class ViltModelTester:
         scope=None,
         modality_type_vocab_size=2,
         add_multiple_images=False,
+        num_images=-1,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -102,6 +103,7 @@ class ViltModelTester:
         self.scope = scope
         self.modality_type_vocab_size = modality_type_vocab_size
         self.add_multiple_images = add_multiple_images
+        self.num_images = num_images
         # we set the expected sequence length (which is used in several tests)
         # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
         self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
@@ -147,6 +149,7 @@ class ViltModelTester:
             initializer_range=self.initializer_range,
             num_labels=self.num_labels,
             modality_type_vocab_size=self.modality_type_vocab_size,
+            num_images=self.num_images,
         )
 
     def create_and_check_model(
@@ -199,7 +202,6 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             ViltForQuestionAnswering,
             ViltForImageRetrievalTextRetrieval,
             ViltForMaskedLM,
-            # ViltForNaturalLanguageVisualReasoning,
         )
         if is_torch_available()
         else ()
@@ -379,18 +381,31 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
-            self.assertEqual(len(hidden_states), expected_num_layers)
+            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+                # hidden_states are a list of length num_images
+                # each element contains the hidden states of a particular image index
+                self.assertEqual(len(hidden_states), self.model_tester.num_images)
+                self.assertEqual(len(hidden_states[0]), expected_num_layers)
+            else:
+                self.assertEqual(len(hidden_states), expected_num_layers)
 
             seq_length = self.model_tester.expected_seq_len
 
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
+            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+                self.assertListEqual(
+                    list(hidden_states[0][0].shape[-2:]),
+                    [seq_length, self.model_tester.hidden_size],
+                )
+            else:
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [seq_length, self.model_tester.hidden_size],
+                )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
+            print("Model class:", model_class)
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
 
@@ -413,7 +428,7 @@ class ViltForNaturalLanguageVisualReasoningModelTest(ViltModelTest, unittest.Tes
     all_model_classes = (ViltForNaturalLanguageVisualReasoning,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = ViltModelTester(self, modality_type_vocab_size=3, add_multiple_images=True)
+        self.model_tester = ViltModelTester(self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2)
         self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=37)
 
 

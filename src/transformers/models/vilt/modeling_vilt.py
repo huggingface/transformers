@@ -1141,11 +1141,12 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         self.vilt = ViltModel(config)
 
         # Classifier head
+        num_images = config.num_images
         self.classifier = nn.Sequential(
-            nn.Linear(config.hidden_size * 2, config.hidden_size * 2),
-            nn.LayerNorm(config.hidden_size * 2),
+            nn.Linear(config.hidden_size * num_images, config.hidden_size * num_images),
+            nn.LayerNorm(config.hidden_size * num_images),
             nn.GELU(),
-            nn.Linear(config.hidden_size * 2, config.num_labels),
+            nn.Linear(config.hidden_size * num_images, config.num_labels),
         )
 
         # Initialize weights and apply final processing
@@ -1202,6 +1203,10 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         >>> idx = logits.argmax(-1).item()
         >>> print("Predicted answer:", model.config.id2label[idx])
         ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values.ndim == 4:
@@ -1209,7 +1214,13 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
             pixel_values = pixel_values.unsqueeze(1)
 
         num_images = pixel_values.shape[1]
+        if num_images != self.config.num_images:
+            raise ValueError(
+                "Make sure to match the number of images in the model with the number of images in the input."
+            )
         pooler_outputs = []
+        hidden_states = [] if output_hidden_states else None
+        attentions = [] if output_attentions else None
         for i in range(num_images):
             # forward every image through the model
             outputs = self.vilt(
@@ -1228,6 +1239,10 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
             )
             pooler_output = outputs.pooler_output if return_dict else outputs[1]
             pooler_outputs.append(pooler_output)
+            if output_hidden_states:
+                hidden_states.append(outputs.hidden_states)
+            if output_attentions:
+                attentions.append(outputs.attentions)
 
         pooled_output = torch.cat(pooler_outputs, dim=-1)
         logits = self.classifier(pooled_output)
@@ -1238,12 +1253,12 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,)
+            output = (logits, hidden_states, attentions)
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=None,
-            attentions=None,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
