@@ -152,7 +152,7 @@ _deps = [
     "tokenizers>=0.10.1,!=0.11.3",
     "torch>=1.0",
     "torchaudio",
-    "pyctcdecode>=0.2.0",
+    "pyctcdecode>=0.3.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
