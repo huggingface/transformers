@@ -618,6 +618,7 @@ def pipeline(
                 and isinstance(model_name, str)
             ):
                 try:
+                    import kenlm  # to trigger `ImportError` if not installed
                     from pyctcdecode import BeamSearchDecoderCTC
 
                     language_model_glob = os.path.join(BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*")
