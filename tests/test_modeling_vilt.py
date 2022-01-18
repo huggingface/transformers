@@ -14,11 +14,8 @@
 # limitations under the License.
 """ Testing suite for the PyTorch ViLT model. """
 
-
-import tempfile
 import unittest
 
-import numpy as np
 from datasets import load_dataset
 
 from transformers import ViltConfig, is_torch_available, is_vision_available
@@ -76,6 +73,7 @@ class ViltModelTester:
         initializer_range=0.02,
         num_labels=3,
         scope=None,
+        modality_type_vocab_size=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -101,6 +99,7 @@ class ViltModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.scope = scope
+        self.modality_type_vocab_size = modality_type_vocab_size
         # we set the expected sequence length (which is used in several tests)
         # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
         self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
@@ -142,6 +141,7 @@ class ViltModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             num_labels=self.num_labels,
+            modality_type_vocab_size=self.modality_type_vocab_size,
         )
 
     def create_and_check_model(
@@ -283,55 +283,19 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
+    @unittest.skip(
+        reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
+                            hidden states"""
+    )
     def test_save_load(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        pass
 
-        for model_class in self.all_model_classes:
-            # ViltModel samples image tokens from a multinomial distribution, resulting in non-deterministic hidden states
-            if model_class in get_values(MODEL_MAPPING):
-                continue
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            out_2 = outputs[0].cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
-                model.to(torch_device)
-                with torch.no_grad():
-                    after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-                # Make sure we don't have nans
-                out_1 = after_outputs[0].cpu().numpy()
-                out_1[np.isnan(out_1)] = 0
-                max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 1e-5)
-
+    @unittest.skip(
+        reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
+                            hidden states"""
+    )
     def test_determinism(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            # ViltModel samples image tokens from a multinomial distribution, resulting in non-deterministic hidden states
-            if model_class in get_values(MODEL_MAPPING):
-                continue
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-                second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-
-            out_1 = first.cpu().numpy()
-            out_2 = second.cpu().numpy()
-            out_1 = out_1[~np.isnan(out_1)]
-            out_2 = out_2[~np.isnan(out_2)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
+        pass
 
     @unittest.skip(
         reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
@@ -434,6 +398,16 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in VILT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ViltModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+@require_torch
+class ViltForNaturalLanguageVisualReasoningModelTest(ViltModelTest, unittest.TestCase):
+
+    all_model_classes = (ViltForNaturalLanguageVisualReasoning,) if is_torch_available() else ()
+
+    def setUp(self):
+        self.model_tester = ViltModelTester(self, modality_type_vocab_size=3)
+        self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=37)
 
 
 # We will verify our results on an image of cute cats
