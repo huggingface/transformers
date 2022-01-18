@@ -474,7 +474,40 @@ hyperparameters.
 
 ## How to finetune with OVH cloud
 
-TODO(Anton)
+For a more detailed guide on setting up OVHcloud please watch this video: TODO
+
+### Creating an OVHCloud account
+*TIP*: If you haven't created a project on OVHcloud yet, make sure you've received your GPU voucher code *beforehand*, 
+so that you can skip entering the credit card information.
+1. If you're a US citizen, create an account via [OVHcloud.CA](https://ovhcloud.ca/). 
+If you're from anywhere else in the world, create an account via [OVHcloud.COM](https://ovhcloud.com/).
+2. Once logged in, click `Public Cloud` from the top menu and then click `Create your first OVH Public Cloud project`. 
+Then enter a project name (e.g. "huggingface"), enter your voucher code, and click `Continue` -> `Create my project`.
+*Note: if you see a request for credit card details during the last step, and you can't skip it, then your voucher code 
+is invalid. Please report it to the [#ovh-support](https://discord.gg/p4qqDV3M) channel on Discord.*
+
+### Setting up an AI notebook
+1. Go to the `Public Cloud` page and select `Project Management` -> `Users & Roles` from the menu on the left. 
+2. Click `+ Add user`. Write a user description (e.g. `AI Trainer`), and select an `AI Training Operator` user role. 
+Click `Confirm`.
+3. Write down the *username* and *password* (at the top of the screen) somewhere. They will be needed during step 7.
+4. Select `AI & Machine Learning` -> `AI Training` from the menu on the left. 
+Click `+ Launch a new job` on the AI Training page.
+5. On the `Launch a new job` page:
+   * In `1. Choose a region` select a region closest to you.
+   * In `2. Enter the Docker image` select `Custom image` -> `baaastijn/ovh_huggingface`.
+   * You can skip steps `3.` and `4.` if you will be using the Hugging Face Hub to store the models after training.
+   * In `5. Configure your job` select **1** `GPU`.
+   * Validate the info and Create the job.
+6. On the `AI Training Jobs` screen wait until the job's status changes from `Pending` to `Running`.
+7. Click `HTTP Access` and log in with the AI training user you've created earlier. 
+Once logged in, you can close the page and click `HTTP Access` to launch a JupyterLab notebook.
+8. Awesome, now you have a free GPU-enabled Jupyter instance!
+
+**Note**: If you're an experienced Docker user, feel free to create a custom docker image with all of the needed packages 
+like the one in step 5. The Dockerfile for it is available here: 
+[baaastijn/Dockerimages](https://github.com/baaastijn/Dockerimages/tree/main/Hugginface_challenge_speech).
+Once you've built your own image, push it to https://hub.docker.com/ and select it during the OVHcloud job creation.
 
 ## How to combine n gram with acoustic model
 
