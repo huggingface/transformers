@@ -547,19 +547,19 @@ def main():
         rng, input_rng = jax.random.split(rng)
 
         # train
+        train_loader = glue_train_data_collator(input_rng, train_dataset, train_batch_size)
         for step, batch in enumerate(
             tqdm(
-                glue_train_data_collator(input_rng, train_dataset, train_batch_size),
+                train_loader,
                 total=steps_per_epoch,
                 desc="Training...",
                 position=1,
             ),
-            1,
         ):
             state, train_metric, dropout_rngs = p_train_step(state, batch, dropout_rngs)
             train_metrics.append(train_metric)
 
-            cur_step = epoch * steps_per_epoch + step
+            cur_step = (epoch * steps_per_epoch) + (step + 1)
 
             if cur_step % training_args.logging_steps == 0 and cur_step > 0:
                 # Save metrics
@@ -578,8 +578,9 @@ def main():
 
                 eval_metrics = {}
                 # evaluate
+                eval_loader = glue_eval_data_collator(eval_dataset, eval_batch_size)
                 for batch in tqdm(
-                    glue_eval_data_collator(eval_dataset, eval_batch_size),
+                    eval_loader,
                     total=len(eval_dataset) // eval_batch_size,
                     desc="Evaluating ...",
                     position=2,
