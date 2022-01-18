@@ -229,8 +229,7 @@ class ViTMAEEmbeddings(nn.Module):
         self.initialize_weights()
 
     def initialize_weights(self):
-        # initialization
-        # initialize (and freeze) pos_embed by sin-cos embedding
+        # initialize (and freeze) position embeddings by sin-cos embedding
         pos_embed = get_2d_sincos_pos_embed(
             self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches ** 0.5), add_cls_token=True
         )
@@ -241,7 +240,7 @@ class ViTMAEEmbeddings(nn.Module):
         torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
 
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
-        torch.nn.init.normal_(self.cls_token, std=0.02)
+        torch.nn.init.normal_(self.cls_token, std=self.config.initializer_range)
 
     def random_masking(self, sequence):
         """
@@ -749,15 +748,18 @@ class ViTMAEDecoder(nn.Module):
             config.decoder_hidden_size, config.patch_size ** 2 * config.num_channels, bias=True
         )  # encoder to decoder
         self.gradient_checkpointing = False
+        self.config = config
         self.initialize_weights(num_patches)
 
     def initialize_weights(self, num_patches):
+        # initialize (and freeze) position embeddings by sin-cos embedding
         decoder_pos_embed = get_2d_sincos_pos_embed(
             self.decoder_pos_embed.shape[-1], int(num_patches ** 0.5), add_cls_token=True
         )
         self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
 
-        torch.nn.init.normal_(self.mask_token, std=0.02)
+        # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
+        torch.nn.init.normal_(self.mask_token, std=self.config.initializer_range)
 
     def forward(
         self,
