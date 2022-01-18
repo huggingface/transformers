@@ -54,7 +54,7 @@ verbose to the most verbose), those levels (with their corresponding int values 
 - `transformers.logging.INFO` (int value, 20): reports error, warnings and basic information.
 - `transformers.logging.DEBUG` (int value, 10): report all information.
 
-By default, `tqdm` progress bars will be displayed to show progress during model download, training and evaluation in the PyTorch [`Trainer`] and various other places. [`transformers.utils.tqdm_utils.set_progress_bar_enabled`] can be used to suppress or unsuppress this behavior. 
+By default, `tqdm` progress bars will be displayed during model download. [`logging.disable_progress_bar`] and [`logging.enable_progress_bar`] can be used to suppress or unsuppress this behavior. 
 
 ## Base setters
 
@@ -82,4 +82,6 @@ By default, `tqdm` progress bars will be displayed to show progress during model
 
 [[autodoc]] logging.reset_format
 
-[[autodoc]] utils.tqdm_utils.set_progress_bar_enabled
+[[autodoc]] logging.enable_progress_bar
+
+[[autodoc]] logging.disable_progress_bar
