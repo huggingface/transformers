@@ -794,10 +794,10 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = Wav2Vec2ForPreTraining(config).to(torch_device)
 
-        features_shape = (
-            inputs_dict["input_values"].shape[0],
-            model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]),
-        )
+        batch_size = inputs_dict["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+
+        features_shape = (batch_size, feature_seq_length)
 
         mask_time_indices = _compute_mask_indices(
             features_shape,
@@ -1158,10 +1158,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
 
-        features_shape = (
-            inputs_dict["input_values"].shape[0],
-            model._get_feat_extract_output_lengths(torch.tensor(inputs_dict["input_values"].shape[1])),
-        )
+        batch_size = inputs_dict["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+
+        features_shape = (batch_size, feature_seq_length)
 
         np.random.seed(4)
         mask_time_indices = _compute_mask_indices(
@@ -1208,10 +1208,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
 
-        features_shape = (
-            inputs_dict["input_values"].shape[0],
-            model._get_feat_extract_output_lengths(torch.tensor(inputs_dict["input_values"].shape[1])),
-        )
+        batch_size = inputs_dict["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+
+        features_shape = (batch_size, feature_seq_length)
 
         torch.manual_seed(0)
         mask_time_indices = _compute_mask_indices(
@@ -1279,10 +1279,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
 
-        features_shape = (
-            inputs_dict["input_values"].shape[0],
-            model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]),
-        )
+        batch_size = inputs_dict["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+
+        features_shape = (batch_size, feature_seq_length)
 
         torch.manual_seed(0)
         np.random.seed(0)
