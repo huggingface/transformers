@@ -2783,6 +2783,62 @@ class RagTokenForGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+REALM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class RealmEmbedder(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RealmForOpenQA(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RealmKnowledgeAugEncoder(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RealmPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RealmReader(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RealmRetriever(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RealmScorer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_realm(*args, **kwargs):
+    requires_backends(load_tf_weights_in_realm, ["torch"])
+
+
 REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -3575,6 +3631,37 @@ class ViTModel(metaclass=DummyObject):
 
 
 class ViTPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ViTMAEForPreTraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTMAELayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTMAEModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTMAEPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
