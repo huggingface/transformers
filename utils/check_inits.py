@@ -211,8 +211,12 @@ def get_transformers_submodules():
     submodules = []
     for path, directories, files in os.walk(PATH_TO_TRANSFORMERS):
         for folder in directories:
+            # Ignore private modules
             if folder.startswith("_"):
                 directories.remove(folder)
+                continue
+            # Ignore leftovers from branches (empty folders apart from pycache)
+            if len(list((Path(path) / folder).glob("*.py"))) == 0:
                 continue
             short_path = str((Path(path) / folder).relative_to(PATH_TO_TRANSFORMERS))
             submodule = short_path.replace(os.path.sep, ".")
