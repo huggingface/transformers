@@ -190,6 +190,7 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("mbart", "sshleifer/tiny-mbart"),
     ("t5", "t5-small"),
     ("marian", "Helsinki-NLP/opus-mt-en-de"),
+    ("m2m-100", "facebook/m2m100_418M"),
 }
 
 TENSORFLOW_EXPORT_DEFAULT_MODELS = {
