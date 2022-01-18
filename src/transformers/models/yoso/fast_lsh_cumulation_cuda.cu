@@ -1,3 +1,5 @@
+// File from https://github.com/mlpen/YOSO/blob/main/encoders/backbones/efficient_attentions/yoso/yoso_v1/cuda/fast_lsh_cumulation_cuda.cu
+
 #include "fast_lsh_cumulation_cuda.h"
 #include "common_cuda_device.h"
 #include "common_cuda.h"

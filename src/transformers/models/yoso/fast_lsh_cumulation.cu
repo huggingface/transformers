@@ -1,3 +1,5 @@
+// File from https://github.com/mlpen/YOSO/blob/main/encoders/backbones/efficient_attentions/yoso/yoso_v1/cuda/fast_lsh_cumulation.cu
+
 #include <torch/extension.h>
 #include <ATen/ATen.h>
 #include "fast_lsh_cumulation.h"
