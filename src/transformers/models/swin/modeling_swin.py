@@ -632,8 +632,8 @@ SWIN_START_DOCSTRING = r"""
 SWIN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViTFeatureExtractor`]. See
-            [`ViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
+            [`AutoFeatureExtractor.__call__`] for details.
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -698,14 +698,14 @@ class SwinModel(SwinPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ViTFeatureExtractor, SwinModel
+        >>> from transformers import AutoFeatureExtractor, SwinModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("swin-base")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("swin-base")
         >>> model = SwinModel.from_pretrained("swin-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
@@ -796,14 +796,14 @@ class SwinForImageClassification(SwinPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ViTFeatureExtractor, SwinForImageClassification
+        >>> from transformers import AutoFeatureExtractor, SwinForImageClassification
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("swin-base")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("swin-base")
         >>> model = SwinForImageClassification.from_pretrained("swin-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")

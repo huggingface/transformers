@@ -37,7 +37,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import AutoFeatureExtractor
 
 
 def _config_zero_init(config):
@@ -364,7 +364,7 @@ class SwinModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            ViTFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+            AutoFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
             if is_vision_available()
             else None
         )
