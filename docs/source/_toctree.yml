@@ -308,7 +308,7 @@
       title: XLSR-Wav2Vec2
     - local: model_doc/xls_r
       title: XLS-R
-    - local: model-doc/yoso
+    - local: model_doc/yoso
       title: YOSO
     title: Models
   - sections:

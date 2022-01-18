@@ -14,12 +14,12 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The YOSO model was proposed in [<You Only Sample (Almost) Once: Linear Cost Self-Attention Via Bernoulli Sampling>(<https://arxiv.org/abs/2111.09714>)  
-by <Zhanpeng Zeng, Yunyang Xiong, Sathya N. Ravi, Shailesh Acharya, Glenn Fung, Vikas Singh>. 
+The YOSO model was proposed in [You Only Sample (Almost) Once: Linear Cost Self-Attention Via Bernoulli Sampling](https://arxiv.org/abs/2111.09714)  
+by Zhanpeng Zeng, Yunyang Xiong, Sathya N. Ravi, Shailesh Acharya, Glenn Fung, Vikas Singh. 
 
 The abstract from the paper is the following:
 
-*<Transformer-based models are widely used in natural language processing (NLP). Central to the transformer model is 
+*Transformer-based models are widely used in natural language processing (NLP). Central to the transformer model is 
 the self-attention mechanism, which captures the interactions of token pairs in the input sequences and depends quadratically 
 on the sequence length. Training such models on longer sequences is expensive. In this paper, we show that a Bernoulli sampling 
 attention mechanism based on Locality Sensitive Hashing (LSH), decreases the quadratic complexity of such models to linear. 
@@ -29,9 +29,9 @@ This leads to an efficient sampling scheme to estimate self-attention which reli
 LSH (to enable deployment on GPU architectures). We evaluate our algorithm on the GLUE benchmark with standard 512 sequence 
 length where we see favorable performance relative to a standard pretrained Transformer. On the Long Range Arena (LRA) benchmark, 
 for evaluating performance on long sequences, our method achieves results consistent with softmax self-attention but with sizable 
-speed-ups and memory savings and often outperforms other efficient self-attention methods. Our code is available at this https URL>*
+speed-ups and memory savings and often outperforms other efficient self-attention methods. Our code is available at this https URL*
 
-This model was contributed by [novice03](<https://huggingface.co/<novice03>)`. The original code can be found [here](<https://github.com/mlpen/YOSO>).
+This model was contributed by [novice03](https://huggingface.co/novice03)`. The original code can be found [here](https://github.com/mlpen/YOSO).
 
 
 ## YosoConfig
@@ -59,18 +59,18 @@ This model was contributed by [novice03](<https://huggingface.co/<novice03>)`. T
 
 ## YosoForSequenceClassification
 
-[[autodoc]] transformers.YosoForSequenceClassification
+[[autodoc]] YosoForSequenceClassification
     - forward
 
 ## YosoForMultipleChoice
 
-[[autodoc]] transformers.YosoForMultipleChoice
+[[autodoc]] YosoForMultipleChoice
     - forward
 
 
 ## YosoForTokenClassification
 
-[[autodoc]] transformers.YosoForTokenClassification
+[[autodoc]] YosoForTokenClassification
     - forward
 
 

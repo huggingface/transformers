@@ -84,7 +84,7 @@ def load_cuda_kernels():
 
 
 def to_contiguous(input):
-    if type(input) is list:
+    if isinstance(input, list):
         out = []
         for tensor in input:
             if not tensor.is_contiguous():
