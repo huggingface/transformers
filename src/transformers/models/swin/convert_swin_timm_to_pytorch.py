@@ -1,27 +1,30 @@
 import argparse
+
 import torch
-from transformers import SwinConfig, SwinFeatureExtractor, SwinForImageClassification
-import timm
-import requests
 from PIL import Image
+
+import requests
+import timm
+from transformers import SwinConfig, SwinFeatureExtractor, SwinForImageClassification
+
 
 def get_swin_config(swin_name):
     config = SwinConfig()
-    name_split = swin_name.split('_')
-    
+    name_split = swin_name.split("_")
+
     model_size = name_split[1]
     img_size = int(name_split[4])
     window_size = int(name_split[3][-1])
-    
-    if model_size == 'tiny':
+
+    if model_size == "tiny":
         embed_dim = 96
         depths = (2, 2, 6, 2)
         num_heads = (3, 6, 12, 24)
-    elif model_size == 'small':
+    elif model_size == "small":
         embed_dim = 96
         depths = (2, 2, 18, 2)
         num_heads = (3, 6, 12, 24)
-    elif model_size == 'base':
+    elif model_size == "base":
         embed_dim = 128
         depths = (2, 2, 18, 2)
         num_heads = (4, 8, 16, 32)
@@ -29,12 +32,12 @@ def get_swin_config(swin_name):
         embed_dim = 192
         depths = (2, 2, 18, 2)
         num_heads = (6, 12, 24, 48)
-    
-    if 'in22k' in swin_name:
+
+    if "in22k" in swin_name:
         num_classes = 21841
     else:
         num_classes = 1000
-        
+
     config.image_size = img_size
     config.num_labels = num_classes
     config.embed_dim = embed_dim
@@ -42,101 +45,110 @@ def get_swin_config(swin_name):
     config.num_heads = num_heads
     config.window_size = window_size
 
-    return config   
+    return config
+
 
 def rename_key(name):
-    if 'patch_embed.proj' in name:
-        name = name.replace('patch_embed.proj', 'embeddings.patch_embeddings.projection')
-    if 'patch_embed.norm' in name:
-        name = name.replace('patch_embed.norm', 'embeddings.norm')
-    if 'layers' in name:
-        name = 'encoder.' + name
-    if 'attn.proj' in name:
-        name = name.replace('attn.proj', 'attention.output.dense')
-    if 'attn' in name:
-        name = name.replace('attn', 'attention.self')
-    if 'norm1' in name:
-        name = name.replace('norm1', 'layernorm_before')
-    if 'norm2' in name:
-        name = name.replace('norm2', 'layernorm_after')
-    if 'mlp.fc1' in name:
-        name = name.replace('mlp.fc1', 'intermediate.dense')
-    if 'mlp.fc2' in name:
-        name = name.replace('mlp.fc2', 'output.dense')
-        
-    if name == 'norm.weight':
-        name = 'layernorm.weight'
-    if name == 'norm.bias':
-        name = 'layernorm.bias'
-     
-    if 'head' in name:
-        name = name.replace('head', 'classifier')
+    if "patch_embed.proj" in name:
+        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
+    if "patch_embed.norm" in name:
+        name = name.replace("patch_embed.norm", "embeddings.norm")
+    if "layers" in name:
+        name = "encoder." + name
+    if "attn.proj" in name:
+        name = name.replace("attn.proj", "attention.output.dense")
+    if "attn" in name:
+        name = name.replace("attn", "attention.self")
+    if "norm1" in name:
+        name = name.replace("norm1", "layernorm_before")
+    if "norm2" in name:
+        name = name.replace("norm2", "layernorm_after")
+    if "mlp.fc1" in name:
+        name = name.replace("mlp.fc1", "intermediate.dense")
+    if "mlp.fc2" in name:
+        name = name.replace("mlp.fc2", "output.dense")
+
+    if name == "norm.weight":
+        name = "layernorm.weight"
+    if name == "norm.bias":
+        name = "layernorm.bias"
+
+    if "head" in name:
+        name = name.replace("head", "classifier")
     else:
-        name = 'swin.' + name
-    
+        name = "swin." + name
+
     return name
 
-def convert_state_dict(orig_state_dict, model):    
+
+def convert_state_dict(orig_state_dict, model):
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
 
-        if 'mask' in key:
+        if "mask" in key:
             continue
-        elif 'qkv' in key:
-            key_split = key.split('.')
+        elif "qkv" in key:
+            key_split = key.split(".")
             layer_num = int(key_split[1])
             block_num = int(key_split[3])
             dim = model.swin.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
 
-            if 'weight' in key:
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"] = val[: dim, :]
+            if "weight" in key:
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
+                ] = val[:dim, :]
                 orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = val[
                     dim : dim * 2, :
                 ]
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"] = val[
-                    -dim :, :
-                ]
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
+                ] = val[-dim:, :]
             else:
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = val[: dim]
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"] = val[
-                dim : dim * 2
+                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = val[
+                    :dim
                 ]
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"] = val[-dim :]
+                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"] = val[
+                    dim : dim * 2
+                ]
+                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"] = val[
+                    -dim:
+                ]
         else:
             orig_state_dict[rename_key(key)] = val
-        
+
     return orig_state_dict
 
+
 def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
-    timm_model = timm.create_model(swin_name, pretrained = True)
+    timm_model = timm.create_model(swin_name, pretrained=True)
     timm_model.eval()
-    
+
     config = get_swin_config(swin_name)
     model = SwinForImageClassification(config)
-    model.eval();
-    
-    feature_extractor = SwinFeatureExtractor(size = config.image_size)
-    
+    model.eval()
+
+    feature_extractor = SwinFeatureExtractor(size=config.image_size)
+
     new_state_dict = convert_state_dict(timm_model.state_dict(), model)
     model.load_state_dict(new_state_dict)
-    
-    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-    
+
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+
     image = Image.open(requests.get(url, stream=True).raw)
-    feature_extractor = SwinFeatureExtractor(size = config.image_size)
+    feature_extractor = SwinFeatureExtractor(size=config.image_size)
     inputs = feature_extractor(images=image, return_tensors="pt")
-    
-    timm_outs = timm_model(inputs['pixel_values'])
+
+    timm_outs = timm_model(inputs["pixel_values"])
     hf_outs = model(**inputs).logits
-    
-    assert torch.allclose(timm_outs, hf_outs, atol = 1e-3)
-    
+
+    assert torch.allclose(timm_outs, hf_outs, atol=1e-3)
+
     print(f"Saving model {swin_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    
+
     print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
-    
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -152,4 +164,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_swin_checkpoint(args.swin_name, args.pytorch_dump_folder_path)  
+    convert_swin_checkpoint(args.swin_name, args.pytorch_dump_folder_path)

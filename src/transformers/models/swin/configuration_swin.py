@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Swin Transformer model configuration """
+""" Swin Transformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,14 +28,14 @@ SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SwinConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~SwinModel`].
-    It is used to instantiate an Swin model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the Swin [microsoft/swin-tiny-patch4-window7-224](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224) architecture.
+    This is the configuration class to store the configuration of a [`~SwinModel`]. It is used to instantiate an Swin
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Swin
+    [microsoft/swin-tiny-patch4-window7-224](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224)
+    architecture.
 
-    Configuration objects inherit from  [`PretrainedConfig`] and can be used
-    to control the model outputs. Read the documentation from  [`PretrainedConfig`]
-    for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -88,26 +88,25 @@ class SwinConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "swin"
 
     def __init__(
         self,
-        image_size=224, 
-        patch_size=4, 
-        num_channels=3, 
-        embed_dim=96, 
-        depths=[2, 2, 6, 2], 
+        image_size=224,
+        patch_size=4,
+        num_channels=3,
+        embed_dim=96,
+        depths=[2, 2, 6, 2],
         num_heads=[3, 6, 12, 24],
-        window_size=7, 
-        mlp_ratio=4., 
+        window_size=7,
+        mlp_ratio=4.0,
         qkv_bias=True,
-        drop_rate=0., 
-        attn_drop_rate=0., 
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
         drop_path_rate=0.1,
         hidden_act="gelu",
-        use_absolute_embeddings=False, 
+        use_absolute_embeddings=False,
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,

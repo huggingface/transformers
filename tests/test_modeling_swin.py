@@ -19,10 +19,10 @@ import inspect
 import unittest
 
 from tests.test_modeling_common import floats_tensor
+from transformers import SwinConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
-from transformers import SwinConfig
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
@@ -31,18 +31,14 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        SwinForImageClassification,
-        SwinModel,
-    )
-    from transformers.models.swin.modeling_swin import (
-        SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
-    )
+    from transformers import SwinForImageClassification, SwinModel
+    from transformers.models.swin.modeling_swin import SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 if is_vision_available():
     from PIL import Image
 
     from transformers import SwinFeatureExtractor
+
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
@@ -57,20 +53,20 @@ class SwinModelTester:
         self,
         parent,
         batch_size=13,
-        image_size=32, 
-        patch_size=2, 
-        num_channels=3, 
-        embed_dim=16, 
-        depths=[1], 
+        image_size=32,
+        patch_size=2,
+        num_channels=3,
+        embed_dim=16,
+        depths=[1],
         num_heads=[2],
-        window_size=2, 
-        mlp_ratio=2., 
+        window_size=2,
+        mlp_ratio=2.0,
         qkv_bias=True,
-        drop_rate=0., 
-        attn_drop_rate=0., 
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
         drop_path_rate=0.1,
         hidden_act="gelu",
-        use_absolute_embeddings=False, 
+        use_absolute_embeddings=False,
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
@@ -100,7 +96,7 @@ class SwinModelTester:
         self.initializer_range = initializer_range
         self.is_training = is_training
         self.scope = scope
-        self.use_labels  = use_labels
+        self.use_labels = use_labels
         self.type_sequence_label_size = type_sequence_label_size
 
     def prepare_config_and_inputs(self):
@@ -175,7 +171,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    
+
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
@@ -233,7 +229,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         image_size = to_2tuple(self.model_tester.image_size)
         patch_size = to_2tuple(self.model_tester.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        seq_len = num_patches 
+        seq_len = num_patches
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         chunk_length = getattr(self.model_tester, "chunk_length", None)
         if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
@@ -361,19 +357,24 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                if 'embeddings' not in name and param.requires_grad:
+                if "embeddings" not in name and param.requires_grad:
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+
 @require_vision
 @require_torch
 class SwinModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return SwinFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224") if is_vision_available() else None
+        return (
+            SwinFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
@@ -391,6 +392,6 @@ class SwinModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2952, -0.4777,  0.2025]).to(torch_device)
+        expected_slice = torch.tensor([-0.2952, -0.4777, 0.2025]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

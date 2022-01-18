@@ -37,8 +37,6 @@ if is_torch_available():
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
 
@@ -52,7 +50,6 @@ if TYPE_CHECKING:
             SwinModel,
             SwinPreTrainedModel,
         )
-
 
 
 else:

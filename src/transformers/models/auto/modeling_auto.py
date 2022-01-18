@@ -261,7 +261,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
                 "PerceiverForImageClassificationConvProcessing",
             ),
         ),
-        ("swin", "SwinForImageClassification")
+        ("swin", "SwinForImageClassification"),
     ]
 )
 
