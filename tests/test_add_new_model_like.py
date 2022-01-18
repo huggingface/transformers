@@ -78,8 +78,10 @@ class TestAddNewModelLike(unittest.TestCase):
         self.assertEqual(model_patterns.model_lower_cased, "gpt_new_new")
         self.assertEqual(model_patterns.model_camel_cased, "GPTNewNew")
         self.assertEqual(model_patterns.model_upper_cased, "GPT_NEW_NEW")
-        self.assertEqual(model_patterns.tokenizer_class, "GPTNewNewTokenizer")
         self.assertEqual(model_patterns.config_class, "GPTNewNewConfig")
+        self.assertIsNone(model_patterns.tokenizer_class)
+        self.assertIsNone(model_patterns.feature_extractor_class)
+        self.assertIsNone(model_patterns.processor_class)
 
     def test_parse_module_content(self):
         test_code = """SOME_CONSTANT = a constant
@@ -785,7 +787,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
             new_doc_file = os.path.join(tmp_dir, "gpt-new-new.mdx")
 
             gpt2_model_patterns = ModelPatterns("GPT2", "gpt2")
-            new_model_patterns = ModelPatterns("GPT-New New", "huggingface/gpt-new-new")
+            new_model_patterns = ModelPatterns("GPT-New New", "huggingface/gpt-new-new", tokenizer_class="GPTNewNewTokenizer")
 
             self.init_file(doc_file, test_doc)
             duplicate_doc_file(doc_file, gpt2_model_patterns, new_model_patterns)

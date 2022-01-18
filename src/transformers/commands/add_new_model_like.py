@@ -59,7 +59,12 @@ class ModelPatterns:
         config_class (`str`, *optional*):
             The tokenizer class associated with this model. Will default to `"{model_camel_cased}Config"`.
         tokenizer_class (`str`, *optional*):
-            The tokenizer class associated with this model. Will default to `"{model_camel_cased}Tokenizer"`.
+            The tokenizer class associated with this model (leave to `None` for models that don't use a tokenizer).
+        feature_extractor_class (`str`, *optional*):
+            The feature extractor class associated with this model (leave to `None` for models that don't use a
+            feature extractor).
+        processor_class (`str`, *optional*):
+            The processor class associated with this model (leave to `None` for models that don't use a processor).
     """
 
     model_name: str
@@ -70,6 +75,8 @@ class ModelPatterns:
     model_upper_cased: Optional[str] = None
     config_class: Optional[str] = None
     tokenizer_class: Optional[str] = None
+    feature_extractor_class: Optional[str] = None
+    processor_class: Optional[str] = None
 
     def __post_init__(self):
         if self.model_type is None:
@@ -87,8 +94,6 @@ class ModelPatterns:
             self.model_upper_cased = self.model_name.upper().replace(" ", "_").replace("-", "_")
         if self.config_class is None:
             self.config_class = f"{self.model_camel_cased}Config"
-        if self.tokenizer_class is None:
-            self.tokenizer_class = f"{self.model_camel_cased}Tokenizer"
 
 
 def is_empty_line(line: str) -> bool:
