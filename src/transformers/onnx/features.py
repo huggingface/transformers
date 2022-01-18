@@ -12,6 +12,7 @@ from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.ibert import IBertOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
+from ..models.m2m_100 import M2M100OnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
@@ -183,6 +184,9 @@ class FeaturesManager:
             "causal-lm",
             "causal-lm-with-past",
             onnx_config_cls=MarianOnnxConfig,
+        ),
+        "m2m-100": supported_features_mapping(
+            "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=M2M100OnnxConfig
         ),
         "roberta": supported_features_mapping(
             "default",
