@@ -367,9 +367,34 @@ def style_docstring(docstring, max_len):
     return "\n".join(new_lines), "\n\n".join(black_errors)
 
 
+def style_docstrings_in_code(code, max_len=119):
+    """
+    Style all docstrings in some code.
+
+    Args:
+        code (`str`): The code in which we want to style the docstrings.
+        max_len (`int`): The maximum number of characters per line.
+
+    Returns:
+        `Tuple[str, str]`: A tuple with the clean code and the black errors (if any)
+    """
+    # fmt: off
+    splits = code.split('\"\"\"')
+    splits = [
+        (s if i % 2 == 0 or _re_doc_ignore.search(splits[i - 1]) is not None else style_docstring(s, max_len=max_len))
+        for i, s in enumerate(splits)
+    ]
+    black_errors = "\n\n".join([s[1] for s in splits if isinstance(s, tuple) and len(s[1]) > 0])
+    splits = [s[0] if isinstance(s, tuple) else s for s in splits]
+    clean_code = '\"\"\"'.join(splits)
+    # fmt: on
+
+    return clean_code, black_errors
+
+
 def style_file_docstrings(code_file, max_len=119, check_only=False):
     """
-    Style all docstrings in  a given file.
+    Style all docstrings in a given file.
 
     Args:
         code_file (`str` or `os.PathLike`): The file in which we want to style the docstring.
@@ -382,16 +407,8 @@ def style_file_docstrings(code_file, max_len=119, check_only=False):
     """
     with open(code_file, "r", encoding="utf-8", newline="\n") as f:
         code = f.read()
-    # fmt: off
-    splits = code.split('\"\"\"')
-    splits = [
-        (s if i % 2 == 0 or _re_doc_ignore.search(splits[i - 1]) is not None else style_docstring(s, max_len=max_len))
-        for i, s in enumerate(splits)
-    ]
-    black_errors = "\n\n".join([s[1] for s in splits if isinstance(s, tuple) and len(s[1]) > 0])
-    splits = [s[0] if isinstance(s, tuple) else s for s in splits]
-    clean_code = '\"\"\"'.join(splits)
-    # fmt: on
+
+    clean_code, black_errors = style_docstrings_in_code(code, max_len=max_len)
 
     diff = clean_code != code
     if not check_only and diff:
