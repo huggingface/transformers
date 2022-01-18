@@ -122,14 +122,7 @@ class ViltModelTester:
 
         config = self.get_config()
 
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            pixel_values,
-            token_labels,
-        )
+        return (config, input_ids, token_type_ids, input_mask, pixel_values, token_labels)
 
     def get_config(self):
         return ViltConfig(

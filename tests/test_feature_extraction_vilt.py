@@ -243,5 +243,9 @@ class ViltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         encoded_images_with_method = feature_extractor_1.pad_and_create_pixel_mask(image_inputs, return_tensors="pt")
         encoded_images = feature_extractor_2(image_inputs, return_tensors="pt")
 
-        assert torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
-        assert torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
+        self.assertTrue(
+            torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
+        )
+        self.assertTrue(
+            torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
+        )

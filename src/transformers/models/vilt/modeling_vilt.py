@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 NAVER AI Labs and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 NAVER AI Labs and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -147,9 +147,7 @@ class ViltEmbeddings(nn.Module):
                 select.append(valid_row_idx[i][valid_choice])
             else:
                 pad_choice = torch.multinomial(torch.ones(nv).float(), p, replacement=True)
-                select.append(
-                    torch.cat([valid_row_idx[i], non_valid_row_idx[i][pad_choice]], dim=0)
-                )
+                select.append(torch.cat([valid_row_idx[i], non_valid_row_idx[i][pad_choice]], dim=0))
 
         select = torch.cat(select, dim=0)
         x = x[select[:, 0], select[:, 1]].view(B, -1, C)

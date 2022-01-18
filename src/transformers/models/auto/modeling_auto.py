@@ -156,7 +156,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
         ("nystromformer", "NystromformerForMaskedLM"),
-        ("imagegpt", "ImageGPTForCausalLM"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),

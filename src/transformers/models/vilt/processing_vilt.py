@@ -128,8 +128,8 @@ class ViltProcessor:
         **kwargs
     ) -> BatchEncoding:
         """
-        This method uses [`ViltFeatureExtractor.__call__`] method to prepare image(s) for the
-        model, and [`BertTokenizer.__call__`] to prepare text for the model.
+        This method uses [`ViltFeatureExtractor.__call__`] method to prepare image(s) for the model, and
+        [`BertTokenizer.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
         """
