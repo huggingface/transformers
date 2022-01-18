@@ -185,7 +185,7 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
-        self.task_name = self.task_name.lower()
+        self.task_name = self.task_name.lower() if type(self.task_name) == str else self.task_name
 
 
 def create_train_state(
