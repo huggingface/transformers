@@ -7,7 +7,6 @@ on:
 
 jobs:
   build_and_package:
-    runs-on: ubuntu-latest
     runs-on: [self-hosted, doc-builder]
     container:
       image: huggingface/doc-builder-transformers
