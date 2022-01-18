@@ -3637,6 +3637,37 @@ class ViTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ViTMAEForPreTraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTMAELayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTMAEModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTMAEPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
