@@ -21,7 +21,7 @@ from typing import Optional, Tuple
 
 import tensorflow as tf
 
-from ...activations_tf import glu
+from ...activations_tf import get_tf_activation, glu
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -34,7 +34,7 @@ from ...modeling_tf_outputs import (
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, shape_list
+from ...modeling_tf_utils import DUMMY_INPUTS, TFPreTrainedModel, shape_list
 from ...utils import logging
 from .configuration_speech_to_text import Speech2TextConfig
 
@@ -141,9 +141,6 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
         return hidden_states
 
 
-## done up to here
-
-
 class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
     """This module produces sinusoidal positional embeddings of any length."""
 
@@ -155,7 +152,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         self.weights = self.get_embedding(num_positions + self.offset, embedding_dim, padding_idx)
 
     @staticmethod
-    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None) -> tf.Tensor:
         """
         Build sinusoidal embeddings. This matches the implementation in tensor2tensor, but differs slightly from the
         description in Section 3.5 of "Attention Is All You Need".
@@ -169,47 +166,44 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
             # zero pad
             emb = tf.concat([emb, tf.zeros(num_embeddings, 1)], axis=1)
         if padding_idx is not None:
-            #### stopped here!
-            emb[padding_idx, :] = 0
+            emb = tf.concat([emb[:padding_idx, :], tf.zeros((1, emb.shape[1])), emb[padding_idx+1:, :]], axis=0)
         return emb
 
-    def call(self, input_ids: tf.Tensor, past_key_values_length: int = 0):
-        bsz, seq_len = input_ids.size()
+    def call(self, input_ids: tf.Tensor, past_key_values_length: int = 0) -> tf.Tensor:
+        bsz, seq_len = shape_list(input_ids)
         # Create the position ids from the input token ids. Any padded tokens remain padded.
-        position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
-            input_ids.device
-        )
+        position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length)
 
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len
-        if max_pos > self.weights.size(0):
-            self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
+        if max_pos > shape_list(self.weights)[0]:
+            self.get_embedding(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
-        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
+        return tf.reshape(
+            tf.gather(self.weights, tf.reshape(position_ids, -1), axis=0),
+            (bsz, seq_len, -1)
+        )
 
+    @staticmethod
     def create_position_ids_from_input_ids(
-        self, input_ids: torch.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
-    ):
+        input_ids: tf.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
+    ) -> tf.Tensor:
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
         symbols are ignored. This is modified from fairseq's `utils.make_positions`.
 
         Args:
-            x: torch.Tensor x:
-        Returns: torch.Tensor
+            x: tf.Tensor x:
+        Returns: tf.Tensor
         """
-        # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-        mask = input_ids.ne(padding_idx).int()
-        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
-        return incremental_indices.long() + padding_idx
+        mask = tf.cast(tf.math.not_equal(input_ids, padding_idx), dtype=tf.int32)
+        incremental_indices = (tf.math.cumsum(mask, axis=1) + past_key_values_length) * mask
+        return tf.cast(incremental_indices, dtype=tf.int64) + padding_idx
 
 
-## partially done up to here
-
-
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Speech2Text
-class Speech2TextAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+# Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->Speech2Text
+class TFSpeech2TextAttention(tf.keras.layers.Layer):
+    """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(
         self,
@@ -218,45 +212,41 @@ class Speech2TextAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
 
-        if (self.head_dim * num_heads) != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {num_heads})."
-            )
+        self.num_heads = num_heads
+        self.dropout = tf.keras.layers.Dropout(dropout)
+        self.head_dim = embed_dim // num_heads
+        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
+        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
+        self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
+        self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+    def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
+        return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), (0, 2, 1, 3))
 
-    def forward(
+    def call(
         self,
-        hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        hidden_states: tf.Tensor,
+        key_value_states: Optional[tf.Tensor] = None,
+        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        layer_head_mask: Optional[tf.Tensor] = None,
+        training=False,
+    ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-
-        bsz, tgt_len, _ = hidden_states.size()
+        bsz, tgt_len, embed_dim = shape_list(hidden_states)
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -273,209 +263,210 @@ class Speech2TextAttention(nn.Module):
             # reuse k, v, self_attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+            key_states = tf.concat([past_key_value[0], key_states], axis=2)
+            value_states = tf.concat([past_key_value[1], value_states], axis=2)
         else:
             # self_attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
         if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # if cross_attention save Tuple(tf.Tensor, tf.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
             # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # if uni-directional self-attention (decoder) save Tuple(tf.Tensor, tf.Tensor) of
             # all previous decoder key/value_states. Further calls to uni-directional self-attention
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        query_states = tf.reshape(self._shape(query_states, tgt_len, bsz), proj_shape)
+        key_states = tf.reshape(key_states, proj_shape)
+        value_states = tf.reshape(value_states, proj_shape)
 
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        src_len = shape_list(key_states)[1]
+        attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(attn_weights),
+                [bsz * self.num_heads, tgt_len, src_len],
+                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
             )
 
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+            # The tf.debugging asserts are not compliant with XLA then they
+            # have to be disabled in other modes than eager.
+            if tf.executing_eagerly():
+                tf.debugging.assert_equal(
+                    shape_list(attention_mask),
+                    [bsz, 1, tgt_len, src_len],
+                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+            attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
+            attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
+            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+
+        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
         if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            # The tf.debugging asserts are not compliant with XLA then they
+            # have to be disabled in other modes than eager.
+            if tf.executing_eagerly():
+                tf.debugging.assert_equal(
+                    shape_list(layer_head_mask),
+                    [self.num_heads],
+                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
+            attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
+                attn_weights, (bsz, self.num_heads, tgt_len, src_len)
+            )
+            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = self.dropout(attn_weights, training=training)
+        attn_output = tf.matmul(attn_probs, value_states)
 
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(attn_output),
+                [bsz * self.num_heads, tgt_len, self.head_dim],
+                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
             )
 
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
+        attn_output = tf.transpose(
+            tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
+        )
+        attn_output = tf.reshape(attn_output, (bsz, tgt_len, embed_dim))
 
         attn_output = self.out_proj(attn_output)
+        attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
 
-        return attn_output, attn_weights_reshaped, past_key_value
+        return attn_output, attn_weights, past_key_value
 
 
-class Speech2TextEncoderLayer(nn.Module):
-    def __init__(self, config: Speech2TextConfig):
-        super().__init__()
+class TFSpeech2TextEncoderLayer(tf.keras.layers.Layer):
+    def __init__(self, config: Speech2TextConfig, **kwargs):
+        super().__init__(**kwargs)
         self.embed_dim = config.d_model
-        self.self_attn = Speech2TextAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
+        self.self_attn = TFSpeech2TextAttention(
+            self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.activation_fn = get_tf_activation(config.activation_function)
+        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
+        self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
+        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
+        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
-    def forward(
+    def call(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        layer_head_mask: torch.Tensor,
-        output_attentions: bool = False,
+        hidden_states: tf.Tensor,
+        attention_mask: tf.Tensor,
+        layer_head_mask: tf.Tensor,
+        training: bool = False
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(config.encoder_attention_heads,)`.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
+            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            attention_mask (`tf.Tensor`): attention mask of size
+                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+            layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
+                *(encoder_attention_heads,)*
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.self_attn(
+        hidden_states, self_attn_weights, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
-            output_attentions=output_attentions,
+            training=training
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(hidden_states),
+                shape_list(residual),
+                message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
+            )
+
+        hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.activation_dropout(hidden_states, training=training)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
 
-        if hidden_states.dtype == torch.float16 and (
-            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
-        ):
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states, self_attn_weights
 
 
-class Speech2TextDecoderLayer(nn.Module):
-    def __init__(self, config: Speech2TextConfig):
-        super().__init__()
+class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
+    def __init__(self, config: Speech2TextConfig, **kwargs):
+        super().__init__(**kwargs)
         self.embed_dim = config.d_model
 
-        self.self_attn = Speech2TextAttention(
+        self.self_attn = TFSpeech2TextAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
+            name="self_attn",
             is_decoder=True,
         )
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.activation_fn = get_tf_activation(config.activation_function)
+        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = Speech2TextAttention(
+        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.encoder_attn = TFSpeech2TextAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
+            name="encoder_attn",
             is_decoder=True,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
+        self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
+        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
+        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
-    def forward(
+    def call(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
-    ):
+        hidden_states,
+        attention_mask: Optional[tf.Tensor] = None,
+        encoder_hidden_states: Optional[tf.Tensor] = None,
+        encoder_attention_mask: Optional[tf.Tensor] = None,
+        layer_head_mask: Optional[tf.Tensor] = None,
+        cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
+        past_key_value: Optional[Tuple[tf.Tensor]] = None,
+        training=False,
+    ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
-            cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size *(decoder_attention_heads,)*.
-            past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
+            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            attention_mask (`tf.Tensor`): attention mask of size
+                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+            encoder_hidden_states (`tf.Tensor`):
+                cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+            encoder_attention_mask (`tf.Tensor`): encoder attention mask of size
+                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+            layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
+                *(decoder_attention_heads,)*
+            cross_attn_layer_head_mask (`tf.Tensor`): mask for heads of the cross-attention module.
+                *(decoder_attention_heads,)*
+            past_key_value (`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -489,9 +480,9 @@ class Speech2TextDecoderLayer(nn.Module):
             past_key_value=self_attn_past_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
-            output_attentions=output_attentions,
+            training=training
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
 
         # Cross-Attention Block
@@ -509,9 +500,9 @@ class Speech2TextDecoderLayer(nn.Module):
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
-                output_attentions=output_attentions,
+                training=training
             )
-            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states = self.dropout(hidden_states, training=training)
             hidden_states = residual + hidden_states
 
             # add cross-attn to positions 3,4 of present_key_value tuple
@@ -521,20 +512,73 @@ class Speech2TextDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.activation_dropout(hidden_states, training=training)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
+        return (
+            hidden_states,
+            self_attn_weights,
+            cross_attn_weights,
+            present_key_value,
+        )
 
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
 
-        if use_cache:
-            outputs += (present_key_value,)
+## done up to here
 
-        return outputs
+class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
+    config_class = Speech2TextConfig
+    base_model_prefix = "model"
+
+    def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
+        """
+        Computes the output length of the convolutional layers
+        """
+        for _ in range(self.config.num_conv_layers):
+            input_lengths = (input_lengths - 1) // 2 + 1
+
+        return input_lengths
+
+    def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
+        # generate creates 3D attention mask, because of the shape of input_features
+        # convert it to 2D if thats the case
+        if len(attention_mask.shape) > 2:
+            attention_mask = attention_mask[:, :, -1]
+
+        subsampled_lengths = self._get_feat_extract_output_lengths(tf.math.reduce_sum(attention_mask, -1))
+        bsz = shape_list(attention_mask)[0]
+
+        # these two operations make sure that all values before the output lengths indices are attended to
+        mask_cols = tf.transpose(
+            tf.expand_dims(
+                tf.scatter_nd(
+                    indices=tf.expand_dims(subsampled_lengths-1, -1),
+                    updates=tf.ones_like(subsampled_lengths, dtype=attention_mask.dtype),
+                    shape=feature_vector_length
+                ),
+                -1
+            )
+        )
+        attention_mask = tf.matmul(tf.ones((bsz, 1), dtype=attention_mask.dtype), mask_cols)
+
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
+        return attention_mask
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 class Speech2TextPreTrainedModel(PreTrainedModel):
@@ -584,6 +628,8 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
         attention_mask[(torch.arange(bsz, device=attention_mask.device), subsampled_lengths - 1)] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
         return attention_mask
+
+## partially done up to here
 
 
 SPEECH_TO_TEXT_START_DOCSTRING = r"""
