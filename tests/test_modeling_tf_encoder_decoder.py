@@ -237,7 +237,7 @@ class TFEncoderDecoderMixin:
         )
 
         # Make sure `loss` exist
-        assert "loss" in outputs_encoder_decoder
+        self.assertIn("loss", outputs_encoder_decoder)
 
         batch_size, seq_len = decoder_input_ids.shape
         expected_shape = (batch_size, seq_len, decoder_config.vocab_size)
