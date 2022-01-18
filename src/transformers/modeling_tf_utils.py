@@ -170,7 +170,7 @@ class TFCausalLanguageModelingLoss:
     </Tip>
     """
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
@@ -186,7 +186,7 @@ class TFQuestionAnsweringLoss:
     Loss function suitable for question answering.
     """
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
@@ -207,7 +207,7 @@ class TFTokenClassificationLoss:
     </Tip>
     """
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
@@ -229,7 +229,7 @@ class TFSequenceClassificationLoss:
     Loss function suitable for sequence classification.
     """
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         if len(shape_list(logits)) == 1 or shape_list(logits)[1] == 1:
             loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         else:
@@ -243,7 +243,7 @@ class TFSequenceClassificationLoss:
 class TFMultipleChoiceLoss:
     """Loss function suitable for multiple choice tasks."""
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
@@ -273,7 +273,7 @@ class TFNextSentencePredictionLoss:
     </Tip>
     """
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
