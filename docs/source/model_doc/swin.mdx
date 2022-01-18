@@ -22,8 +22,8 @@ The abstract from the paper is the following:
 *This paper presents a new vision Transformer, called Swin Transformer, that capably serves as a general-purpose backbone 
 for computer vision. Challenges in adapting Transformer from language to vision arise from differences between the two domains, 
 such as large variations in the scale of visual entities and the high resolution of pixels in images compared to words in text. 
-To address these differences, we propose a hierarchical Transformer whose representation is computed with \textbf{S}hifted 
-\textbf{win}dows. The shifted windowing scheme brings greater efficiency by limiting self-attention computation to non-overlapping 
+To address these differences, we propose a hierarchical Transformer whose representation is computed with \bold{S}hifted 
+\bold{win}dows. The shifted windowing scheme brings greater efficiency by limiting self-attention computation to non-overlapping 
 local windows while also allowing for cross-window connection. This hierarchical architecture has the flexibility to model at 
 various scales and has linear computational complexity with respect to image size. These qualities of Swin Transformer make it 
 compatible with a broad range of vision tasks, including image classification (87.3 top-1 accuracy on ImageNet-1K) and dense 
@@ -39,12 +39,6 @@ This model was contributed by [novice03](https://huggingface.co/novice03>)`. The
 ## SwinConfig
 
 [[autodoc]] SwinConfig
-
-
-## SwinFeatureExtractor
-
-[[autodoc]] SwinFeatureExtractor
-    - __call__
 
 
 ## SwinModel

@@ -5,7 +5,7 @@ from PIL import Image
 
 import requests
 import timm
-from transformers import SwinConfig, SwinFeatureExtractor, SwinForImageClassification
+from transformers import SwinConfig, ViTFeatureExtractor, SwinForImageClassification
 
 
 def get_swin_config(swin_name):
@@ -127,7 +127,7 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
     model = SwinForImageClassification(config)
     model.eval()
 
-    feature_extractor = SwinFeatureExtractor(size=config.image_size)
+    feature_extractor = ViTFeatureExtractor(size=config.image_size)
 
     new_state_dict = convert_state_dict(timm_model.state_dict(), model)
     model.load_state_dict(new_state_dict)
@@ -135,7 +135,7 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
     image = Image.open(requests.get(url, stream=True).raw)
-    feature_extractor = SwinFeatureExtractor(size=config.image_size)
+    feature_extractor = ViTFeatureExtractor(size=config.image_size)
     inputs = feature_extractor(images=image, return_tensors="pt")
 
     timm_outs = timm_model(inputs["pixel_values"])

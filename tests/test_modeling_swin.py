@@ -37,7 +37,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import SwinFeatureExtractor
+    from transformers import ViTFeatureExtractor
 
 
 def _config_zero_init(config):
@@ -163,14 +163,7 @@ class SwinModelTester:
 @require_torch
 class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            SwinModel,
-            SwinForImageClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = ((SwinModel, SwinForImageClassification,) if is_torch_available() else ())
 
     test_pruning = False
     test_torchscript = False
@@ -371,7 +364,7 @@ class SwinModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            SwinFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+            ViTFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
             if is_vision_available()
             else None
         )

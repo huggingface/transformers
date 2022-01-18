@@ -25,8 +25,6 @@ _import_structure = {
     "configuration_swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
 }
 
-if is_vision_available():
-    _import_structure["feature_extraction_swin"] = ["SwinFeatureExtractor"]
 
 if is_torch_available():
     _import_structure["modeling_swin"] = [
@@ -39,9 +37,6 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
-
-    if is_vision_available():
-        from .feature_extraction_swin import SwinFeatureExtractor
 
     if is_torch_available():
         from .modeling_swin import (

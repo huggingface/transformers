@@ -42,7 +42,7 @@ SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# to_2tuple, drop_path, PatchEmbeddings, PatchMerging and DropPath are from the timm library.
+# to_2tuple, drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
 
 
 # Copied from transformers.models.vit.modeling_vit.to_2tuple
@@ -52,38 +52,30 @@ def to_2tuple(x):
     return (x, x)
 
 
-def window_partition(x, window_size):
+def window_partition(input_feature, window_size):
     """
-    Args:
-        x: (B, H, W, C)
-        window_size (int): window size
-    Returns:
-        windows: (num_windows*B, window_size, window_size, C)
+    Partitions the given input into windows.
     """
-    B, H, W, C = x.shape
-    x = x.view(B, H // window_size, window_size, W // window_size, window_size, C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
+    batch_size, height, width, num_channels = input_feature.shape
+    input_feature = input_feature.view(batch_size, height // window_size, window_size, width // window_size, window_size, num_channels)
+    windows = input_feature.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
     return windows
 
 
-def window_reverse(windows, window_size, H, W):
+def window_reverse(windows, window_size, height, width):
     """
-    Args:
-        windows: (num_windows*B, window_size, window_size, C)
-        window_size (int): Window size
-        H (int): Height of image
-        W (int): Width of image
-    Returns:
-        windows: (B, H, W, C)
+    Mergres windows to produce higher resolution features. 
     """
-    B = int(windows.shape[0] / (H * W / window_size / window_size))
-    windows = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
-    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
+    batch_size = int(windows.shape[0] / (height * width / window_size / window_size))
+    windows = windows.view(batch_size, height // window_size, width // window_size, window_size, window_size, -1)
+    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(batch_size, height, width, -1)
     return windows
 
 
 def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+    """
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
@@ -102,7 +94,7 @@ class SwinEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.patch_embeddings = PatchEmbeddings(
+        self.patch_embeddings = SwinPatchEmbeddings(
             image_size=config.image_size,
             patch_size=config.patch_size,
             num_channels=config.num_channels,
@@ -131,7 +123,7 @@ class SwinEmbeddings(nn.Module):
         return embeddings
 
 
-class PatchEmbeddings(nn.Module):
+class SwinPatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
     """
@@ -153,7 +145,7 @@ class PatchEmbeddings(nn.Module):
         return pixel_values
 
 
-class PatchMerging(nn.Module):
+class SwinPatchMerging(nn.Module):
     """
     Patch Merging Layer.
     
@@ -174,9 +166,6 @@ class PatchMerging(nn.Module):
         self.norm = norm_layer(4 * dim)
 
     def forward(self, input_feature):
-        """
-        input_feature: batch_size, height*width, num_channels
-        """
         height, width = self.input_resolution
         # `dim` is height * width
         batch_size, dim, num_channels = input_feature.shape
@@ -187,9 +176,8 @@ class PatchMerging(nn.Module):
         input_feature_1 = input_feature[:, 1::2, 0::2, :]  # batch_size height/2 width/2 num_channels
         input_feature_2 = input_feature[:, 0::2, 1::2, :]  # batch_size height/2 width/2 num_channels
         input_feature_3 = input_feature[:, 1::2, 1::2, :]  # batch_size height/2 width/2 num_channels
-        input_feature = torch.cat(
-            [input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1
-        )  # batch_size height/2 width/2 4*num_channels
+        # batch_size height/2 width/2 4*num_channels
+        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)  
         input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
 
         input_feature = self.norm(input_feature)
@@ -198,11 +186,11 @@ class PatchMerging(nn.Module):
         return input_feature
 
 
-class DropPath(nn.Module):
+class SwinDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob=None, scale_by_keep=True):
-        super(DropPath, self).__init__()
+        super(SwinDropPath, self).__init__()
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
 
@@ -270,19 +258,19 @@ class SwinSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
-        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
+        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)]
+        relative_position_bias = relative_position_bias.view(
             self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
         )
 
         relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()
         attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
 
-        if attention_mask is not None:
+        if attention_mask is not None:  
             # Apply the attention mask is (precomputed for all layers in SwinModel forward() function)
-            nW = attention_mask.shape[0]
-            attention_scores = attention_scores.view(
-                batch_size // nW, nW, self.num_attention_heads, dim, dim
-            ) + attention_mask.unsqueeze(1).unsqueeze(0)
+            mask_shape = attention_mask.shape[0]
+            attention_scores = attention_scores.view(batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim) 
+            attention_scores = attention_scores + attention_mask.unsqueeze(1).unsqueeze(0)
             attention_scores = attention_scores.view(-1, self.num_attention_heads, dim, dim)
 
         # Normalize the attention scores to probabilities.
@@ -393,7 +381,7 @@ class SwinBlock(nn.Module):
 
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = SwinAttention(config, dim, num_heads)
-        self.drop_path = DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = SwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = SwinIntermediate(config, dim)
         self.output = SwinOutput(config, dim)
@@ -402,21 +390,21 @@ class SwinBlock(nn.Module):
             # calculate attention mask for SW-MSA
             height, width = self.input_resolution
             img_mask = torch.zeros((1, height, width, 1))
-            h_slices = (
+            height_slices = (
                 slice(0, -self.window_size),
                 slice(-self.window_size, -self.shift_size),
                 slice(-self.shift_size, None),
             )
-            w_slices = (
+            width_slices = (
                 slice(0, -self.window_size),
                 slice(-self.window_size, -self.shift_size),
                 slice(-self.shift_size, None),
             )
-            cnt = 0
-            for h in h_slices:
-                for w in w_slices:
-                    img_mask[:, h, w, :] = cnt
-                    cnt += 1
+            count = 0
+            for height_slice in height_slices:
+                for width_slice in width_slices:
+                    img_mask[:, height_slice, width_slice, :] = count
+                    count += 1
 
             mask_windows = window_partition(img_mask, self.window_size)
             mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
@@ -544,7 +532,7 @@ class SwinEncoder(nn.Module):
                     depth=config.depths[i_layer],
                     num_heads=config.num_heads[i_layer],
                     drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=PatchMerging if (i_layer < self.num_layers - 1) else None,
+                    downsample=SwinPatchMerging if (i_layer < self.num_layers - 1) else None,
                 )
                 for i_layer in range(self.num_layers)
             ]
@@ -591,19 +579,10 @@ class SwinEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions,] if v is not None)
+
         return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
         )
 
 
@@ -653,8 +632,8 @@ SWIN_START_DOCSTRING = r"""
 SWIN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`SwinFeatureExtractor`]. See
-            [`SwinFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`ViTFeatureExtractor`]. See
+            [`ViTFeatureExtractor.__call__`] for details.
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -719,14 +698,14 @@ class SwinModel(SwinPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import SwinFeatureExtractor, SwinModel
+        >>> from transformers import ViTFeatureExtractor, SwinModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = SwinFeatureExtractor.from_pretrained("swin-base")
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("swin-base")
         >>> model = SwinModel.from_pretrained("swin-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
@@ -769,9 +748,7 @@ class SwinModel(SwinPreTrainedModel):
             return (sequence_output,) + encoder_outputs[1:]
 
         return BaseModelOutput(
-            last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            last_hidden_state=sequence_output, hidden_states=encoder_outputs.hidden_states, attentions=encoder_outputs.attentions,
         )
 
 
@@ -819,14 +796,14 @@ class SwinForImageClassification(SwinPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import SwinFeatureExtractor, SwinForImageClassification
+        >>> from transformers import ViTFeatureExtractor, SwinForImageClassification
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = SwinFeatureExtractor.from_pretrained("swin-base")
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("swin-base")
         >>> model = SwinForImageClassification.from_pretrained("swin-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
