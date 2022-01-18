@@ -38,7 +38,7 @@ jobs:
         if: github.event.action == 'opened' || github.event.action == 'reopened'
 
         with:
-          message: 'Thank you for your PR! The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_15110).\n\nAll of your documentation changes will be reflected on that endpoint.'
+          message: 'Thank you for your PR! The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_15110). All of your documentation changes will be reflected on that endpoint.'
           GITHUB_TOKEN: ${{ env.WRITE }}
 
       - name: Loading cache.
@@ -97,5 +97,5 @@ jobs:
           cd doc-build-dev
           ls
           git add .
-          git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
+          git commit -m "Updated with commit ${{ github.sha }} See: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
           git push origin main
