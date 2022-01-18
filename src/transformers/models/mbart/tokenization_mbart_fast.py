@@ -13,15 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from contextlib import contextmanager
-from typing import List, Optional
+from shutil import copyfile
+from typing import List, Optional, Tuple
 
 from tokenizers import processors
 
 from ...file_utils import is_sentencepiece_available
-from ...tokenization_utils import BatchEncoding
+from ...tokenization_utils import AddedToken, BatchEncoding
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
 
 
 if is_sentencepiece_available():
@@ -51,36 +53,12 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "facebook/mbart-large-cc25": 1024,
 }
 
-FAIRSEQ_LANGUAGE_CODES = [
-    "ar_AR",
-    "cs_CZ",
-    "de_DE",
-    "en_XX",
-    "es_XX",
-    "et_EE",
-    "fi_FI",
-    "fr_XX",
-    "gu_IN",
-    "hi_IN",
-    "it_IT",
-    "ja_XX",
-    "kk_KZ",
-    "ko_KR",
-    "lt_LT",
-    "lv_LV",
-    "my_MM",
-    "ne_NP",
-    "nl_XX",
-    "ro_RO",
-    "ru_RU",
-    "si_LK",
-    "tr_TR",
-    "vi_VN",
-    "zh_CN",
-]
+# fmt: off
+FAIRSEQ_LANGUAGE_CODES = ["ar_AR", "cs_CZ", "de_DE", "en_XX", "es_XX", "et_EE", "fi_FI", "fr_XX", "gu_IN", "hi_IN", "it_IT", "ja_XX", "kk_KZ", "ko_KR", "lt_LT", "lv_LV", "my_MM", "ne_NP", "nl_XX", "ro_RO", "ru_RU", "si_LK", "tr_TR", "vi_VN", "zh_CN"]
+# fmt: on
 
 
-class MBartTokenizerFast(XLMRobertaTokenizerFast):
+class MBartTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" MBART tokenizer (backed by HuggingFace's *tokenizers* library). Based on
     [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models).
@@ -111,6 +89,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = MBartTokenizer
 
     prefix_tokens: List[int] = []
@@ -120,19 +99,39 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         self,
         vocab_file=None,
         tokenizer_file=None,
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
         src_lang=None,
         tgt_lang=None,
         additional_special_tokens=None,
         **kwargs
     ):
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
+
+        self.vocab_file = vocab_file
+        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
         _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
 
@@ -189,6 +188,31 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. mBART does not
+        make use of token type ids, therefore a list of zeros is returned.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of zeros.
+
+        """
+
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def _build_translation_inputs(
         self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
@@ -253,3 +277,22 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
             pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
             special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
         )
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not self.can_save_slow_tokenizer:
+            raise ValueError(
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
+            )
+
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory.")
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+
+        return (out_vocab_file,)

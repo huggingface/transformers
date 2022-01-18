@@ -29,6 +29,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
         ("swin", "SwinModel"),
+        ("vit_mae", "ViTMAEModel"),
         ("nystromformer", "NystromformerModel"),
         ("imagegpt", "ImageGPTModel"),
         ("qdqbert", "QDQBertModel"),
@@ -110,6 +111,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
+        ("vit_mae", "ViTMAEForPreTraining"),
         ("fnet", "FNetForPreTraining"),
         ("visual_bert", "VisualBertForPreTraining"),
         ("layoutlm", "LayoutLMForMaskedLM"),
