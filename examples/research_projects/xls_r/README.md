@@ -534,19 +534,110 @@ the *n-gram* with a trained speech recognition model directly into the same mode
 
 ## Evaluation
 
-Now, we come to the most 
+Finally, we have arrived at the most fun part of the challenge - sitting back and
+watching the model transcribe audio. If possible, every participant should evaluate 
+the speech recognition system on the test set of Common Voice 7 and 
+ideally also on the real world audio data (if available).
+For languages that have neither a Common Voice evaluation dataset nor a real world 
+evaluation dataset, please contact the organizers on Discord so that we can work 
+together to find some evaluation data.
+
+In a first step, one should copy the official `eval.py` script to her/his model 
+repository. Let's use our previously trained [xls-r-300m-sv](https://huggingface.co/hf-test/xls-r-300m-sv) again as an example.
+
+Assuming that we have a clone of the model's repo under `~/xls-r-300m-sv`, we can 
+copy the `eval.py` script to the repo.
 
 ```bash
-./eval.py --model_id hf-test/xls-r-300m-sv --dataset mozilla-foundation/common_voice_7_0 --config sv-SE --split test --log_outputs
+cp ~/transformers/examples/research_projects/xls_r/eval.py ~/xls-r-300m-sv
 ```
 
-works, but
+Next, we should adapt `eval.py` so that it fits our evaluation data. Here it is 
+important to keep the `eval.py` file in the following format:
+
+- 1. The following input arguments should not be changed and keep their original functionality/meaning (being to load the model and dataset): `"--model_id"`, `"--dataset"`, `"--config"`, `"--split"`. We recommend to not change any of the code written under `if __name__ == "__main__":`.
+- 2. The function `def log_results(result: Dataset, args: Dict[str, str])` should also not be changed. The function expects the above names attached to the `args` object as well as a `datasets.Dataset` object, called `result` which includes all predictions and target transcriptions under the names `"predictions"` and `"targets"` respectively.
+- 3. All other code can be changed and adapted. Participants are especially invited to change the `def normalize_text(text: str) -> str:` function as this might be a very language and model-training specific function.
+- 4. **Important**: It is not allowed to "cheat" in any way when in comes to pre- and postprocessing. In short, "cheating" refers to any of the following:
+	- a. Somehow giving the model access to the target transcriptions to improve performance. The model is obviously not allowed to use the target transcriptions to generate its predictions.
+	- b. Pre-processing the target transcriptions in a way that makes the target transcriptions loose their original meaning. This corresonds to what has already been said in [Data and Preprocessing](#data-and-preprocessing) and is somewhat of a grey zone. It means that one should not remove characters that would make a word to loose its meaning. E.g., it is not allowed to replace all `e` in English with `i` and simply make the model learn that `e` and `i` are the same letter for a better word error rate. This would destroy the meaning of words such as `fell -> fill`. However, it is totally fine to normalize (*e.g.* lowercase) all letters, remove punctuation. There can be a lot of language specific exceptions and in case you are not sure whether your target transcription pre-processing is allowed, please ask on the Discord channel.
+
+Uff, that was a lot of text describing on how make sure the your `eval.py` script 
+is in the correct format. If you have any questions, please ask openly about in Discord.
+
+Great, now that we have adapted the `eval.py` script, we can lean back and run the 
+evaluation. 
+First, one should evaluate the model on Common Voice 7's test data. This might 
+already have been done for your acoustic model during training, but in case you 
+added an *n-gram* language model after having fine-tuned the acoustic model, you
+should now see a nice improvement.
+
+The command to evaluate our test model [xls-r-300m-sv](https://huggingface.co/hf-test/xls-r-300m-sv) on Common Voice 7's test data is the following:
+
+```bash
+cd xls-r-300m-sv
+./eval.py --model_id ./ --dataset mozilla-foundation/common_voice_7_0 --config sv-SE --split test --log_outputs
+```
+
+To log each of the model's predictions with the target transcriptions, you can just 
+add the `--log_outputs` flag.
+
+Running this command should automatically create the file:
+`mozilla-foundation_common_voice_7_0_sv-SE_test_eval_results.txt` that contains 
+both the word- and character error rate.
+
+In a few days, we will give everybody access to some real world audio data for as many languages as possible.
+If your language has real world audio data, it will most likely have audio input 
+of multiple minutes. 🤗Transformer's [ASR pipeline](https://huggingface.co/docs/transformers/master/en/main_classes/pipelines#transformers.AutomaticSpeechRecognitionPipeline) supports audio chunking out-of-the-box. You only need to specify 
+how song each audio chunk should be (`chunk_length_s`) and how much audio stride 
+(`stride_length_s`) each chunk should use.
+For more information on the chunking works, please have a look at [this nice blog post](TODO: ).
+
+In the case of `xls-r-300m-sv`, the following command can be run:
 
 ```bash 
-./eval.py --model_id hf-test/xls-r-300m-sv --dataset speech-recognition-community-internal/tedx_manual_dev_test --config sv --split validation --chunk_length_s 5.0 --stride_length_s 1.0 --log_outputs
+cd xls-r-300m-sv
+./eval.py --model_id hf-test/xls-r-300m-sv --dataset <to-be-announced> --config sv --split validation --chunk_length_s 5.0 --stride_length_s 1.0 --log_outputs
 ```
 
-doesn't work yet.
+Great, now you should have succesfully evaluated your model. Finally, there is one 
+**important** thing you should do so that your model is taken into account 
+for the final evaluation. You should add two tags to your model, one being `robust-speech-event`, one being the ISO code of your chosen language, *e.g.* `"sv"` for the 
+examplary model we used above. You can find a list of all available languages and 
+their ISO code [here](https://huggingface.co/languages).
+
+To add the tags, simply edit the README.md of your model repository and add
+
+```
+- "sv"
+- "robust-speech-event"
+```
+
+under `tags:` as done [here](https://huggingface.co/hf-test/xls-r-300m-sv/commit/a495fd70c96bb7d019729be9273a265c2557345e).
+
+To verify that you've added the tags correctly make sure that your model 
+appears when clicking on [this link](https://huggingface.co/models?other=robust-speech-event).
+
+Great that's it! This should give you all the necessary information to evaluate
+your model. For the final evaluation, we will verify each evaluation result to 
+determine the final score and thereby the winning models for each language.
+
+The final score is calculated as follows:
+
+```bash
+FINAL_SCORE = 1/3 * WER_Common_Voice_7_test + 1/3 * WER_REAL_AUDIO_DEV + 1/3 * WER_REAL_AUDIO_TEST
+```
+
+The dataset `WER_REAL_AUDIO_TEST` is a hidden dataset and will only be published 
+at the end of the robust speech challenge.
+
+If there is no real audio data for your language the final score will be 
+computed solely based on the Common Voice 7 test dataset. If there is also
+no Common Voice 7 test dataset for your language, we will see together how to 
+score your model - if this is the case, please don't be discouraged. We are 
+especially excited about speech recognition systems of such low-resource 
+languages and will make sure that we'll decide on a good approach to evaluate 
+your model.
 
 ## Prizes
 
@@ -569,8 +660,7 @@ The following table summarizes what platform to use for which problem.
 
 ## Talks
 
-TODO(Patrick)
-We are very excited to be hosting 2 days of talks from:
+We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozilla's Common Voice, Kensho-Technologies, Hugging Face.
 
 ### Thursday, January 20th
 
@@ -579,8 +669,8 @@ We are very excited to be hosting 2 days of talks from:
 
  Speaker        | Topic                           | Time                  |  Video |
 |-------------|---------------------------------|------------------------|------------------------|
-| <someone from hf>, Hugging Face | TODO | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
-| Raymond Grossman and Jeremy Lopez, Kensho-Technologies | TODO | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
+| Patrick von Platen, Hugging Face | TODO | ??? UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
+| Raymond Grossman and Jeremy Lopez, Kensho-Technologies | Pyctcdecode & Speech2text decoding | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
 
 ### Friday, January 21th
 
@@ -590,7 +680,30 @@ We are very excited to be hosting 2 days of talks from:
  Speaker        | Topic                           | Time                  | Video |
 |-------------|---------------------------------|------------------------|------------------------|
 | Gabriel Habayeb, Mozilla Common Voice | TODO | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
-| Changhan Wang, Meta AI Research | TODO | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
+| Changhan Wang, Meta AI Research | XLS-R: Large-Scale Cross-lingual Speech Representation Learning on 128 Languages | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
+
+### Talks & Speakers
+
+#### Patrick von Platen, Research Engineer, Hugging Face
+- Talk: Introduction to Robust Speech Challenge
+- Abtract: In this talk, Patrick outlines the Robust Speech Challenge and gives tips and tricks on how to train and evaluate speech recognition systems with 🤗 Transformers and 🤗 Datasets, and PyTorch.
+- Speaker info: Patrick von Platen is a research engineer at Hugging Face and one of the core maintainers of the popular Transformers library. He specializes in speech recognition, encoder-decoder models and long-range sequence modeling. Before joining Hugging Face, Patrick conducted research in speech recognition at Uber AI, Cambridge University, and RWTH Aachen University.
+
+#### Raymond Grossman, Jeremy Lopez, Machine Learning Engineer, Kensho Technologies
+- Talk: PyCTCDecode & Speech2text decoding
+- Abstract: PyCTCDecode is a fast and feature-rich CTC beam search decoder for speech recognition written in Python, providing n-gram (kenlm) language model support similar to PaddlePaddle's decoder, but incorporating many new features such as byte pair encoding and real-time decoding to support models like Nvidia's Conformer-CTC or Facebook's Wav2Vec2.
+- Speaker info : 
+	- Raymond works as a machine learning engineer at Kensho Technologies, specializing in speech and natural language domains. Prior to coming to Kensho, he studied mathematics at Princeton and was an avid Kaggler under the moniker @ToTrainThemIsMyCause. 
+	- Jeremy is a machine learning engineer at Kensho Technologies and has worked on a variety of different topics including search and speech recognition. Before working at Kensho, he earned a PhD in experimental particle physics at MIT and continued doing physics research as a postdoc at the University of Colorado Boulder.
+
+#### Gabriel Habayeb, Data Engineer, Common Voice @ Mozilla
+- Talk: Common Voice
+- Abstract: 
+- Speaker info: 
+
+#### Changhan Wang, Main author of XLS-R and Research Engineer, Meta AI Research
+- Talk: XLS-R: Large-Scale Cross-lingual Speech Representation Learning on 128 Languages
+- Abstract: In this talk, Changhan will present XLS-R, a large-scale model for cross-lingual speech representation learning based on wav2vec 2.0. XLS-R has up to 2B parameters and was trained on nearly half a million hours of publicly available speech audio in 128 languages, an order of magnitude more public data than the largest known prior work. On the CoVoST-2 speech translation benchmark, XLS-R improves the previous state of the art by an average of 7.4 BLEU over 21 translation directions into English. For speech recognition, XLS-R improves over the best known prior work on BABEL, MLS, CommonVoice as well as VoxPopuli, lowering error rates by 14-34% relative on average. XLS-R also sets a new state of the art on VoxLingua107 language identification. The XLS-R team hopes to work together with the open-source community to improve speech processing tasks for many more languages of the world.
 
 ## General Tips and Tricks
 

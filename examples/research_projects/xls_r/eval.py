@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-from datasets import load_dataset, load_metric, Audio, Dataset
-from transformers import pipeline, AutoFeatureExtractor
-import re
 import argparse
+import re
 from typing import Dict
+
+from datasets import Audio, Dataset, load_dataset, load_metric
+
+from transformers import AutoFeatureExtractor, pipeline
 
 
 def log_results(result: Dataset, args: Dict[str, str]):
-    """ DO NOT CHANGE. This function computes and logs the result metrics. """
+    """DO NOT CHANGE. This function computes and logs the result metrics."""
 
     log_outputs = args.log_outputs
     dataset_id = "_".join(args.dataset.split("/") + [args.config, args.split])
@@ -21,10 +23,7 @@ def log_results(result: Dataset, args: Dict[str, str]):
     cer_result = cer.compute(references=result["target"], predictions=result["prediction"])
 
     # print & log results
-    result_str = (
-        f"WER: {wer_result}\n"
-        f"CER: {cer_result}"
-    )
+    result_str = f"WER: {wer_result}\n" f"CER: {cer_result}"
     print(result_str)
 
     with open(f"{dataset_id}_eval_results.txt", "w") as f:
@@ -48,9 +47,9 @@ def log_results(result: Dataset, args: Dict[str, str]):
 
 
 def normalize_text(text: str) -> str:
-    """ DO ADAPT FOR YOUR USE CASE. this function normalizes the target text. """
+    """DO ADAPT FOR YOUR USE CASE. this function normalizes the target text."""
 
-    chars_to_ignore_regex = '[,?.!\-\;\:\"“%‘”�—’…–]'  # noqa: W605 IMPORTANT: this should correspond to the chars that were ignored during training
+    chars_to_ignore_regex = '[,?.!\-\;\:"“%‘”�—’…–]'  # noqa: W605 IMPORTANT: this should correspond to the chars that were ignored during training
 
     text = re.sub(chars_to_ignore_regex, "", text.lower())
 
@@ -83,7 +82,9 @@ def main(args):
 
     # map function to decode audio
     def map_to_pred(batch):
-        prediction = asr(batch["audio"]["array"], chunk_length_s=args.chunk_length_s, stride_length_s=args.stride_length_s)
+        prediction = asr(
+            batch["audio"]["array"], chunk_length_s=args.chunk_length_s, stride_length_s=args.stride_length_s
+        )
 
         batch["prediction"] = prediction["text"]
         batch["target"] = normalize_text(batch["sentence"])
@@ -104,14 +105,15 @@ if __name__ == "__main__":
         "--model_id", type=str, required=True, help="Model identifier. Should be loadable with 🤗 Transformers"
     )
     parser.add_argument(
-        "--dataset", type=str, required=True, help="Dataset name to evaluate the `model_id`. Should be loadable with 🤗 Datasets"
+        "--dataset",
+        type=str,
+        required=True,
+        help="Dataset name to evaluate the `model_id`. Should be loadable with 🤗 Datasets",
     )
     parser.add_argument(
         "--config", type=str, required=True, help="Config of the dataset. *E.g.* `'en'`  for Common Voice"
     )
-    parser.add_argument(
-        "--split", type=str, required=True, help="Split of the dataset. *E.g.* `'test'`"
-    )
+    parser.add_argument("--split", type=str, required=True, help="Split of the dataset. *E.g.* `'test'`")
     parser.add_argument(
         "--chunk_length_s", type=float, default=None, help="Chunk length in seconds. Defaults to 5 seconds."
     )
@@ -119,7 +121,7 @@ if __name__ == "__main__":
         "--stride_length_s", type=float, default=None, help="Stride of the audio chunks. Defaults to 1 second."
     )
     parser.add_argument(
-        "--log_outputs", action='store_true', help="If defined, write outputs to log file for analysis."
+        "--log_outputs", action="store_true", help="If defined, write outputs to log file for analysis."
     )
     args = parser.parse_args()
 

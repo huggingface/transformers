@@ -23,7 +23,6 @@ import re
 import sys
 import warnings
 from dataclasses import dataclass, field
-import bitsandbytes as bnb
 from typing import Dict, List, Optional, Union
 
 import datasets
@@ -31,8 +30,8 @@ import numpy as np
 import torch
 from datasets import DatasetDict, load_dataset, load_metric
 
+import bitsandbytes as bnb
 import transformers
-from transformers.trainer_pt_utils import get_parameter_names
 from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
@@ -45,6 +44,7 @@ from transformers import (
     Wav2Vec2Processor,
     set_seed,
 )
+from transformers.trainer_pt_utils import get_parameter_names
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
