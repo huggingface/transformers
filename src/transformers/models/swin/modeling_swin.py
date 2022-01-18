@@ -97,7 +97,6 @@ def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
 class SwinEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings.
-
     """
 
     def __init__(self, config):
@@ -135,7 +134,6 @@ class SwinEmbeddings(nn.Module):
 class PatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
-
     """
 
     def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768):
@@ -156,14 +154,16 @@ class PatchEmbeddings(nn.Module):
 
 
 class PatchMerging(nn.Module):
-    r"""Patch Merging Layer.
+    """
+    Patch Merging Layer.
+    
     Args:
-        input_resolution (tuple[int]):
+        input_resolution (`Tuple[int]`):
             Resolution of input feature.
-        dim (int):
+        dim (`int`):
             Number of input channels.
-        norm_layer (nn.Module, *optional*, defaults to nn.LayerNorm):
-            Normalization layer.
+        norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
+            Normalization layer class.
     """
 
     def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
@@ -178,6 +178,7 @@ class PatchMerging(nn.Module):
         input_feature: batch_size, height*width, num_channels
         """
         height, width = self.input_resolution
+        # `dim` is height * width
         batch_size, dim, num_channels = input_feature.shape
 
         input_feature = input_feature.view(batch_size, height, width, num_channels)
@@ -343,19 +344,8 @@ class SwinAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-    ):
-        self_outputs = self.self(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions,
-        )
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -437,12 +427,7 @@ class SwinBlock(nn.Module):
 
         self.attn_mask = attn_mask
 
-    def forward(
-        self,
-        hidden_states,
-        head_mask=None,
-        output_attentions=False,
-    ):
+    def forward(self, hidden_states, head_mask=None, output_attentions=False):
         height, width = self.input_resolution
         batch_size, dim, channels = hidden_states.size()
         shortcut = hidden_states
@@ -519,13 +504,7 @@ class SwinLayer(nn.Module):
 
         self.pointing = False
 
-    def forward(
-        self,
-        hidden_states,
-        head_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-    ):
+    def forward(self, hidden_states, head_mask=None, output_attentions=False, output_hidden_states=False):
         all_hidden_states = () if output_hidden_states else None
 
         for i, block_module in enumerate(self.blocks):
@@ -599,16 +578,10 @@ class SwinEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    layer_head_mask,
+                    create_custom_forward(layer_module), hidden_states, layer_head_mask
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    layer_head_mask,
-                    output_attentions,
-                )
+                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -672,7 +645,7 @@ SWIN_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`~SwinConfig`]): Model configuration class with all the parameters of the model.
+        config ([`SwinConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """

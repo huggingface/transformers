@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SwinConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~SwinModel`]. It is used to instantiate an Swin
+    This is the configuration class to store the configuration of a [`SwinModel`]. It is used to instantiate an Swin
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Swin
     [microsoft/swin-tiny-patch4-window7-224](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224)
