@@ -41,7 +41,9 @@ SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Swin models at https://huggingface.co/models?filter=swin
 ]
 
+
 # to_2tuple, drop_path, PatchEmbeddings, PatchMerging and DropPath are from the timm library.
+
 
 # Copied from transformers.models.vit.modeling_vit.to_2tuple
 def to_2tuple(x):
