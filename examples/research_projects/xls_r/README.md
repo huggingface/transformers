@@ -501,7 +501,17 @@ the *n-gram* with a trained speech recognition model directly into the same mode
 
 ## Evaluation
 
-TODO(Patrick)
+```bash
+./eval.py --model_id hf-test/xls-r-300m-sv --dataset mozilla-foundation/common_voice_7_0 --config sv-SE --split test --log_outputs
+```
+
+works, but
+
+```bash 
+./eval.py --model_id hf-test/xls-r-300m-sv --dataset speech-recognition-community-internal/tedx_manual_dev_test --config sv --split validation --chunk_length_s 5.0 --stride_length_s 1.0 --log_outputs
+```
+
+doesn't work yet.
 
 ## Prizes
 
