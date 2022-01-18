@@ -240,6 +240,8 @@
       title: QDQBert
     - local: model_doc/rag
       title: RAG
+    - local: model_doc/realm
+      title: REALM
     - local: model_doc/reformer
       title: Reformer
     - local: model_doc/rembert

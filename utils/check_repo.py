@@ -35,6 +35,7 @@ PATH_TO_DOC = "docs/source"
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
     "DPRSpanPredictor",
+    "RealmBertModel",
     "T5Stack",
     "TFDPRSpanPredictor",
 ]
@@ -73,6 +74,10 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
+    "RealmBertModel",  # Building part of bigger (tested) model.
+    "RealmReader",  # Not regular model.
+    "RealmScorer",  # Not regular model.
+    "RealmForOpenQA",  # Not regular model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "Speech2Text2DecoderWrapper",  # Building part of bigger (tested) model.
     "TFDPREncoder",  # Building part of bigger (tested) model.
@@ -129,6 +134,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
+    "RealmEmbedder",
+    "RealmForOpenQA",
+    "RealmScorer",
+    "RealmReader",
     "TFDPRReader",
     "TFGPT2DoubleHeadsModel",
     "TFOpenAIGPTDoubleHeadsModel",
