@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,31 +13,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import unittest
 
-from transformers import BertTokenizerFast
 from transformers.models.bert.tokenization_bert import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
-    BertTokenizer,
     WordpieceTokenizer,
     _is_control,
     _is_punctuation,
     _is_whitespace,
 )
+from transformers.models.realm.tokenization_realm import RealmTokenizer
 from transformers.testing_utils import require_tokenizers, slow
 
 from .test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 
 @require_tokenizers
-class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class RealmTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    tokenizer_class = BertTokenizer
-    rust_tokenizer_class = BertTokenizerFast
-    test_rust_tokenizer = True
+    tokenizer_class = RealmTokenizer
+    rust_tokenizer_class = None
+    test_rust_tokenizer = False
     space_between_special_tokens = True
     from_pretrained_filter = filter_non_english
 
@@ -226,14 +224,15 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_clean_text(self):
         tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
 
         # Example taken from the issue https://github.com/huggingface/tokenizers/issues/340
         self.assertListEqual([tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]])
 
-        self.assertListEqual(
-            [rust_tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]]
-        )
+        if self.test_rust_tokenizer:
+            rust_tokenizer = self.get_rust_tokenizer()
+            self.assertListEqual(
+                [rust_tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]]
+            )
 
     @slow
     def test_sequence_builders(self):
@@ -300,39 +299,16 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
-    def test_change_tokenize_chinese_chars(self):
-        list_of_commun_chinese_char = ["的", "人", "有"]
-        text_with_chinese_char = "".join(list_of_commun_chinese_char)
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+    @slow
+    def test_batch_encode_candidates(self):
+        tokenizer = self.tokenizer_class.from_pretrained("bert-base-uncased")
 
-                kwargs["tokenize_chinese_chars"] = True
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+        text = [["Hello world!", "Nice to meet you!"], ["The cute cat.", "The adorable dog."]]
 
-                ids_without_spe_char_p = tokenizer_p.encode(text_with_chinese_char, add_special_tokens=False)
-                ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
+        encoded_sentence = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
 
-                tokens_without_spe_char_r = tokenizer_r.convert_ids_to_tokens(ids_without_spe_char_r)
-                tokens_without_spe_char_p = tokenizer_p.convert_ids_to_tokens(ids_without_spe_char_p)
+        expected_shape = (2, 2, 10)
 
-                # it is expected that each Chinese character is not preceded by "##"
-                self.assertListEqual(tokens_without_spe_char_p, list_of_commun_chinese_char)
-                self.assertListEqual(tokens_without_spe_char_r, list_of_commun_chinese_char)
-
-                kwargs["tokenize_chinese_chars"] = False
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-
-                ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
-                ids_without_spe_char_p = tokenizer_p.encode(text_with_chinese_char, add_special_tokens=False)
-
-                tokens_without_spe_char_r = tokenizer_r.convert_ids_to_tokens(ids_without_spe_char_r)
-                tokens_without_spe_char_p = tokenizer_p.convert_ids_to_tokens(ids_without_spe_char_p)
-
-                # it is expected that only the first Chinese character is not preceded by "##".
-                expected_tokens = [
-                    f"##{token}" if idx != 0 else token for idx, token in enumerate(list_of_commun_chinese_char)
-                ]
-                self.assertListEqual(tokens_without_spe_char_p, expected_tokens)
-                self.assertListEqual(tokens_without_spe_char_r, expected_tokens)
+        assert encoded_sentence["input_ids"].shape == expected_shape
+        assert encoded_sentence["attention_mask"].shape == expected_shape
+        assert encoded_sentence["token_type_ids"].shape == expected_shape

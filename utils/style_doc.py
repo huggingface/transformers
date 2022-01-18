@@ -445,6 +445,9 @@ def style_mdx_file(mdx_file, max_len=119, check_only=False):
         else:
             new_lines.append(line)
 
+    if in_code:
+        raise ValueError(f"There was a problem when styling {mdx_file}. A code block is opened without being closed.")
+
     clean_content = "\n".join(new_lines)
     diff = clean_content != content
     if not check_only and diff:
