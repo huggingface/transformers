@@ -7,10 +7,9 @@ on:
 
 jobs:
   build_and_package:
-    runs-on: ubuntu-latest
     runs-on: [self-hosted, doc-builder]
     container:
-      image: huggingface/doc-builder-transformers
+      image: ubuntu
       options: "-v /home/github_actions:/mnt"
     env:
       PR_NUMBER: ${{ github.event.number }}
