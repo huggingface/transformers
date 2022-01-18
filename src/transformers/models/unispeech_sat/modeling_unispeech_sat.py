@@ -1298,13 +1298,13 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import UniSpeechSatFeatureEncoder, UniSpeechSatForPreTraining
+        >>> from transformers import Wav2Vec2FeatureExtractor, UniSpeechSatForPreTraining
         >>> from transformers.models.unispeech_sat.modeling_unispeech_sat import _compute_mask_indices
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> feature_extractor = UniSpeechSatFeatureEncoder.from_pretrained("patrickvonplaten/unispeech_sat-base")
-        >>> model = UniSpeechSatForPreTraining.from_pretrained("patrickvonplaten/unispeech_sat-base")
+        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("microsoft/unispeech-sat-base")
+        >>> model = UniSpeechSatForPreTraining.from_pretrained("microsoft/unispeech-sat-base")
 
 
         >>> def map_to_array(batch):
