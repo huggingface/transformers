@@ -84,6 +84,7 @@ from . import (
     prophetnet,
     qdqbert,
     rag,
+    realm,
     reformer,
     rembert,
     retribert,

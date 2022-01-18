@@ -30,6 +30,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("realm", "RealmConfig"),
         ("nystromformer", "NystromformerConfig"),
         ("imagegpt", "ImageGPTConfig"),
         ("qdqbert", "QDQBertConfig"),
@@ -117,6 +118,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
+        ("realm", "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nystromformer", "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -192,6 +194,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("realm", "Realm"),
         ("nystromformer", "Nystromformer"),
         ("imagegpt", "ImageGPT"),
         ("qdqbert", "QDQBert"),

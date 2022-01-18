@@ -265,6 +265,7 @@ _import_structure = {
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
+    "models.realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RealmConfig", "RealmTokenizer"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
@@ -1198,6 +1199,19 @@ if is_torch_available():
     )
     _import_structure["models.rag"].extend(
         ["RagModel", "RagPreTrainedModel", "RagSequenceForGeneration", "RagTokenForGeneration"]
+    )
+    _import_structure["models.realm"].extend(
+        [
+            "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RealmEmbedder",
+            "RealmForOpenQA",
+            "RealmKnowledgeAugEncoder",
+            "RealmPreTrainedModel",
+            "RealmReader",
+            "RealmRetriever",
+            "RealmScorer",
+            "load_tf_weights_in_realm",
+        ]
     )
     _import_structure["models.reformer"].extend(
         [
@@ -2353,6 +2367,7 @@ if TYPE_CHECKING:
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
+    from .models.realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig, RealmTokenizer
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
@@ -3128,6 +3143,17 @@ if TYPE_CHECKING:
             ProphetNetPreTrainedModel,
         )
         from .models.rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
+        from .models.realm import (
+            REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RealmEmbedder,
+            RealmForOpenQA,
+            RealmKnowledgeAugEncoder,
+            RealmPreTrainedModel,
+            RealmReader,
+            RealmRetriever,
+            RealmScorer,
+            load_tf_weights_in_realm,
+        )
         from .models.reformer import (
             REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             ReformerAttention,
