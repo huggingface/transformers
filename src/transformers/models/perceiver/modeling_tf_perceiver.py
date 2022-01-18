@@ -1089,8 +1089,158 @@ class TFPerceiverForOpticalFlow(TFPerceiverPreTrainedModel):
         )
 
 
-class TFPerceiverForMultimodalAutoencoding:
-    pass
+class TFPerceiverForMultimodalAutoencoding(TFPerceiverPreTrainedModel):
+    def __init__(self, config):
+        super(TFPerceiverForMultimodalAutoencoding, self).__init__(config)
+
+        n_audio_samples = config.num_frames * config.audio_samples_per_frame
+
+        input_preprocessor = TFPerceiverMultimodalPreprocessor(
+            min_padding_size=4,
+            modalities={
+                "audio": TFPerceiverAudioPreprocessor(
+                    config,
+                    position_encoding_type="fourier",
+                    fourier_position_encoding_kwargs=dict(
+                        num_bands=192,
+                        max_resolution=(n_audio_samples,),
+                        sine_only=False,
+                        concat_pos=True,
+                    ),
+                    prep_type="patches",
+                    samples_per_patch=config.samples_per_patch,
+                ),
+                "image": TFPerceiverImagePreprocessor(
+                    config,
+                    position_encoding_type="fourier",
+                    fourier_position_encoding_kwargs=dict(
+                        num_bands=32,
+                        max_resolution=(config.num_frames, config.image_size, config.image_size),
+                        sine_only=False,
+                        concat_pos=True,
+                    ),
+                    prep_type="patches",
+                    spatial_downsample=4,
+                    temporal_downsample=1,
+                ),
+                "label": TFPerceiverOneHotPreprocessor(config),
+            },
+            mask_probs={"image": 0.0, "audio": 0.0, "label": 1.0},
+        )
+
+        image_decoder = TFPerceiverBasicVideoAutoencodingDecoder(
+            config,
+            # Autoencoding, don't pass inputs to the queries.
+            concat_preprocessed_input=False,
+            output_shape=config.output_shape,
+            output_num_channels=512,
+            use_query_residual=False,
+            position_encoding_only=True,
+            position_encoding_type="fourier",
+            fourier_position_encoding_kwargs=dict(
+                num_bands=32,
+                max_resolution=(config.num_frames, config.image_size, config.image_size),
+                sine_only=False,
+                concat_pos=True,
+            ),
+        )
+
+        decoder = TFPerceiverMultimodalDecoder(
+            config,
+            # Autoencoding, don't pass inputs to the queries.
+            concat_preprocessed_input=False,
+            # Modality specific decoders are used ONLY to generate queries.
+            # All modalties are decoded together using a unified decoder.
+            modalities={
+                "audio": TFPerceiverBasicDecoder(
+                    config,
+                    # Autoencoding, don't pass inputs to the queries.
+                    concat_preprocessed_input=False,
+                    output_index_dims=(n_audio_samples // config.samples_per_patch,),
+                    output_num_channels=512,
+                    use_query_residual=False,
+                    position_encoding_only=True,
+                    position_encoding_type="fourier",
+                    fourier_position_encoding_kwargs=dict(
+                        num_bands=192,
+                        max_resolution=(n_audio_samples,),
+                        sine_only=False,
+                        concat_pos=True,
+                    ),
+                ),
+                "image": image_decoder,
+                "label": TFPerceiverClassificationDecoder(
+                    config,
+                    # Autoencoding, don't pass inputs to the queries.
+                    concat_preprocessed_input=False,
+                    use_query_residual=False,
+                    position_encoding_only=True,
+                    position_encoding_type="trainable",
+                    trainable_position_encoding_kwargs=dict(
+                        num_channels=1024,
+                        index_dims=1,
+                    ),
+                ),
+            },
+            num_outputs=None,
+            output_num_channels=512,
+            use_query_residual=False,
+        )
+
+        output_postprocessor = TFPerceiverMultimodalPostprocessor(
+            modalities={
+                "audio": TFPerceiverAudioPostprocessor(config, in_channels=512),
+                "image": TFPerceiverProjectionPostprocessor(in_channels=512, out_channels=3),
+                "label": TFPerceiverClassificationPostprocessor(config, in_channels=512),
+            }
+        )
+
+        self.perceiver = TFPerceiverModel(
+            config,
+            input_preprocessor=input_preprocessor,
+            decoder=decoder,
+            output_postprocessor=output_postprocessor,
+        )
+    
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        subsampled_output_points=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        return_dict=None,
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            inputs=inputs,
+            attention_mask=attention_mask,
+            subsampled_output_points=subsampled_output_points,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        logits = outputs.logits if return_dict else outputs[0]
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Multimodal autoencoding training is not yet supported")
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return PerceiverClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
 
 
 def build_position_encoding(
@@ -1134,8 +1284,20 @@ class TFPerceiverAbstractDecoder(tf.keras.layers.Layer, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 
-class TFPerceiverProjectionDecoder:
-    pass
+class TFPerceiverProjectionDecoder(TFPerceiverAbstractDecoder):
+    def __init__(self, config):
+        super().__init__()
+        self.classifier = tf.keras.layers.Dense(config.num_labels)
+
+    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
+        return None
+
+    def forward(self, query, z, query_mask=None):
+        # (batch_size, num_latents, d_latents) -> (batch_size, d_latents)
+        z = tf.mean(z, axis=1)
+        # (batch_size, d_latents) -> (batch_size, config.num_labels)
+        logits = self.classifier(z)
+        return logits
 
 
 class TFPerceiverBasicDecoder(TFPerceiverAbstractDecoder):
@@ -1337,12 +1499,135 @@ class TFPerceiverOpticalFlowDecoder(TFPerceiverAbstractDecoder):
         return TFPerceiverDecoderOutput(logits=preds, cross_attentions=decoder_outputs.cross_attentions)
 
 
-class TFPerceiverBasicVideoAutoencodingDecoder:
-    pass
+class TFPerceiverBasicVideoAutoencodingDecoder(TFPerceiverAbstractDecoder):
+    def __init__(self, config, output_shape, position_encoding_type, **decoder_kwargs):
+        super(TFPerceiverBasicVideoAutoencodingDecoder, self).__init__()
+        if len(output_shape) != 4:  # B, T, H, W
+            raise ValueError(f"Expected rank 4 output_shape, got {output_shape}.")
+        # Build the decoder components:
+        self.output_shape = output_shape
+        self.output_num_channels = decoder_kwargs["output_num_channels"]
+
+        self.decoder = TFPerceiverBasicDecoder(
+            config,
+            output_index_dims=self.output_shape[1:4],  # T*H*W
+            position_encoding_type=position_encoding_type,
+            **decoder_kwargs,
+        )
+
+    @property
+    def num_query_channels(self) -> int:
+        return self.decoder.num_query_channels
+    
+    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
+        return self.decoder.decoder_query(
+            inputs,
+            modality_sizes=modality_sizes,
+            inputs_without_pos=inputs_without_pos,
+            subsampled_points=subsampled_points,
+        )
+    
+    def call(self, query, z, query_mask=None):
+        decoder_outputs = self.decoder(query, z)
+        logits = decoder_outputs.logits
+        
+        logits_shape = shape_list(logits)
+        logits = tf.reshape(logits, self.output_shape + [logits_shape[-1]])
+        return PerceiverDecoderOutput(logits=logits, cross_attentions=decoder_outputs.cross_attentions)
 
 
-class TFPerceiverMultimodalDecoder:
-    pass
+def restructure(modality_sizes: ModalitySizeType, inputs: tf.Tensor) -> Mapping[str, tf.Tensor]:
+    outputs = {}
+    index = 0
+    # Apply a predictable ordering to the modalities
+    for modality in sorted(modality_sizes.keys()):
+        size = modality_sizes[modality]
+        inp = inputs[:, index : index + size]
+        index += size
+        outputs[modality] = inp
+    return outputs
+
+
+class TFPerceiverMultimodalDecoder(TFPerceiverAbstractDecoder):
+    def __init__(
+        self,
+        config,
+        modalities,
+        num_outputs,
+        output_num_channels,
+        min_padding_size=2,
+        subsampled_index_dims=None,
+        **decoder_kwargs
+    ):
+        super(TFPerceiverMultimodalDecoder, self).__init__()
+        self.modalities = modalities
+        self.subsampled_index_dims = subsampled_index_dims
+        self.min_padding_size = min_padding_size
+        self.output_num_channels = output_num_channels
+        self.num_outputs = num_outputs
+        self.decoder = TFPerceiverBasicDecoder(
+            config,
+            output_index_dims=(num_outputs,),
+            output_num_channels=output_num_channels,
+            position_encoding_type="none",
+            num_channels=self.num_query_channels,
+            **decoder_kwargs,
+        )
+        self.padding = {
+                modality: tf.Variable(
+                    initial_value=tf.keras.initializers.RandomNormal(mean=0.0, stddev=1.0)(
+                        shape=(1, self.num_query_channels - decoder.num_query_channels)
+                )
+                for modality, decoder in modalities.items()
+            }
+        )
+    
+    @property
+    def num_query_channels(self) -> int:
+        max_channel_size = max(decoder.num_query_channels for _, decoder in self.modalities.items())
+        common_channel_size = max_channel_size + self.min_padding_size
+        return common_channel_size
+
+    def decoder_query(self, inputs, modality_sizes, inputs_without_pos=None, subsampled_points=None):
+        # Partition the flat inputs among the different modalities
+        inputs = restructure(modality_sizes, inputs)
+
+        # Obtain modality-specific decoders' queries
+        subsampled_points = subsampled_points or dict()
+
+        decoder_queries = dict()
+        for modality, decoder in self.modalities.items():
+            # Get input_without_pos for this modality if it exists.
+            input_without_pos = None
+            if inputs_without_pos is not None:
+                input_without_pos = inputs_without_pos.get(modality, None)
+            query = decoder.decoder_query(
+                inputs=inputs[modality],
+                modality_sizes=None,
+                inputs_without_pos=input_without_pos,
+                subsampled_points=subsampled_points.get(modality, None),
+            )
+            decoder_queries[modality] = query
+
+        # Pad all queries with trainable position encodings to make them have the same channels
+
+        def embed(modality, x):
+            x_shape = shape_list(x)
+            x = tf.reshape(x, [x_shape[0], tf.reduce_prod(x_shape[1:-1]), x_shape[-1]])
+            pos = self.padding[modality]
+            pos = tf.broadcast_to(pos, [x_shape[0], x_shape[1], self.num_query_channels - x_shape[2]])
+            return tf.concat([x, pos], axis=2)
+
+        # Apply a predictable ordering to the modalities
+        return tf.concat(
+            [embed(modality, decoder_queries[modality]) for modality in sorted(self.modalities.keys())], axis=1
+        )
+    
+    def call(self, query, z, query_mask=None, output_attentions=False):
+        # B x 1 x num_classes -> B x num_classes
+        decoder_outputs = self.decoder(query, z, output_attentions=output_attentions)
+
+        return decoder_outputs
 
 
 class TFPerceiverAbstractPositionEncoding(tf.keras.layers.Layer, metaclass=abc.ABCMeta):
@@ -1530,20 +1815,60 @@ class TFPerceiverEmbeddingDecoder(tf.keras.layers.Layer):
         return tf.reshape(output, [batch_size, seq_len, self.vocab_size])
 
 
-class TFPerceiverMultimodalPostprocessor:
-    pass
+class TFPerceiverMultimodalPostprocessor(tf.keras.layers.Layer):
+    def __init__(self, modalities: Mapping[str, PostprocessorType], input_is_dict: bool = False):
+        super(TFPerceiverMultimodalPostprocessor, self).__init__()
+        self.modalities = modalities
+        self.input_is_dict = input_is_dict
+
+    def call(self, inputs: tf.Tensor, pos: Optional[tf.Tensor] = None, modality_sizes=None):
+        if not self.input_is_dict:
+            # Slice up modalities by their sizes.
+            if modality_sizes is None:
+                raise ValueError("Modality sizes should be specified if input is not a dictionary.")
+            inputs = restructure(modality_sizes=modality_sizes, inputs=inputs)
+
+        outputs = {
+            modality: postprocessor(inputs[modality], pos=pos, modality_sizes=None)
+            for modality, postprocessor in self.modalities.items()
+        }
+        return outputs
 
 
-class TFPerceiverClassificationPostprocessor:
-    pass
+class TFPerceiverClassificationPostprocessor(tf.keras.layers.Layer):
+    def __init__(self, config, in_channels):
+        super(TFPerceiverClassificationPostprocessor, self).__init__()
+        self.classifier = tf.keras.layers.Dense(config.num_labels)
+
+    def forward(self, inputs, pos: Optional[tf.Tensor] = None, modality_sizes=None) -> tf.Tensor:
+        logits = self.classifier(inputs)
+        return logits[:, 0, :]
 
 
-class TFPerceiverAudioPostprocessor:
-    pass
+class TFPerceiverAudioPostprocessor(tf.keras.layers.Layer):
+    def __init__(self, config, in_channels, postproc_type: str = "patches"):
+        super(TFPerceiverAudioPostprocessor, self).__init__()
+
+        if postproc_type not in ("patches",):  # to be supported: 'conv', 'patches', 'pixels'
+            raise ValueError("Invalid postproc_type!")
+
+        # Architecture parameters:
+        self.classifier = tf.keras.layers.Dense(config.samples_per_patch)
+
+    def forward(self, inputs: tf.Tensor, pos: Optional[tf.Tensor] = None, modality_sizes=None) -> tf.Tensor:
+        logits = self.classifier(inputs)
+        inputs_shape = shape_list(inputs)
+        return tf.reshape(logits, [inputs_shape[0], -1])
 
 
-class TFPerceiverProjectionPostprocessor:
-    pass
+class TFPerceiverProjectionPostprocessor(tf.keras.layers.Layer):
+    def __init__(self, in_channels, out_channels):
+        super(TFPerceiverProjectionPostprocessor, self).__init__()
+        self.classifier = tf.keras.layer.Dense(out_channels)
+
+    def forward(self, inputs: tf.Tensor, pos: Optional[tf.Tensor] = None, modality_sizes=None) -> tf.Tensor:
+        logits = self.classifier(inputs)
+        return logits
 
 
 def space_to_depth(frames: tf.Tensor, temporal_block_size: int = 1, spatial_block_size: int = 1) -> tf.Tensor:
@@ -1820,16 +2145,184 @@ class TFPerceiverImagePreprocessor(TFAbstractPreprocessor):
         return inputs, modality_sizes, inputs_without_pos
 
 
-class TFPerceiverOneHotPreprocessor:
-    pass
+class TFPerceiverOneHotPreprocessor(TFAbstractPreprocessor):
+    def __init__(self, config):
+        super(TFPerceiverOneHotPreprocessor, self).__init__()
+        self.config = config
+
+    @property
+    def num_channels(self) -> int:
+        return self.config.num_labels
+
+    def call(self, inputs: tf.Tensor, pos: Optional[tf.Tensor] = None, network_input_is_1d: bool = True):
+        # Add a dummy index dimension.
+        inputs = inputs[:, None, :]
+        # inputs = tf.expand_dim(inputs, axis=1) ????
+
+        # No position encodings, so the 1st (input) and 3rd (inputs_without_pos)
+        # outputs are identical.
+        return inputs, None, inputs
 
 
-class TFPerceiverAudioPreprocessor:
-    pass
+class TFPerceiverAudioPreprocessor(TFAbstractPreprocessor):
+    def __init__(
+        self,
+        config,
+        prep_type: str = "patches",
+        samples_per_patch: int = 96,
+        position_encoding_type: str = "fourier",
+        concat_or_add_pos: str = "concat",
+        out_channels=64,
+        project_pos_dim=-1,
+        **position_encoding_kwargs,
+    ):
+        super(TFPerceiverAudioPreprocessor, self).__init__()
+        self.config = config
+
+        if prep_type not in ("patches",):
+            raise ValueError(f"Prep_type {prep_type} is invalid, can only be 'patches'.")
+
+        if concat_or_add_pos not in ["concat", "add"]:
+            raise ValueError(f"Concat_or_pos {concat_or_add_pos} is invalid, can only be 'concat' or 'add'.")
+
+        self.samples_per_patch = samples_per_patch
+        self.position_encoding_type = position_encoding_type
+        self.concat_or_add_pos = concat_or_add_pos
+        self.project_pos_dim = project_pos_dim
+
+        # Position embeddings
+        self.position_embeddings, self.positions_projection = build_position_encoding(
+            position_encoding_type=position_encoding_type,
+            out_channels=out_channels,
+            project_pos_dim=project_pos_dim,
+            **position_encoding_kwargs,
+        )
+
+    @property
+    def num_channels(self) -> int:
+        # position embedding
+        if self.project_pos_dim > 0:
+            pos_dim = self.project_pos_dim
+        else:
+            pos_dim = self.position_embeddings.output_size()
+        if self.concat_or_add_pos == "add":
+            return pos_dim
+        return self.samples_per_patch + pos_dim
+
+    def _build_network_inputs(self, inputs, pos):
+        """Construct the final input, including position encoding."""
+        intput_shape = shape_list(inputs)
+        batch_size = intput_shape[0]
+        index_dims = intput_shape[1:-1]
+
+        # Construct the position encoding.
+        if self.position_encoding_type == "trainable":
+            pos_enc = self.position_embeddings(batch_size)
+        elif self.position_encoding_type == "fourier":
+            pos_enc = self.position_embeddings(index_dims, batch_size)
+
+        # Optionally project them to a target dimension.
+        pos_enc = self.positions_projection(pos_enc)
+
+        if self.concat_or_add_pos == "concat":
+            inputs_with_pos = tf.concat([inputs, pos_enc], axis=-1)
+        elif self.concat_or_add_pos == "add":
+            inputs_with_pos = inputs + pos_enc
+
+        return inputs_with_pos, inputs
+
+    def call(self, inputs, pos, network_input_is_1d: bool = True):
+        intput_shape = shape_list(inputs)
+        inputs = tf.reshape(inputs, [intput_shape[0], -1, self.samples_per_patch])
+
+        inputs, inputs_without_pos = self._build_network_inputs(inputs, pos)
+        modality_sizes = None  # Size for each modality, only needed for multimodal
+
+        return inputs, modality_sizes, inputs_without_pos
 
 
-class TFPerceiverMultimodalPreprocessor:
-    pass
+class TFPerceiverMultimodalPreprocessor(TFAbstractPreprocessor):
+    def __init__(
+        self,
+        modalities: Mapping[str, PreprocessorType],
+        mask_probs: Optional[Mapping[str, float]] = None,
+        min_padding_size: int = 2,
+    ):
+        super(TFPerceiverMultimodalPreprocessor, self).__init__()
+        self.modalities = modalities
+        self.min_padding_size = min_padding_size
+        self.mask_probs = mask_probs if mask_probs is not None else dict()
+        self.padding = {
+            modality: tf.Variable(
+                initial_value=tf.keras.initializers.RandomNormal(mean=0.0, stddev=1.0)(
+                    shape=(1, self.num_channels - preprocessor.num_channels)
+                )
+            )
+            for modality, preprocessor in modalities.items()
+        }
+        self.mask = {
+            modality: tf.Variable(
+                initial_value=tf.keras.initializers.RandomNormal(mean=0.0, stddev=1.0)(shape=(1, self.num_channels))
+            )
+            for modality, _ in self.mask_probs.items()
+        }
+
+    @property
+    def num_channels(self) -> int:
+        max_channel_size = max(processor.num_channels for _, processor in self.modalities.items())
+        common_channel_size = max_channel_size + self.min_padding_size
+        return common_channel_size
+
+    def call(
+        self, inputs: Mapping[str, tf.Tensor], pos: Optional[tf.Tensor] = None, network_input_is_1d: bool = True
+    ) -> PreprocessorOutputType:
+        padded = {}
+        modality_sizes = {}
+        inputs_without_pos = {}
+        for modality, preprocessor in self.modalities.items():
+            # preprocess each modality using the respective preprocessor.
+            output, _, inputs_without_pos[modality] = preprocessor(
+                inputs[modality], pos=pos, network_input_is_1d=network_input_is_1d
+            )
+
+            # pad to the same common_channel_size.
+            batch_size, num_samples, num_channels = output.shape
+            pos_enc = self.padding[modality]
+            pos_enc = tf.reshape(pos_enc, (1, num_samples, num_channels))
+            pos_enc = tf.tile(pos_enc, [batch_size, 1, 1])
+
+            padding = tf.broadcast_to(
+                pos_enc,
+                [batch_size, num_samples, self.num_channels - num_channels],
+            )
+            output_padded = tf.concat([output, padding], axis=2)
+
+            # mask if required
+            if modality in self.mask_probs:
+                mask_token = self.mask[modality]
+                mask_token = tf.reshape(mask_token, (1, num_samples, num_channels))
+                mask_token = tf.tile(mask_token, [batch_size, 1, 1])
+
+                mask_prob = self.mask_probs[modality]
+                # bernoulli(can we use tensorflow probability ?)
+                p = tf.fill([batch_size, num_samples], mask_prob)
+                r = tf.random.uniform(shape=[batch_size, num_samples])
+                mask = tf.math.greater(p, r)
+                mask = tf.cast(mask, dtype=tf.float32)
+
+                mask = tf.expand_dims(mask, dim=2)
+                output_padded = (1 - mask) * output_padded + mask * mask_token
+
+            padded[modality] = output_padded
+            modality_sizes[modality] = output_padded.shape[1]
+
+        # Apply a predictable ordering to the modalities
+        padded_ls = [padded[k] for k in sorted(padded.keys())]
+
+        # Finally, concatenate along the time dimension
+        final_inputs = tf.concat(padded_ls, axis=1)
+
+        return final_inputs, modality_sizes, inputs_without_pos
 
 
 class TFConv2DDownsample(tf.keras.layers.Layer):
