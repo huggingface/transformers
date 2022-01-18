@@ -551,7 +551,7 @@ Assuming that we have a clone of the model's repo under `~/xls-r-300m-sv`, we ca
 copy the `eval.py` script to the repo.
 
 ```bash
-cp ~/transformers/examples/research_projects/xls_r/eval.py ~/xls-r-300m-sv
+cp ~/transformers/examples/research_projects/robust-speech-event/eval.py ~/xls-r-300m-sv
 ```
 
 Next, we should adapt `eval.py` so that it fits our evaluation data. Here it is 
