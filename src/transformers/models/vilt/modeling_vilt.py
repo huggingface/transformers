@@ -1160,8 +1160,6 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         token_type_ids=None,
         pixel_values=None,
         pixel_mask=None,
-        pixel_values_2=None,
-        pixel_mask_2=None,
         head_mask=None,
         inputs_embeds=None,
         image_embeds=None,
@@ -1193,12 +1191,12 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         >>> # prepare inputs
         >>> encoding_1 = processor(image1, text, return_tensors="pt")
         >>> encoding_2 = processor(image2, text, return_tensors="pt")
+        >>> pixel_values = torch.stack([encoding_1.pixel_values, encoding_2.pixel_values], dim=1)
 
         >>> # forward pass
         >>> outputs = model(
         ...     input_ids=encoding_1.input_ids,
-        ...     pixel_values=encoding_1.pixel_values,
-        ...     pixel_values_2=encoding_2.pixel_values_2,
+        ...     pixel_values=pixel_values,
         ... )
         >>> logits = outputs.logits
         >>> idx = logits.argmax(-1).item()
@@ -1206,39 +1204,32 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs_1 = self.vilt(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            pixel_values=pixel_values,
-            pixel_mask=pixel_mask,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            image_embeds=image_embeds,
-            image_token_type_idx=1,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        if pixel_values.ndim == 4:
+            # add dummy num_images dimension
+            pixel_values = pixel_values.unsqueeze(1)
 
-        outputs_2 = self.vilt(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            pixel_values=pixel_values_2,
-            pixel_mask=pixel_mask_2,
-            image_token_type_idx=2,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        num_images = pixel_values.shape[1]
+        pooler_outputs = []
+        for i in range(num_images):
+            # forward every image through the model
+            outputs = self.vilt(
+                input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                pixel_values=pixel_values[:, i, :, :, :],
+                pixel_mask=pixel_mask[:, i, :, :] if pixel_mask is not None else None,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                image_embeds=image_embeds,
+                image_token_type_idx=i + 1,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+            pooler_output = outputs.pooler_output if return_dict else outputs[1]
+            pooler_outputs.append(pooler_output)
 
-        pooler_output_1 = outputs_1.pooler_output if return_dict else outputs_1[1]
-        pooler_output_2 = outputs_2.pooler_output if return_dict else outputs_2[1]
-
-        pooled_output = torch.cat((pooler_output_1, pooler_output_2), dim=-1)
+        pooled_output = torch.cat(pooler_outputs, dim=-1)
         logits = self.classifier(pooled_output)
 
         loss = None
@@ -1247,12 +1238,12 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs_1[2:]
+            output = (logits,)
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs_1.hidden_states,
-            attentions=outputs_1.attentions,
+            hidden_states=None,
+            attentions=None,
         )

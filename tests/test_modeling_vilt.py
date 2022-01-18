@@ -74,6 +74,7 @@ class ViltModelTester:
         num_labels=3,
         scope=None,
         modality_type_vocab_size=2,
+        add_multiple_images=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -100,13 +101,17 @@ class ViltModelTester:
         self.num_labels = num_labels
         self.scope = scope
         self.modality_type_vocab_size = modality_type_vocab_size
+        self.add_multiple_images = add_multiple_images
         # we set the expected sequence length (which is used in several tests)
         # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
         self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        if self.add_multiple_images:
+            pixel_values = floats_tensor([self.batch_size, 2, self.num_channels, self.image_size, self.image_size])
+        else:
+            pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         input_mask = None
         if self.use_input_mask:
@@ -207,8 +212,8 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
-        if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
-            inputs_dict["pixel_values_2"] = self.model_tester.prepare_pixel_values()
+        if model_class.__name__ == "ViltForNaturalLanguageVisualReasonining":
+            inputs_dict["pixel_values"] = floats_tensor
 
         if return_labels:
             if model_class.__name__ == "ViltForQuestionAnswering":
@@ -256,6 +261,8 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            for k, v in inputs.items():
+                print(k, v.shape)
             loss = model(**inputs).loss
             loss.backward()
 
@@ -406,7 +413,7 @@ class ViltForNaturalLanguageVisualReasoningModelTest(ViltModelTest, unittest.Tes
     all_model_classes = (ViltForNaturalLanguageVisualReasoning,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = ViltModelTester(self, modality_type_vocab_size=3)
+        self.model_tester = ViltModelTester(self, modality_type_vocab_size=3, add_multiple_images=True)
         self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=37)
 
 
@@ -499,11 +506,12 @@ class ViltModelIntegrationTest(unittest.TestCase):
         encoding_1 = processor(image1, text, return_tensors="pt")
         encoding_2 = processor(image2, text, return_tensors="pt")
 
+        pixel_values = torch.stack([encoding_1.pixel_values, encoding_2.pixel_values], dim=1)
+
         # forward pass
         outputs = model(
             input_ids=encoding_1.input_ids,
-            pixel_values=encoding_1.pixel_values,
-            pixel_values_2=encoding_2.pixel_values,
+            pixel_values=pixel_values,
         )
 
         # verify the logits

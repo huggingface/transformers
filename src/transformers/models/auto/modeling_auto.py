@@ -443,13 +443,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
-    [
-        # Model for Visual Question Answering mapping
-        ("vilt", "ViltForVisualQuestionAnswering"),
-    ]
-)
-
 MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Table Question Answering mapping
@@ -603,9 +596,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 )
-MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
-    CONFIG_MAPPING_NAMES, MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
-)
 MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES
 )
@@ -683,10 +673,6 @@ AutoModelForSequenceClassification = auto_class_update(
 
 class AutoModelForQuestionAnswering(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
-
-
-class AutoModelForVisualQuestionAnswering(_BaseAutoModelClass):
-    _model_mapping = MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
 
 
 AutoModelForQuestionAnswering = auto_class_update(AutoModelForQuestionAnswering, head_doc="question answering")

@@ -3564,7 +3564,7 @@ class ViltForNaturalLanguageVisualReasoning(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class ViltForVisualQuestionAnswering(metaclass=DummyObject):
+class ViltForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
