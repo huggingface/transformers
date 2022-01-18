@@ -204,11 +204,12 @@ class DPREncoder(DPRPreTrainedModel):
         )
         sequence_output = outputs[0]
         pooled_output = sequence_output[:, 0, :]
+
         if self.projection_dim > 0:
             pooled_output = self.encode_proj(pooled_output)
 
         if not return_dict:
-            return (sequence_output, pooled_output) + outputs[1:]
+            return (sequence_output, pooled_output) + outputs[2:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
