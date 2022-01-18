@@ -2624,9 +2624,6 @@ if TYPE_CHECKING:
             SwinForImageClassification,
             SwinModel,
             SwinPreTrainedModel,
-            SwinLayer,
-            SwinModel,
-            SwinPreTrainedModel,
         )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark

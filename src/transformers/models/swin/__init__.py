@@ -32,7 +32,6 @@ if is_torch_available():
     _import_structure["modeling_swin"] = [
         "SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SwinForImageClassification",
-        "SwinLayer",
         "SwinModel",
         "SwinPreTrainedModel",
     ]
@@ -50,7 +49,6 @@ if TYPE_CHECKING:
         from .modeling_swin import (
             SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwinForImageClassification,
-            SwinLayer,
             SwinModel,
             SwinPreTrainedModel,
         )
