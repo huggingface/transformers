@@ -294,7 +294,7 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
 
 def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     """
-    Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR
+    Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR)
 
     Args:
         nlp: The pipeline to be exported
@@ -312,10 +312,10 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     try:
         import tensorflow as tf
 
-        from keras2onnx import __version__ as k2ov
-        from keras2onnx import convert_keras, save_model
+        from tf2onnx import __version__ as t2ov
+        from tf2onnx import convert_keras, save_model
 
-        print(f"Using framework TensorFlow: {tf.version.VERSION}, keras2onnx: {k2ov}")
+        print(f"Using framework TensorFlow: {tf.version.VERSION}, tf2onnx: {t2ov}")
 
         # Build
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "tf")
