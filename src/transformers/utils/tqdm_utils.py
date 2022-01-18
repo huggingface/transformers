@@ -76,3 +76,13 @@ def is_progress_bar_enabled() -> bool:
     """Return a boolean indicating whether tqdm progress bars are enabled."""
     global _active
     return bool(_active)
+
+
+def enable_progress_bar():
+    global _active
+    _active = True
+
+
+def disable_progress_bar():
+    global _active
+    _active = False
