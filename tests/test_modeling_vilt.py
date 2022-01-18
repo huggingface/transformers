@@ -329,7 +329,13 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+                # attentions are a list of length num_images
+                # each element contains the attentions of a particular image index
+                self.assertEqual(len(attentions), self.model_tester.num_images)
+                self.assertEqual(len(attentions[0]), self.model_tester.num_hidden_layers)
+            else:
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -340,12 +346,24 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+                # attentions are a list of length num_images
+                # each element contains the attentions of a particular image index
+                self.assertEqual(len(attentions), self.model_tester.num_images)
+                self.assertEqual(len(attentions[0]), self.model_tester.num_hidden_layers)
+            else:
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_len, seq_len],
-            )
+            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+                self.assertListEqual(
+                    list(attentions[0][0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                )
+            else:
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                )
             out_len = len(outputs)
 
             # Check attention is always last and order is fine
@@ -361,11 +379,19 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_len, seq_len],
-            )
+            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+                self.assertEqual(len(self_attentions), self.model_tester.num_images)
+                self.assertEqual(len(self_attentions[0]), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(self_attentions[0][0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                )
+            else:
+                self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(self_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
