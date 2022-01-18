@@ -17,10 +17,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+      - name: Set env
+        run: echo "WRITE=$(cat /mnt/WRITE)" >> $GITHUB_ENV
+
+      - uses: actions/checkout@v2
         with:
           repository: 'huggingface/doc-build-dev'
           path: doc-build-dev
-          token: ${{ secrets.HUGGINGFACE_PUSH }}
+          token: ${{ env.WRITE }}
 
       - name: Print
         run: |
