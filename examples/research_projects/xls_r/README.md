@@ -709,7 +709,11 @@ We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozi
 
 - Memory efficient training:
 
-TODO(Patrick)
+In case, you are getting out-of-memory erros on your GPU, we recommend to use 
+[bitsandbytes](https://github.com/facebookresearch/bitsandbytes) to replace the 
+native memory intensive Adam optimizer with the one of `bitsandbytes`. You
+can simply run the script `./run_speech_recognition_ctc_bnb.py` provided in this 
+folder that makes use of `bitsandbytes` instead of the official one.
 
 - Dataset streaming
 
