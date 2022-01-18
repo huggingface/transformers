@@ -108,6 +108,7 @@ from . import (
     vision_text_dual_encoder,
     visual_bert,
     vit,
+    vit_mae,
     wav2vec2,
     wav2vec2_phoneme,
     wav2vec2_with_lm,

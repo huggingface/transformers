@@ -152,7 +152,7 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         # resolve name conflict with TFBertMainLayer instead of TFBertModel
-        self.bert_model = TFBertMainLayer(config, name="bert_model")
+        self.bert_model = TFBertMainLayer(config, add_pooling_layer=False, name="bert_model")
         self.config = config
 
         assert self.config.hidden_size > 0, "Encoder hidden_size can't be zero"
@@ -198,13 +198,13 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
             training=inputs["training"],
         )
 
-        sequence_output, pooled_output = outputs[:2]
+        sequence_output = outputs[0]
         pooled_output = sequence_output[:, 0, :]
         if self.projection_dim > 0:
             pooled_output = self.encode_proj(pooled_output)
 
         if not inputs["return_dict"]:
-            return (sequence_output, pooled_output) + outputs[2:]
+            return (sequence_output, pooled_output) + outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,

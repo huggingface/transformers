@@ -296,6 +296,26 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(output[0]["text"][:6], "ZBT ZC")
 
     @require_torch
+    @require_pyctcdecode
+    def test_with_lm_fast(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/processor_with_lm",
+            framework="pt",
+        )
+        self.assertEqual(speech_recognizer.type, "ctc_with_lm")
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        n_repeats = 2
+        audio_tiled = np.tile(audio, n_repeats)
+        output = speech_recognizer([audio_tiled], batch_size=2)
+
+        self.assertEqual(output, [{"text": ANY(str)}])
+        self.assertEqual(output[0]["text"][:6], "<s> <s")
+
+    @require_torch
     @slow
     def test_chunking(self):
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
