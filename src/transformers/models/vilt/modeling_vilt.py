@@ -148,10 +148,7 @@ class ViltEmbeddings(nn.Module):
             else:
                 pad_choice = torch.multinomial(torch.ones(nv).float(), p, replacement=True)
                 select.append(
-                    torch.cat(
-                        [valid_row_idx[i], non_valid_row_idx[i][pad_choice]],
-                        dim=0,
-                    )
+                    torch.cat([valid_row_idx[i], non_valid_row_idx[i][pad_choice]], dim=0)
                 )
 
         select = torch.cat(select, dim=0)
@@ -279,7 +276,6 @@ class TextEmbeddings(nn.Module):
 class PatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
-
     """
 
     def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768):
@@ -968,7 +964,7 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (*torch.FloatTensor* of shape *(batch_size, num_labels)*, *optional*):
+        labels (`torch.FloatTensor` of shape `(batch_size, num_labels)`, *optional*):
             Labels for computing the visual question answering loss. This tensor must be either a one-hot encoding of
             all answers that are applicable for a given example in the batch, or a soft encoding indicating which
             answers are applicable, where 1.0 is the highest score.
@@ -1072,7 +1068,7 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (*torch.LongTensor* of shape *(batch_size,)*, *optional*):
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels are currently not supported.
 
         Returns:
@@ -1181,7 +1177,7 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (*torch.LongTensor* of shape *(batch_size,)*, *optional*):
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Binary classification labels.
 
         Returns:
