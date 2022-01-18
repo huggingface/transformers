@@ -5,7 +5,7 @@ from PIL import Image
 
 import requests
 import timm
-from transformers import SwinConfig, AutoFeatureExtractor, SwinForImageClassification
+from transformers import AutoFeatureExtractor, SwinConfig, SwinForImageClassification
 
 
 def get_swin_config(swin_name):

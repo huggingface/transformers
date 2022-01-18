@@ -163,7 +163,14 @@ class SwinModelTester:
 @require_torch
 class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = ((SwinModel, SwinForImageClassification,) if is_torch_available() else ())
+    all_model_classes = (
+        (
+            SwinModel,
+            SwinForImageClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     test_pruning = False
     test_torchscript = False

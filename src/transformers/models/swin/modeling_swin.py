@@ -57,14 +57,16 @@ def window_partition(input_feature, window_size):
     Partitions the given input into windows.
     """
     batch_size, height, width, num_channels = input_feature.shape
-    input_feature = input_feature.view(batch_size, height // window_size, window_size, width // window_size, window_size, num_channels)
+    input_feature = input_feature.view(
+        batch_size, height // window_size, window_size, width // window_size, window_size, num_channels
+    )
     windows = input_feature.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
     return windows
 
 
 def window_reverse(windows, window_size, height, width):
     """
-    Mergres windows to produce higher resolution features. 
+    Mergres windows to produce higher resolution features.
     """
     batch_size = int(windows.shape[0] / (height * width / window_size / window_size))
     windows = windows.view(batch_size, height // window_size, width // window_size, window_size, window_size, -1)
@@ -148,7 +150,7 @@ class SwinPatchEmbeddings(nn.Module):
 class SwinPatchMerging(nn.Module):
     """
     Patch Merging Layer.
-    
+
     Args:
         input_resolution (`Tuple[int]`):
             Resolution of input feature.
@@ -177,7 +179,7 @@ class SwinPatchMerging(nn.Module):
         input_feature_2 = input_feature[:, 0::2, 1::2, :]  # batch_size height/2 width/2 num_channels
         input_feature_3 = input_feature[:, 1::2, 1::2, :]  # batch_size height/2 width/2 num_channels
         # batch_size height/2 width/2 4*num_channels
-        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)  
+        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
         input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
 
         input_feature = self.norm(input_feature)
@@ -266,10 +268,12 @@ class SwinSelfAttention(nn.Module):
         relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()
         attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
 
-        if attention_mask is not None:  
+        if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in SwinModel forward() function)
             mask_shape = attention_mask.shape[0]
-            attention_scores = attention_scores.view(batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim) 
+            attention_scores = attention_scores.view(
+                batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim
+            )
             attention_scores = attention_scores + attention_mask.unsqueeze(1).unsqueeze(0)
             attention_scores = attention_scores.view(-1, self.num_attention_heads, dim, dim)
 
@@ -579,10 +583,20 @@ class SwinEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions,] if v is not None)
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    all_hidden_states,
+                    all_self_attentions,
+                ]
+                if v is not None
+            )
 
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 
@@ -748,7 +762,9 @@ class SwinModel(SwinPreTrainedModel):
             return (sequence_output,) + encoder_outputs[1:]
 
         return BaseModelOutput(
-            last_hidden_state=sequence_output, hidden_states=encoder_outputs.hidden_states, attentions=encoder_outputs.attentions,
+            last_hidden_state=sequence_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
