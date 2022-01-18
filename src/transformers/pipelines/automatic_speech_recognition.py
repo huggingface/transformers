@@ -215,7 +215,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate))
             stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate))
 
-            if not self.is_ctc:
+            if self.type != "ctc":
                 raise ValueError(
                     "`chunk_length_s` is only valid for CTC models, use other chunking options for other models"
                 )
