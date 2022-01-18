@@ -1,0 +1,54 @@
+<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+-->
+
+# Efficient Training on a Single GPU
+
+
+
+## Less Memory
+
+### fp16
+
+### bf16
+
+### Gradient Accumulation
+
+### Gradient Checkpointing
+
+### Optimizer
+
+
+
+
+
+## Faster Speed
+
+### Gradient Accumulation
+
+### Batch sizes
+
+
+
+
+## Scalability Strategy
+
+* Model fits onto a single GPU:
+
+    1. Normal use
+
+* Model doesn't fit onto a single GPU:
+
+    1. ZeRO + Offload CPU and optionally NVMe
+    2. as above plus Memory Centric Tiling (see below for details) if the largest layer can't fit into a single GPU
+
+* Largest Layer not fitting into a single GPU:
+
+1. ZeRO - Enable [Memory Centric Tiling](https://deepspeed.readthedocs.io/en/latest/zero3.html#memory-centric-tiling) (MCT). It allows you to run arbitrarily large layers by automatically splitting them and executing them sequentially. MCT reduces the number of parameters that are live on a GPU, but it does not affect the activation memory. As this need is very rare as of this writing a manual override of `torch.nn.Linear` needs to be done by the user.

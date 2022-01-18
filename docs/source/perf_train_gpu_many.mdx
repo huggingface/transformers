@@ -1,0 +1,80 @@
+<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+-->
+
+# Efficient Training on Multiple GPU
+
+
+
+## Less Memory
+
+
+### fp16
+
+### bf16
+
+### Gradient Accumulation
+
+### Gradient Checkpointing
+
+### Optimizer
+
+
+## Faster Speed
+
+### DP vs DDP
+
+### Gradient Accumulation
+
+### Batch sizes
+
+
+
+## Scalability Strategy
+
+**⇨ Single Node / Multi-GPU**
+
+* Model fits onto a single GPU:
+
+    1. DDP - Distributed DP
+    2. ZeRO - may or may not be faster depending on the situation and configuration used
+
+* Model doesn't fit onto a single GPU:
+
+    1. PP
+    2. ZeRO
+    3. TP
+
+    With very fast intra-node connectivity of NVLINK or NVSwitch all three should be mostly on par, without these PP will be faster than TP or ZeRO. The degree of TP may also make a difference. Best to experiment to find the winner on your particular setup.
+
+    TP is almost always used within a single node. That is TP size <= gpus per node.
+
+* Largest Layer not fitting into a single GPU:
+
+    1. If not using ZeRO - must use TP, as PP alone won't be able to fit.
+    2. With ZeRO see the same entry for "Single GPU" above
+
+
+**⇨ Multi-Node / Multi-GPU**
+
+* When you have fast inter-node connectivity:
+
+    1. ZeRO - as it requires close to no modifications to the model
+    2. PP+TP+DP - less communications, but requires massive changes to the model
+
+* when you have slow inter-node connectivity and still low on GPU memory:
+
+    1. DP+PP+TP+ZeRO-1
+
+
+
+
+
+## Hardware
