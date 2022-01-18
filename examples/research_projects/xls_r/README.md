@@ -6,7 +6,10 @@ The goal of this event is to build **robust**, **real-world** speech recognition
 If necessary and available, free access to a V100 32 GB GPU will kindly be provided by the [OVH could team](https://us.ovhcloud.com/) 🚀.
 This document summarizes all the relevant information required for the speech community event 📋.
 
-To sign-up, please see [this forum post](https://discuss.huggingface.co/t/open-to-the-community-robust-speech-recognition-challenge/13614) 🤗.
+To sign-up, please see [this forum post](https://discuss.huggingface.co/t/open-to-the-community-robust-speech-recognition-challenge/13614) 🤗. Please make sure to:
+- Read it in detail
+- Fill the google form
+- Join our Discord server in the #join-sprint channel.
 
 ## Table of Contents
 
