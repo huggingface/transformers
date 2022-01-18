@@ -1911,8 +1911,8 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
     r.raise_for_status()
     content_length = r.headers.get("Content-Length")
     total = resume_size + int(content_length) if content_length is not None else None
-    # `tqdm` behavior is determined by `utils.tqdm_utils.is_progress_bar_enabled()`
-    # and can be set using `utils.tqdm_utils.enable/disable_progress_bar()`
+    # `tqdm` behavior is determined by `utils.logging.is_progress_bar_enabled()`
+    # and can be set using `utils.logging.enable/disable_progress_bar()`
     progress = tqdm(
         unit="B",
         unit_scale=True,
