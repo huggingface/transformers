@@ -35,7 +35,7 @@ if is_torch_available():
         ViltForImageRetrievalTextRetrieval,
         ViltForMaskedLM,
         ViltForNaturalLanguageVisualReasoning,
-        ViltForVisualQuestionAnswering,
+        ViltForQuestionAnswering,
         ViltModel,
     )
     from transformers.models.vilt.modeling_vilt import VILT_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -191,7 +191,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ViltModel,
-            ViltForVisualQuestionAnswering,
+            ViltForQuestionAnswering,
             ViltForImageRetrievalTextRetrieval,
             ViltForMaskedLM,
             # ViltForNaturalLanguageVisualReasoning,
@@ -203,7 +203,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_torchscript = False
 
-    # ViltForMaskedLM, ViltForVisualQuestionAnswering and ViltForNaturalLanguageVisualReasoning require special treatment
+    # ViltForMaskedLM, ViltForQuestionAnswering and ViltForNaturalLanguageVisualReasoning require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -211,7 +211,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["pixel_values_2"] = self.model_tester.prepare_pixel_values()
 
         if return_labels:
-            if model_class.__name__ == "ViltForVisualQuestionAnswering":
+            if model_class.__name__ == "ViltForQuestionAnswering":
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, self.model_tester.num_labels, device=torch_device
                 )
@@ -425,8 +425,7 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_masked_lm(self):
-        # TODO replace nielsr by dandelin
-        model = ViltForMaskedLM.from_pretrained("nielsr/vilt-b32-mlm").to(torch_device)
+        model = ViltForMaskedLM.from_pretrained("dandelin/vilt-b32-mlm").to(torch_device)
 
         processor = self.default_processor
         image = prepare_img()
@@ -450,7 +449,7 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_visual_question_answering(self):
-        model = ViltForVisualQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa").to(torch_device)
+        model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa").to(torch_device)
 
         processor = self.default_processor
         image = prepare_img()
@@ -486,8 +485,7 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_natural_language_visual_reasoning(self):
-        # TODO replace nielsr by dandelin
-        model = ViltForNaturalLanguageVisualReasoning.from_pretrained("nielsr/vilt-b32-finetuned-nlvr2").to(
+        model = ViltForNaturalLanguageVisualReasoning.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2").to(
             torch_device
         )
 

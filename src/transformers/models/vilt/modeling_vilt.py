@@ -922,7 +922,7 @@ class ViltMLMHead(nn.Module):
     """,
     VILT_START_DOCSTRING,
 )
-class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
+class ViltForQuestionAnswering(ViltPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -968,7 +968,7 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ViltProcessor, ViltForVisualQuestionAnswering
+        >>> from transformers import ViltProcessor, ViltForQuestionAnswering
         >>> import requests
         >>> from PIL import Image
 
@@ -977,7 +977,7 @@ class ViltForVisualQuestionAnswering(ViltPreTrainedModel):
         >>> text = "How many cats are there?"
 
         >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
-        >>> model = ViltForVisualQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
+        >>> model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
 
         >>> # prepare inputs
         >>> encoding = processor(image, text, return_tensors="pt")

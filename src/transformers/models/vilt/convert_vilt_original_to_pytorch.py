@@ -31,7 +31,7 @@ from transformers import (
     ViltForImageRetrievalTextRetrieval,
     ViltForMaskedLM,
     ViltForNaturalLanguageVisualReasoning,
-    ViltForVisualQuestionAnswering,
+    ViltForQuestionAnswering,
     ViltProcessor,
 )
 from transformers.utils import logging
@@ -186,7 +186,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
-        model = ViltForVisualQuestionAnswering(config)
+        model = ViltForQuestionAnswering(config)
     elif "nlvr" in checkpoint_url:
         nlvr_model = True
         config.num_labels = 2
