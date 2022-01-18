@@ -88,9 +88,9 @@ class ViltEmbeddings(nn.Module):
         x_h = x_mask[:, 0].sum(dim=1)[:, 0]
         x_w = x_mask[:, 0].sum(dim=2)[:, 0]
 
-        B, C, H, W = x.shape
+        batch_size, num_channels, height, width = x.shape
         patch_dim = self.config.image_size // self.config.patch_size
-        spatial_pos = self.position_embeddings[:, 1:, :].transpose(1, 2).view(1, C, patch_dim, patch_dim)
+        spatial_pos = self.position_embeddings[:, 1:, :].transpose(1, 2).view(1, num_channels, patch_dim, patch_dim)
         pos_embed = torch.cat(
             [
                 nn.functional.pad(
@@ -100,7 +100,7 @@ class ViltEmbeddings(nn.Module):
                         mode="bilinear",
                         align_corners=True,
                     ),
-                    (0, W - w, 0, H - h),
+                    (0, width - w, 0, height - h),
                 )
                 for h, w in zip(x_h, x_w)
             ],
@@ -109,14 +109,12 @@ class ViltEmbeddings(nn.Module):
 
         pos_embed = pos_embed.flatten(2).transpose(1, 2)
         x = x.flatten(2).transpose(1, 2)
-        patch_index = (
-            torch.stack(
-                torch.meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1]), indexing="ij"),
-                dim=-1,
-            )[None, None, :, :, :]
-            .expand(x_mask.shape[0], x_mask.shape[1], -1, -1, -1)
-            .flatten(1, 3)
+        patch_index = torch.stack(
+            torch.meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1]), indexing="ij"), dim=-1
         )
+        patch_index = patch_index[None, None, :, :, :]
+        patch_index = patch_index.expand(x_mask.shape[0], x_mask.shape[1], -1, -1, -1)
+        patch_index = patch_index.flatten(1, 3)
         x_mask = x_mask.flatten(1)
 
         if max_image_length < 0 or max_image_length is None or not isinstance(max_image_length, int):
@@ -124,11 +122,11 @@ class ViltEmbeddings(nn.Module):
             # (800 // self.patch_size) * (1333 // self.patch_size) is the maximum number of patches that single image can get.
             # if self.patch_size = 32, 25 * 41 = 1025
             # if res is 384 x 640, 12 * 20 = 240
-            eff = x_h * x_w
-            max_image_length = eff.max()
+            effective_resolution = x_h * x_w
+            max_image_length = effective_resolution.max()
         else:
-            eff = x_h * x_w
-            max_image_length = min(eff.max(), max_image_length)
+            effective_resolution = x_h * x_w
+            max_image_length = min(effective_resolution.max(), max_image_length)
 
         valid_idx = x_mask.nonzero(as_tuple=False)
         non_valid_idx = (1 - x_mask).nonzero(as_tuple=False)
@@ -150,20 +148,22 @@ class ViltEmbeddings(nn.Module):
                 select.append(torch.cat([valid_row_idx[i], non_valid_row_idx[i][pad_choice]], dim=0))
 
         select = torch.cat(select, dim=0)
-        x = x[select[:, 0], select[:, 1]].view(B, -1, C)
-        x_mask = x_mask[select[:, 0], select[:, 1]].view(B, -1)
-        patch_index = patch_index[select[:, 0], select[:, 1]].view(B, -1, 2)
-        pos_embed = pos_embed[select[:, 0], select[:, 1]].view(B, -1, C)
+        x = x[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
+        x_mask = x_mask[select[:, 0], select[:, 1]].view(batch_size, -1)
+        patch_index = patch_index[select[:, 0], select[:, 1]].view(batch_size, -1, 2)
+        pos_embed = pos_embed[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
 
-        cls_tokens = self.cls_token.expand(B, -1, -1)
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
-        pos_embed = torch.cat((self.position_embeddings[:, 0, :][:, None, :].expand(B, -1, -1), pos_embed), dim=1)
+        pos_embed = torch.cat(
+            (self.position_embeddings[:, 0, :][:, None, :].expand(batch_size, -1, -1), pos_embed), dim=1
+        )
         x = x + pos_embed
         x = self.dropout(x)
 
         x_mask = torch.cat([torch.ones(x_mask.shape[0], 1).to(x_mask), x_mask], dim=1)
 
-        return x, x_mask, (patch_index, (H, W))
+        return x, x_mask, (patch_index, (height, width))
 
     def forward(
         self,
@@ -193,15 +193,11 @@ class ViltEmbeddings(nn.Module):
         # 0 indicates text, 1 indicates image, 2 is optionally used when a second image is provided (NLVR2)
         if image_token_type_idx is None:
             image_token_type_idx = 1
-        text_embeds, image_embeds = (
-            text_embeds
-            + self.token_type_embeddings(
-                torch.zeros_like(attention_mask, dtype=torch.long, device=text_embeds.device)
-            ),
-            image_embeds
-            + self.token_type_embeddings(
-                torch.full_like(image_masks, image_token_type_idx, dtype=torch.long, device=text_embeds.device)
-            ),
+        text_embeds = text_embeds + self.token_type_embeddings(
+            torch.zeros_like(attention_mask, dtype=torch.long, device=text_embeds.device)
+        )
+        image_embeds = image_embeds + self.token_type_embeddings(
+            torch.full_like(image_masks, image_token_type_idx, dtype=torch.long, device=text_embeds.device)
         )
 
         # PART 4: concatenate
