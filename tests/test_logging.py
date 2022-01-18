@@ -19,7 +19,7 @@ from unittest.mock import patch
 import transformers.models.bart.tokenization_bart
 from transformers import AutoConfig, logging
 from transformers.testing_utils import CaptureLogger, mockenv, mockenv_context
-from transformers.utils.tqdm_utils import set_progress_bar_enabled
+from transformers.utils.logging import disable_progress_bar, enable_progress_bar
 
 
 class HfArgumentParserTest(unittest.TestCase):
@@ -128,12 +128,12 @@ class HfArgumentParserTest(unittest.TestCase):
 def test_set_progress_bar_enabled():
     TINY_MODEL = "hf-internal-testing/tiny-random-distilbert"
     with patch("tqdm.auto.tqdm") as mock_tqdm:
-        set_progress_bar_enabled(True)
+        disable_progress_bar()
         _ = AutoConfig.from_pretrained(TINY_MODEL, force_download=True)
-        mock_tqdm.assert_called()
+        mock_tqdm.assert_not_called()
 
         mock_tqdm.reset_mock()
 
-        set_progress_bar_enabled(False)
+        enable_progress_bar()
         _ = AutoConfig.from_pretrained(TINY_MODEL, force_download=True)
-        mock_tqdm.assert_not_called()
+        mock_tqdm.assert_called()
