@@ -215,7 +215,7 @@ def get_transformers_submodules():
             if folder.startswith("_"):
                 directories.remove(folder)
                 continue
-            # Ignore leftovers from branches (empty fodlers apart from pycache)
+            # Ignore leftovers from branches (empty folders apart from pycache)
             if len(list((Path(path) / folder).glob("*.py"))) == 0:
                 continue
             short_path = str((Path(path) / folder).relative_to(PATH_TO_TRANSFORMERS))
