@@ -55,11 +55,10 @@ During the event, the speech recognition system will be evaluated on both the Co
 of the participants' chosen language as well as the *real-world* `"dev"` data provided by 
 the Hugging Face team. 
 At the end of the robust speech recognition challenge, the speech recognition system will also be evaluated on the
-*real-world* `"test"` data provided by the Hugging Face team. Each participant should add a 
-`eval.py` script to her/his model repository in a specific format that let's one easily 
+*real-world* `"test"` data provided by the Hugging Face team. Each participant should add an 
+`eval.py` script to her/his model repository in a specific format that lets one easily 
 evaluate the speech recognition system on both Common Voice's `"test"` data as well as the *real-world* audio 
-data. Please read through the [Evaluation](#evaluation) section in order
-to make sure your evaluation script is in the correct format. Speech recognition systems
+data. Please read through the [Evaluation](#evaluation) section to make sure your evaluation script is in the correct format. Speech recognition systems
 with evaluation scripts in an incorrect format can sadly not be considered for the Challenge.
 
 At the end of the event, the best performing speech recognition system 
@@ -113,16 +112,16 @@ For most languages, the Common Voice dataset offers already a decent amount of t
 always advantageous to collect additional data. To do so, the participants are in a first step encouraged to search the
 Hugging Face Hub for additional audio data, for example by selecting the category 
 ["speech-processing"](https://huggingface.co/datasets?task_categories=task_categories:speech-processing&sort=downloads).
-All datasets that are available on the Hub can be downloaded via the 🤗 Datasets library in the exact same way Common Voice is downloaded.
+All datasets that are available on the Hub can be downloaded via the 🤗 Datasets library in the same way Common Voice is downloaded.
 If one wants to combine multiple datasets for training, it might make sense to take a look at 
 the [`interleave_datasets`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=interleave#datasets.interleave_datasets) function.
 
-In addition, participants can also make use of the own audio data. Here, please make sure that you **are allowed to use the audio data**. E.g., if audio data 
-is taken from a media platforms, such as YouTube, it should be verified that the media platform and the owner of the data has given her/his approval to use the audio 
+In addition, participants can also make use of their audio data. Here, please make sure that you **are allowed to use the audio data**. E.g., if audio data 
+is taken from media platforms, such as YouTube, it should be verified that the media platform and the owner of the data have given her/his approval to use the audio 
 data in the context of machine learning research. If you are not sure whether the data you want to use has the appropriate licensing, please contact the Hugging Face 
 team on discord.
 
-Next, let's talk about preprocessing. Audio data and transcriptions have to be brough into the correct format when 
+Next, let's talk about preprocessing. Audio data and transcriptions have to be brought into the correct format when 
 training the acoustic model (example shown in [How to fine-tune an acoustic model](#how-to-finetune-an-acoustic-model)).
 It is recommended that this is done by using 🤗 Datasets `.map()` function as shown 
 [here](https://github.com/huggingface/transformers/blob/9a2dabae7002258e41419491c73dd43ad61b5de7/examples/pytorch/speech-recognition/run_speech_recognition_ctc.py#L444). As can be 
@@ -131,15 +130,15 @@ on the official ["Single GPU Example"](https://github.com/huggingface/transforme
 The participants are free to modify this preprocessing by removing more characters or even replacing characters as 
 it is done in the [official blog post](https://github.com/huggingface/transformers/blob/9a2dabae7002258e41419491c73dd43ad61b5de7/examples/pytorch/speech-recognition/run_speech_recognition_ctc.py#L444).
 **However**, there are some rules regarding what characters are allowed to be removed/replaced and which are not.
-These rules are not this straight-forward and therefore often have to be evaluated case-by-case.
+These rules are not this straightforward and therefore often have to be evaluated case-by-case.
 It is allowed (and recommended) to normalize the data to only have lower-case characters. It is also allowed (and recommended) to remove typographical 
-symbols and punctuation marks. A list of such symbols can *e.g.* be fonud [here](https://en.wikipedia.org/wiki/List_of_typographical_symbols_and_punctuation_marks) - however here we already must be careful. We should **not** remove a symbol that would change the meaning of the words, *e.g.* in English, 
+symbols and punctuation marks. A list of such symbols can *e.g.* be found [here](https://en.wikipedia.org/wiki/List_of_typographical_symbols_and_punctuation_marks) - however here we already must be careful. We should **not** remove a symbol that would change the meaning of the words, *e.g.* in English, 
 we should not remove the single quotation mark `'` since it would change the meaning of the word `"it's"` to `"its"` which would then be incorrect. 
 So the golden rule here is to not remove any characters that could change the meaning of a word into another word. This is not always obvious and should 
-be given some consideration. As another example, it is fine to remove the "Hypen-minus" sign "`-`" since it doesn't change the 
+be given some consideration. As another example, it is fine to remove the "Hyphen-minus" sign "`-`" since it doesn't change the 
 meaning of a word to another one. *E.g.* "`fine-tuning`" would be changed to "`finetuning`" which has still the same meaning.
 
-Since those choices are not always obvious when in doubt feel free to ask on Discord or even better post your quesiton on the forum, as was 
+Since those choices are not always obvious when in doubt feel free to ask on Discord or even better post your question on the forum, as was 
 done, *e.g.* [here](https://discuss.huggingface.co/t/spanish-asr-fine-tuning-wav2vec2/4586).
 
 ## How to install relevant libraries
@@ -173,7 +172,7 @@ The following command should return ``True``:
 python -c "import torch; print(torch.cuda.is_available())"
 ```
 
-If the above command doesn't print ``True``, in a first step, please follow the
+If the above command doesn't print ``True``, in the first step, please follow the
 instructions [here](https://pytorch.org/) to install PyTorch with CUDA.
 
 We strongly recommend making use of the provided PyTorch examples scripts in [transformers/examples/pytorch/speech-recognition](https://github.com/huggingface/transformers/tree/master/examples/pytorch/speech-recognition) to train your speech recognition
@@ -211,7 +210,7 @@ In all likelihood, you will adjust one of the example scripts, so we recommend f
    If you have already cloned that repo, you might need to `git pull` to get the most recent changes in the `transformers`
    library.
 
-   Running this command will automatically install `pytorch` and the most relevant 
+   Running this command will automatically install `torch` and the most relevant 
    libraries required for fine-tuning a speech recognition system.
 
 Next, you should also install the 🤗 Datasets library. We strongly recommend installing the 
@@ -275,7 +274,7 @@ In this section, we will explain how to fine-tune the model on a local machine.
 
 1. **Log in**
 
-To begin with you should check that you are correctly logged in and that you have `git-lfs` installed so that your fine-tuned model can automatically be uploaded.
+To begin with, you should check that you are correctly logged in and that you have `git-lfs` installed so that your fine-tuned model can automatically be uploaded.
 
 Run:
 
@@ -283,7 +282,7 @@ Run:
 huggingface-cli login
 ```
 
-to login. It is recommend to login with your personal access token that can be found under your hugging face profile (icon in the top right corner on [hf.co](http://hf.co/), then Settings -> Access Tokens -> User Access Tokens -> New Token (if haven't generated one already)
+to login. It is recommended to login with your access token that can be found under your hugging face profile (icon in the top right corner on [hf.co](http://hf.co/), then Settings -> Access Tokens -> User Access Tokens -> New Token (if haven't generated one already)
 
 You can then copy-paste this token to log in locally.
 
@@ -402,7 +401,7 @@ However as you can see on the model card [hf-test/xls-r-ab-test](https://hugging
 not surprising given that we trained for just 10 steps on a randomly initialized
 model.
 
-For a real model training, one of the actual pre-trained XLS-R models should be used:
+For real model training, it is recommended to use one of the actual pre-trained XLS-R models:
 
 - [300M parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-300m)
 - [1B parameters version](https://huggingface.co/facebook/wav2vec2-xls-r-1b)
@@ -468,7 +467,7 @@ The training takes *ca.* 7 hours and yields a reasonable test word
 error rate of 27% as can be seen on the automatically generated [model card](https://huggingface.co/hf-test/xls-r-300m-sv).
 
 The above-chosen hyperparameters probably work quite well on a range of different 
-datasets and languages, but are by no means optimal. It is up to you to find a good set of 
+datasets and languages but are by no means optimal. It is up to you to find a good set of 
 hyperparameters.
 
 
@@ -507,22 +506,22 @@ Once logged in, you can close the page and click `HTTP Access` to launch a Jupyt
 **Note**: If you're an experienced Docker user, feel free to create a custom docker image with all of the needed packages 
 like the one in step 5. The Dockerfile for it is available here: 
 [baaastijn/Dockerimages](https://github.com/baaastijn/Dockerimages/tree/main/Hugginface_challenge_speech).
-Once you've built your own image, push it to https://hub.docker.com/ and select it during the OVHcloud job creation.
+Once you've built your image, push it to https://hub.docker.com/ and select it during the OVHcloud job creation.
 
-## How to combine n gram with acoustic model
+## How to combine n-gram with acoustic model
 
 Having trained a speech recognition model with CTC as shown in the section above, 
 one can further improve the model's performance by adding an **n-gram language model**
 to the decoding process of the model. By doing so, we are replacing the naive greedy decoding 
-by **n-gram-boosted** beam search decoding.
+with **n-gram-boosted** beam search decoding.
 
-N-gram language models can be built on CPU in just a few minutes. *N-gram-boosted* beam search decoding noticebly slows down the 
+N-gram language models can be built on CPU in just a few minutes. *N-gram-boosted* beam search decoding noticeably slows down the 
 inference time, but also yields significant word error rates improvements - usually between 10-40 %.
 
 You can find an in-detail blog post on how to build an *n-gram* [here](https://huggingface.co/blog/wav2vec2-with-ngram).
 The blog post can be opened in a google colab and by adapting three lines of the example for your use case, one can directly
 create an *n-gram* in the google colab.
-The blog post gives in-detail instructions on: how to built an n-gram and how to add it to your trained speech recognition model.
+The blog post gives in-detail instructions on how to build an n-gram and how to add it to your trained speech recognition model.
 
 - why one should add an *n-gram* to her/his speech recognition system,
 - how to build an *n-gram*, and,
@@ -537,12 +536,12 @@ the *n-gram* with a trained speech recognition model directly into the same mode
 Finally, we have arrived at the most fun part of the challenge - sitting back and
 watching the model transcribe audio. If possible, every participant should evaluate 
 the speech recognition system on the test set of Common Voice 7 and 
-ideally also on the real world audio data (if available).
+ideally also on the real-world audio data (if available).
 For languages that have neither a Common Voice evaluation dataset nor a real world 
 evaluation dataset, please contact the organizers on Discord so that we can work 
 together to find some evaluation data.
 
-In a first step, one should copy the official `eval.py` script to her/his model 
+As a first step, one should copy the official `eval.py` script to her/his model 
 repository. Let's use our previously trained [xls-r-300m-sv](https://huggingface.co/hf-test/xls-r-300m-sv) again as an example.
 
 Assuming that we have a clone of the model's repo under `~/xls-r-300m-sv`, we can 
@@ -558,17 +557,17 @@ important to keep the `eval.py` file in the following format:
 - 1. The following input arguments should not be changed and keep their original functionality/meaning (being to load the model and dataset): `"--model_id"`, `"--dataset"`, `"--config"`, `"--split"`. We recommend to not change any of the code written under `if __name__ == "__main__":`.
 - 2. The function `def log_results(result: Dataset, args: Dict[str, str])` should also not be changed. The function expects the above names attached to the `args` object as well as a `datasets.Dataset` object, called `result` which includes all predictions and target transcriptions under the names `"predictions"` and `"targets"` respectively.
 - 3. All other code can be changed and adapted. Participants are especially invited to change the `def normalize_text(text: str) -> str:` function as this might be a very language and model-training specific function.
-- 4. **Important**: It is not allowed to "cheat" in any way when in comes to pre- and postprocessing. In short, "cheating" refers to any of the following:
-	- a. Somehow giving the model access to the target transcriptions to improve performance. The model is obviously not allowed to use the target transcriptions to generate its predictions.
-	- b. Pre-processing the target transcriptions in a way that makes the target transcriptions loose their original meaning. This corresonds to what has already been said in [Data and Preprocessing](#data-and-preprocessing) and is somewhat of a grey zone. It means that one should not remove characters that would make a word to loose its meaning. E.g., it is not allowed to replace all `e` in English with `i` and simply make the model learn that `e` and `i` are the same letter for a better word error rate. This would destroy the meaning of words such as `fell -> fill`. However, it is totally fine to normalize (*e.g.* lowercase) all letters, remove punctuation. There can be a lot of language specific exceptions and in case you are not sure whether your target transcription pre-processing is allowed, please ask on the Discord channel.
+- 4. **Important**: It is not allowed to "cheat" in any way when in comes to pre-and postprocessing. In short, "cheating" refers to any of the following:
+	- a. Somehow giving the model access to the target transcriptions to improve performance. The model is not allowed to use the target transcriptions to generate its predictions.
+	- b. Pre-processing the target transcriptions in a way that makes the target transcriptions lose their original meaning. This corresponds to what has already been said in [Data and Preprocessing](#data-and-preprocessing) and is somewhat of a grey zone. It means that one should not remove characters that would make a word to lose its meaning. E.g., it is not allowed to replace all `e` in English with `i` and simply make the model learn that `e` and `i` are the same letter for a better word error rate. This would destroy the meaning of words such as `fell -> fill`. However, it is totally fine to normalize (*e.g.* lowercase) all letters, remove punctuation. There can be a lot of language-specific exceptions and in case you are not sure whether your target transcription pre-processing is allowed, please ask on the Discord channel.
 
-Uff, that was a lot of text describing on how make sure the your `eval.py` script 
-is in the correct format. If you have any questions, please ask openly about in Discord.
+Uff, that was a lot of text describing how to make sure your `eval.py` script 
+is in the correct format. If you have any questions, please ask openly in Discord.
 
 Great, now that we have adapted the `eval.py` script, we can lean back and run the 
 evaluation. 
 First, one should evaluate the model on Common Voice 7's test data. This might 
-already have been done for your acoustic model during training, but in case you 
+already have been done for your acoustic model during training but in case you 
 added an *n-gram* language model after having fine-tuned the acoustic model, you
 should now see a nice improvement.
 
@@ -586,8 +585,8 @@ Running this command should automatically create the file:
 `mozilla-foundation_common_voice_7_0_sv-SE_test_eval_results.txt` that contains 
 both the word- and character error rate.
 
-In a few days, we will give everybody access to some real world audio data for as many languages as possible.
-If your language has real world audio data, it will most likely have audio input 
+In a few days, we will give everybody access to some real-world audio data for as many languages as possible.
+If your language has real-world audio data, it will most likely have audio input 
 of multiple minutes. 🤗Transformer's [ASR pipeline](https://huggingface.co/docs/transformers/master/en/main_classes/pipelines#transformers.AutomaticSpeechRecognitionPipeline) supports audio chunking out-of-the-box. You only need to specify 
 how song each audio chunk should be (`chunk_length_s`) and how much audio stride 
 (`stride_length_s`) each chunk should use.
@@ -600,10 +599,10 @@ cd xls-r-300m-sv
 ./eval.py --model_id hf-test/xls-r-300m-sv --dataset <to-be-announced> --config sv --split validation --chunk_length_s 5.0 --stride_length_s 1.0 --log_outputs
 ```
 
-Great, now you should have succesfully evaluated your model. Finally, there is one 
+Great, now you should have successfully evaluated your model. Finally, there is one 
 **important** thing you should do so that your model is taken into account 
 for the final evaluation. You should add two tags to your model, one being `robust-speech-event`, one being the ISO code of your chosen language, *e.g.* `"sv"` for the 
-examplary model we used above. You can find a list of all available languages and 
+exemplary model we used above. You can find a list of all available languages and 
 their ISO code [here](https://huggingface.co/languages).
 
 To add the tags, simply edit the README.md of your model repository and add
@@ -628,7 +627,7 @@ The final score is calculated as follows:
 FINAL_SCORE = 1/3 * WER_Common_Voice_7_test + 1/3 * WER_REAL_AUDIO_DEV + 1/3 * WER_REAL_AUDIO_TEST
 ```
 
-The dataset `WER_REAL_AUDIO_TEST` is a hidden dataset and will only be published 
+The dataset `WER_REAL_AUDIO_TEST` is hidden and will only be published 
 at the end of the robust speech challenge.
 
 If there is no real audio data for your language the final score will be 
@@ -636,7 +635,7 @@ computed solely based on the Common Voice 7 test dataset. If there is also
 no Common Voice 7 test dataset for your language, we will see together how to 
 score your model - if this is the case, please don't be discouraged. We are 
 especially excited about speech recognition systems of such low-resource 
-languages and will make sure that we'll decide on a good approach to evaluate 
+languages and will make sure that we'll decide on a good approach to evaluating 
 your model.
 
 ## Prizes
@@ -646,17 +645,17 @@ TODO(Patrick, Omar, ...)
 ## Communication and Problems
 
 If you encounter any problems or have any questions, you should use one of the following platforms
-depending on your type of problem. Hugging Face is a "open-source-first" organization meaning 
+depending on your type of problem. Hugging Face is an "open-source-first" organization meaning 
 that we'll try to solve all problems in the most public and most transparent way possible so that everybody
 in the community profits.
 
 The following table summarizes what platform to use for which problem.
 
-- Problem/question/bug with the 🤗 Datasets library that you think is a general problems that also impacts other people, please open an [Issues on Datasets](https://github.com/huggingface/datasets/issues/new?assignees=&labels=bug&template=bug-report.md&title=) and ping @anton-l and @patrickvonplaten.
-- Problem/question/bug with the 🤗 Transformers library that you think is a general problems that also impacts other people, please open an [Issues on Transformers](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title=) and ping @anton-l and @patrickvonplaten.
+- Problem/question/bug with the 🤗 Datasets library that you think is a general problem that also impacts other people, please open an [Issues on Datasets](https://github.com/huggingface/datasets/issues/new?assignees=&labels=bug&template=bug-report.md&title=) and ping @anton-l and @patrickvonplaten.
+- Problem/question/bug with the 🤗 Transformers library that you think is a general problem that also impacts other people, please open an [Issues on Transformers](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title=) and ping @anton-l and @patrickvonplaten.
 - Problem/question with a modified, customized training script that is less likely to impact other people, please post your problem/question [on the forum](https://discuss.huggingface.co/) and ping @anton-l and @patrickvonplaten.
 - Questions regarding access to the OVHcloud GPU, please ask in the Discord channel **#ovh-support**.
-- Other question regarding the event, rules of the event, or if you are not sure where to post your question, please ask in the Discord channel **#sprint-discussions**.
+- Other questions regarding the event, rules of the event, or if you are not sure where to post your question, please ask in the Discord channel **#sprint-discussions**.
 
 ## Talks
 
@@ -686,14 +685,14 @@ We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozi
 
 #### Patrick von Platen, Research Engineer, Hugging Face
 - Talk: Introduction to Robust Speech Challenge
-- Abtract: In this talk, Patrick outlines the Robust Speech Challenge and gives tips and tricks on how to train and evaluate speech recognition systems with 🤗 Transformers and 🤗 Datasets, and PyTorch.
-- Speaker info: Patrick von Platen is a research engineer at Hugging Face and one of the core maintainers of the popular Transformers library. He specializes in speech recognition, encoder-decoder models and long-range sequence modeling. Before joining Hugging Face, Patrick conducted research in speech recognition at Uber AI, Cambridge University, and RWTH Aachen University.
+- Abstract: In this talk, Patrick outlines the Robust Speech Challenge and gives tips and tricks on how to train and evaluate speech recognition systems with 🤗 Transformers and 🤗 Datasets, and PyTorch.
+- Speaker info: Patrick von Platen is a research engineer at Hugging Face and one of the core maintainers of the popular Transformers library. He specializes in speech recognition, encoder-decoder models, and long-range sequence modeling. Before joining Hugging Face, Patrick researched speech recognition at Uber AI, Cambridge University, and RWTH Aachen University.
 
 #### Raymond Grossman, Jeremy Lopez, Machine Learning Engineer, Kensho Technologies
 - Talk: PyCTCDecode & Speech2text decoding
 - Abstract: PyCTCDecode is a fast and feature-rich CTC beam search decoder for speech recognition written in Python, providing n-gram (kenlm) language model support similar to PaddlePaddle's decoder, but incorporating many new features such as byte pair encoding and real-time decoding to support models like Nvidia's Conformer-CTC or Facebook's Wav2Vec2.
 - Speaker info : 
-	- Raymond works as a machine learning engineer at Kensho Technologies, specializing in speech and natural language domains. Prior to coming to Kensho, he studied mathematics at Princeton and was an avid Kaggler under the moniker @ToTrainThemIsMyCause. 
+	- Raymond works as a machine learning engineer at Kensho Technologies, specializing in speech and natural language domains. Before coming to Kensho, he studied mathematics at Princeton and was an avid Kaggler under the moniker @ToTrainThemIsMyCause. 
 	- Jeremy is a machine learning engineer at Kensho Technologies and has worked on a variety of different topics including search and speech recognition. Before working at Kensho, he earned a PhD in experimental particle physics at MIT and continued doing physics research as a postdoc at the University of Colorado Boulder.
 
 #### Gabriel Habayeb, Data Engineer, Common Voice @ Mozilla
@@ -709,9 +708,9 @@ We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozi
 
 - Memory efficient training:
 
-In case, you are getting out-of-memory erros on your GPU, we recommend to use 
+In case, you are getting out-of-memory errors on your GPU, we recommend to use 
 [bitsandbytes](https://github.com/facebookresearch/bitsandbytes) to replace the 
-native memory intensive Adam optimizer with the one of `bitsandbytes`. You
+native memory-intensive Adam optimizer with the one of `bitsandbytes`. You
 can simply run the script `./run_speech_recognition_ctc_bnb.py` provided in this 
 folder that makes use of `bitsandbytes` instead of the official one.
 
