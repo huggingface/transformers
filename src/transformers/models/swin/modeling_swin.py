@@ -54,7 +54,7 @@ _CHECKPOINT_FOR_DOC = "swin-base"
 _CONFIG_FOR_DOC = "SwinConfig"
 
 SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "swin-base",
+    "microsoft/swin-tiny-patch4-window7-224",
     # See all Swin models at https://huggingface.co/models?filter=swin
 ]
 
