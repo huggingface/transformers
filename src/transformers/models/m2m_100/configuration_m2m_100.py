@@ -24,10 +24,6 @@ from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import logging
 
 
-# from ..t5.configuration_t5 import T5OnnxConfig
-# from ..bart.configuration_bart import BartOnnxConfig
-
-
 logger = logging.get_logger(__name__)
 
 M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP = {
