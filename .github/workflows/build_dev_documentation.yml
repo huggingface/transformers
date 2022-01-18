@@ -30,9 +30,8 @@ jobs:
           repository: 'huggingface/notebooks'
           path: notebooks
 
-      - name: Print
-        run: |
-          echo $EVENT_CONTEXT
+      - name: Set env
+        run: echo "WRITE=$(cat /mnt/WRITE)" >> $GITHUB_ENV
 
       - name: Comment PR
         uses: thollander/actions-comment-pull-request@v1
@@ -40,7 +39,7 @@ jobs:
 
         with:
           message: 'Thank you for your PR! The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_15110).\n\nAll of your documentation changes will be reflected on that endpoint.'
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ env.WRITE }}
 
       - name: Loading cache.
         uses: actions/cache@v2

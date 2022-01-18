@@ -46,7 +46,7 @@ jobs:
 
         with:
           message: 'Thank you for your PR. The documentation will now be removed from the staging environment - feel free to reopen this PR to recreate it.'
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ env.WRITE }}
 
       - name: Comment PR
         uses: thollander/actions-comment-pull-request@v1
@@ -54,4 +54,4 @@ jobs:
 
         with:
           message: 'Great job merging this PR! the documentation will now be removed from the staging environment.'
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ env.WRITE }}
