@@ -8,12 +8,12 @@ on:
 jobs:
   build_and_package:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash -l {0}
+    runs-on: [self-hosted, doc-builder]
+    container:
+      image: huggingface/doc-builder-transformers
+      options: "-v /home/github_actions:/mnt"
     env:
       PR_NUMBER: ${{ github.event.number }}
-      ACTION: ${{ github.event.pull_request.action }}
 
     steps:
       - uses: actions/checkout@v2
@@ -25,10 +25,6 @@ jobs:
           repository: 'huggingface/doc-build-dev'
           path: doc-build-dev
           token: ${{ env.WRITE }}
-
-      - name: Print
-        run: |
-          echo $ACTION
 
       - name: Setup git
         run: |
