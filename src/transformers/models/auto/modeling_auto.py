@@ -111,7 +111,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
-        ("vilt", "ViltForPreTraining"),
         ("vit_mae", "ViTMAEForPreTraining"),
         ("fnet", "FNetForPreTraining"),
         ("visual_bert", "VisualBertForPreTraining"),
