@@ -297,7 +297,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     # This won't work with left padding (which doesn't exist right now)
                     right_n = total_n - right
                     logits = logits[:, left:right_n]
-                    final_logits.append(logits)
+                final_logits.append(logits)
             logits = np.concatenate(final_logits, axis=1)
             logits = logits.squeeze(0)
             text = self.decoder.decode_beams(logits)[0][0]
