@@ -34,6 +34,7 @@ from transformers.commands.add_new_model_like import (
     replace_model_patterns,
     retrieve_info_for_model,
     retrieve_model_classes,
+    simplify_replacements,
 )
 from transformers.testing_utils import require_flax, require_tf, require_torch
 
@@ -186,6 +187,17 @@ class SomeClass:
             add_content_to_file(file_name, line, add_after=re.compile('^\s*"gpt":'))
             self.check_result(file_name, expected)
 
+    def test_simplify_replacements(self):
+        self.assertEqual(simplify_replacements([("Bert", "NewBert")]), [("Bert", "NewBert")])
+        self.assertEqual(
+            simplify_replacements([("Bert", "NewBert"), ("bert", "new-bert")]),
+            [("Bert", "NewBert"), ("bert", "new-bert")],
+        )
+        self.assertEqual(
+            simplify_replacements([("BertConfig", "NewBertConfig"), ("Bert", "NewBert"), ("bert", "new-bert")]),
+            [("Bert", "NewBert"), ("bert", "new-bert")],
+        )
+
     def test_replace_model_patterns(self):
         bert_model_patterns = ModelPatterns("Bert", "bert-base-cased")
         new_bert_model_patterns = ModelPatterns("New Bert", "huggingface/bert-new-base")
@@ -222,8 +234,16 @@ NEW_BERT_CONSTANT = "value"
 
         bert_converted, replacements = replace_model_patterns(bert_test, bert_model_patterns, new_bert_model_patterns)
         self.assertEqual(bert_converted, bert_expected)
-        # TODO: model type replacement missing here
-        self.assertEqual(replacements, "bert->new_bert,Bert->NewBert,BERT->NEW_BERT")
+        # Replacements are empty here since bert as been replaced by bert_new in some instances and bert-new
+        # in others.
+        self.assertEqual(replacements, "")
+
+        # If we remove the model type, we will get replacements
+        bert_test = bert_test.replace('    model_type = "bert"\n', "")
+        bert_expected = bert_expected.replace('    model_type = "new-bert"\n', "")
+        bert_converted, replacements = replace_model_patterns(bert_test, bert_model_patterns, new_bert_model_patterns)
+        self.assertEqual(bert_converted, bert_expected)
+        self.assertEqual(replacements, "BERT->NEW_BERT,Bert->NewBert,bert->new_bert")
 
         gpt_model_patterns = ModelPatterns("GPT2", "gpt2")
         new_gpt_model_patterns = ModelPatterns("GPT-New new", "huggingface/gpt-new-base")
@@ -263,6 +283,25 @@ GPT_NEW_NEW_CONSTANT = "value"
         # in others.
         self.assertEqual(replacements, "")
 
+        roberta_model_patterns = ModelPatterns("RoBERTa", "roberta-base", model_camel_cased="Roberta")
+        new_roberta_model_patterns = ModelPatterns(
+            "RoBERTa-New", "huggingface/roberta-new-base", model_camel_cased="RobertaNew"
+        )
+        roberta_test = '''class RobertaModel(RobertaPreTrainedModel):
+    """ The base RoBERTa model. """
+    checkpoint = roberta-base
+    base_model_prefix = "roberta"
+        '''
+        roberta_expected = '''class RobertaNewModel(RobertaNewPreTrainedModel):
+    """ The base RoBERTa-New model. """
+    checkpoint = huggingface/roberta-new-base
+    base_model_prefix = "roberta_new"
+        '''
+        roberta_converted, replacements = replace_model_patterns(
+            roberta_test, roberta_model_patterns, new_roberta_model_patterns
+        )
+        self.assertEqual(roberta_converted, roberta_expected)
+
     def test_get_module_from_file(self):
         self.assertEqual(
             get_module_from_file("/git/transformers/src/transformers/models/bert/modeling_tf_bert.py"),
@@ -289,7 +328,6 @@ GPT_NEW_NEW_CONSTANT = "value"
     base_model_prefix = "bert"
     is_parallelizable = True
     supports_gradient_checkpointing = True
-    model_type = "bert"
 
 BERT_CONSTANT = "value"
 '''
@@ -304,12 +342,11 @@ BERT_CONSTANT = "value"
     base_model_prefix = "new_bert"
     is_parallelizable = True
     supports_gradient_checkpointing = True
-    model_type = "new-bert"
 
 NEW_BERT_CONSTANT = "value"
 '''
         bert_expected_with_copied_from = (
-            "# Copied from transformers.bert_module.TFBertPreTrainedModel with bert->new_bert,Bert->NewBert\n"
+            "# Copied from transformers.bert_module.TFBertPreTrainedModel with Bert->NewBert,bert->new_bert\n"
             + bert_expected
         )
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -786,8 +823,10 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
             doc_file = os.path.join(tmp_dir, "gpt2.mdx")
             new_doc_file = os.path.join(tmp_dir, "gpt-new-new.mdx")
 
-            gpt2_model_patterns = ModelPatterns("GPT2", "gpt2")
-            new_model_patterns = ModelPatterns("GPT-New New", "huggingface/gpt-new-new", tokenizer_class="GPTNewNewTokenizer")
+            gpt2_model_patterns = ModelPatterns("GPT2", "gpt2", tokenizer_class="GPT2Tokenizer")
+            new_model_patterns = ModelPatterns(
+                "GPT-New New", "huggingface/gpt-new-new", tokenizer_class="GPTNewNewTokenizer"
+            )
 
             self.init_file(doc_file, test_doc)
             duplicate_doc_file(doc_file, gpt2_model_patterns, new_model_patterns)
@@ -830,6 +869,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
             )
             self.init_file(doc_file, test_doc)
             duplicate_doc_file(doc_file, gpt2_model_patterns, new_model_patterns)
+            print(test_new_doc_no_tok)
             self.check_result(new_doc_file, test_new_doc_no_tok)
 
             test_new_doc_pt_only_no_tok = test_new_doc_no_tok.replace(

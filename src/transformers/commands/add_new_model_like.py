@@ -61,8 +61,8 @@ class ModelPatterns:
         tokenizer_class (`str`, *optional*):
             The tokenizer class associated with this model (leave to `None` for models that don't use a tokenizer).
         feature_extractor_class (`str`, *optional*):
-            The feature extractor class associated with this model (leave to `None` for models that don't use a
-            feature extractor).
+            The feature extractor class associated with this model (leave to `None` for models that don't use a feature
+            extractor).
         processor_class (`str`, *optional*):
             The processor class associated with this model (leave to `None` for models that don't use a processor).
     """
@@ -94,6 +94,20 @@ class ModelPatterns:
             self.model_upper_cased = self.model_name.upper().replace(" ", "_").replace("-", "_")
         if self.config_class is None:
             self.config_class = f"{self.model_camel_cased}Config"
+
+
+ATTRIBUTE_TO_PLACEHOLDER = {
+    "config_class": "[CONFIG_CLASS]",
+    "tokenizer_class": "[TOKENIZER_CLASS]",
+    "feature_extractor_class": "[FEATURE_EXTRACTOR_CLASS]",
+    "processor_class": "[PROCESSOR_CLASS]",
+    "checkpoint": "[CHECKPOINT]",
+    "model_type": "[MODEL_TYPE]",
+    "model_upper_cased": "[MODEL_UPPER_CASED]",
+    "model_camel_cased": "[MODEL_CAMELCASED]",
+    "model_lower_cased": "[MODEL_LOWER_CASED]",
+    "model_name": "[MODEL_NAME]",
+}
 
 
 def is_empty_line(line: str) -> bool:
@@ -260,61 +274,93 @@ def replace_model_patterns(
     Returns:
         `Tuple(str, str)`: A tuple of with the treated text and the replacement actually done in it.
     """
-    replacements = []
-    # Special case when the model camel cased and upper cased names are the same for the old model (GPT2) but not the
-    # new one. We can't just do a replace in all the text and will need to go word by word to see if they are
-    # uppercased or not.
-    if (
-        old_model_patterns.model_upper_cased == old_model_patterns.model_camel_cased
-        and new_model_patterns.model_upper_cased != new_model_patterns.model_camel_cased
-    ):
-        old_model_value = old_model_patterns.model_upper_cased
-        new_model_upper = new_model_patterns.model_upper_cased
+    # The order is crucially important as we will check and replace in that order. For instance the config probably
+    # contains the camel-cased named, but will be treated before.
+    attributes_to_check = ["config_class"]
+    # Add relevant preprocessing classes
+    for attr in ["tokenizer_class", "feature_extractor_class", "processor_class"]:
+        if getattr(old_model_patterns, attr) is not None and getattr(new_model_patterns, attr) is not None:
+            attributes_to_check.append(attr)
 
-        if re.search(fr"{old_model_value}_[A-Z_]*[^A-Z_]", text) is not None:
-            replacements.append((old_model_value, new_model_upper))
-            text = re.sub(fr"{old_model_value}([A-Z_]*)([^a-zA-Z_])", fr"{new_model_upper}\1\2", text)
-
-        # Now that we have done those, we can replace the camel cased ones normally.
-        attributes = ["model_lower_cased", "model_camel_cased"]
+    # Special cases for checkpoint and model_type
+    if old_model_patterns.checkpoint not in [old_model_patterns.model_type, old_model_patterns.model_lower_cased]:
+        attributes_to_check.append("checkpoint")
+    if old_model_patterns.model_type != old_model_patterns.model_lower_cased:
+        attributes_to_check.append("model_type")
     else:
-        attributes = ["model_lower_cased", "model_camel_cased", "model_upper_cased"]
+        text = re.sub(
+            fr'(\s*)model_type = "{old_model_patterns.model_type}"',
+            r'\1model_type = "[MODEL_TYPE]"',
+            text,
+        )
 
-    for attribute in attributes:
-        old_model_value = getattr(old_model_patterns, attribute)
-        new_model_value = getattr(new_model_patterns, attribute)
-        if old_model_value in text:
-            replacements.append((old_model_value, new_model_value))
-            text = text.replace(old_model_value, new_model_value)
+    # Special case when the model camel cased and upper cased names are the same for the old model (like for GPT2) but
+    # not the new one. We can't just do a replace in all the text and will need a special regex
+    if old_model_patterns.model_upper_cased == old_model_patterns.model_camel_cased:
+        old_model_value = old_model_patterns.model_upper_cased
+        if re.search(fr"{old_model_value}_[A-Z_]*[^A-Z_]", text) is not None:
+            text = re.sub(fr"{old_model_value}([A-Z_]*)([^a-zA-Z_])", r"[MODEL_UPPER_CASED]\1\2", text)
+    else:
+        attributes_to_check.append("model_upper_cased")
 
-    # We may have a config class that is different from NewModelConfig:
-    if new_model_patterns.config_class != f"{new_model_patterns.model_camel_cased}Config":
-        text = text.replace(f"{new_model_patterns.model_camel_cased}Config", old_model_patterns.config_class)
+    attributes_to_check.extend(["model_camel_cased", "model_lower_cased", "model_name"])
 
-    # We may have a tokenizer class that is different from NewModelTokenizer:
-    if new_model_patterns.tokenizer_class != f"{new_model_patterns.model_camel_cased}Tokenizer":
-        text = text.replace(f"{new_model_patterns.model_camel_cased}Tokenizer", old_model_patterns.tokenizer_class)
+    # Now let's replace every other attribute by their placeholder
+    for attr in attributes_to_check:
+        text = text.replace(getattr(old_model_patterns, attr), ATTRIBUTE_TO_PLACEHOLDER[attr])
+
+    # Finally we can replace the placeholder byt the new values.
+    replacements = []
+    for attr, placeholder in ATTRIBUTE_TO_PLACEHOLDER.items():
+        if placeholder in text:
+            replacements.append((getattr(old_model_patterns, attr), getattr(new_model_patterns, attr)))
+            text = text.replace(placeholder, getattr(new_model_patterns, attr))
 
     # If we have two inconsistent replacements, we don't return anything (ex: GPT2->GPT_NEW and GPT2->GPTNew)
     old_replacement_values = [old for old, new in replacements]
     if len(set(old_replacement_values)) != len(old_replacement_values):
         return text, ""
 
-    if old_model_patterns.model_type == old_model_patterns.model_lower_cased:
-        text = re.sub(
-            fr'(\s*)model_type = "{new_model_patterns.model_lower_cased}"',
-            fr'\1model_type = "{new_model_patterns.model_type}"',
-            text,
-        )
-    else:
-        text = re.sub(
-            fr'(\s*)model_type = "{old_model_patterns.model_type}"',
-            fr'\1model_type = "{new_model_patterns.model_type}"',
-            text,
-        )
-
+    replacements = simplify_replacements(replacements)
     replacements = [f"{old}->{new}" for old, new in replacements]
     return text, ",".join(replacements)
+
+
+def simplify_replacements(replacements):
+    """
+    Simplify a list of replacement patterns to make sure there are no needless ones.
+
+    For instance in the sequence "Bert->BertNew, BertConfig->BertNewConfig, bert->bert_new", the replacement
+    "BertConfig->BertNewConfig" is implied by "Bert->BertNew" so not needed.
+
+    Args:
+        replacements (`List[Tuple[str, str]]`): List of patterns (old, new)
+
+    Returns:
+        `List[Tuple[str, str]]`: The list of patterns simplified.
+    """
+    if len(replacements) <= 1:
+        # Nothing to simplify
+        return replacements
+
+    # Next let's sort replacements by length as a replacement can only "imply" another replacement if it's shorter.
+    replacements.sort(key=lambda x: len(x[0]))
+
+    idx = 0
+    while idx < len(replacements):
+        old, new = replacements[idx]
+        # Loop through all replacements after
+        j = idx + 1
+        while j < len(replacements):
+            old_2, new_2 = replacements[j]
+            # If the replacement is implied by the current one, we can drop it.
+            if old_2.replace(old, new) == new_2:
+                replacements.pop(j)
+            else:
+                j += 1
+        idx += 1
+
+    return replacements
 
 
 def get_module_from_file(module_file: Union[str, os.PathLike]) -> str:
@@ -500,6 +546,8 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
         f"test_modeling_tf_{module_name}.py",
         f"test_modeling_flax_{module_name}.py",
         f"test_tokenization_{module_name}.py",
+        f"test_feature_extraction_{module_name}.py",
+        f"test_processor_{module_name}.py",
     ]
     test_files = filter_framework_files(test_files, frameworks=frameworks)
     # Add the test directory
@@ -1091,16 +1139,28 @@ def create_new_model_like(
     if old_model_patterns.model_type == old_model_patterns.checkpoint:
         print(
             "The model you picked has the same name for the model type and the checkpoint name "
-            f"({old_model_patterns.model_type}). It's possible some checkpoints have been badly converted so search "
-            f"for all instances of {new_model_patterns.model_type} in the new modeling file to check they're not "
-            "badly used as checkpoints."
+            f"({old_model_patterns.model_type}). As a result, it's possible some places where the new checkpoint "
+            f"should be, you have {new_model_patterns.model_type} instead. You should search for all instances of "
+            f"{new_model_patterns.model_type} in the new files and check they're not badly used as checkpoints."
         )
     elif old_model_patterns.model_lower_cased == old_model_patterns.checkpoint:
         print(
             "The model you picked has the same name for the model type and the checkpoint name "
-            f"({old_model_patterns.model_lower_cased}). It's possible some checkpoints have been badly converted so "
-            f"search for all instances of {new_model_patterns.model_lower_cased} in the new modeling file to check "
-            "they're not badly used as checkpoints."
+            f"({old_model_patterns.model_lower_cased}). As a result, it's possible some places where the new "
+            f"checkpoint should be, you have {new_model_patterns.model_lower_cased} instead. You should search for "
+            f"all instances of {new_model_patterns.model_lower_cased} in the new files and check they're not badly "
+            "used as checkpoints."
+        )
+    if (
+        old_model_patterns.model_type == old_model_patterns.model_lower_cased
+        and new_model_patterns.model_type != new_model_patterns.model_lower_cased
+    ):
+        print(
+            "The model you picked has the same name for the model type and the lowercased model name "
+            f"({old_model_patterns.model_lower_cased}). As a result, it's possible some places where the new "
+            f"model type should be, you have {new_model_patterns.model_lower_cased} instead. You should search for "
+            f"all instances of {new_model_patterns.model_lower_cased} in the new files and check they're not badly "
+            "used as the model type."
         )
 
     if not keep_old_tokenizer:
