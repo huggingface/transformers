@@ -874,10 +874,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             # This will be true in TF 2.8 or greater
             return super().compute_loss(*args, **kwargs)
         else:
-            logger.warning(
+            warnings.warn(
                 "The old compute_loss method is deprecated as it conflicts with the Keras compute_loss "
                 "method added in TF 2.8. If you want the original HF compute_loss, please call "
-                "hf_compute_loss() instead."
+                "hf_compute_loss() instead.",
+                FutureWarning,
             )
             return self.hf_compute_loss(*args, **kwargs)
 
