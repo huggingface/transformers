@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
+# Copyright 2022 The REALM authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,16 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Tokenization classes for Bert."""
+"""Fast Tokenization classes for REALM."""
 
 import json
 from typing import List, Optional, Tuple
 
 from tokenizers import normalizers
 
+from ...file_utils import PaddingStrategy
+from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from .tokenization_bert import BertTokenizer
+from .tokenization_realm import RealmTokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -30,93 +32,56 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "bert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-        "bert-large-uncased": "https://huggingface.co/bert-large-uncased/resolve/main/vocab.txt",
-        "bert-base-cased": "https://huggingface.co/bert-base-cased/resolve/main/vocab.txt",
-        "bert-large-cased": "https://huggingface.co/bert-large-cased/resolve/main/vocab.txt",
-        "bert-base-multilingual-uncased": "https://huggingface.co/bert-base-multilingual-uncased/resolve/main/vocab.txt",
-        "bert-base-multilingual-cased": "https://huggingface.co/bert-base-multilingual-cased/resolve/main/vocab.txt",
-        "bert-base-chinese": "https://huggingface.co/bert-base-chinese/resolve/main/vocab.txt",
-        "bert-base-german-cased": "https://huggingface.co/bert-base-german-cased/resolve/main/vocab.txt",
-        "bert-large-uncased-whole-word-masking": "https://huggingface.co/bert-large-uncased-whole-word-masking/resolve/main/vocab.txt",
-        "bert-large-cased-whole-word-masking": "https://huggingface.co/bert-large-cased-whole-word-masking/resolve/main/vocab.txt",
-        "bert-large-uncased-whole-word-masking-finetuned-squad": "https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt",
-        "bert-large-cased-whole-word-masking-finetuned-squad": "https://huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt",
-        "bert-base-cased-finetuned-mrpc": "https://huggingface.co/bert-base-cased-finetuned-mrpc/resolve/main/vocab.txt",
-        "bert-base-german-dbmdz-cased": "https://huggingface.co/bert-base-german-dbmdz-cased/resolve/main/vocab.txt",
-        "bert-base-german-dbmdz-uncased": "https://huggingface.co/bert-base-german-dbmdz-uncased/resolve/main/vocab.txt",
-        "TurkuNLP/bert-base-finnish-cased-v1": "https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/resolve/main/vocab.txt",
-        "TurkuNLP/bert-base-finnish-uncased-v1": "https://huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/resolve/main/vocab.txt",
-        "wietsedv/bert-base-dutch-cased": "https://huggingface.co/wietsedv/bert-base-dutch-cased/resolve/main/vocab.txt",
+        "qqaatw/realm-cc-news-pretrained-embedder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-embedder/resolve/main/vocab.txt",
+        "qqaatw/realm-cc-news-pretrained-encoder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-encoder/resolve/main/vocab.txt",
+        "qqaatw/realm-cc-news-pretrained-scorer": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-scorer/resolve/main/vocab.txt",
+        "qqaatw/realm-cc-news-pretrained-openqa": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-openqa/aresolve/main/vocab.txt",
+        "qqaatw/realm-orqa-nq-openqa": "https://huggingface.co/qqaatw/realm-orqa-nq-openqa/resolve/main/vocab.txt",
+        "qqaatw/realm-orqa-nq-reader": "https://huggingface.co/qqaatw/realm-orqa-nq-reader/resolve/main/vocab.txt",
+        "qqaatw/realm-orqa-wq-openqa": "https://huggingface.co/qqaatw/realm-orqa-wq-openqa/resolve/main/vocab.txt",
+        "qqaatw/realm-orqa-wq-reader": "https://huggingface.co/qqaatw/realm-orqa-wq-reader/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "bert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
-        "bert-large-uncased": "https://huggingface.co/bert-large-uncased/resolve/main/tokenizer.json",
-        "bert-base-cased": "https://huggingface.co/bert-base-cased/resolve/main/tokenizer.json",
-        "bert-large-cased": "https://huggingface.co/bert-large-cased/resolve/main/tokenizer.json",
-        "bert-base-multilingual-uncased": "https://huggingface.co/bert-base-multilingual-uncased/resolve/main/tokenizer.json",
-        "bert-base-multilingual-cased": "https://huggingface.co/bert-base-multilingual-cased/resolve/main/tokenizer.json",
-        "bert-base-chinese": "https://huggingface.co/bert-base-chinese/resolve/main/tokenizer.json",
-        "bert-base-german-cased": "https://huggingface.co/bert-base-german-cased/resolve/main/tokenizer.json",
-        "bert-large-uncased-whole-word-masking": "https://huggingface.co/bert-large-uncased-whole-word-masking/resolve/main/tokenizer.json",
-        "bert-large-cased-whole-word-masking": "https://huggingface.co/bert-large-cased-whole-word-masking/resolve/main/tokenizer.json",
-        "bert-large-uncased-whole-word-masking-finetuned-squad": "https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/tokenizer.json",
-        "bert-large-cased-whole-word-masking-finetuned-squad": "https://huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/tokenizer.json",
-        "bert-base-cased-finetuned-mrpc": "https://huggingface.co/bert-base-cased-finetuned-mrpc/resolve/main/tokenizer.json",
-        "bert-base-german-dbmdz-cased": "https://huggingface.co/bert-base-german-dbmdz-cased/resolve/main/tokenizer.json",
-        "bert-base-german-dbmdz-uncased": "https://huggingface.co/bert-base-german-dbmdz-uncased/resolve/main/tokenizer.json",
-        "TurkuNLP/bert-base-finnish-cased-v1": "https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/resolve/main/tokenizer.json",
-        "TurkuNLP/bert-base-finnish-uncased-v1": "https://huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/resolve/main/tokenizer.json",
-        "wietsedv/bert-base-dutch-cased": "https://huggingface.co/wietsedv/bert-base-dutch-cased/resolve/main/tokenizer.json",
+        "qqaatw/realm-cc-news-pretrained-embedder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-embedder/resolve/main/tokenizer.jsont",
+        "qqaatw/realm-cc-news-pretrained-encoder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-encoder/resolve/main/tokenizer.json",
+        "qqaatw/realm-cc-news-pretrained-scorer": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-scorer/resolve/main/tokenizer.json",
+        "qqaatw/realm-cc-news-pretrained-openqa": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-openqa/aresolve/main/tokenizer.json",
+        "qqaatw/realm-orqa-nq-openqa": "https://huggingface.co/qqaatw/realm-orqa-nq-openqa/resolve/main/tokenizer.json",
+        "qqaatw/realm-orqa-nq-reader": "https://huggingface.co/qqaatw/realm-orqa-nq-reader/resolve/main/tokenizer.json",
+        "qqaatw/realm-orqa-wq-openqa": "https://huggingface.co/qqaatw/realm-orqa-wq-openqa/resolve/main/tokenizer.json",
+        "qqaatw/realm-orqa-wq-reader": "https://huggingface.co/qqaatw/realm-orqa-wq-reader/resolve/main/tokenizer.json",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "bert-base-uncased": 512,
-    "bert-large-uncased": 512,
-    "bert-base-cased": 512,
-    "bert-large-cased": 512,
-    "bert-base-multilingual-uncased": 512,
-    "bert-base-multilingual-cased": 512,
-    "bert-base-chinese": 512,
-    "bert-base-german-cased": 512,
-    "bert-large-uncased-whole-word-masking": 512,
-    "bert-large-cased-whole-word-masking": 512,
-    "bert-large-uncased-whole-word-masking-finetuned-squad": 512,
-    "bert-large-cased-whole-word-masking-finetuned-squad": 512,
-    "bert-base-cased-finetuned-mrpc": 512,
-    "bert-base-german-dbmdz-cased": 512,
-    "bert-base-german-dbmdz-uncased": 512,
-    "TurkuNLP/bert-base-finnish-cased-v1": 512,
-    "TurkuNLP/bert-base-finnish-uncased-v1": 512,
-    "wietsedv/bert-base-dutch-cased": 512,
+    "qqaatw/realm-cc-news-pretrained-embedder": 512,
+    "qqaatw/realm-cc-news-pretrained-encoder": 512,
+    "qqaatw/realm-cc-news-pretrained-scorer": 512,
+    "qqaatw/realm-cc-news-pretrained-openqa": 512,
+    "qqaatw/realm-orqa-nq-openqa": 512,
+    "qqaatw/realm-orqa-nq-reader": 512,
+    "qqaatw/realm-orqa-wq-openqa": 512,
+    "qqaatw/realm-orqa-wq-reader": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "bert-base-uncased": {"do_lower_case": True},
-    "bert-large-uncased": {"do_lower_case": True},
-    "bert-base-cased": {"do_lower_case": False},
-    "bert-large-cased": {"do_lower_case": False},
-    "bert-base-multilingual-uncased": {"do_lower_case": True},
-    "bert-base-multilingual-cased": {"do_lower_case": False},
-    "bert-base-chinese": {"do_lower_case": False},
-    "bert-base-german-cased": {"do_lower_case": False},
-    "bert-large-uncased-whole-word-masking": {"do_lower_case": True},
-    "bert-large-cased-whole-word-masking": {"do_lower_case": False},
-    "bert-large-uncased-whole-word-masking-finetuned-squad": {"do_lower_case": True},
-    "bert-large-cased-whole-word-masking-finetuned-squad": {"do_lower_case": False},
-    "bert-base-cased-finetuned-mrpc": {"do_lower_case": False},
-    "bert-base-german-dbmdz-cased": {"do_lower_case": False},
-    "bert-base-german-dbmdz-uncased": {"do_lower_case": True},
-    "TurkuNLP/bert-base-finnish-cased-v1": {"do_lower_case": False},
-    "TurkuNLP/bert-base-finnish-uncased-v1": {"do_lower_case": True},
-    "wietsedv/bert-base-dutch-cased": {"do_lower_case": False},
+    "qqaatw/realm-cc-news-pretrained-embedder": {"do_lower_case": True},
+    "qqaatw/realm-cc-news-pretrained-encoder": {"do_lower_case": True},
+    "qqaatw/realm-cc-news-pretrained-scorer": {"do_lower_case": True},
+    "qqaatw/realm-cc-news-pretrained-openqa": {"do_lower_case": True},
+    "qqaatw/realm-orqa-nq-openqa": {"do_lower_case": True},
+    "qqaatw/realm-orqa-nq-reader": {"do_lower_case": True},
+    "qqaatw/realm-orqa-wq-openqa": {"do_lower_case": True},
+    "qqaatw/realm-orqa-wq-reader": {"do_lower_case": True},
 }
 
 
-class BertTokenizerFast(PreTrainedTokenizerFast):
+class RealmTokenizerFast(PreTrainedTokenizerFast):
     r"""
-    Construct a "fast" BERT tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
+    Construct a "fast" REALM tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
+
+    [`RealmTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
+    splitting and wordpiece.
 
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
@@ -158,7 +123,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    slow_tokenizer_class = BertTokenizer
+    slow_tokenizer_class = RealmTokenizer
 
     def __init__(
         self,
@@ -202,10 +167,83 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
 
         self.do_lower_case = do_lower_case
 
+    def batch_encode_candidates(self, text, **kwargs):
+        r"""
+        Encode a batch of text or text pair. This method is similar to regular __call__ method but has the following
+        differences:
+
+            1. Handle additional num_candidate axis. (batch_size, num_candidates, text)
+            2. Always pad the sequences to *max_length*.
+            3. Must specify *max_length* in order to stack packs of candidates into a batch.
+
+            - single sequence: `[CLS] X [SEP]`
+            - pair of sequences: `[CLS] A [SEP] B [SEP]`
+
+        Args:
+            text (`List[List[str]]`):
+                The batch of sequences to be encoded. Each sequence must be in this format: (batch_size,
+                num_candidates, text).
+            text_pair (`List[List[str]]`, *optional*):
+                The batch of sequences to be encoded. Each sequence must be in this format: (batch_size,
+                num_candidates, text).
+            **kwargs:
+                Keyword arguments of the __call__ method.
+
+        Returns:
+            [`BatchEncoding`]: Encoded text or text pair.
+
+        Example:
+
+        ```python
+        >>> from transformers import RealmTokenizerFast
+
+        >>> # batch_size = 2, num_candidates = 2
+        >>> text = [["Hello world!", "Nice to meet you!"], ["The cute cat.", "The adorable dog."]]
+
+        >>> tokenizer = RealmTokenizerFast.from_pretrained("qqaatw/realm-cc-news-pretrained-encoder")
+        >>> tokenized_text = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
+        ```"""
+
+        # Always using a fixed sequence length to encode in order to stack candidates into a batch.
+        kwargs["padding"] = PaddingStrategy.MAX_LENGTH
+
+        batch_text = text
+        batch_text_pair = kwargs.pop("text_pair", None)
+        return_tensors = kwargs.pop("return_tensors", None)
+
+        output_data = {
+            "input_ids": [],
+            "attention_mask": [],
+            "token_type_ids": [],
+        }
+
+        for idx, candidate_text in enumerate(batch_text):
+            if batch_text_pair is not None:
+                candidate_text_pair = batch_text_pair[idx]
+            else:
+                candidate_text_pair = None
+
+            encoded_candidates = super().__call__(candidate_text, candidate_text_pair, return_tensors=None, **kwargs)
+
+            encoded_input_ids = encoded_candidates.get("input_ids")
+            encoded_attention_mask = encoded_candidates.get("attention_mask")
+            encoded_token_type_ids = encoded_candidates.get("token_type_ids")
+
+            if encoded_input_ids is not None:
+                output_data["input_ids"].append(encoded_input_ids)
+            if encoded_attention_mask is not None:
+                output_data["attention_mask"].append(encoded_attention_mask)
+            if encoded_token_type_ids is not None:
+                output_data["token_type_ids"].append(encoded_token_type_ids)
+
+        output_data = dict((key, item) for key, item in output_data.items() if len(item) != 0)
+
+        return BatchEncoding(output_data, tensor_type=return_tensors)
+
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A BERT sequence has the following format:
+        adding special tokens. A REALM sequence has the following format:
 
         - single sequence: `[CLS] X [SEP]`
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
@@ -230,7 +268,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A REALM sequence
         pair mask has the following format:
 
         ```

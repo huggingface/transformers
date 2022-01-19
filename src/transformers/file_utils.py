@@ -45,12 +45,12 @@ from zipfile import ZipFile, is_zipfile
 
 import numpy as np
 from packaging import version
-from tqdm.auto import tqdm
 
 import requests
 from filelock import FileLock
 from huggingface_hub import HfFolder, Repository, create_repo, list_repo_files, whoami
 from requests.exceptions import HTTPError
+from transformers.utils.logging import tqdm
 from transformers.utils.versions import importlib_metadata
 
 from . import __version__
@@ -1911,6 +1911,8 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
     r.raise_for_status()
     content_length = r.headers.get("Content-Length")
     total = resume_size + int(content_length) if content_length is not None else None
+    # `tqdm` behavior is determined by `utils.logging.is_progress_bar_enabled()`
+    # and can be set using `utils.logging.enable/disable_progress_bar()`
     progress = tqdm(
         unit="B",
         unit_scale=True,
@@ -1918,7 +1920,6 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
         total=total,
         initial=resume_size,
         desc="Downloading",
-        disable=bool(logging.get_verbosity() == logging.NOTSET),
     )
     for chunk in r.iter_content(chunk_size=1024):
         if chunk:  # filter out keep-alive new chunks

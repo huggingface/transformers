@@ -45,6 +45,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("clip", "CLIPFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
         ("swin", "ViTFeatureExtractor"),
+        ("vit_mae", "ViTFeatureExtractor"),
     ]
 )
 
