@@ -361,7 +361,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     def test_chunking_with_lm(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
-            model="patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm",
+            model="patrickvonplaten/wav2vec2-base-100h-with-lm",
             chunk_length_s=10.0,
         )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -370,7 +370,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         n_repeats = 10
         audio = np.tile(audio, n_repeats)
         output = speech_recognizer([audio], batch_size=2)
-        expected_text = "a man sed to the univers sir i exist" * n_repeats
+        expected_text = "A MAN SAID TO THE UNIVERSE SIR I EXIST " * n_repeats
         expected = [{"text": expected_text.strip()}]
         self.assertEqual(output, expected)
 
