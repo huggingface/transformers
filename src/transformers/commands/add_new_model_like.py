@@ -660,6 +660,7 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
 
     model_name = auto_module.MODEL_NAMES_MAPPING[model_type]
     config_class = auto_module.configuration_auto.CONFIG_MAPPING_NAMES[model_type]
+    archive_map = auto_module.configuration_auto.CONFIG_ARCHIVE_MAP_MAPPING_NAMES.get(model_type, None)
     if model_type in auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES:
         tokenizer_classes = auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES[model_type]
         tokenizer_class = tokenizer_classes[0] if tokenizer_classes[0] is not None else tokenizer_classes[1]
@@ -687,13 +688,26 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
 
     model_classes = retrieve_model_classes(model_type, frameworks=frameworks)
 
+    # Retrieve model upper-cased name from the constant name of the pretrained archive map.
+    if archive_map is None:
+        model_upper_cased = model_camel_cased.upper()
+    else:
+        parts = archive_map.split("_")
+        idx = 0
+        while idx < len(parts) and parts[idx] != "PRETRAINED":
+            idx += 1
+        if idx < len(parts):
+            model_upper_cased = "_".join(parts[:idx])
+        else:
+            model_upper_cased = model_camel_cased.upper()
+
     model_patterns = ModelPatterns(
         model_name,
         checkpoint=find_base_model_checkpoint(model_type, model_files=model_files),
         model_type=model_type,
         model_camel_cased=model_camel_cased,
         model_lower_cased=model_files["module_name"],
-        model_upper_cased=model_camel_cased.upper(),
+        model_upper_cased=model_upper_cased,
         config_class=config_class,
         tokenizer_class=tokenizer_class,
         feature_extractor_class=feature_extractor_class,
@@ -709,25 +723,26 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
 
 
 def clean_frameworks_in_init(
-    init_file: Union[str, os.PathLike], frameworks: Optional[List[str]] = None, keep_tokenizer: bool = True
+    init_file: Union[str, os.PathLike], frameworks: Optional[List[str]] = None, keep_processing: bool = True
 ):
     """
-    Removes all the import lines that don't belong to a given list of frameworks or concern tokenizers in an init.
+    Removes all the import lines that don't belong to a given list of frameworks or concern tokenizers/feature
+    extractors/processors in an init.
 
     Args:
         init_file (`str` or `os.PathLike`): The path to the init to treat.
         frameworks (`List[str]`, *optional*):
            If passed, this will remove all imports that are subject to a framework not in frameworks
-        keep_tokenizer (`bool`, *optional*, defaults to `True`):
-            Whether or not to keep the tokenizer imports in the init.
+        keep_processing (`bool`, *optional*, defaults to `True`):
+            Whether or not to keep the preprocessing (tokenizer, feature extractor, processor) imports in the init.
     """
     if frameworks is None:
         frameworks = ["pt", "tf", "flax"]
 
     names = {"pt": "torch"}
     to_remove = [names.get(f, f) for f in ["pt", "tf", "flax"] if f not in frameworks]
-    if not keep_tokenizer:
-        to_remove.extend(["sentencepiece", "tokenizers"])
+    if not keep_processing:
+        to_remove.extend(["sentencepiece", "tokenizers", "vision"])
 
     if len(to_remove) == 0:
         # Nothing to do
@@ -756,16 +771,17 @@ def clean_frameworks_in_init(
         elif re_is_xxx_available.search(lines[idx]) is not None:
             line = lines[idx]
             for framework in to_remove:
-                line = line.replace(f"is_{framework}_available,", "")
+                line = line.replace(f", is_{framework}_available", "")
+                line = line.replace(f"is_{framework}_available, ", "")
                 line = line.replace(f"is_{framework}_available", "")
 
             if len(line.strip()) > 0:
                 new_lines.append(line)
             idx += 1
         # Otherwise we keep the line, except if it's a tokenizer import and we don't want to keep it.
-        elif keep_tokenizer or (
-            re.search('^\s*"tokenization', lines[idx]) is None
-            and re.search("^\s*from .tokenization", lines[idx]) is None
+        elif keep_processing or (
+            re.search('^\s*"(tokenization|processing|feature_extraction)', lines[idx]) is None
+            and re.search("^\s*from .(tokenization|processing|feature_extraction)", lines[idx]) is None
         ):
             new_lines.append(lines[idx])
             idx += 1
@@ -780,7 +796,7 @@ def add_model_to_main_init(
     old_model_patterns: ModelPatterns,
     new_model_patterns: ModelPatterns,
     frameworks: Optional[List[str]] = None,
-    with_tokenizer: bool = True,
+    with_processing: bool = True,
 ):
     """
     Add a model to the main init of Transformers.
@@ -790,8 +806,8 @@ def add_model_to_main_init(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         frameworks (`List[str]`, *optional*):
             If specified, only the models implemented in those frameworks will be added.
-        with_tokenizer (`bool`, *optional*, defaults to `True`):
-            Whether the tokenizer of the model should also be added to the init or not.
+        with_processsing (`bool`, *optional*, defaults to `True`):
+            Whether the tokenizer/feature extractor/processor of the model should also be added to the init or not.
     """
     with open(TRANSFORMERS_PATH / "__init__.py", "r", encoding="utf-8") as f:
         content = f.read()
@@ -826,13 +842,22 @@ def add_model_to_main_init(
                 idx += 1
             block = "\n".join(block)
             new_lines.append(block)
-            if not with_tokenizer:
-                tokenizer_class = old_model_patterns.tokenizer_class
-                block = block.replace(f' "{tokenizer_class}",', "")
-                block = block.replace(f', "{tokenizer_class}"', "")
-                block = block.replace(f" {tokenizer_class},", "")
-                block = block.replace(f", {tokenizer_class}", "")
-            if with_tokenizer or tokenizer_class not in block:
+
+            add_block = True
+            if not with_processing:
+                for processing_class in [
+                    old_model_patterns.tokenizer_class,
+                    old_model_patterns.feature_extractor_class,
+                    old_model_patterns.processor_class,
+                ]:
+                    block = block.replace(f' "{processing_class}",', "")
+                    block = block.replace(f', "{processing_class}"', "")
+                    block = block.replace(f" {processing_class},", "")
+                    block = block.replace(f", {processing_class}", "")
+
+                    if processing_class in block:
+                        add_block = False
+            if add_block:
                 new_lines.append(replace_model_patterns(block, old_model_patterns, new_model_patterns)[0])
         else:
             new_lines.append(lines[idx])
@@ -850,6 +875,9 @@ def insert_tokenizer_in_auto_module(old_model_patterns: ModelPatterns, new_model
         old_model_patterns (`ModelPatterns`): The patterns for the old model.
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
     """
+    if old_model_patterns.tokenizer_class is None or new_model_patterns.tokenizer_class is None:
+        return
+
     with open(TRANSFORMERS_PATH / "models" / "auto" / "tokenization_auto.py", "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -892,9 +920,11 @@ AUTO_CLASSES_PATTERNS = {
         '        ("{model_type}", "{config_class}"),',
         '        ("{model_type}", "{pretrained_archive_map}"),',
     ],
+    "feature_extration_auto.py": ['        ("{model_type}", "{feature_extractor_class}"),'],
     "modeling_auto.py": ['        ("{model_type}", "{any_pt_class}"),'],
     "modeling_tf_auto.py": ['        ("{model_type}", "{any_tf_class}"),'],
     "modeling_flax_auto.py": ['        ("{model_type}", "{any_flax_class}"),'],
+    "processing_auto.py": ['        ("{model_type}", "{processor_class}"),'],
 }
 
 
@@ -909,10 +939,10 @@ def add_model_to_auto_classes(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         model_classes (`Dict[str, List[str]]`): A dictionary framework to list of model classes implemented.
     """
-    for file in AUTO_CLASSES_PATTERNS:
+    for filename in AUTO_CLASSES_PATTERNS:
         # Extend patterns with all model classes if necessary
         new_patterns = []
-        for pattern in AUTO_CLASSES_PATTERNS[file]:
+        for pattern in AUTO_CLASSES_PATTERNS[filename]:
             if re.search("any_([a-z]*)_class", pattern) is not None:
                 framework = re.search("any_([a-z]*)_class", pattern).groups()[0]
                 if framework in model_classes:
@@ -924,12 +954,21 @@ def add_model_to_auto_classes(
                     )
             elif "{config_class}" in pattern:
                 new_patterns.append(pattern.replace("{config_class}", old_model_patterns.config_class))
+            elif "{feature_extractor_class}" in pattern:
+                if (
+                    old_model_patterns.feature_extractor_class is not None
+                    and new_model_patterns.feature_extractor_class is not None
+                ):
+                    new_patterns.append(pattern)
+            elif "{processor_class}" in pattern:
+                if old_model_patterns.processor_class is not None and new_model_patterns.processor_class is not None:
+                    new_patterns.append(pattern)
             else:
                 new_patterns.append(pattern)
 
         # Loop through all patterns.
         for pattern in new_patterns:
-            file_name = TRANSFORMERS_PATH / "models" / "auto" / file
+            full_name = TRANSFORMERS_PATH / "models" / "auto" / filename
             old_model_line = pattern
             new_model_line = pattern
             for attr in ["model_type", "model_name"]:
@@ -947,7 +986,7 @@ def add_model_to_auto_classes(
                 old_model_patterns.model_camel_cased, new_model_patterns.model_camel_cased
             )
 
-            add_content_to_file(file_name, new_model_line, add_after=old_model_line)
+            add_content_to_file(full_name, new_model_line, add_after=old_model_line)
 
     # Tokenizers require special handling
     insert_tokenizer_in_auto_module(old_model_patterns, new_model_patterns)
@@ -1038,6 +1077,14 @@ def duplicate_doc_file(
                 # We only add the tokenizer if necessary
                 if old_model_patterns.tokenizer_class != new_model_patterns.tokenizer_class:
                     new_blocks.append(new_block)
+            elif "FeatureExtractor" in block_class:
+                # We only add the feature extractor if necessary
+                if old_model_patterns.feature_extractor_class != new_model_patterns.feature_extractor_class:
+                    new_blocks.append(new_block)
+            elif "Processor" in block_class:
+                # We only add the processor if necessary
+                if old_model_patterns.processor_class != new_model_patterns.processor_class:
+                    new_blocks.append(new_block)
             elif block_class.startswith("Flax"):
                 # We only add Flax models if in the selected frameworks
                 if "flax" in frameworks:
@@ -1078,7 +1125,11 @@ def create_new_model_like(
     model_info = retrieve_info_for_model(model_type, frameworks=frameworks)
     model_files = model_info["model_files"]
     old_model_patterns = model_info["model_patterns"]
-    keep_old_tokenizer = old_model_patterns.tokenizer_class == new_model_patterns.tokenizer_class
+    keep_old_processing = True
+    for processing_attr in ["feature_extractor_class", "processor_class", "tokenizer_class"]:
+        if getattr(old_model_patterns, processing_attr) != getattr(new_model_patterns, processing_attr):
+            keep_old_processing = False
+
     model_classes = model_info["model_classes"]
 
     # 1. We create the module for our new model.
@@ -1087,8 +1138,12 @@ def create_new_model_like(
     os.makedirs(module_folder, exist_ok=True)
 
     files_to_adapt = model_files["model_files"]
-    if keep_old_tokenizer:
-        files_to_adapt = [f for f in files_to_adapt if "tokenization" not in str(f)]
+    if keep_old_processing:
+        files_to_adapt = [
+            f
+            for f in files_to_adapt
+            if "tokenization" not in str(f) and "processing" not in str(f) and "feature_extraction" not in str(f)
+        ]
 
     os.makedirs(module_folder, exist_ok=True)
     for module_file in files_to_adapt:
@@ -1105,7 +1160,7 @@ def create_new_model_like(
         )
 
     clean_frameworks_in_init(
-        module_folder / "__init__.py", frameworks=frameworks, keep_tokenizer=not keep_old_tokenizer
+        module_folder / "__init__.py", frameworks=frameworks, keep_processing=not keep_old_processing
     )
 
     # 2. We add our new model to the models init and the main init
@@ -1116,13 +1171,17 @@ def create_new_model_like(
         exact_match=True,
     )
     add_model_to_main_init(
-        old_model_patterns, new_model_patterns, frameworks=frameworks, with_tokenizer=not keep_old_tokenizer
+        old_model_patterns, new_model_patterns, frameworks=frameworks, with_processing=not keep_old_processing
     )
 
     # 3. Add test files
     files_to_adapt = model_files["test_files"]
-    if keep_old_tokenizer:
-        files_to_adapt = [f for f in files_to_adapt if "tokenization" not in str(f)]
+    if keep_old_processing:
+        files_to_adapt = [
+            f
+            for f in files_to_adapt
+            if "tokenization" not in str(f) and "processor" not in str(f) and "feature_extraction" not in str(f)
+        ]
 
     for test_file in files_to_adapt:
         new_test_file_name = test_file.name.replace(
@@ -1172,12 +1231,12 @@ def create_new_model_like(
             "used as the model type."
         )
 
-    if not keep_old_tokenizer:
-        print(
-            "The constants at the start of the new tokenizer file created needs to be manually fixed. If your new "
-            "model has a tokenizer fast, you will also need to manually add the converter in the "
-            "`SLOW_TO_FAST_CONVERTERS` constant of `convert_slow_tokenizer.py`."
-        )
+    # if not keep_old_tokenizer:
+    #    print(
+    #       "The constants at the start of the new tokenizer file created needs to be manually fixed. If your new "
+    #        "model has a tokenizer fast, you will also need to manually add the converter in the "
+    #        "`SLOW_TO_FAST_CONVERTERS` constant of `convert_slow_tokenizer.py`."
+    #    )
 
 
 def add_new_model_like_command_factory(args: Namespace):

@@ -495,7 +495,6 @@ NEW_BERT_CONSTANT = "value"
         }
         self.assertEqual(test_files, bert_test_files)
 
-
         # VIT
         vit_files = get_model_files("vit", frameworks=["pt"])
         doc_file = str(Path(vit_files["doc_file"]).relative_to(REPO_PATH))
@@ -723,7 +722,7 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(bert_model_patterns.tokenizer_class, "BertTokenizer")
         self.assertIsNone(bert_model_patterns.feature_extractor_class)
         self.assertIsNone(bert_model_patterns.processor_class)
-    
+
     def test_retrieve_info_for_model_with_vit(self):
         vit_info = retrieve_info_for_model("vit")
         vit_classes = ["ViTForImageClassification", "ViTModel"]
@@ -767,7 +766,60 @@ NEW_BERT_CONSTANT = "value"
         self.assertIsNone(vit_model_patterns.tokenizer_class)
         self.assertIsNone(vit_model_patterns.processor_class)
 
-    def test_clean_frameworks_in_init(self):
+    def test_retrieve_info_for_model_with_wav2vec2(self):
+        wav2vec2_info = retrieve_info_for_model("wav2vec2")
+        wav2vec2_classes = [
+            "Wav2Vec2Model",
+            "Wav2Vec2ForPreTraining",
+            "Wav2Vec2ForAudioFrameClassification",
+            "Wav2Vec2ForCTC",
+            "Wav2Vec2ForMaskedLM",
+            "Wav2Vec2ForSequenceClassification",
+            "Wav2Vec2ForXVector",
+        ]
+        expected_model_classes = {
+            "pt": set(wav2vec2_classes),
+            "tf": {f"TF{m}" for m in wav2vec2_classes[:1]},
+            "flax": {f"Flax{m}" for m in wav2vec2_classes[:2]},
+        }
+
+        self.assertEqual(set(wav2vec2_info["frameworks"]), {"pt", "tf", "flax"})
+        model_classes = {k: set(v) for k, v in wav2vec2_info["model_classes"].items()}
+        self.assertEqual(model_classes, expected_model_classes)
+
+        all_wav2vec2_files = wav2vec2_info["model_files"]
+        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in all_wav2vec2_files["model_files"]}
+        self.assertEqual(model_files, WAV2VEC2_MODEL_FILES)
+
+        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in all_wav2vec2_files["test_files"]}
+        wav2vec2_test_files = {
+            "tests/test_feature_extraction_wav2vec2.py",
+            "tests/test_modeling_wav2vec2.py",
+            "tests/test_modeling_tf_wav2vec2.py",
+            "tests/test_modeling_flax_wav2vec2.py",
+            "tests/test_processor_wav2vec2.py",
+            "tests/test_tokenization_wav2vec2.py",
+        }
+        self.assertEqual(test_files, wav2vec2_test_files)
+
+        doc_file = str(Path(all_wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
+        self.assertEqual(doc_file, "docs/source/model_doc/wav2vec2.mdx")
+
+        self.assertEqual(all_wav2vec2_files["module_name"], "wav2vec2")
+
+        wav2vec2_model_patterns = wav2vec2_info["model_patterns"]
+        self.assertEqual(wav2vec2_model_patterns.model_name, "Wav2Vec2")
+        self.assertEqual(wav2vec2_model_patterns.checkpoint, "facebook/wav2vec2-base-960h")
+        self.assertEqual(wav2vec2_model_patterns.model_type, "wav2vec2")
+        self.assertEqual(wav2vec2_model_patterns.model_lower_cased, "wav2vec2")
+        self.assertEqual(wav2vec2_model_patterns.model_camel_cased, "Wav2Vec2")
+        self.assertEqual(wav2vec2_model_patterns.model_upper_cased, "WAV_2_VEC_2")
+        self.assertEqual(wav2vec2_model_patterns.config_class, "Wav2Vec2Config")
+        self.assertEqual(wav2vec2_model_patterns.feature_extractor_class, "Wav2Vec2FeatureExtractor")
+        self.assertEqual(wav2vec2_model_patterns.processor_class, "Wav2Vec2Processor")
+        self.assertEqual(wav2vec2_model_patterns.tokenizer_class, "Wav2Vec2CTCTokenizer")
+
+    def test_clean_frameworks_in_init_with_gpt(self):
         test_init = """
 from typing import TYPE_CHECKING
 
@@ -815,7 +867,7 @@ else:
         init_no_tokenizer = """
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available,  is_torch_available
+from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 _import_structure = {
     "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
@@ -851,7 +903,7 @@ else:
         init_pt_only = """
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule,   is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 _import_structure = {
     "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
@@ -883,7 +935,7 @@ else:
         init_pt_only_no_tokenizer = """
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule,    is_torch_available
+from ...file_utils import _LazyModule, is_torch_available
 
 _import_structure = {
     "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
@@ -908,7 +960,7 @@ else:
             file_name = os.path.join(tmp_dir, "__init__.py")
 
             self.init_file(file_name, test_init)
-            clean_frameworks_in_init(file_name, keep_tokenizer=False)
+            clean_frameworks_in_init(file_name, keep_processing=False)
             self.check_result(file_name, init_no_tokenizer)
 
             self.init_file(file_name, test_init)
@@ -916,8 +968,156 @@ else:
             self.check_result(file_name, init_pt_only)
 
             self.init_file(file_name, test_init)
-            clean_frameworks_in_init(file_name, frameworks=["pt"], keep_tokenizer=False)
+            clean_frameworks_in_init(file_name, frameworks=["pt"], keep_processing=False)
             self.check_result(file_name, init_pt_only_no_tokenizer)
+
+    def test_clean_frameworks_in_init_with_vit(self):
+        test_init = """
+from typing import TYPE_CHECKING
+
+from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available, is_vision_available
+
+_import_structure = {
+    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+}
+
+if is_vision_available():
+    _import_structure["feature_extraction_vit"] = ["ViTFeatureExtractor"]
+
+if is_torch_available():
+    _import_structure["modeling_vit"] = ["ViTModel"]
+
+if is_tf_available():
+    _import_structure["modeling_tf_vit"] = ["TFViTModel"]
+
+if is_flax_available():
+    _import_structure["modeling_flax_vit"] = ["FlaxViTModel"]
+
+if TYPE_CHECKING:
+    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+
+    if is_vision_available():
+        from .feature_extraction_vit import ViTFeatureExtractor
+
+    if is_torch_available():
+        from .modeling_vit import ViTModel
+
+    if is_tf_available():
+        from .modeling_tf_vit import ViTModel
+
+    if is_flax_available():
+        from .modeling_flax_vit import ViTModel
+
+else:
+    import sys
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+"""
+
+        init_no_feature_extractor = """
+from typing import TYPE_CHECKING
+
+from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
+
+_import_structure = {
+    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+}
+
+if is_torch_available():
+    _import_structure["modeling_vit"] = ["ViTModel"]
+
+if is_tf_available():
+    _import_structure["modeling_tf_vit"] = ["TFViTModel"]
+
+if is_flax_available():
+    _import_structure["modeling_flax_vit"] = ["FlaxViTModel"]
+
+if TYPE_CHECKING:
+    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+
+    if is_torch_available():
+        from .modeling_vit import ViTModel
+
+    if is_tf_available():
+        from .modeling_tf_vit import ViTModel
+
+    if is_flax_available():
+        from .modeling_flax_vit import ViTModel
+
+else:
+    import sys
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+"""
+
+        init_pt_only = """
+from typing import TYPE_CHECKING
+
+from ...file_utils import _LazyModule, is_torch_available, is_vision_available
+
+_import_structure = {
+    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+}
+
+if is_vision_available():
+    _import_structure["feature_extraction_vit"] = ["ViTFeatureExtractor"]
+
+if is_torch_available():
+    _import_structure["modeling_vit"] = ["ViTModel"]
+
+if TYPE_CHECKING:
+    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+
+    if is_vision_available():
+        from .feature_extraction_vit import ViTFeatureExtractor
+
+    if is_torch_available():
+        from .modeling_vit import ViTModel
+
+else:
+    import sys
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+"""
+
+        init_pt_only_no_feature_extractor = """
+from typing import TYPE_CHECKING
+
+from ...file_utils import _LazyModule, is_torch_available
+
+_import_structure = {
+    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+}
+
+if is_torch_available():
+    _import_structure["modeling_vit"] = ["ViTModel"]
+
+if TYPE_CHECKING:
+    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+
+    if is_torch_available():
+        from .modeling_vit import ViTModel
+
+else:
+    import sys
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+"""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_name = os.path.join(tmp_dir, "__init__.py")
+
+            self.init_file(file_name, test_init)
+            clean_frameworks_in_init(file_name, keep_processing=False)
+            self.check_result(file_name, init_no_feature_extractor)
+
+            self.init_file(file_name, test_init)
+            clean_frameworks_in_init(file_name, frameworks=["pt"])
+            self.check_result(file_name, init_pt_only)
+
+            self.init_file(file_name, test_init)
+            clean_frameworks_in_init(file_name, frameworks=["pt"], keep_processing=False)
+            self.check_result(file_name, init_pt_only_no_feature_extractor)
 
     def test_duplicate_doc_file(self):
         test_doc = """
