@@ -307,24 +307,14 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
         n_repeats = 2
         audio_tiled = np.tile(audio, n_repeats)
-        output = speech_recognizer([audio_tiled], batch_size=2)
-        self.assertEqual(output, [{"text": ANY(str)}])
-        self.assertEqual(output[0]["text"][:6], "<s> <s")
+        # Batch_size = 1
+        output1 = speech_recognizer(audio_tiled, batch_size=1)
+        self.assertEqual(output1, [{"text": ANY(str)}])
+        self.assertEqual(output1[0]["text"][:6], "<s> <s")
 
-    def test_chunking_fast_with_lm_batch_size_1(self):
-        speech_recognizer = pipeline(
-            model="hf-internal-testing/processor_with_lm",
-            chunk_length_s=10.0,
-        )
-
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
-        audio = ds[40]["audio"]["array"]
-
-        n_repeats = 2
-        audio_tiled = np.tile(audio, n_repeats)
-        output = speech_recognizer(audio_tiled, batch_size=2)
-        self.assertEqual(output, {"text": ANY(str)})
-        self.assertEqual(output["text"][:6], "<s> <s")
+        output2 = speech_recognizer([audio_tiled], batch_size=2)
+        self.assertEqual(output2, [{"text": ANY(str)}])
+        self.assertEqual(output1, output2)
 
     @require_torch
     @require_pyctcdecode

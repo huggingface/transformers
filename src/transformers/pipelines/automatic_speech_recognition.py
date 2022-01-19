@@ -66,13 +66,14 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     return audio
 
 
-def audio_to_logits(tokens_or_logits, stride):
+def rescale_stride(tokens_or_logits, stride):
+    """
+    Rescales the stride values from audio space to tokens/logits space.
+
+    (160_000, 16_000, 16_000) -> (2000, 200, 200) for instance.
+    """
     # Shape is [B, SEQ] for tokens
     # [B, SEQ, V] for logits
-
-    is_batch_size_one = isinstance(stride, tuple) and not isinstance(stride[0], tuple)
-    if is_batch_size_one:
-        stride = [stride]
 
     max_token_n = tokens_or_logits.shape[1]
     max_input_n = max(input_n for input_n, _, _ in stride)
@@ -85,14 +86,11 @@ def audio_to_logits(tokens_or_logits, stride):
         new_stride = (token_n, left, right)
         new_strides.append(new_stride)
 
-    if is_batch_size_one:
-        new_strides = new_strides[0]
-
     return new_strides
 
 
 def apply_stride(tokens, stride):
-    new_stride = audio_to_logits(tokens, stride)
+    new_stride = rescale_stride(tokens, stride)
     for i, (input_n, left, right) in enumerate(new_stride):
         left_token = left
         right_token = input_n - right
@@ -274,7 +272,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # Send stride to `postprocess`.
                 # it needs to be handled there where
                 # the pieces are to be concatenated.
-                out["stride"] = audio_to_logits(logits, stride)
+                if isinstance(stride, tuple):
+                    stride = [stride]
+                out["stride"] = rescale_stride(logits, stride)
         elif self.type == "ctc":
             stride = model_inputs.pop("stride", None)
             outputs = self.model(**model_inputs)
