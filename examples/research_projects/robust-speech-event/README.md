@@ -662,7 +662,7 @@ The following table summarizes what platform to use for which problem.
 
 ## Talks
 
-We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozilla's Common Voice, Kensho-Technologies, Hugging Face.
+We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozilla's Common Voice, Meta AI Research and Hugging Face.
 
 ### Thursday, January 20th
 
