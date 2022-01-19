@@ -675,8 +675,8 @@ We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozi
 
  Speaker        | Topic                           | Time                  | Video |
 |-------------|---------------------------------|------------------------|------------------------|
-| Gabriel Habayeb, Mozilla Common Voice | The Common Voice Dataset | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=ic_J7ZCROBM)
-| Changhan Wang, Meta AI Research | XLS-R: Large-Scale Cross-lingual Speech Representation Learning on 128 Languages | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=Vvn984QmAVg)
+| Gabriel Habayeb, Mozilla Common Voice | The Common Voice Dataset | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=Vvn984QmAVg)
+| Changhan Wang, Meta AI Research | XLS-R: Large-Scale Cross-lingual Speech Representation Learning on 128 Languages | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=ic_J7ZCROBM)
 
 ### Talks & Speakers
 
