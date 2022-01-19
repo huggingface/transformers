@@ -1161,7 +1161,9 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
         loss = (
-            None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=prediction_scores)
+            None
+            if inputs["labels"] is None
+            else self.hf_compute_loss(labels=inputs["labels"], logits=prediction_scores)
         )
 
         if not inputs["return_dict"]:
@@ -1741,7 +1743,7 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         pooled_output = outputs[1]
         pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
         logits = self.classifier(inputs=pooled_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(labels=inputs["labels"], logits=logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]

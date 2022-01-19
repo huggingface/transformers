@@ -82,7 +82,7 @@ class TFAlbertPreTrainingLoss:
     MLM. .. note:: Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
     """
 
-    def compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
+    def hf_compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
@@ -941,7 +941,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
         if inputs["labels"] is not None and inputs["sentence_order_label"] is not None:
             d_labels = {"labels": inputs["labels"]}
             d_labels["sentence_order_label"] = inputs["sentence_order_label"]
-            total_loss = self.compute_loss(labels=d_labels, logits=(prediction_scores, sop_scores))
+            total_loss = self.hf_compute_loss(labels=d_labels, logits=(prediction_scores, sop_scores))
 
         if not inputs["return_dict"]:
             output = (prediction_scores, sop_scores) + outputs[2:]
@@ -1058,7 +1058,9 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         sequence_output = outputs[0]
         prediction_scores = self.predictions(hidden_states=sequence_output, training=inputs["training"])
         loss = (
-            None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=prediction_scores)
+            None
+            if inputs["labels"] is None
+            else self.hf_compute_loss(labels=inputs["labels"], logits=prediction_scores)
         )
 
         if not inputs["return_dict"]:
@@ -1163,7 +1165,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
         pooled_output = outputs[1]
         pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
         logits = self.classifier(inputs=pooled_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(labels=inputs["labels"], logits=logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
@@ -1270,7 +1272,7 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
         sequence_output = outputs[0]
         sequence_output = self.dropout(inputs=sequence_output, training=inputs["training"])
         logits = self.classifier(inputs=sequence_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(labels=inputs["labels"], logits=logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
@@ -1385,7 +1387,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
         if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
             labels = {"start_position": inputs["start_positions"]}
             labels["end_position"] = inputs["end_positions"]
-            loss = self.compute_loss(labels=labels, logits=(start_logits, end_logits))
+            loss = self.hf_compute_loss(labels=labels, logits=(start_logits, end_logits))
 
         if not inputs["return_dict"]:
             output = (start_logits, end_logits) + outputs[2:]
@@ -1527,7 +1529,9 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
         logits = self.classifier(inputs=pooled_output)
         reshaped_logits = tf.reshape(tensor=logits, shape=(-1, num_choices))
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=reshaped_logits)
+        loss = (
+            None if inputs["labels"] is None else self.hf_compute_loss(labels=inputs["labels"], logits=reshaped_logits)
+        )
 
         if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[2:]

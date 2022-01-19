@@ -1418,12 +1418,12 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
         target = tf.concat([target[:, 1:], tf.fill([target.shape[0], 1], self.config.generator.pad_token_id)], axis=1)
         rag_logprobs = self.marginalize(seq_logits, doc_scores, n_docs)
-        loss = self.compute_loss(target, rag_logprobs, from_logits=True, reduce_loss=reduce_loss)
+        loss = self.hf_compute_loss(target, rag_logprobs, from_logits=True, reduce_loss=reduce_loss)
 
         return loss
 
     # Adopted modeling_tf_bart + add smooth_loss to match with pytorch version
-    def compute_loss(self, labels, y_pred, smooth_epsilon=0.0, from_logits=True, reduce_loss=False):
+    def hf_compute_loss(self, labels, y_pred, smooth_epsilon=0.0, from_logits=True, reduce_loss=False):
         """CrossEntropyLoss that ignores pad tokens"""
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True,
