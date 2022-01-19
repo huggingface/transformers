@@ -245,7 +245,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             # config_zero3["fp16"]["enabled"] = True
             # This setting slows things down, so don't enable it by default unless needed by a test.
             # It's in the file as a demo for users since we want everything to work out of the box even if slower.
-            config_zero3["zero_optimization"]["stage3_gather_fp16_weights_on_model_save"] = False
+            config_zero3["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = False
 
         self.ds_config_dict = dict(
             zero2=config_zero2,
@@ -541,7 +541,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
         # XXX:
         if stage == ZERO3:  # and dtype == FP16:
-            ds_config_dict["zero_optimization"]["stage3_gather_fp16_weights_on_model_save"] = True
+            ds_config_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
 
         # save checkpoints
         with mockenv_context(**self.dist_env_1_gpu):
@@ -593,7 +593,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
         # XXX:
         if stage == ZERO3:  # and dtype == FP16:
-            ds_config_dict["zero_optimization"]["stage3_gather_fp16_weights_on_model_save"] = True
+            ds_config_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
 
         kwargs = dict(output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict)
         kwargs[dtype] = True

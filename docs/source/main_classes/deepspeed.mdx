@@ -367,7 +367,7 @@ cat <<'EOT' > ds_config_zero3.json
         "stage3_param_persistence_threshold": "auto",
         "stage3_max_live_parameters": 1e9,
         "stage3_max_reuse_distance": 1e9,
-        "stage3_gather_fp16_weights_on_model_save": true
+        "stage3_gather_16bit_weights_on_model_save": true
     },
 
     "gradient_accumulation_steps": "auto",
@@ -641,7 +641,7 @@ The following is an example configuration for ZeRO stage 3:
         "stage3_param_persistence_threshold": "auto",
         "stage3_max_live_parameters": 1e9,
         "stage3_max_reuse_distance": 1e9,
-        "stage3_gather_fp16_weights_on_model_save": true
+        "stage3_gather_16bit_weights_on_model_save": true
     }
 }
 ```
@@ -680,7 +680,7 @@ The following configuration values depend on the model's hidden size:
 therefore set these values to `auto` and the [`Trainer`] will automatically assign the recommended
 values. But, of course, feel free to set these explicitly as well.
 
-`stage3_gather_fp16_weights_on_model_save` enables model fp16 weights consolidation when model gets saved. With large
+`stage3_gather_16bit_weights_on_model_save` enables model fp16 weights consolidation when model gets saved. With large
 models and multiple GPUs this is an expensive operation both in terms of memory and speed. It's currently required if
 you plan to resume the training. Watch out for future updates that will remove this limitation and make things more
 flexible.
@@ -749,7 +749,7 @@ The following configuration example enables NVMe to offload both optimizer state
         "stage3_param_persistence_threshold": "auto",
         "stage3_max_live_parameters": 1e9,
         "stage3_max_reuse_distance": 1e9,
-        "stage3_gather_fp16_weights_on_model_save": true
+        "stage3_gather_16bit_weights_on_model_save": true
     },
 }
 ```
@@ -955,7 +955,7 @@ Here is a full ZeRO-3 auto-configuration file `ds_config_zero3.json`:
         "stage3_param_persistence_threshold": "auto",
         "stage3_max_live_parameters": 1e9,
         "stage3_max_reuse_distance": 1e9,
-        "stage3_gather_fp16_weights_on_model_save": true
+        "stage3_gather_16bit_weights_on_model_save": true
     },
 
     "gradient_accumulation_steps": "auto",
@@ -1018,7 +1018,7 @@ values look like, but we highly recommend using the one with multiple `auto` set
         "stage3_param_persistence_threshold": 1e4,
         "stage3_max_live_parameters": 1e9,
         "stage3_max_reuse_distance": 1e9,
-        "stage3_gather_fp16_weights_on_model_save": true
+        "stage3_gather_16bit_weights_on_model_save": true
     },
 
     "steps_per_print": 2000,
@@ -1432,7 +1432,7 @@ When a model is saved under ZeRO-2, you end up having the normal `pytorch_model.
 they are only the fp16 version of the weights.
 
 Under ZeRO-3, things are much more complicated, since the model weights are partitioned out over multiple GPUs,
-therefore `"stage3_gather_fp16_weights_on_model_save": true` is required to get the `Trainer` to save the fp16
+therefore `"stage3_gather_16bit_weights_on_model_save": true` is required to get the `Trainer` to save the fp16
 version of the weights. If this setting is `False` ``pytorch_model.bin` won't be created. This is because by default DeepSpeed's `state_dict` contains a placeholder and not the real weights. If we were to save this `state_dict`` it
 won't be possible to load it back.
 
@@ -1440,7 +1440,7 @@ won't be possible to load it back.
 ```json
 {
     "zero_optimization": {
-        "stage3_gather_fp16_weights_on_model_save": true
+        "stage3_gather_16bit_weights_on_model_save": true
     }
 }
 ```
