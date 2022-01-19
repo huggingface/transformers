@@ -326,7 +326,9 @@ class YosoSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = position_embedding_type if position_embedding_type is not None else config.position_embedding_type
+        self.position_embedding_type = (
+            position_embedding_type if position_embedding_type is not None else config.position_embedding_type
+        )
 
         self.use_expectation = config.use_expectation
         self.hash_code_len = config.hash_code_len
@@ -356,9 +358,11 @@ class YosoSelfAttention(nn.Module):
             loaded = load_cuda_kernels()
 
             if not loaded:
-                raise ValueError("""Failed to compile CUDA kernels. Ensure that the correct versions of PyTorch and cudatoolkit
+                raise ValueError(
+                    """Failed to compile CUDA kernels. Ensure that the correct versions of PyTorch and cudatoolkit
                     are installed and try again. Alternatively, avoid loading CUDA kernels by using YOSO Expectation by
-                    setting use_expectation=True.""")
+                    setting use_expectation=True."""
+                )
 
     def transpose_for_scores(self, layer):
         new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -400,15 +404,24 @@ class YosoSelfAttention(nn.Module):
 
         if (not self.use_expectation) and head_dim < gpu_warp_size:
             query_layer = torch.cat(
-                [query_layer, torch.zeros(batch_size * num_heads, seq_len, gpu_warp_size - head_dim, device=query_layer.device)],
+                [
+                    query_layer,
+                    torch.zeros(batch_size * num_heads, seq_len, gpu_warp_size - head_dim, device=query_layer.device),
+                ],
                 dim=-1,
             )
             key_layer = torch.cat(
-                [key_layer, torch.zeros(batch_size * num_heads, seq_len, gpu_warp_size - head_dim, device=key_layer.device)],
+                [
+                    key_layer,
+                    torch.zeros(batch_size * num_heads, seq_len, gpu_warp_size - head_dim, device=key_layer.device),
+                ],
                 dim=-1,
             )
             value_layer = torch.cat(
-                [value_layer, torch.zeros(batch_size * num_heads, seq_len, gpu_warp_size - head_dim, device=value_layer.device)],
+                [
+                    value_layer,
+                    torch.zeros(batch_size * num_heads, seq_len, gpu_warp_size - head_dim, device=value_layer.device),
+                ],
                 dim=-1,
             )
 
@@ -804,8 +817,7 @@ YOSO_START_DOCSTRING = r"""
     Parameters:
         config ([`YosoConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 YOSO_INPUTS_DOCSTRING = r"""
@@ -813,9 +825,8 @@ YOSO_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`AutoTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
@@ -826,27 +837,29 @@ YOSO_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         head_mask (:
-            obj:*torch.FloatTensor* of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*): Mask
-            to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+            obj:*torch.FloatTensor* of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*): Mask to nullify
+            selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert *input_ids* indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -870,10 +883,9 @@ class YosoModel(YosoPreTrainedModel):
     all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration
-    set to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder`
-    argument and `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an
-    input to the forward pass.
+    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
+    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
+    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
     def __init__(self, config):
@@ -924,9 +936,9 @@ class YosoModel(YosoPreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (:
-            obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Sequence
-            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model
-            is configured as a decoder.
+            obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model is
+            configured as a decoder.
         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
@@ -934,15 +946,15 @@ class YosoModel(YosoPreTrainedModel):
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
         past_key_values (:
-            obj:*tuple(tuple(torch.FloatTensor))* of length `config.n_layers` with each tuple having 4 tensors of
-            shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key
-            and value hidden states of the attention blocks. Can be used to speed up decoding. If
-            `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            obj:*tuple(tuple(torch.FloatTensor))* of length `config.n_layers` with each tuple having 4 tensors of shape
+            `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key and value
+            hidden states of the attention blocks. Can be used to speed up decoding. If `past_key_values` are used, the
+            user can optionally input only the last `decoder_input_ids` (those that don't have their past key value
+            states given to this model) of shape `(batch_size, 1)` instead of all `decoder_input_ids` of shape
+            `(batch_size, sequence_length)`.
         use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1084,8 +1096,9 @@ class YosoForMaskedLM(YosoPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1186,9 +1199,9 @@ class YosoForCausalLM(YosoPreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (:
-            obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Sequence
-            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model
-            is configured as a decoder.
+            obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model is
+            configured as a decoder.
         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
@@ -1197,44 +1210,43 @@ class YosoForCausalLM(YosoPreTrainedModel):
             - 0 for tokens that are **masked**.
         past_key_values (:
             obj:*tuple(tuple(torch.FloatTensor))*, *optional*, returned when `use_cache=True` is passed or when
-            `config.use_cache=True`): Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with
-            each tuple having 2 tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-            and 2 additional tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two additional tensors are only required when the model is used as a decoder in
-            a Sequence to Sequence model.
+            `config.use_cache=True`): Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple
+            having 2 tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
+            tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two
+            additional tensors are only required when the model is used as a decoder in a Sequence to Sequence model.
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
         use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
 
         Returns:
 
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, YosoForCausalLM, YosoConfig 
+        >>> from transformers import AutoTokenizer, YosoForCausalLM, YosoConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained('uw-madison/yoso-4096') 
-        >>> config = YosoConfig.from_pretrained("uw-madison/yoso-4096") 
-        >>> config.is_decoder = True 
-        >>> model = YosoForCausalLM.from_pretrained('uw-madison/yoso-4096', config=config)
+        >>> tokenizer = AutoTokenizer.from_pretrained("uw-madison/yoso-4096")
+        >>> config = YosoConfig.from_pretrained("uw-madison/yoso-4096")
+        >>> config.is_decoder = True
+        >>> model = YosoForCausalLM.from_pretrained("uw-madison/yoso-4096", config=config)
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt") 
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.yoso(
@@ -1345,8 +1357,9 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1437,7 +1450,8 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1618,12 +1632,12 @@ class YosoForQuestionAnswering(YosoPreTrainedModel):
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

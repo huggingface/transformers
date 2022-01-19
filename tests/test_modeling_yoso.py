@@ -439,7 +439,7 @@ class YosoModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-0.0611,  0.1242,  0.0840], [ 0.0280, -0.0048,  0.1125], [ 0.0106,  0.0226,  0.0751]]]
+            [[[-0.0611, 0.1242, 0.0840], [0.0280, -0.0048, 0.1125], [0.0106, 0.0226, 0.0751]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
@@ -458,7 +458,7 @@ class YosoModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-2.1313, -3.7285, -2.2407], [-2.7047, -3.3314, -2.6408], [ 0.0629, -2.5166, -0.3356]]]
+            [[[-2.1313, -3.7285, -2.2407], [-2.7047, -3.3314, -2.6408], [0.0629, -2.5166, -0.3356]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

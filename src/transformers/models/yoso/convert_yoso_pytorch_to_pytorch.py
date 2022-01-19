@@ -15,8 +15,11 @@
 """Convert YOSO checkpoints from the original repository. URL: https://github.com/mlpen/YOSO"""
 
 import argparse
+
 import torch
+
 from transformers import YosoConfig, YosoForMaskedLM
+
 
 def rename_key(orig_key):
     if "model" in orig_key:
@@ -55,6 +58,7 @@ def rename_key(orig_key):
 
     return orig_key
 
+
 def convert_checkpoint_helper(max_position_embeddings, orig_state_dict):
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
@@ -65,14 +69,13 @@ def convert_checkpoint_helper(max_position_embeddings, orig_state_dict):
             orig_state_dict[rename_key(key)] = val
 
     orig_state_dict["cls.predictions.bias"] = orig_state_dict["cls.predictions.decoder.bias"]
-    orig_state_dict["yoso.embeddings.position_ids"] = (
-        torch.arange(max_position_embeddings).expand((1, -1)) + 2
-    )
+    orig_state_dict["yoso.embeddings.position_ids"] = torch.arange(max_position_embeddings).expand((1, -1)) + 2
 
     return orig_state_dict
 
+
 def convert_yoso_checkpoint(checkpoint_path, yoso_config_file, pytorch_dump_path):
-    
+
     orig_state_dict = torch.load(checkpoint_path, map_location="cpu")["model_state_dict"]
     config = YosoConfig.from_json_file(yoso_config_file)
     model = YosoForMaskedLM(config)
@@ -84,6 +87,7 @@ def convert_yoso_checkpoint(checkpoint_path, yoso_config_file, pytorch_dump_path
     model.save_pretrained(pytorch_dump_path)
 
     print(f"Checkpoint successfuly converted. Model saved at {pytorch_dump_path}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
