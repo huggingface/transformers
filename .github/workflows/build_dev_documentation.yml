@@ -38,7 +38,7 @@ jobs:
         if: github.event.action == 'opened' || github.event.action == 'reopened'
 
         with:
-          message: 'Thank you for your PR! The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_$PR_NUMBER). All of your documentation changes will be reflected on that endpoint.'
+          message: 'Thank you for your PR! The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_${{ env.PR_NUMBER }}). All of your documentation changes will be reflected on that endpoint.'
           GITHUB_TOKEN: ${{ env.WRITE }}
 
       - name: Loading cache.
