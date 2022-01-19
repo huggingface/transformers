@@ -142,18 +142,28 @@ def is_dist_avail_and_initialized():
 
 # copied from original implementation
 def dice_loss(inputs: Tensor, targets: Tensor, num_masks: float) -> Tensor:
-    """
-    Compute the DICE loss, similar to generalized IOU for masks
+    r"""
+    Compute the DICE loss, similar to generalized IOU for masks as follow
+
+    .. math::
+        \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x \cap y }{x \cup y + 1}}
+
+    In practice, since `targets` is a binary mask, (only 0s and 1s), dice can be computed as follow
+
+    .. math::
+        \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x * y }{x + y + 1}}
+
     Args:
-        inputs: A float tensor of arbitrary shape.
-                The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs
-                (0 for the negative class and 1 for the positive class).
+        inputs (Tensor): A tensor representing a mask
+        targets (Tensor): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
+
+
+    Returns:
+        Tensor: The computed loss
     """
     probs: Tensor = inputs.sigmoid().flatten(1)
-    numerator = 2 * (probs * targets).sum(-1)
-    denominator = probs.sum(-1) + targets.sum(-1)
+    numerator: Tensor = 2 * (probs * targets).sum(-1)
+    denominator: Tensor = probs.sum(-1) + targets.sum(-1)
     loss: Tensor = 1 - (numerator + 1) / (denominator + 1)
     loss = loss.sum() / num_masks
     return loss
@@ -163,20 +173,28 @@ def dice_loss(inputs: Tensor, targets: Tensor, num_masks: float) -> Tensor:
 def sigmoid_focal_loss(
     inputs: Tensor, targets: Tensor, num_masks: int, alpha: float = 0.25, gamma: float = 2
 ) -> Tensor:
-    """
-    Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+    r"""
+       Focal loss proposed in `Focal Loss for Dense Object Detection
+    <https://arxiv.org/abs/1708.02002>`_ originally used in RetinaNet. The loss is computed as follows
+
+    .. math::
+         \mathcal{L}_{\text{focal loss} = -(1 - p_t)^{\gamma}\log{(p_t)}
+
+    where :math:`CE(p_t) = -\log{(p_t)}}`, CE is the standard Cross Entropy Loss
+
+    Please refer to equation (1,2,3) of the paper for a better understanding.
+
+
     Args:
-        inputs: A float tensor of arbitrary shape.
+        inputs (Tensor): A float tensor of arbitrary shape.
                 The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs
-                (0 for the negative class and 1 for the positive class).
-        alpha: (optional) Weighting factor in range (0,1) to balance
+        targets (Tensor,): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
+        alpha (float, optional): Weighting factor in range (0,1) to balance
                 positive vs negative examples. Default = -1 (no weighting).
-        gamma: Exponent of the modulating factor (1 - p_t) to
-               balance easy vs hard examples.
+        gamma (float, optional): Exponent of the modulating factor (1 - p_t) to
+                balance easy vs hard examples.
     Returns:
-        Loss tensor
+        Tensor: The computed loss
     """
     probs: Tensor = inputs.sigmoid()
     ce_loss: Tensor = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
@@ -189,6 +207,62 @@ def sigmoid_focal_loss(
 
     loss = loss.mean(1).sum() / num_masks
     return loss
+
+
+def pair_wise_dice_loss(self, inputs: Tensor, targets: Tensor) -> Tensor:
+    """
+    A pair wise version of the dice loss, see `dice_loss` for usage
+
+    Args:
+        inputs (Tensor): A tensor representing a mask
+        targets (Tensor): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
+
+
+    Returns:
+        Tensor: The computed loss between each pairs
+    """
+    inputs: Tensor = inputs.sigmoid()
+    # TODO this .flatten seems to be unecessary because the shape is 2d
+    inputs: Tensor = inputs.flatten(1)
+    # TODO why 1 is not added to the number to avoid numerator = 0 in edge cases?
+    numerator: Tensor = 2 * torch.einsum("nc,mc->nm", inputs, targets)
+    # using broadcasting to get a [NUM_QUERIES, NUM_CLASSES] matrix
+    denominator: Tensor = inputs.sum(-1)[:, None] + targets.sum(-1)[None, :]
+    loss: Tensor = 1 - (numerator + 1) / (denominator + 1)
+    return loss
+
+
+def pair_wise_sigmoid_focal_loss(inputs: Tensor, targets: Tensor, alpha: float = 0.25, gamma: float = 2.0) -> Tensor:
+    """
+    A pair wise version of the focal loss, see `sigmoid_focal_loss` for usage
+
+    Args:
+        inputs (Tensor): A tensor representing a mask
+        targets (Tensor): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
+
+
+    Returns:
+        Tensor: The computed loss between each pairs
+    """
+    if alpha < 0:
+        raise ValueError(f"alpha must be positive")
+
+    hw: int = inputs.shape[1]
+
+    prob: Tensor = inputs.sigmoid()
+    focal_pos: Tensor = ((1 - prob) ** gamma) * F.binary_cross_entropy_with_logits(
+        inputs, torch.ones_like(inputs), reduction="none"
+    )
+    focal_neg: Tensor = (prob ** gamma) * F.binary_cross_entropy_with_logits(
+        inputs, torch.zeros_like(inputs), reduction="none"
+    )
+
+    focal_pos *= alpha
+    focal_neg *= 1 - alpha
+
+    loss: Tensor = torch.einsum("nc,mc->nm", focal_pos, targets) + torch.einsum("nc,mc->nm", focal_neg, (1 - targets))
+
+    return loss / hw
 
 
 # copied from original implementation
@@ -215,66 +289,6 @@ class MaskFormerHungarianMatcher(nn.Module):
         self.cost_mask = cost_mask
         self.cost_dice = cost_dice
 
-    def pair_wise_dice_loss(self, inputs: Tensor, targets: Tensor) -> Tensor:
-        """
-        Compute the DICE loss, similar to generalized IOU for masks
-        Args:
-            inputs: A float tensor of arbitrary shape.
-                    The predictions for each example.
-            targets: A float tensor with the same shape as inputs. Stores the binary
-                    classification label for each element in inputs
-                    (0 for the negative class and 1 for the positive class).
-        """
-        inputs: Tensor = inputs.sigmoid()
-        # TODO this .flatten seems to be unecessary because the shape is 2d
-        inputs: Tensor = inputs.flatten(1)
-        # TODO why 1 is not added to the number to avoid numerator = 0 in edge cases?
-        numerator: Tensor = 2 * torch.einsum("nc,mc->nm", inputs, targets)
-        # using broadcasting to get a [NUM_QUERIES, NUM_CLASSES] matrix
-        denominator: Tensor = inputs.sum(-1)[:, None] + targets.sum(-1)[None, :]
-        loss: Tensor = 1 - (numerator + 1) / (denominator + 1)
-        return loss
-
-    def pair_wise_sigmoid_focal_loss(
-        self, inputs: Tensor, targets: Tensor, alpha: float = 0.25, gamma: float = 2.0
-    ) -> Tensor:
-        """
-        Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
-        Args:
-            inputs: A float tensor of arbitrary shape.
-                    The predictions for each example.
-            targets: A float tensor with the same shape as inputs. Stores the binary
-                    classification label for each element in inputs
-                    (0 for the negative class and 1 for the positive class).
-            alpha: (optional) Weighting factor in range (0,1) to balance
-                    positive vs negative examples. Default = -1 (no weighting).
-            gamma: Exponent of the modulating factor (1 - p_t) to
-                balance easy vs hard examples.
-        Returns:
-            Loss tensor
-        """
-        if alpha < 0:
-            raise ValueError(f"alpha must be positive")
-
-        hw: int = inputs.shape[1]
-
-        prob: Tensor = inputs.sigmoid()
-        focal_pos: Tensor = ((1 - prob) ** gamma) * F.binary_cross_entropy_with_logits(
-            inputs, torch.ones_like(inputs), reduction="none"
-        )
-        focal_neg: Tensor = (prob ** gamma) * F.binary_cross_entropy_with_logits(
-            inputs, torch.zeros_like(inputs), reduction="none"
-        )
-
-        focal_pos *= alpha
-        focal_neg *= 1 - alpha
-
-        loss: Tensor = torch.einsum("nc,mc->nm", focal_pos, targets) + torch.einsum(
-            "nc,mc->nm", focal_neg, (1 - targets)
-        )
-
-        return loss / hw
-
     @torch.no_grad()
     def forward(self, outputs: Dict[str, Tensor], targets: List[Dict[str, Tensor]]) -> List[Tuple[Tensor]]:
         """Performs the matching
@@ -297,7 +311,7 @@ class MaskFormerHungarianMatcher(nn.Module):
                 len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
 
-        indices = []
+        indices: List[Tuple[np.array]] = []
 
         # iterate through batch size
         for i, (pred_logit, pred_mask) in enumerate(zip(outputs["pred_logits"], outputs["pred_masks"])):
@@ -318,9 +332,9 @@ class MaskFormerHungarianMatcher(nn.Module):
             # still not sure why we didn't add a batch dimension
             target_mask_flat: Tensor = rearrange(target_mask[:, 0], "c h w -> c (h w)")  # [num_total_targets, H*W]
             # compute the focal loss between each mask pairs -> shape [NUM_QUERIES, CLASSES]
-            cost_mask: Tensor = self.pair_wise_sigmoid_focal_loss(pred_mask_flat, target_mask_flat)
+            cost_mask: Tensor = pair_wise_sigmoid_focal_loss(pred_mask_flat, target_mask_flat)
             # Compute the dice loss betwen each mask pairs -> shape [NUM_QUERIES, CLASSES]
-            cost_dice: Tensor = self.pair_wise_dice_loss(pred_mask_flat, target_mask_flat)
+            cost_dice: Tensor = pair_wise_dice_loss(pred_mask_flat, target_mask_flat)
             # final cost matrix
             cost_matrix: Tensor = (
                 self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
@@ -352,12 +366,6 @@ class MaskFormerHungarianMatcher(nn.Module):
 
 # copied from original implementation
 class MaskFormerLoss(nn.Module):
-    """This class computes the loss for MaskFormer, heavily based on DETR.
-    The process happens in two steps:
-        1) we compute hungarian assignment between ground truth masks and the outputs of the model
-        2) we supervise each pair of matched ground-truth / prediction (supervise class and mask)
-    """
-
     def __init__(
         self,
         num_classes: int,
@@ -366,14 +374,18 @@ class MaskFormerLoss(nn.Module):
         eos_coef: float,
         losses: List[str],
     ):
-        """Create the criterion.
-        Parameters:
-            num_classes: number of object categories, omitting the special no-object category
-            matcher: module able to compute a matching between targets and proposals
-            weight_dict: dict containing as key the names of the losses and as values their relative weight.
-            eos_coef: relative classification weight applied to the no-object category
-            losses: list of all the losses to be applied. See get_loss for list of available losses.
+        """The MaskFormer Loss. The loss is computed very similar to DETR. The process happens in two steps:
+        1) we compute hungarian assignment between ground truth masks and the outputs of the model
+        2) we supervise each pair of matched ground-truth / prediction (supervise class and mask)
+
+        Args:
+            num_classes (int): The number of classes
+            matcher (MaskFormerHungarianMatcher): A torch module that computes the assigments between the predictions and targets
+            weight_dict (Dict[str, float]): A dictionary of weights to be applied to the different losses
+            eos_coef (float): TODO no idea
+            losses (List[str]): A list of losses to be used TODO probably remove it
         """
+
         super().__init__()
         requires_backends(self, ["scipy"])
         self.num_classes = num_classes
@@ -381,7 +393,7 @@ class MaskFormerLoss(nn.Module):
         self.weight_dict = weight_dict
         self.eos_coef = eos_coef
         self.losses = losses
-        empty_weight = torch.ones(self.num_classes + 1)
+        empty_weight: Tensor = torch.ones(self.num_classes + 1)
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
 
@@ -1165,7 +1177,7 @@ class SwinTransformerBackbone(SwinTransformer, BackboneMixin):
 
 class ConvLayer(nn.Sequential):
     def __init__(self, in_features: int, out_features: int, kernel_size: int = 3, padding: int = 1):
-        """A basic module that executs conv - act - norm in sequence
+        """A basic module that executs conv - norm - act in sequence
         used in MaskFormer
 
         Args:
@@ -1393,9 +1405,8 @@ class MaskFormerSegmentationModule(nn.Module):
         if self.mask_classification:
             classes: Tensor = self.class_predictor(last_decoder_output)
             out.update({"pred_logits": classes})
-
         # sum up over the channels
-        binary_masks: Tensor = torch.einsum("bqc, bchw -> bqhw", mask_embeddings, pixel_embbeddings)
+        binary_masks: Tensor = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embbeddings)
         # TODO add a MaskFormer<>Output for this module too! REVIEW -> ask!
         out.update({"pred_masks": binary_masks})
         return out
@@ -1411,14 +1422,24 @@ class MaskFormerOutput(ModelOutput):
 
 
 def upsample_like(x: Tensor, like: Tensor, mode: str = "bilinear") -> Tensor:
+    """An utility function that upsamples `x` to match the dimension of `like`
+
+    Args:
+        x (Tensor): The tensor we wish to upsample
+        like (Tensor): The tensor we wish to use as size target
+        mode (str, optional): The interpolation mode. Defaults to "bilinear".
+
+    Returns:
+        Tensor: The upsampled tensor
+    """
     _, _, h, w = like.shape
-    x = F.interpolate(
+    upsampled: Tensor = F.interpolate(
         x,
         size=(h, w),
         mode=mode,
         align_corners=False,
     )
-    return x
+    return upsampled
 
 
 class MaskFormerModel(PreTrainedModel):
@@ -1438,6 +1459,9 @@ class MaskFormerModel(PreTrainedModel):
         )
 
         losses = ["labels", "masks"]
+        # TODO I don't like too aggressive abbreviations in the naming
+        # what is 'ce'? It's cross entropy but it's not clear
+        # ask if we should follow a more exhaustive naming convention
         self.weight_dict: Dict[str, float] = {
             "loss_ce": config.ce_weight,
             "loss_mask": config.mask_weight,
@@ -1455,7 +1479,7 @@ class MaskFormerModel(PreTrainedModel):
     def forward(self, pixel_values: Tensor, targets: Optional[Dict[str, Tensor]] = None) -> MaskFormerOutput:
         image_features, pixel_embeddings = self.pixel_level_module(pixel_values)
         queries = self.transformer_module(image_features)
-        outputs = self.segmentation_module(queries, pixel_embeddings)
+        outputs: Dict[str, Tensor] = self.segmentation_module(queries, pixel_embeddings)
 
         loss_dict: Dict[str, Tensor] = {}
         loss: Tensor = None
@@ -1463,13 +1487,14 @@ class MaskFormerModel(PreTrainedModel):
             loss_dict = self.get_loss_dict(outputs, targets)
             loss = self.get_loss(loss_dict)
         else:
-            # upsample the masks to match the input spatial dimension
+            # upsample the masks to match the inputs' spatial dimension
             outputs["pred_masks"] = upsample_like(outputs["pred_masks"], pixel_values)
 
         return MaskFormerOutput(**outputs, loss_dict=loss_dict, loss=loss)
 
     def get_loss_dict(self, outputs: Dict[str, Tensor], targets: Dict[str, Tensor]) -> Dict[str, Tensor]:
         loss_dict: Dict[str, Tensor] = self.criterion(outputs, targets)
+        # weight each loss by `self.weight_dict[<LOSS_NAME>]`
         weighted_loss_dict: Dict[str, Tensor] = {k: v * self.weight_dict[k] for k, v in loss_dict.items()}
         return weighted_loss_dict
 
