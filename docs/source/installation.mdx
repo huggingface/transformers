@@ -110,7 +110,9 @@ pip install -e .
 These commands will link the folder you cloned the repository to and your Python library paths. Python will now look inside the folder you cloned to in addition to the normal library paths. For example, if your Python packages are typically installed in `~/anaconda3/envs/main/lib/python3.7/site-packages/`, Python will also search the folder you cloned to: `~/transformers/`.
 
 <Tip warning={true}>
+
 You must keep the `transformers` folder if you want to keep using the library.
+
 </Tip>
 
 Now you can easily update your clone to the latest version of 🤗 Transformers with the following command:
@@ -139,7 +141,9 @@ Pretrained models are downloaded and locally cached at: `~/.cache/huggingface/tr
 3. Shell environment variable: `XDG_CACHE_HOME` + `/huggingface/transformers`.
 
 <Tip>
+
 🤗 Transformers will use the shell environment variables `PYTORCH_TRANSFORMERS_CACHE` or `PYTORCH_PRETRAINED_BERT_CACHE` if you are coming from an earlier iteration of this library and have set those environment variables, unless you specify the shell environment variable `TRANSFORMERS_CACHE`.
+
 </Tip>
 
 ## Offline mode
@@ -147,7 +151,9 @@ Pretrained models are downloaded and locally cached at: `~/.cache/huggingface/tr
 🤗 Transformers is able to run in a firewalled or offline environment by only using local files. Set the environment variable `TRANSFORMERS_OFFLINE=1` to enable this behavior.
 
 <Tip>
+
 Add 🤗 [Datasets](https://huggingface.co/docs/datasets/) to your offline training workflow by setting the environment variable `HF_DATASETS_OFFLINE=1`.
+
 </Tip>
 
 For example, you would typically run a program on a normal network firewalled to external instances with the following command:
@@ -177,7 +183,7 @@ Another option for using 🤗 Transformers offline is to download the files ahea
 
     1. Download your files ahead of time with [`PreTrainedModel.from_pretrained`]:
 
-    ```python
+    ```py
     >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
     >>> tokenizer = AutoTokenizer.from_pretrained("bigscience/T0_3B")
@@ -186,16 +192,17 @@ Another option for using 🤗 Transformers offline is to download the files ahea
 
     2. Save your files to a specified directory with [`PreTrainedModel.save_pretrained`]:
 
-    ```python
+    ```py
     >>> tokenizer.save_pretrained("./your/path/bigscience_t0")
     >>> model.save_pretrained("./your/path/bigscience_t0")
     ```
 
     3. Now when you're offline, reload your files with [`PreTrainedModel.from_pretrained`] from the specified directory:
 
-    ```python
+    ```py
     >>> tokenizer =  AutoTokenizer.from_pretrained("./your/path/bigscience_t0")
     >>> model = AutoModel.from_pretrained("./your/path/bigscience_t0")
+    ```
 
 * Programmatically download files with the [`huggingface_hub`](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) library:
 
@@ -207,7 +214,7 @@ Another option for using 🤗 Transformers offline is to download the files ahea
 
     2. Use the [`hf_hub_download`](https://huggingface.co/docs/hub/adding-a-library#download-files-from-the-hub) function to download a file to a specific path. For example, the following command downloads the `config.json` file from the [T0](https://huggingface.co/bigscience/T0_3B) model to your desired path:
 
-    ```python
+    ```py
     >>> from huggingface_hub import hf_hub_download
 
     >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./your/path/bigscience_t0")
@@ -215,12 +222,14 @@ Another option for using 🤗 Transformers offline is to download the files ahea
 
 Once your file is downloaded and locally cached, specify it's local path to load and use it:
 
-```python
+```py
 >>> from transformers import AutoConfig
 
 >>> config = AutoConfig.from_pretrained("./your/path/bigscience_t0/config.json")
 ```
 
 <Tip>
+
 See the [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream) section for more details on downloading files stored on the Hub.
+
 </Tip>

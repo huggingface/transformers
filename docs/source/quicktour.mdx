@@ -259,16 +259,19 @@ tf.Tensor(
 ```
 
 <Tip>
+
 All 🤗 Transformers models (PyTorch or TensorFlow) outputs the tensors *before* the final activation
 function (like softmax) because the final activation function is often fused with the loss.
+
 </Tip>
 
 Models are standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) so you can use them in your usual training loop. However, to make things easier, 🤗 Transformers provides a [`Trainer`] class for PyTorch that adds functionality for distributed training, mixed precision, and more. For TensorFlow, you can use the `fit()` method from [Keras](https://keras.io/). Refer to the [training tutorial](./training) for more details.
 
 <Tip>
+
 🤗 Transformers model outputs are special dataclasses so their attributes are autocompleted in an IDE.
-The model outputs also behave like a tuple or a dictionary (e.g., you can index with an integer, a slice or a string) in which
-case the attributes that are `None` are ignored.
+The model outputs also behave like a tuple or a dictionary (e.g., you can index with an integer, a slice or a string) in which case the attributes that are `None` are ignored.
+
 </Tip>
 
 ### Save your model
