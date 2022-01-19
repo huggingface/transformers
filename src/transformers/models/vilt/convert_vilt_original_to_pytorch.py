@@ -29,8 +29,8 @@ from transformers import (
     ViltConfig,
     ViltFeatureExtractor,
     ViltForImageAndTextRetrieval,
+    ViltForImagesAndTextClassification,
     ViltForMaskedLM,
-    ViltForNaturalLanguageVisualReasoning,
     ViltForQuestionAnswering,
     ViltProcessor,
 )
@@ -193,7 +193,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.id2label = {0: "False", 1: "True"}
         config.label2id = {v: k for k, v in config.id2label.items()}
         config.modality_type_vocab_size = 3
-        model = ViltForNaturalLanguageVisualReasoning(config)
+        model = ViltForImagesAndTextClassification(config)
     elif "irtr" in checkpoint_url:
         irtr_model = True
         model = ViltForImageAndTextRetrieval(config)

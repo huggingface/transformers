@@ -14,9 +14,10 @@
 # limitations under the License.
 """ PyTorch ViLT model."""
 
-
 import collections.abc
 import math
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -26,7 +27,13 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    MaskedLMOutput,
+    ModelOutput,
+    SequenceClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_vilt import ViltConfig
@@ -41,6 +48,32 @@ VILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "dandelin/vilt-b32-mlm-itm",
     # See all ViLT models at https://huggingface.co/models?filter=vilt
 ]
+
+
+@dataclass
+class ViltForImagesAndTextClassificationOutput(ModelOutput):
+    """
+    Class for outputs of [`ViltForImagesAndTextClassification`].
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (`List[tuple(torch.FloatTensor)]`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            List of tuples of `torch.FloatTensor` (one for each image-text pair, each tuple containing the output of
+            the embeddings + one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`List[tuple(torch.FloatTensor)]`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            List of tuples of `torch.FloatTensor` (one for each image-text pair, each tuple containing the attention
+            weights of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights after the
+            attention softmax, used to compute the weighted average in the self-attention heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[List[Tuple[torch.FloatTensor]]] = None
+    attentions: Optional[List[Tuple[torch.FloatTensor]]] = None
 
 
 # Copied from transformers.models.vit.modeling_vit.to_2tuple
@@ -578,11 +611,84 @@ VILT_START_DOCSTRING = r"""
 
 VILT_INPUTS_DOCSTRING = r"""
     Args:
+        input_ids (`torch.LongTensor` of shape `({0})`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`BertTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
+
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+            [What are token type IDs?](../glossary#token-type-ids)
+
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`ViltFeatureExtractor`]. See
             [`ViltFeatureExtractor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
+
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+            `What are attention masks? <../glossary.html#attention-mask>`__
+
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
+            Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+"""
+
+VILT_IMAGES_AND_TEXT_CLASSIFICATION_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `({0})`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`BertTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
+
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+            [What are token type IDs?](../glossary#token-type-ids)
+
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_images, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`ViltFeatureExtractor`]. See
+            [`ViltFeatureExtractor.__call__`] for details.
+
+        pixel_mask (`torch.LongTensor` of shape `(batch_size, num_images, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
 
             - 1 for pixels that are real (i.e. **not masked**),
@@ -1131,9 +1237,9 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
     """
     Vilt Model transformer with a classifier head on top for natural language visual reasoning, e.g. NLVR2.
     """,
-    VILT_START_DOCSTRING,
+    VILT_IMAGES_AND_TEXT_CLASSIFICATION_INPUTS_DOCSTRING,
 )
-class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
+class ViltForImagesAndTextClassification(ViltPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1153,7 +1259,7 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ViltForImagesAndTextClassificationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1178,7 +1284,7 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ViltProcessor, ViltForNaturalLanguageVisualReasoning
+        >>> from transformers import ViltProcessor, ViltForImagesAndTextClassification
         >>> import requests
         >>> from PIL import Image
 
@@ -1187,18 +1293,14 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
         >>> text = "The left image contains twice the number of dogs as the right image."
 
         >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
-        >>> model = ViltForNaturalLanguageVisualReasoning.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
+        >>> model = ViltForImagesAndTextClassification.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
 
         >>> # prepare inputs
-        >>> encoding_1 = processor(image1, text, return_tensors="pt")
-        >>> encoding_2 = processor(image2, text, return_tensors="pt")
+        >>> encoding = processor([image1, image2], text, return_tensors="pt")
         >>> pixel_values = torch.stack([encoding_1.pixel_values, encoding_2.pixel_values], dim=1)
 
         >>> # forward pass
-        >>> outputs = model(
-        ...     input_ids=encoding_1.input_ids,
-        ...     pixel_values=pixel_values,
-        ... )
+        >>> outputs = model(input_ids=encoding.input_ids, pixel_values=encoding.pixel_values.unsqueeze(0))
         >>> logits = outputs.logits
         >>> idx = logits.argmax(-1).item()
         >>> print("Predicted answer:", model.config.id2label[idx])
@@ -1256,7 +1358,7 @@ class ViltForNaturalLanguageVisualReasoning(ViltPreTrainedModel):
             output = (logits, hidden_states, attentions)
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return ViltForImagesAndTextClassificationOutput(
             loss=loss,
             logits=logits,
             hidden_states=hidden_states,

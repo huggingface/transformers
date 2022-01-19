@@ -33,8 +33,8 @@ if is_torch_available():
     from transformers import (
         MODEL_MAPPING,
         ViltForImageAndTextRetrieval,
+        ViltForImagesAndTextClassification,
         ViltForMaskedLM,
-        ViltForNaturalLanguageVisualReasoning,
         ViltForQuestionAnswering,
         ViltModel,
     )
@@ -210,7 +210,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_torchscript = False
 
-    # ViltForMaskedLM, ViltForQuestionAnswering and ViltForNaturalLanguageVisualReasoning require special treatment
+    # ViltForMaskedLM, ViltForQuestionAnswering and ViltForImagesAndTextClassification require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -226,7 +226,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
-            elif model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+            elif model_class.__name__ == "ViltForImagesAndTextClassification":
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
@@ -252,7 +252,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+            if model_class.__name__ == "ViltForImagesAndTextClassification":
                 config.modality_type_vocab_size = 3
 
             # ViltForImageAndTextRetrieval doesn't support training for now
@@ -329,7 +329,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+            if model_class.__name__ == "ViltForImagesAndTextClassification":
                 # attentions are a list of length num_images
                 # each element contains the attentions of a particular image index
                 self.assertEqual(len(attentions), self.model_tester.num_images)
@@ -346,7 +346,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+            if model_class.__name__ == "ViltForImagesAndTextClassification":
                 # attentions are a list of length num_images
                 # each element contains the attentions of a particular image index
                 self.assertEqual(len(attentions), self.model_tester.num_images)
@@ -354,7 +354,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             else:
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+            if model_class.__name__ == "ViltForImagesAndTextClassification":
                 self.assertListEqual(
                     list(attentions[0][0].shape[-3:]),
                     [self.model_tester.num_attention_heads, seq_len, seq_len],
@@ -379,7 +379,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
-            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+            if model_class.__name__ == "ViltForImagesAndTextClassification":
                 self.assertEqual(len(self_attentions), self.model_tester.num_images)
                 self.assertEqual(len(self_attentions[0]), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
@@ -407,7 +407,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
-            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+            if model_class.__name__ == "ViltForImagesAndTextClassification":
                 # hidden_states are a list of length num_images
                 # each element contains the hidden states of a particular image index
                 self.assertEqual(len(hidden_states), self.model_tester.num_images)
@@ -417,7 +417,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
             seq_length = self.model_tester.expected_seq_len
 
-            if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+            if model_class.__name__ == "ViltForImagesAndTextClassification":
                 self.assertListEqual(
                     list(hidden_states[0][0].shape[-2:]),
                     [seq_length, self.model_tester.hidden_size],
@@ -461,7 +461,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
         hidden_states = outputs.hidden_states[0]
         attentions = outputs.attentions[0]
 
-        if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+        if model_class.__name__ == "ViltForImagesAndTextClassification":
             # hidden_states are a list of length num_images
             # each element contains the hidden states of a particular image index
             hidden_states[0].retain_grad()
@@ -472,7 +472,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
         output.flatten()[0].backward(retain_graph=True)
 
-        if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+        if model_class.__name__ == "ViltForImagesAndTextClassification":
             # hidden_states are a list of length num_images
             # each element contains the hidden states of a particular image index
             self.assertIsNotNone(hidden_states[0].grad)
@@ -489,9 +489,9 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class ViltForNaturalLanguageVisualReasoningModelTest(ViltModelTest, unittest.TestCase):
+class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCase):
 
-    all_model_classes = (ViltForNaturalLanguageVisualReasoning,) if is_torch_available() else ()
+    all_model_classes = (ViltForImagesAndTextClassification,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = ViltModelTester(self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2)
@@ -577,7 +577,7 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_natural_language_visual_reasoning(self):
-        model = ViltForNaturalLanguageVisualReasoning.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2").to(
+        model = ViltForImagesAndTextClassification.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2").to(
             torch_device
         )
 
