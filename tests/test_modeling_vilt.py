@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -214,8 +214,8 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
-        if model_class.__name__ == "ViltForNaturalLanguageVisualReasonining":
-            inputs_dict["pixel_values"] = floats_tensor
+        # if model_class.__name__ == "ViltForNaturalLanguageVisualReasonining":
+        #     inputs_dict["pixel_values"] = floats_tensor([self.model_tester.batch_size, self.model_tester.num_images, self.model_tester.num_channels, self.model_tester.image_size, self.model_tester.image_size])
 
         if return_labels:
             if model_class.__name__ == "ViltForQuestionAnswering":
@@ -441,6 +441,46 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        output = outputs[0]
+
+        # Encoder-/Decoder-only models
+        hidden_states = outputs.hidden_states[0]
+        attentions = outputs.attentions[0]
+
+        if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+            # hidden_states are a list of length num_images
+            # each element contains the hidden states of a particular image index
+            hidden_states[0].retain_grad()
+            attentions[0].retain_grad()
+        else:
+            hidden_states.retain_grad()
+            attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
+            # hidden_states are a list of length num_images
+            # each element contains the hidden states of a particular image index
+            self.assertIsNotNone(hidden_states[0].grad)
+            self.assertIsNotNone(attentions[0].grad)
+        else:
+            self.assertIsNotNone(hidden_states.grad)
+            self.assertIsNotNone(attentions.grad)
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in VILT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -456,6 +496,10 @@ class ViltForNaturalLanguageVisualReasoningModelTest(ViltModelTest, unittest.Tes
     def setUp(self):
         self.model_tester = ViltModelTester(self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2)
         self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=37)
+
+    @unittest.skip("We only test the model that takes in multiple images")
+    def test_model(self):
+        pass
 
 
 # We will verify our results on an image of cute cats
