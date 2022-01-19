@@ -55,6 +55,7 @@ jobs:
         run: |
           apt-get -y update && apt-get install -y libsndfile1-dev
 
+          pip uninstall -y doc-builder
           pip install git+https://github.com/huggingface/doc-builder -U
           cd transformers
           pip install .[dev]
