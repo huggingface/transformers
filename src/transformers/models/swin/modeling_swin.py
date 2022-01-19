@@ -111,7 +111,7 @@ class SwinEmbeddings(nn.Module):
             self.position_embeddings = None
 
         self.norm = nn.LayerNorm(config.embed_dim)
-        self.dropout = nn.Dropout(config.drop_rate)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, pixel_values):
         embeddings = self.patch_embeddings(pixel_values)
@@ -234,7 +234,7 @@ class SwinSelfAttention(nn.Module):
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
 
-        self.dropout = nn.Dropout(config.attn_drop_rate)
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -302,7 +302,7 @@ class SwinSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Linear(dim, dim)
-        self.dropout = nn.Dropout(config.attn_drop_rate)
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
@@ -362,7 +362,7 @@ class SwinOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Linear(int(config.mlp_ratio * dim), dim)
-        self.dropout = nn.Dropout(config.drop_rate)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)

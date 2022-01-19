@@ -62,8 +62,8 @@ class SwinModelTester:
         window_size=2,
         mlp_ratio=2.0,
         qkv_bias=True,
-        drop_rate=0.0,
-        attn_drop_rate=0.0,
+        hidden_dropout_prob=0.0,
+        attention_probs_dropout_prob=0.0,
         drop_path_rate=0.1,
         hidden_act="gelu",
         use_absolute_embeddings=False,
@@ -86,8 +86,8 @@ class SwinModelTester:
         self.window_size = window_size
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
-        self.drop_rate = drop_rate
-        self.attn_drop_rate = attn_drop_rate
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.drop_path_rate = drop_path_rate
         self.hidden_act = hidden_act
         self.use_absolute_embeddings = use_absolute_embeddings
@@ -121,8 +121,8 @@ class SwinModelTester:
             window_size=self.window_size,
             mlp_ratio=self.mlp_ratio,
             qkv_bias=self.qkv_bias,
-            drop_rate=self.drop_rate,
-            attn_drop_rate=self.attn_drop_rate,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             drop_path_rate=self.drop_path_rate,
             hidden_act=self.hidden_act,
             use_absolute_embeddings=self.use_absolute_embeddings,

@@ -57,13 +57,13 @@ class SwinConfig(PretrainedConfig):
         qkv_bias (`bool`, *optional*, defaults to True):
             Whether or not a learnable bias should be added to the queries, keys and values.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings and encoder.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             Stochastic depth rate.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            The non-linear activation function (function or string) in the encoder. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         use_absolute_embeddings (`bool`, *optional*, defaults to False):
             Whether or not to add absolute position embeddings to the patch embeddings.
@@ -101,8 +101,8 @@ class SwinConfig(PretrainedConfig):
         window_size=7,
         mlp_ratio=4.0,
         qkv_bias=True,
-        drop_rate=0.0,
-        attn_drop_rate=0.0,
+        hidden_dropout_prob=0.0,
+        attention_probs_dropout_prob=0.0,
         drop_path_rate=0.1,
         hidden_act="gelu",
         use_absolute_embeddings=False,
@@ -122,8 +122,8 @@ class SwinConfig(PretrainedConfig):
         self.window_size = window_size
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
-        self.drop_rate = drop_rate
-        self.attn_drop_rate = attn_drop_rate
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.drop_path_rate = drop_path_rate
         self.hidden_act = hidden_act
         self.use_absolute_embeddings = use_absolute_embeddings
