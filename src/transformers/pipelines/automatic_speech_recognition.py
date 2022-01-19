@@ -69,6 +69,11 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
 def audio_to_logits(tokens_or_logits, stride):
     # Shape is [B, SEQ] for tokens
     # [B, SEQ, V] for logits
+
+    is_batch_size_one = isinstance(stride, tuple) and not isinstance(stride[0], tuple)
+    if is_batch_size_one:
+        stride = [stride]
+
     max_token_n = tokens_or_logits.shape[1]
     max_input_n = max(input_n for input_n, _, _ in stride)
     ratio = max_token_n / max_input_n
@@ -79,6 +84,10 @@ def audio_to_logits(tokens_or_logits, stride):
         right = int(round(right / input_n * token_n))
         new_stride = (token_n, left, right)
         new_strides.append(new_stride)
+
+    if is_batch_size_one:
+        new_strides = new_strides[0]
+
     return new_strides
 
 
