@@ -18,7 +18,7 @@ Processor class for ViLT.
 
 from typing import List, Optional, Union
 
-from transformers import BertTokenizer
+from transformers import BertTokenizer, BertTokenizerFast
 
 from ...file_utils import TensorType
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
@@ -36,7 +36,7 @@ class ViltProcessor:
         feature_extractor (`ViltFeatureExtractor`):
             An instance of [`ViltFeatureExtractor`]. The feature extractor is a required input.
         tokenizer (`BertTokenizer`):
-            An instance of [`BertTokenizer`]. The tokenizer is a required input.
+            An instance of [`BertTokenizer`]/['BertTokenizerFast`]. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
@@ -44,8 +44,10 @@ class ViltProcessor:
             raise ValueError(
                 f"`feature_extractor` has to be of type {ViltFeatureExtractor.__class__}, but is {type(feature_extractor)}"
             )
-        if not isinstance(tokenizer, BertTokenizer):
-            raise ValueError(f"`tokenizer` has to be of type {BertTokenizer.__class__}, but is {type(tokenizer)}")
+        if not isinstance(tokenizer, (BertTokenizer, BertTokenizerFast)):
+            raise ValueError(
+                f"`tokenizer` has to be of type {BertTokenizer.__class__} or {BertTokenizerFast.__class__}, but is {type(tokenizer)}"
+            )
 
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer
