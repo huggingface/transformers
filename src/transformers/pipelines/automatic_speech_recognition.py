@@ -265,6 +265,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             out = {"tokens": tokens}
         elif self.type == "ctc_with_lm":
             stride = model_inputs.pop("stride", None)
+            print("Model inputs ", model_inputs["input_values"].shape)
             outputs = self.model(**model_inputs)
             logits = outputs.logits
             out = {"logits": logits}
@@ -273,8 +274,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # it needs to be handled there where
                 # the pieces are to be concatenated.
                 if isinstance(stride, tuple):
-                    stride = [stride]
-                out["stride"] = rescale_stride(logits, stride)
+                    out["stride"] = rescale_stride(logits, [stride])[0]
+                else:
+                    out["stride"] = rescale_stride(logits, stride)
         elif self.type == "ctc":
             stride = model_inputs.pop("stride", None)
             outputs = self.model(**model_inputs)
@@ -299,7 +301,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 logits = outputs["logits"].numpy()
                 stride = outputs.get("stride", None)
                 if stride is not None:
-                    total_n, left, right = stride
+                    try:
+                        total_n, left, right = stride
+                    except Exception:
+                        import ipdb
+
+                        ipdb.set_trace()
                     # Total_n might be < logits.shape[1]
                     # because of padding, that's why
                     # we need to reconstruct this information
