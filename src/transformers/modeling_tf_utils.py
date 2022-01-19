@@ -877,7 +877,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             warnings.warn(
                 "The old compute_loss method is deprecated as it conflicts with the Keras compute_loss "
                 "method added in TF 2.8. If you want the original HF compute_loss, please call "
-                "hf_compute_loss() instead.",
+                "hf_compute_loss() instead. From TF versions >= 2.8, or Transformers versions >= 5, "
+                "calling compute_loss() will get the Keras method instead.",
                 FutureWarning,
             )
             return self.hf_compute_loss(*args, **kwargs)
