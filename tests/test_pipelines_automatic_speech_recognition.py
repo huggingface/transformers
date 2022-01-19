@@ -296,6 +296,22 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(output[0]["text"][:6], "ZBT ZC")
 
     @require_torch
+    def test_chunking_fast_with_lm(self):
+        speech_recognizer = pipeline(
+            model="hf-internal-testing/processor_with_lm",
+            chunk_length_s=10.0,
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        n_repeats = 2
+        audio_tiled = np.tile(audio, n_repeats)
+        output = speech_recognizer([audio_tiled], batch_size=2)
+        self.assertEqual(output, [{"text": ANY(str)}])
+        self.assertEqual(output[0]["text"][:6], "<s> <s")
+
+    @require_torch
     @require_pyctcdecode
     def test_with_lm_fast(self):
         speech_recognizer = pipeline(
@@ -337,6 +353,24 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         audio = np.tile(audio, n_repeats)
         output = speech_recognizer([audio], batch_size=2)
         expected_text = "A MAN SAID TO THE UNIVERSE SIR I EXIST " * n_repeats
+        expected = [{"text": expected_text.strip()}]
+        self.assertEqual(output, expected)
+
+    @require_torch
+    @slow
+    def test_chunking_with_lm(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm",
+            chunk_length_s=10.0,
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        n_repeats = 10
+        audio = np.tile(audio, n_repeats)
+        output = speech_recognizer([audio], batch_size=2)
+        expected_text = "a man sed to the univers sir i exist" * n_repeats
         expected = [{"text": expected_text.strip()}]
         self.assertEqual(output, expected)
 
