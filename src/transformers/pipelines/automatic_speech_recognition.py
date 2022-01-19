@@ -265,7 +265,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             out = {"tokens": tokens}
         elif self.type == "ctc_with_lm":
             stride = model_inputs.pop("stride", None)
-            print("Model inputs ", model_inputs["input_values"].shape)
             outputs = self.model(**model_inputs)
             logits = outputs.logits
             out = {"logits": logits}
