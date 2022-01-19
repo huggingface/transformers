@@ -1,9 +1,9 @@
-# Robust Speech Challange 🤗
+# Robust Speech Challenge 🤗
 
 Welcome to the robust speech recognition challenge 🎙️ !
 
 The goal of this event is to build **robust**, **real-world** speech recognition (ASR) systems in as many languages as possible 🌏🌍🌎.
-If necessary and available, free access to a V100 32 GB GPU will kindly be provided by the [OVH could team](https://us.ovhcloud.com/) 🚀.
+If necessary and available, free access to a V100S 32 GB GPU will kindly be provided by the [OVHcloud team]( https://www.ovhcloud.com/) 🚀.
 This document summarizes all the relevant information required for the speech community event 📋.
 
 To sign-up, please see [this forum post](https://discuss.huggingface.co/t/open-to-the-community-robust-speech-recognition-challenge/13614) 🤗. Please make sure to:
@@ -666,23 +666,17 @@ We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozi
 
 ### Thursday, January 20th
 
-- [Watch the talks on YouTube](TODO)
-- [Chat history](TODO)
-
  Speaker        | Topic                           | Time                  |  Video |
 |-------------|---------------------------------|------------------------|------------------------|
-| Patrick von Platen, Hugging Face | TODO | ??? UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
-| Raymond Grossman and Jeremy Lopez, Kensho-Technologies | Pyctcdecode & Speech2text decoding | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
+| Patrick von Platen, Hugging Face | TODO | ??? UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=X9e5Tto-Iuk)
+| Raymond Grossman and Jeremy Lopez, Kensho-Technologies | Pyctcdecode & Speech2text decoding | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=mp7fHMTnK9A)
 
 ### Friday, January 21th
 
-- [Watch the talks on YouTube](TODO)
-- [Chat history](TODO)
-
  Speaker        | Topic                           | Time                  | Video |
 |-------------|---------------------------------|------------------------|------------------------|
-| Gabriel Habayeb, Mozilla Common Voice | TODO | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
-| Changhan Wang, Meta AI Research | XLS-R: Large-Scale Cross-lingual Speech Representation Learning on 128 Languages | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
+| Gabriel Habayeb, Mozilla Common Voice | TODO | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=ic_J7ZCROBM)
+| Changhan Wang, Meta AI Research | XLS-R: Large-Scale Cross-lingual Speech Representation Learning on 128 Languages | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=Vvn984QmAVg)
 
 ### Talks & Speakers
 
@@ -699,9 +693,9 @@ We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozi
 	- Jeremy is a machine learning engineer at Kensho Technologies and has worked on a variety of different topics including search and speech recognition. Before working at Kensho, he earned a PhD in experimental particle physics at MIT and continued doing physics research as a postdoc at the University of Colorado Boulder.
 
 #### Gabriel Habayeb, Data Engineer, Common Voice @ Mozilla
-- Talk: Common Voice
+- Talk: The Common Voice Dataset
 - Abstract: 
-- Speaker info: 
+- Speaker info: Gabriel is a software developer with the Common Voice team at the Mozilla Foundation with a focus on data engineering. Before joining the Foundation, he spent the last six years working across different industries, including education, enterprise and not-for-profit organizations.
 
 #### Changhan Wang, Main author of XLS-R and Research Engineer, Meta AI Research
 - Talk: XLS-R: Large-Scale Cross-lingual Speech Representation Learning on 128 Languages
