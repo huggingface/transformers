@@ -668,14 +668,14 @@ We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozi
 
  Speaker        | Topic                           | Time                  |  Video |
 |-------------|---------------------------------|------------------------|------------------------|
-| Patrick von Platen, Hugging Face | TODO | ??? UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=X9e5Tto-Iuk)
+| Patrick von Platen, Hugging Face | Introduction to Robust Speech Challenge | 4h30pm - 5h00pm UTC     | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=X9e5Tto-Iuk)
 | Raymond Grossman and Jeremy Lopez, Kensho-Technologies | Pyctcdecode & Speech2text decoding | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=mp7fHMTnK9A)
 
 ### Friday, January 21th
 
  Speaker        | Topic                           | Time                  | Video |
 |-------------|---------------------------------|------------------------|------------------------|
-| Gabriel Habayeb, Mozilla Common Voice | TODO | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=ic_J7ZCROBM)
+| Gabriel Habayeb, Mozilla Common Voice | The Common Voice Dataset | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=ic_J7ZCROBM)
 | Changhan Wang, Meta AI Research | XLS-R: Large-Scale Cross-lingual Speech Representation Learning on 128 Languages | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=Vvn984QmAVg)
 
 ### Talks & Speakers
