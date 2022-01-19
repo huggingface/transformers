@@ -3543,7 +3543,7 @@ class UniSpeechSatPreTrainedModel(metaclass=DummyObject):
 VILT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ViltForImageRetrievalTextRetrieval(metaclass=DummyObject):
+class ViltForImageAndTextRetrieval(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

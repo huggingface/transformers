@@ -32,7 +32,7 @@ if is_torch_available():
 
     from transformers import (
         MODEL_MAPPING,
-        ViltForImageRetrievalTextRetrieval,
+        ViltForImageAndTextRetrieval,
         ViltForMaskedLM,
         ViltForNaturalLanguageVisualReasoning,
         ViltForQuestionAnswering,
@@ -200,7 +200,7 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
         (
             ViltModel,
             ViltForQuestionAnswering,
-            ViltForImageRetrievalTextRetrieval,
+            ViltForImageAndTextRetrieval,
             ViltForMaskedLM,
         )
         if is_torch_available()
@@ -255,8 +255,8 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             if model_class.__name__ == "ViltForNaturalLanguageVisualReasoning":
                 config.modality_type_vocab_size = 3
 
-            # ViltForImageRetrievalTextRetrieval doesn't support training for now
-            if model_class in [*get_values(MODEL_MAPPING), ViltForImageRetrievalTextRetrieval]:
+            # ViltForImageAndTextRetrieval doesn't support training for now
+            if model_class in [*get_values(MODEL_MAPPING), ViltForImageAndTextRetrieval]:
                 continue
 
             model = model_class(config)
@@ -277,9 +277,9 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             config.use_cache = False
             config.return_dict = True
 
-            # ViltForImageRetrievalTextRetrieval doesn't support training for now
+            # ViltForImageAndTextRetrieval doesn't support training for now
             if (
-                model_class in [*get_values(MODEL_MAPPING), ViltForImageRetrievalTextRetrieval]
+                model_class in [*get_values(MODEL_MAPPING), ViltForImageAndTextRetrieval]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue

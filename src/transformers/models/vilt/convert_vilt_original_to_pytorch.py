@@ -28,7 +28,7 @@ from transformers import (
     BertTokenizer,
     ViltConfig,
     ViltFeatureExtractor,
-    ViltForImageRetrievalTextRetrieval,
+    ViltForImageAndTextRetrieval,
     ViltForMaskedLM,
     ViltForNaturalLanguageVisualReasoning,
     ViltForQuestionAnswering,
@@ -196,7 +196,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         model = ViltForNaturalLanguageVisualReasoning(config)
     elif "irtr" in checkpoint_url:
         irtr_model = True
-        model = ViltForImageRetrievalTextRetrieval(config)
+        model = ViltForImageAndTextRetrieval(config)
     elif "mlm_itm" in checkpoint_url:
         mlm_model = True
         model = ViltForMaskedLM(config)

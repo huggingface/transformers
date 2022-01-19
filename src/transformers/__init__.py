@@ -1386,7 +1386,7 @@ if is_torch_available():
     _import_structure["models.vilt"].extend(
         [
             "VILT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ViltForImageRetrievalTextRetrieval",
+            "ViltForImageAndTextRetrieval",
             "ViltForMaskedLM",
             "ViltForNaturalLanguageVisualReasoning",
             "ViltForQuestionAnswering",
@@ -3318,7 +3318,7 @@ if TYPE_CHECKING:
         )
         from .models.vilt import (
             VILT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ViltForImageRetrievalTextRetrieval,
+            ViltForImageAndTextRetrieval,
             ViltForMaskedLM,
             ViltForNaturalLanguageVisualReasoning,
             ViltForQuestionAnswering,

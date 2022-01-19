@@ -1032,7 +1032,7 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
     """,
     VILT_START_DOCSTRING,
 )
-class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
+class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1070,7 +1070,7 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ViltProcessor, ViltForImageRetrievalTextRetrieval
+        >>> from transformers import ViltProcessor, ViltForImageAndTextRetrieval
         >>> import requests
         >>> from PIL import Image
 
@@ -1079,7 +1079,7 @@ class ViltForImageRetrievalTextRetrieval(ViltPreTrainedModel):
         >>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
 
         >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-coco")
-        >>> model = ViltForImageRetrievalTextRetrieval.from_pretrained("dandelin/vilt-b32-finetuned-coco")
+        >>> model = ViltForImageAndTextRetrieval.from_pretrained("dandelin/vilt-b32-finetuned-coco")
 
         >>> # prepare inputs
         >>> encoding = processor(image, text, return_tensors="pt")

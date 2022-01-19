@@ -110,7 +110,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
     "ViltForQuestionAnswering",
     "ViltForNaturalLanguageVisualReasoning",
-    "ViltForImageRetrievalTextRetrieval",
+    "ViltForImageAndTextRetrieval",
     "ViltForMaskedLM",
     "PerceiverForMultimodalAutoencoding",
     "PerceiverForOpticalFlow",
