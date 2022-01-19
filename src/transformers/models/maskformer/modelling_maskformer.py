@@ -1177,7 +1177,7 @@ class SwinTransformerBackbone(SwinTransformer, BackboneMixin):
 
 class ConvLayer(nn.Sequential):
     def __init__(self, in_features: int, out_features: int, kernel_size: int = 3, padding: int = 1):
-        """A basic module that executs conv - norm - act in sequence
+        """A basic module that executs conv - norm -  in sequence
         used in MaskFormer
 
         Args:
