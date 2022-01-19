@@ -603,8 +603,8 @@ VIT_MAE_START_DOCSTRING = r"""
 VIT_MAE_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViTFeatureExtractor`]. See
-            [`ViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
+            [`AutoFeatureExtractor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -667,14 +667,14 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ViTFeatureExtractor, ViTMAEModel
+        >>> from transformers import AutoFeatureExtractor, ViTMAEModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("facebook/vit-mae-base")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-mae-base")
         >>> model = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
@@ -909,19 +909,21 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ViTFeatureExtractor, ViTMAEModel
+        >>> from transformers import AutoFeatureExtractor, ViTMAEForPreTraining
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("facebook/vit-mae-base")
-        >>> model = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-mae-base")
+        >>> model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
+        >>> loss = outputs.loss
+        >>> mask = outputs.mask
+        >>> ids_restore = outputs.ids_restore
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
