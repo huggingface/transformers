@@ -384,6 +384,8 @@ SPECIAL_PATTERNS = {
     "_CHECKPOINT_FOR_DOC =": "checkpoint",
     "_CONFIG_FOR_DOC =": "config_class",
     "_TOKENIZER_FOR_DOC =": "tokenizer_class",
+    "_FEAT_EXTRACTOR_FOR_DOC =": "feature_extractor_class",
+    "_PROCESSOR_FOR_DOC =": "processor_class",
 }
 
 
@@ -658,8 +660,13 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
 
     model_name = auto_module.MODEL_NAMES_MAPPING[model_type]
     config_class = auto_module.configuration_auto.CONFIG_MAPPING_NAMES[model_type]
-    tokenizer_classes = auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES[model_type]
-    tokenizer_class = tokenizer_classes[0] if tokenizer_classes[0] is not None else tokenizer_classes[1]
+    if model_type in auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES:
+        tokenizer_classes = auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES[model_type]
+        tokenizer_class = tokenizer_classes[0] if tokenizer_classes[0] is not None else tokenizer_classes[1]
+    else:
+        tokenizer_class = None
+    feature_extractor_class = auto_module.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES.get(model_type, None)
+    processor_class = auto_module.processing_auto.PROCESSOR_MAPPING_NAMES.get(model_type, None)
 
     model_files = get_model_files(model_type, frameworks=frameworks)
     model_camel_cased = config_class.replace("Config", "")
@@ -689,6 +696,8 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
         model_upper_cased=model_camel_cased.upper(),
         config_class=config_class,
         tokenizer_class=tokenizer_class,
+        feature_extractor_class=feature_extractor_class,
+        processor_class=processor_class,
     )
 
     return {

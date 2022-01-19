@@ -52,6 +52,30 @@ BERT_MODEL_FILES = {
     "src/transformers/models/bert/convert_bert_pytorch_checkpoint_to_original_tf.py",
 }
 
+VIT_MODEL_FILES = {
+    "src/transformers/models/vit/__init__.py",
+    "src/transformers/models/vit/configuration_vit.py",
+    "src/transformers/models/vit/convert_dino_to_pytorch.py",
+    "src/transformers/models/vit/convert_vit_timm_to_pytorch.py",
+    "src/transformers/models/vit/feature_extraction_vit.py",
+    "src/transformers/models/vit/modeling_vit.py",
+    "src/transformers/models/vit/modeling_tf_vit.py",
+    "src/transformers/models/vit/modeling_flax_vit.py",
+}
+
+WAV2VEC2_MODEL_FILES = {
+    "src/transformers/models/wav2vec2/__init__.py",
+    "src/transformers/models/wav2vec2/configuration_wav2vec2.py",
+    "src/transformers/models/wav2vec2/convert_wav2vec2_original_pytorch_checkpoint_to_pytorch.py",
+    "src/transformers/models/wav2vec2/convert_wav2vec2_original_s3prl_checkpoint_to_pytorch.py",
+    "src/transformers/models/wav2vec2/feature_extraction_wav2vec2.py",
+    "src/transformers/models/wav2vec2/modeling_wav2vec2.py",
+    "src/transformers/models/wav2vec2/modeling_tf_wav2vec2.py",
+    "src/transformers/models/wav2vec2/modeling_flax_wav2vec2.py",
+    "src/transformers/models/wav2vec2/processing_wav2vec2.py",
+    "src/transformers/models/wav2vec2/tokenization_wav2vec2.py",
+}
+
 REPO_PATH = Path(transformers.__path__[0]).parent.parent
 
 
@@ -388,6 +412,7 @@ NEW_BERT_CONSTANT = "value"
         )
 
     def test_get_model_files(self):
+        # BERT
         bert_files = get_model_files("bert")
 
         doc_file = str(Path(bert_files["doc_file"]).relative_to(REPO_PATH))
@@ -407,7 +432,48 @@ NEW_BERT_CONSTANT = "value"
         }
         self.assertEqual(test_files, bert_test_files)
 
+        # VIT
+        vit_files = get_model_files("vit")
+        doc_file = str(Path(vit_files["doc_file"]).relative_to(REPO_PATH))
+        self.assertEqual(doc_file, "docs/source/model_doc/vit.mdx")
+
+        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["model_files"]}
+        self.assertEqual(model_files, VIT_MODEL_FILES)
+
+        self.assertEqual(vit_files["module_name"], "vit")
+
+        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["test_files"]}
+        vit_test_files = {
+            "tests/test_feature_extraction_vit.py",
+            "tests/test_modeling_vit.py",
+            "tests/test_modeling_tf_vit.py",
+            "tests/test_modeling_flax_vit.py",
+        }
+        self.assertEqual(test_files, vit_test_files)
+
+        # Wav2Vec2
+        wav2vec2_files = get_model_files("wav2vec2")
+        doc_file = str(Path(wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
+        self.assertEqual(doc_file, "docs/source/model_doc/wav2vec2.mdx")
+
+        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["model_files"]}
+        self.assertEqual(model_files, WAV2VEC2_MODEL_FILES)
+
+        self.assertEqual(wav2vec2_files["module_name"], "wav2vec2")
+
+        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["test_files"]}
+        wav2vec2_test_files = {
+            "tests/test_feature_extraction_wav2vec2.py",
+            "tests/test_modeling_wav2vec2.py",
+            "tests/test_modeling_tf_wav2vec2.py",
+            "tests/test_modeling_flax_wav2vec2.py",
+            "tests/test_processor_wav2vec2.py",
+            "tests/test_tokenization_wav2vec2.py",
+        }
+        self.assertEqual(test_files, wav2vec2_test_files)
+
     def test_get_model_files_only_pt(self):
+        # BERT
         bert_files = get_model_files("bert", frameworks=["pt"])
 
         doc_file = str(Path(bert_files["doc_file"]).relative_to(REPO_PATH))
@@ -429,7 +495,53 @@ NEW_BERT_CONSTANT = "value"
         }
         self.assertEqual(test_files, bert_test_files)
 
+
+        # VIT
+        vit_files = get_model_files("vit", frameworks=["pt"])
+        doc_file = str(Path(vit_files["doc_file"]).relative_to(REPO_PATH))
+        self.assertEqual(doc_file, "docs/source/model_doc/vit.mdx")
+
+        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["model_files"]}
+        vit_model_files = VIT_MODEL_FILES - {
+            "src/transformers/models/vit/modeling_tf_vit.py",
+            "src/transformers/models/vit/modeling_flax_vit.py",
+        }
+        self.assertEqual(model_files, vit_model_files)
+
+        self.assertEqual(vit_files["module_name"], "vit")
+
+        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["test_files"]}
+        vit_test_files = {
+            "tests/test_feature_extraction_vit.py",
+            "tests/test_modeling_vit.py",
+        }
+        self.assertEqual(test_files, vit_test_files)
+
+        # Wav2Vec2
+        wav2vec2_files = get_model_files("wav2vec2", frameworks=["pt"])
+        doc_file = str(Path(wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
+        self.assertEqual(doc_file, "docs/source/model_doc/wav2vec2.mdx")
+
+        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["model_files"]}
+        wav2vec2_model_files = WAV2VEC2_MODEL_FILES - {
+            "src/transformers/models/wav2vec2/modeling_tf_wav2vec2.py",
+            "src/transformers/models/wav2vec2/modeling_flax_wav2vec2.py",
+        }
+        self.assertEqual(model_files, wav2vec2_model_files)
+
+        self.assertEqual(wav2vec2_files["module_name"], "wav2vec2")
+
+        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["test_files"]}
+        wav2vec2_test_files = {
+            "tests/test_feature_extraction_wav2vec2.py",
+            "tests/test_modeling_wav2vec2.py",
+            "tests/test_processor_wav2vec2.py",
+            "tests/test_tokenization_wav2vec2.py",
+        }
+        self.assertEqual(test_files, wav2vec2_test_files)
+
     def test_get_model_files_tf_and_flax(self):
+        # BERT
         bert_files = get_model_files("bert", frameworks=["tf", "flax"])
 
         doc_file = str(Path(bert_files["doc_file"]).relative_to(REPO_PATH))
@@ -448,6 +560,46 @@ NEW_BERT_CONSTANT = "value"
             "tests/test_modeling_flax_bert.py",
         }
         self.assertEqual(test_files, bert_test_files)
+
+        # VIT
+        vit_files = get_model_files("vit", frameworks=["tf", "flax"])
+        doc_file = str(Path(vit_files["doc_file"]).relative_to(REPO_PATH))
+        self.assertEqual(doc_file, "docs/source/model_doc/vit.mdx")
+
+        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["model_files"]}
+        vit_model_files = VIT_MODEL_FILES - {"src/transformers/models/vit/modeling_vit.py"}
+        self.assertEqual(model_files, vit_model_files)
+
+        self.assertEqual(vit_files["module_name"], "vit")
+
+        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in vit_files["test_files"]}
+        vit_test_files = {
+            "tests/test_feature_extraction_vit.py",
+            "tests/test_modeling_tf_vit.py",
+            "tests/test_modeling_flax_vit.py",
+        }
+        self.assertEqual(test_files, vit_test_files)
+
+        # Wav2Vec2
+        wav2vec2_files = get_model_files("wav2vec2", frameworks=["tf", "flax"])
+        doc_file = str(Path(wav2vec2_files["doc_file"]).relative_to(REPO_PATH))
+        self.assertEqual(doc_file, "docs/source/model_doc/wav2vec2.mdx")
+
+        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["model_files"]}
+        wav2vec2_model_files = WAV2VEC2_MODEL_FILES - {"src/transformers/models/wav2vec2/modeling_wav2vec2.py"}
+        self.assertEqual(model_files, wav2vec2_model_files)
+
+        self.assertEqual(wav2vec2_files["module_name"], "wav2vec2")
+
+        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in wav2vec2_files["test_files"]}
+        wav2vec2_test_files = {
+            "tests/test_feature_extraction_wav2vec2.py",
+            "tests/test_modeling_tf_wav2vec2.py",
+            "tests/test_modeling_flax_wav2vec2.py",
+            "tests/test_processor_wav2vec2.py",
+            "tests/test_tokenization_wav2vec2.py",
+        }
+        self.assertEqual(test_files, wav2vec2_test_files)
 
     def test_find_base_model_checkpoint(self):
         self.assertEqual(find_base_model_checkpoint("bert"), "bert-base-uncased")
@@ -520,6 +672,8 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(bert_model_patterns.model_upper_cased, "BERT")
         self.assertEqual(bert_model_patterns.config_class, "BertConfig")
         self.assertEqual(bert_model_patterns.tokenizer_class, "BertTokenizer")
+        self.assertIsNone(bert_model_patterns.feature_extractor_class)
+        self.assertIsNone(bert_model_patterns.processor_class)
 
     def test_retrieve_info_for_model_pt_tf_with_bert(self):
         bert_info = retrieve_info_for_model("bert", frameworks=["pt", "tf"])
@@ -567,6 +721,51 @@ NEW_BERT_CONSTANT = "value"
         self.assertEqual(bert_model_patterns.model_upper_cased, "BERT")
         self.assertEqual(bert_model_patterns.config_class, "BertConfig")
         self.assertEqual(bert_model_patterns.tokenizer_class, "BertTokenizer")
+        self.assertIsNone(bert_model_patterns.feature_extractor_class)
+        self.assertIsNone(bert_model_patterns.processor_class)
+    
+    def test_retrieve_info_for_model_with_vit(self):
+        vit_info = retrieve_info_for_model("vit")
+        vit_classes = ["ViTForImageClassification", "ViTModel"]
+        expected_model_classes = {
+            "pt": set(vit_classes),
+            "tf": {f"TF{m}" for m in vit_classes},
+            "flax": {f"Flax{m}" for m in vit_classes},
+        }
+
+        self.assertEqual(set(vit_info["frameworks"]), {"pt", "tf", "flax"})
+        model_classes = {k: set(v) for k, v in vit_info["model_classes"].items()}
+        self.assertEqual(model_classes, expected_model_classes)
+
+        all_vit_files = vit_info["model_files"]
+        model_files = {str(Path(f).relative_to(REPO_PATH)) for f in all_vit_files["model_files"]}
+        self.assertEqual(model_files, VIT_MODEL_FILES)
+
+        test_files = {str(Path(f).relative_to(REPO_PATH)) for f in all_vit_files["test_files"]}
+        vit_test_files = {
+            "tests/test_feature_extraction_vit.py",
+            "tests/test_modeling_vit.py",
+            "tests/test_modeling_tf_vit.py",
+            "tests/test_modeling_flax_vit.py",
+        }
+        self.assertEqual(test_files, vit_test_files)
+
+        doc_file = str(Path(all_vit_files["doc_file"]).relative_to(REPO_PATH))
+        self.assertEqual(doc_file, "docs/source/model_doc/vit.mdx")
+
+        self.assertEqual(all_vit_files["module_name"], "vit")
+
+        vit_model_patterns = vit_info["model_patterns"]
+        self.assertEqual(vit_model_patterns.model_name, "ViT")
+        self.assertEqual(vit_model_patterns.checkpoint, "google/vit-base-patch16-224")
+        self.assertEqual(vit_model_patterns.model_type, "vit")
+        self.assertEqual(vit_model_patterns.model_lower_cased, "vit")
+        self.assertEqual(vit_model_patterns.model_camel_cased, "ViT")
+        self.assertEqual(vit_model_patterns.model_upper_cased, "VIT")
+        self.assertEqual(vit_model_patterns.config_class, "ViTConfig")
+        self.assertEqual(vit_model_patterns.feature_extractor_class, "ViTFeatureExtractor")
+        self.assertIsNone(vit_model_patterns.tokenizer_class)
+        self.assertIsNone(vit_model_patterns.processor_class)
 
     def test_clean_frameworks_in_init(self):
         test_init = """
