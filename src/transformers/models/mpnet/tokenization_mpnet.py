@@ -359,7 +359,7 @@ class BasicTokenizer(object):
         WordPieceTokenizer.
 
         Args:
-            never_split (`LIst[str]`, *optional*)
+            never_split (`List[str]`, *optional*)
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
                 [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """
