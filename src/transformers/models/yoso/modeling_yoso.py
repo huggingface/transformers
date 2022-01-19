@@ -1221,13 +1221,16 @@ class YosoForCausalLM(YosoPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, YosoForCausalLM, YosoConfig >>> import torch
+        >>> from transformers import AutoTokenizer, YosoForCausalLM, YosoConfig 
+        >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained('uw-madison/yoso-4096') >>> config =
-        YosoConfig.from_pretrained("uw-madison/yoso-4096") >>> config.is_decoder = True >>> model =
-        YosoForCausalLM.from_pretrained('uw-madison/yoso-4096', config=config)
+        >>> tokenizer = AutoTokenizer.from_pretrained('uw-madison/yoso-4096') 
+        >>> config = YosoConfig.from_pretrained("uw-madison/yoso-4096") 
+        >>> config.is_decoder = True 
+        >>> model = YosoForCausalLM.from_pretrained('uw-madison/yoso-4096', config=config)
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt") >>> outputs = model(**inputs)
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt") 
+        >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
         ```
