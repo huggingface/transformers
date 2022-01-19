@@ -74,12 +74,13 @@ def load_cuda_kernels():
             ["fast_lsh_cumulation_torch.cpp", "fast_lsh_cumulation.cu", "fast_lsh_cumulation_cuda.cu"]
         )
 
-        fast_lsh_cumulation = load("fast_lsh_cumulation", src_files, verbose=True)
+        load("fast_lsh_cumulation", src_files, verbose=True)
 
         import fast_lsh_cumulation as lsh_cumulation
 
         return True
     except Exception:
+        lsh_cumulation = None
         return False
 
 
