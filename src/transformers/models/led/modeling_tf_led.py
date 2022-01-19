@@ -2457,7 +2457,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         )
         lm_logits = self.led.shared(outputs[0], mode="linear")
         lm_logits = lm_logits + self.final_logits_bias
-        masked_lm_loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], lm_logits)
+        masked_lm_loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], lm_logits)
 
         if not inputs["return_dict"]:
             output = (lm_logits,) + outputs[1:]
@@ -2556,7 +2556,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             )
         return (past[0], reordered_past)
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True,

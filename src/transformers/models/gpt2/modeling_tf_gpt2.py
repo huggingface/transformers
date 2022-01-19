@@ -951,7 +951,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             # shift labels to the left and cut last logit token
             logits = logits[:, :-1]
             labels = inputs["labels"][:, 1:]
-            loss = self.compute_loss(labels, logits)
+            loss = self.hf_compute_loss(labels, logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + transformer_outputs[1:]
@@ -1275,7 +1275,9 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0 : logits_shape[0], sequence_lengths]
 
-            loss = self.compute_loss(tf.reshape(inputs["labels"], [-1]), tf.reshape(in_logits, [-1, self.num_labels]))
+            loss = self.hf_compute_loss(
+                tf.reshape(inputs["labels"], [-1]), tf.reshape(in_logits, [-1, self.num_labels])
+            )
         pooled_logits = in_logits if in_logits is not None else logits
 
         if not inputs["return_dict"]:

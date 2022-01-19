@@ -941,7 +941,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
         generator_sequence_output = generator_hidden_states[0]
         prediction_scores = self.generator_predictions(generator_sequence_output, training=inputs["training"])
         prediction_scores = self.generator_lm_head(prediction_scores, training=inputs["training"])
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], prediction_scores)
 
         if not inputs["return_dict"]:
             output = (prediction_scores,) + generator_hidden_states[1:]
@@ -1063,7 +1063,7 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
             training=inputs["training"],
         )
         logits = self.classifier(outputs[0], training=inputs["training"])
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[1:]
@@ -1196,7 +1196,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
         logits = self.sequence_summary(outputs[0], training=inputs["training"])
         logits = self.classifier(logits)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], reshaped_logits)
 
         if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[1:]
@@ -1309,7 +1309,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
         sequence_output = outputs[0]
         sequence_output = self.dropout(sequence_output, training=inputs["training"])
         logits = self.classifier(sequence_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[1:]
@@ -1418,7 +1418,7 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
         if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
             labels = {"start_position": inputs["start_positions"]}
             labels["end_position"] = inputs["end_positions"]
-            loss = self.compute_loss(labels, (start_logits, end_logits))
+            loss = self.hf_compute_loss(labels, (start_logits, end_logits))
 
         if not inputs["return_dict"]:
             output = (start_logits, end_logits) + outputs[1:]

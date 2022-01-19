@@ -1472,7 +1472,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         logits = tf.cast(logits, tf.float32)
 
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
 
         if not inputs["return_dict"]:
             past = (inputs["encoder_outputs"], decoder_outputs[1]) if inputs["use_cache"] else None
