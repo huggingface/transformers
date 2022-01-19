@@ -625,7 +625,6 @@ class YosoLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Yoso
 class YosoEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
