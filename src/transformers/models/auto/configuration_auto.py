@@ -123,7 +123,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("vilt", "ViLT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_mae", "VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("realm", "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("vilt", "ViLT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nystromformer", "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -199,7 +198,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("vilt", "Vilt"),
+        ("vilt", "ViLT"),
         ("vit_mae", "ViTMAE"),
         ("realm", "Realm"),
         ("nystromformer", "Nystromformer"),
