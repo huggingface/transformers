@@ -462,3 +462,22 @@ class YosoModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_masked_lm_long_input(self):
+        model = YosoForMaskedLM.from_pretrained("uw-madison/yoso-4096")
+        input_ids = torch.arange(4096).unsqueeze(0)
+
+        with torch.no_grad():
+            output = model(input_ids)[0]
+
+        vocab_size = 50265
+
+        expected_shape = torch.Size((1, 4096, vocab_size))
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[[-2.3914, -4.3742, -5.0956], [-4.0988, -4.2384, -7.0406], [-3.1427, -3.7192, -6.6800]]]
+        )
+
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

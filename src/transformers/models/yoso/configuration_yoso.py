@@ -121,6 +121,8 @@ class YosoConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs
     ):
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -140,4 +142,3 @@ class YosoConfig(PretrainedConfig):
         self.conv_window = conv_window
         self.use_fast_hash = use_fast_hash
         self.lsh_backward = lsh_backward
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)

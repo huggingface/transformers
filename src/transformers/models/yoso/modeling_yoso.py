@@ -394,17 +394,21 @@ class YosoSelfAttention(nn.Module):
         attention_mask = 1.0 + attention_mask / 10000.0
         attention_mask = attention_mask.squeeze().repeat(1, num_heads, 1).reshape(batch_size * num_heads, seq_len)
 
-        if (not self.use_expectation) and head_dim < 32:
+        # The CUDA kernels are most efficient with inputs whose size is a multiple of a GPU's warp size (32). Inputs
+        # smaller than this are padded with zeros.
+        gpu_warp_size = 32
+
+        if (not self.use_expectation) and head_dim < gpu_warp_size:
             query_layer = torch.cat(
-                [query_layer, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device=query_layer.device)],
+                [query_layer, torch.zeros(batch_size * num_heads, seq_len, gpu_warp_size - head_dim, device=query_layer.device)],
                 dim=-1,
             )
             key_layer = torch.cat(
-                [key_layer, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device=key_layer.device)],
+                [key_layer, torch.zeros(batch_size * num_heads, seq_len, gpu_warp_size - head_dim, device=key_layer.device)],
                 dim=-1,
             )
             value_layer = torch.cat(
-                [value_layer, torch.zeros(batch_size * num_heads, seq_len, 32 - head_dim, device=value_layer.device)],
+                [value_layer, torch.zeros(batch_size * num_heads, seq_len, gpu_warp_size - head_dim, device=value_layer.device)],
                 dim=-1,
             )
 
@@ -420,7 +424,7 @@ class YosoSelfAttention(nn.Module):
                 attention_mask, attention_mask, query_layer, key_layer, value_layer, self.lsh_config
             )
 
-        if (not self.use_expectation) and head_dim < 32:
+        if (not self.use_expectation) and head_dim < gpu_warp_size:
             context_layer = context_layer[:, :, :head_dim]
 
         context_layer = normalize(context_layer)
@@ -656,12 +660,6 @@ class YosoEncoder(nn.Module):
 
             if self.gradient_checkpointing and self.training:
 
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         return module(*inputs, past_key_value, output_attentions)
@@ -688,8 +686,6 @@ class YosoEncoder(nn.Module):
                 )
 
             hidden_states = layer_outputs[0]
-            if use_cache:
-                next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
@@ -922,7 +918,7 @@ class YosoModel(YosoPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
-        use_cache=None,
+        use_cache=False,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1023,7 +1019,7 @@ class YosoModel(YosoPreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
             past_key_values=past_key_values,
-            use_cache=use_cache,
+            use_cache=False,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1184,7 +1180,7 @@ class YosoForCausalLM(YosoPreTrainedModel):
         cross_attn_head_mask=None,
         past_key_values=None,
         labels=None,
-        use_cache=None,
+        use_cache=False,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1286,19 +1282,7 @@ class YosoForCausalLM(YosoPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
-        # cut decoder_input_ids if past is used
-        if past is not None:
-            input_ids = input_ids[:, -1:]
-
         return {"input_ids": input_ids, "attention_mask": attention_mask}
-
-    def _reorder_cache(self, past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
-            )
-        return reordered_past
 
 
 class YosoClassificationHead(nn.Module):
