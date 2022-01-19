@@ -294,7 +294,7 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
 
 def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     """
-    Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR
+    Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR)
 
     Args:
         nlp: The pipeline to be exported
@@ -312,10 +312,10 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     try:
         import tensorflow as tf
 
-        from keras2onnx import __version__ as k2ov
-        from keras2onnx import convert_keras, save_model
+        from tf2onnx import __version__ as t2ov
+        from tf2onnx import convert_keras, save_model
 
-        print(f"Using framework TensorFlow: {tf.version.VERSION}, keras2onnx: {k2ov}")
+        print(f"Using framework TensorFlow: {tf.version.VERSION}, tf2onnx: {t2ov}")
 
         # Build
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "tf")
@@ -348,7 +348,8 @@ def convert(
         output: The path where the ONNX graph will be stored
         opset: The actual version of the ONNX operator set to use
         tokenizer: The name of the model to load for the pipeline, default to the model's name if not provided
-        use_external_format: Split the model definition from its parameters to allow model bigger than 2GB (PyTorch only)
+        use_external_format:
+            Split the model definition from its parameters to allow model bigger than 2GB (PyTorch only)
         pipeline_name: The kind of pipeline to instantiate (ner, question-answering, etc.)
         model_kwargs: Keyword arguments to be forwarded to the model constructor
 
@@ -376,7 +377,7 @@ def convert(
 def optimize(onnx_model_path: Path) -> Path:
     """
     Load the model at the specified path and let onnxruntime look at transformations on the graph to enable all the
-    optimizations possibl
+    optimizations possible
 
     Args:
         onnx_model_path: filepath where the model binary description is stored

@@ -180,7 +180,7 @@ class ConfigTester(object):
 
         if len(wrong_values) > 0:
             errors = "\n".join([f"- {v[0]}: got {v[1]} instead of {v[2]}" for v in wrong_values])
-            raise ValueError(f"The following keys were not properly sey in the config:\n{errors}")
+            raise ValueError(f"The following keys were not properly set in the config:\n{errors}")
 
     def run_common_tests(self):
         self.create_and_test_config_common_properties()

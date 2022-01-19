@@ -22,7 +22,7 @@ import pytest
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from transformers import SEWDConfig, is_torch_available
-from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, _config_zero_init
@@ -224,7 +224,7 @@ class SEWDModelTester:
         model.train()
 
         # freeze feature encoder
-        model.freeze_feature_extractor()
+        model.freeze_feature_encoder()
 
         input_values = input_values[:3]
 
@@ -441,6 +441,10 @@ class SEWDModelTest(ModelTesterMixin, unittest.TestCase):
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
+    @unittest.skip(reason="Feed forward chunking is not implemented")
+    def test_feed_forward_chunking(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model = SEWDModel.from_pretrained("asapp/sew-d-tiny-100k")
@@ -475,7 +479,6 @@ class SEWDUtilsTest(unittest.TestCase):
 
 
 @require_torch
-@require_datasets
 @require_soundfile
 @slow
 class SEWDModelIntegrationTest(unittest.TestCase):

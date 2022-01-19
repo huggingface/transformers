@@ -36,8 +36,8 @@ from transformers.testing_utils import (
     _tf_gpu_memory_limit,
     is_pt_tf_cross_test,
     is_staging_test,
-    require_keras2onnx,
     require_tf,
+    require_tf2onnx,
     slow,
 )
 from transformers.utils import logging
@@ -254,14 +254,14 @@ class TFModelTesterMixin:
 
             self.assertEqual(len(incompatible_ops), 0, incompatible_ops)
 
-    @require_keras2onnx
+    @require_tf2onnx
     @slow
     def test_onnx_runtime_optimize(self):
         if not self.test_onnx:
             return
 
-        import keras2onnx
         import onnxruntime
+        import tf2onnx
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -269,9 +269,9 @@ class TFModelTesterMixin:
             model = model_class(config)
             model(model.dummy_inputs)
 
-            onnx_model = keras2onnx.convert_keras(model, model.name, target_opset=self.onnx_min_opset)
+            onnx_model_proto, _ = tf2onnx.convert.from_keras(model, opset=self.onnx_min_opset)
 
-            onnxruntime.InferenceSession(onnx_model.SerializeToString())
+            onnxruntime.InferenceSession(onnx_model_proto.SerializeToString())
 
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -282,6 +282,8 @@ class TFModelTesterMixin:
             for module in (import_module(model_class.__module__),)
             for module_member_name in dir(module)
             if module_member_name.endswith("MainLayer")
+            # This condition is required, since `modeling_tf_clip.py` has 3 classes whose names end with `MainLayer`.
+            and module_member_name[: -len("MainLayer")] == model_class.__name__[: -len("Model")]
             for module_member in (getattr(module, module_member_name),)
             if isinstance(module_member, type)
             and tf.keras.layers.Layer in module_member.__bases__
@@ -458,7 +460,7 @@ class TFModelTesterMixin:
                     "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
                 }
             # TODO: A better way to handle vision models
-            elif model_class.__name__ in ["TFViTModel", "TFViTForImageClassification"]:
+            elif model_class.__name__ in ["TFViTModel", "TFViTForImageClassification", "TFCLIPVisionModel"]:
                 inputs = tf.keras.Input(
                     batch_shape=(
                         3,
@@ -469,6 +471,20 @@ class TFModelTesterMixin:
                     name="pixel_values",
                     dtype="float32",
                 )
+            elif model_class.__name__ in ["TFCLIPModel"]:
+                inputs = {
+                    "input_ids": tf.keras.Input(batch_shape=(3, max_input), name="input_ids", dtype="int32"),
+                    "pixel_values": tf.keras.Input(
+                        batch_shape=(
+                            3,
+                            self.model_tester.vision_model_tester.num_channels,
+                            self.model_tester.vision_model_tester.image_size,
+                            self.model_tester.vision_model_tester.image_size,
+                        ),
+                        name="pixel_values",
+                        dtype="float32",
+                    ),
+                }
             elif model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
                 inputs = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
             else:
@@ -830,7 +846,9 @@ class TFModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class)
             inputs_np = prepare_numpy_arrays(inputs)
 
-            model(inputs_np)
+            output_for_dict_input = model(inputs_np)
+            output_for_kw_input = model(**inputs_np)
+            self.assert_outputs_same(output_for_dict_input, output_for_kw_input)
 
     def test_resize_token_embeddings(self):
         if not self.test_resize_embeddings:
@@ -1183,6 +1201,13 @@ class TFModelTesterMixin:
                     else:
                         new_model_without_prefix(input_ids)
 
+    def test_model_main_input_name(self):
+        for model_class in self.all_model_classes:
+            model_signature = inspect.signature(getattr(model_class, "call"))
+            # The main input is the name of the argument after `self`
+            observed_main_input_name = list(model_signature.parameters.keys())[1]
+            self.assertEqual(model_class.main_input_name, observed_main_input_name)
+
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens
         special_tokens = []
@@ -1235,6 +1260,13 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
     output = tf.constant(values, shape=shape, dtype=dtype if dtype is not None else tf.int32)
 
     return output
+
+
+def random_attention_mask(shape, rng=None, name=None, dtype=None):
+    attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None, dtype=dtype)
+    # make sure that at least one token is attended to for each batch
+    attn_mask = tf.concat([tf.constant(value=1, shape=(shape[0], 1), dtype=dtype), attn_mask[:, 1:]], axis=1)
+    return attn_mask
 
 
 def floats_tensor(shape, scale=1.0, rng=None, name=None, dtype=None):
@@ -1385,6 +1417,15 @@ class TFModelPushToHubTester(unittest.TestCase):
                 if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                     models_equal = False
             self.assertTrue(models_equal)
+
+    def test_push_to_hub_with_model_card(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = TFBertModel(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.push_to_hub(os.path.join(tmp_dir, "test-model-tf"))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "test-model-card-tf", "README.md")))
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(

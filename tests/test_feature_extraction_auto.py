@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
 import tempfile
 import unittest
@@ -42,14 +43,19 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
             # remove feature_extractor_type to make sure config.json alone is enough to load feature processor locally
             config_dict = AutoFeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR).to_dict()
+
             config_dict.pop("feature_extractor_type")
-            config = Wav2Vec2FeatureExtractor(config_dict)
+            config = Wav2Vec2FeatureExtractor(**config_dict)
 
             # save in new folder
             model_config.save_pretrained(tmpdirname)
             config.save_pretrained(tmpdirname)
 
             config = AutoFeatureExtractor.from_pretrained(tmpdirname)
+
+            # make sure private variable is not incorrectly saved
+            dict_as_saved = json.loads(config.to_json_string())
+            self.assertTrue("_processor_class" not in dict_as_saved)
 
         self.assertIsInstance(config, Wav2Vec2FeatureExtractor)
 

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Model class. """
+""" Auto Model class."""
 
 
 import warnings
@@ -29,6 +29,7 @@ logger = logging.get_logger(__name__)
 TF_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("clip", "TFCLIPModel"),
         ("deberta-v2", "TFDebertaV2Model"),
         ("deberta", "TFDebertaModel"),
         ("rembert", "TFRemBertModel"),
@@ -155,6 +156,12 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
+    [
+        ("vision-encoder-decoder", "TFVisionEncoderDecoderModel"),
+    ]
+)
+
 TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
@@ -180,7 +187,6 @@ TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("mpnet", "TFMPNetForMaskedLM"),
     ]
 )
-
 
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
@@ -326,6 +332,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL
 TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 )
+TF_MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
 TF_MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES)
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
@@ -384,6 +391,13 @@ class TFAutoModelForImageClassification(_BaseAutoModelClass):
 
 
 AutoModelForImageClassification = auto_class_update(TFAutoModelForImageClassification, head_doc="image classification")
+
+
+class TFAutoModelForVision2Seq(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_VISION_2_SEQ_MAPPING
+
+
+TFAutoModelForVision2Seq = auto_class_update(TFAutoModelForVision2Seq, head_doc="vision-to-text modeling")
 
 
 class TFAutoModelForMaskedLM(_BaseAutoModelClass):

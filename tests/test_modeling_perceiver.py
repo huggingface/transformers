@@ -28,7 +28,7 @@ from datasets import load_dataset
 from transformers import PerceiverConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -147,19 +147,14 @@ class PerceiverModelTester:
             if self.use_input_mask:
                 input_mask = random_attention_mask([self.batch_size, self.seq_length])
         elif model_class.__name__ == "PerceiverForImageClassificationLearned":
-            config.d_model = 512
             inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         elif model_class.__name__ == "PerceiverForImageClassificationFourier":
-            config.d_model = 261
             inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         elif model_class.__name__ == "PerceiverForImageClassificationConvProcessing":
-            config.d_model = 322
             inputs = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         elif model_class.__name__ == "PerceiverForOpticalFlow":
-            config.d_model = 322
             inputs = floats_tensor([self.batch_size, 2, 27, self.train_size[0], self.train_size[1]])
         elif model_class.__name__ == "PerceiverForMultimodalAutoencoding":
-            config.d_model = 409
             images = torch.randn(
                 (self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size),
                 device=torch_device,
@@ -196,6 +191,13 @@ class PerceiverModelTester:
             num_labels=self.num_labels,
         )
 
+    def get_pipeline_config(self):
+        config = self.get_config()
+        # Byte level vocab
+        config.vocab_size = 261
+        config.max_position_embeddings = 40
+        return config
+
     def create_and_check_for_masked_lm(self, config, inputs, input_mask, sequence_labels, token_labels):
         model = PerceiverForMaskedLM(config=config)
         model.to(torch_device)
@@ -204,8 +206,6 @@ class PerceiverModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_sequence_classification(self, config, inputs, input_mask, sequence_labels, token_labels):
-        # set num_labels
-        config.num_labels = self.num_labels
         model = PerceiverForSequenceClassification(config=config)
         model.to(torch_device)
         model.eval()
@@ -215,9 +215,6 @@ class PerceiverModelTester:
     def create_and_check_for_image_classification_learned(
         self, config, inputs, input_mask, sequence_labels, token_labels
     ):
-        # set d_model and num_labels
-        config.d_model = 512
-        config.num_labels = self.num_labels
         model = PerceiverForImageClassificationLearned(config=config)
         model.to(torch_device)
         model.eval()
@@ -227,9 +224,6 @@ class PerceiverModelTester:
     def create_and_check_for_image_classification_fourier(
         self, config, inputs, input_mask, sequence_labels, token_labels
     ):
-        # set d_model and num_labels
-        config.d_model = 261
-        config.num_labels = self.num_labels
         model = PerceiverForImageClassificationFourier(config=config)
         model.to(torch_device)
         model.eval()
@@ -239,9 +233,6 @@ class PerceiverModelTester:
     def create_and_check_for_image_classification_conv(
         self, config, inputs, input_mask, sequence_labels, token_labels
     ):
-        # set d_model and num_labels
-        config.d_model = 322
-        config.num_labels = self.num_labels
         model = PerceiverForImageClassificationConvProcessing(config=config)
         model.to(torch_device)
         model.eval()
@@ -765,6 +756,13 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                             )
 
                     loss.backward()
+
+    @require_torch_multi_gpu
+    @unittest.skip(
+        reason="Perceiver does not work with data parallel (DP) because of a bug in PyTorch: https://github.com/pytorch/pytorch/issues/36035"
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
 
     @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
     def test_save_load_fast_init_from_base(self):
