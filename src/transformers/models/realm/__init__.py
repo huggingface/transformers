@@ -25,6 +25,8 @@ _import_structure = {
     "tokenization_realm": ["RealmTokenizer"],
 }
 
+if is_tokenizers_available():
+    _import_structure["tokenization_realm_fast"] = ["RealmTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_realm"] = [
@@ -43,6 +45,9 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig
     from .tokenization_realm import RealmTokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_realm import RealmTokenizerFast
 
     if is_torch_available():
         from .modeling_realm import (

@@ -31,37 +31,37 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "realm-cc-news-pretrained-embedder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-embedder/resolve/main/vocab.txt",
-        "realm-cc-news-pretrained-encoder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-encoder/resolve/main/vocab.txt",
-        "realm-cc-news-pretrained-scorer": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-scorer/resolve/main/vocab.txt",
-        "realm-cc-news-pretrained-openqa": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-openqa/aresolve/main/vocab.txt",
-        "realm-orqa-nq-openqa": "https://huggingface.co/qqaatw/realm-orqa-nq-openqa/resolve/main/vocab.txt",
-        "realm-orqa-nq-reader": "https://huggingface.co/qqaatw/realm-orqa-nq-reader/resolve/main/vocab.txt",
-        "realm-orqa-wq-openqa": "https://huggingface.co/qqaatw/realm-orqa-wq-openqa/resolve/main/vocab.txt",
-        "realm-orqa-wq-reader": "https://huggingface.co/qqaatw/realm-orqa-wq-reader/resolve/main/vocab.txt",
+        "qqaatw/realm-cc-news-pretrained-embedder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-embedder/resolve/main/vocab.txt",
+        "qqaatw/realm-cc-news-pretrained-encoder": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-encoder/resolve/main/vocab.txt",
+        "qqaatw/realm-cc-news-pretrained-scorer": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-scorer/resolve/main/vocab.txt",
+        "qqaatw/realm-cc-news-pretrained-openqa": "https://huggingface.co/qqaatw/realm-cc-news-pretrained-openqa/aresolve/main/vocab.txt",
+        "qqaatw/realm-orqa-nq-openqa": "https://huggingface.co/qqaatw/realm-orqa-nq-openqa/resolve/main/vocab.txt",
+        "qqaatw/realm-orqa-nq-reader": "https://huggingface.co/qqaatw/realm-orqa-nq-reader/resolve/main/vocab.txt",
+        "qqaatw/realm-orqa-wq-openqa": "https://huggingface.co/qqaatw/realm-orqa-wq-openqa/resolve/main/vocab.txt",
+        "qqaatw/realm-orqa-wq-reader": "https://huggingface.co/qqaatw/realm-orqa-wq-reader/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "realm-cc-news-pretrained-embedder": 512,
-    "realm-cc-news-pretrained-encoder": 512,
-    "realm-cc-news-pretrained-scorer": 512,
-    "realm-cc-news-pretrained-openqa": 512,
-    "realm-orqa-nq-openqa": 512,
-    "realm-orqa-nq-reader": 512,
-    "realm-orqa-wq-openqa": 512,
-    "realm-orqa-wq-reader": 512,
+    "qqaatw/realm-cc-news-pretrained-embedder": 512,
+    "qqaatw/realm-cc-news-pretrained-encoder": 512,
+    "qqaatw/realm-cc-news-pretrained-scorer": 512,
+    "qqaatw/realm-cc-news-pretrained-openqa": 512,
+    "qqaatw/realm-orqa-nq-openqa": 512,
+    "qqaatw/realm-orqa-nq-reader": 512,
+    "qqaatw/realm-orqa-wq-openqa": 512,
+    "qqaatw/realm-orqa-wq-reader": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "realm-cc-news-pretrained-embedder": {"do_lower_case": True},
-    "realm-cc-news-pretrained-encoder": {"do_lower_case": True},
-    "realm-cc-news-pretrained-scorer": {"do_lower_case": True},
-    "realm-cc-news-pretrained-openqa": {"do_lower_case": True},
-    "realm-orqa-nq-openqa": {"do_lower_case": True},
-    "realm-orqa-nq-reader": {"do_lower_case": True},
-    "realm-orqa-wq-openqa": {"do_lower_case": True},
-    "realm-orqa-wq-reader": {"do_lower_case": True},
+    "qqaatw/realm-cc-news-pretrained-embedder": {"do_lower_case": True},
+    "qqaatw/realm-cc-news-pretrained-encoder": {"do_lower_case": True},
+    "qqaatw/realm-cc-news-pretrained-scorer": {"do_lower_case": True},
+    "qqaatw/realm-cc-news-pretrained-openqa": {"do_lower_case": True},
+    "qqaatw/realm-orqa-nq-openqa": {"do_lower_case": True},
+    "qqaatw/realm-orqa-nq-reader": {"do_lower_case": True},
+    "qqaatw/realm-orqa-wq-openqa": {"do_lower_case": True},
+    "qqaatw/realm-orqa-wq-reader": {"do_lower_case": True},
 }
 
 
@@ -91,8 +91,6 @@ class RealmTokenizer(PreTrainedTokenizer):
 
     [`RealmTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting and
     wordpiece.
-
-    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
@@ -169,7 +167,7 @@ class RealmTokenizer(PreTrainedTokenizer):
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                "model use `tokenizer = RealmTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
@@ -299,7 +297,7 @@ class RealmTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A BERT sequence has the following format:
+        adding special tokens. A REALM sequence has the following format:
 
         - single sequence: `[CLS] X [SEP]`
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
@@ -351,7 +349,7 @@ class RealmTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A REALM sequence
         pair mask has the following format:
 
         ```
