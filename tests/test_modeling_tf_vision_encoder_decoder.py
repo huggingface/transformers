@@ -563,6 +563,7 @@ class TFViT2GPT2EncoderDecoderModelTest(TFVisionEncoderDecoderMixin, unittest.Te
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
+            "decoder_token_labels": decoder_token_labels,
             "encoder_hidden_states": encoder_hidden_states,  # This is not used in the tests.
             "labels": decoder_token_labels,
         }
