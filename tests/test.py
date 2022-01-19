@@ -1,20 +1,25 @@
 import unittest
 
-from transformers import BartForConditionalGeneration, BartTokenizer
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
 from transformers.generation_beam_constraints import (
     PhrasalConstraint
 )
 device = "cuda"
 
-model = BartForConditionalGeneration.from_pretrained("facebook/bart-base").to(device)
-tokenizer = BartTokenizer.from_pretrained("facebook/bart-base")
+model = GPT2LMHeadModel.from_pretrained("gpt2").to(device)
+tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
-force_text = "forced a little"
-force_tokens = tokenizer.encode(force_text, return_tensors="pt").to(device)
-print("force_tokens", force_tokens[0][1:-1])
-constraints = [PhrasalConstraint(force_tokens[0][1:-1])]
+force_text = "talk"
+force_text_2 = "forceful manner"
+force_tokens = tokenizer.encode(force_text, return_tensors="pt").to(device)[0]
+force_tokens_2 = tokenizer.encode(force_text_2, return_tensors="pt").to(device)[0]
 
-input_text = ["this feels very"] * 10
+constraints = [
+    PhrasalConstraint(force_tokens),
+    PhrasalConstraint(force_tokens_2)
+]
+
+input_text = ["He always"] * 2
 
 model_inputs = tokenizer(input_text, return_tensors="pt")
 
@@ -24,7 +29,9 @@ for key, value in model_inputs.items():
 print("model_inputs", model_inputs)
 k = model.generate(
     **model_inputs,
-    constraints=constraints
+    constraints=constraints,
+    num_beams=4,
+    num_return_sequences=3
 )
 
 for out in k:

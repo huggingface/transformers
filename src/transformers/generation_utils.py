@@ -1298,7 +1298,6 @@ class GenerationMixin:
             # 12. run beam search
             return self.constrained_beam_search(
                 input_ids,
-                constraints=constraints,
                 constrained_beam_scorer=constrained_beam_scorer,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
@@ -2723,7 +2722,6 @@ class GenerationMixin:
     def constrained_beam_search(
         self,
         input_ids: torch.LongTensor,
-        constraints: List[Constraint],
         constrained_beam_scorer: ConstrainedBeamSearchScorer,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
@@ -2744,9 +2742,6 @@ class GenerationMixin:
 
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
-            constraints (`List[Constraint]`):
-                A list of positive constraints represented as `Constraint` objects that must be fulfilled in 
-                the generation output. For more information, the documentation of [`Constraint`] should be read.
             constrained_beam_scorer (`ConstrainedBeamScorer`):
                 An derived instance of [`BeamScorer`] that defines how beam hypotheses are constructed, stored and
                 sorted during generation, while satisfying a list of positive constraints. For more information, the 
@@ -2841,22 +2836,11 @@ class GenerationMixin:
         ...     ]
         ... )
 
-        >>> outputs = model.beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
+        >>> outputs = model.constrained_beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         ```"""
-        # init values
-        print("constraints", constraints)
-        constraint_states = [
-            [
-                ConstraintListState([
-                    constraint.copy()
-                    for constraint in constraints
-                ])    
-                for _ in range(constrained_beam_scorer.num_beams)
-            ] for _ in range(len(constrained_beam_scorer._beam_hyps))
-        ] # need a constraint tracker for each sentence output, for each batch
-
+        # init values        
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
@@ -2905,7 +2889,6 @@ class GenerationMixin:
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
-        print("<><><>input_ids", input_ids)
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
@@ -2980,14 +2963,13 @@ class GenerationMixin:
             next_indices = (next_tokens / vocab_size).long()
             next_tokens = next_tokens % vocab_size
 
-            print("!!!!!!scores_for_all_vocab", scores_for_all_vocab.size())
+            print("<<<<<<input_ids", input_ids)
             # stateless
             beam_outputs = constrained_beam_scorer.process(
                 input_ids,
                 next_token_scores,
                 next_tokens,
                 next_indices,
-                constraint_states,
                 scores_for_all_vocab,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
@@ -2997,9 +2979,10 @@ class GenerationMixin:
             beam_idx = beam_outputs["next_beam_indices"]
 
             print("beam_idx", beam_idx)
-            print("input_ids", input_ids.size())
-            print("beam_next_tokens", beam_next_tokens.size())
+            print(">>>>>beam_next_tokens", beam_next_tokens)
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
+            print(">>>>>input_ids", input_ids)
+
 
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder

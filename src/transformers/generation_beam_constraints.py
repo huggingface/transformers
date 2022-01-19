@@ -140,10 +140,12 @@ class PhrasalConstraint(Constraint):
         return self.token_ids[self.fulfilled_idx + 1]
     
     def does_advance(self, token_id):
+        if self.completed:
+            return False
+
         return token_id == self.token_ids[self.fulfilled_idx + 1]
 
     def update(self, token_id: int):
-        
         stepped = False
         completed = False
         reset = False
@@ -167,10 +169,17 @@ class PhrasalConstraint(Constraint):
         
 class ConstraintListState:
     def __init__(self, constraints: List[Constraint]):
+        self.constraints = constraints
+        self.n_constraints = len(constraints)
+        self.completed = False
+
+        self.init_state()
+
+
+    def init_state(self):
         self.complete_constraints = []
         self.inprogress_constraint = None
-        self.pending_constraints = constraints
-        self.completed = False
+        self.pending_constraints = [constraint.copy() for constraint in self.constraints]
     
     def advance(self):
         '''The list of tokens to generate such that we can make progress.
@@ -180,6 +189,8 @@ class ConstraintListState:
         we'll return.
         '''
         if self.inprogress_constraint is None:
+            print("RUN ADVANCE NO PROGRESS")
+            print("self.pending_constraints", self.pending_constraints)
             token_list = []
             for constraint in self.pending_constraints:
                 advance = constraint.advance()
@@ -190,39 +201,83 @@ class ConstraintListState:
         if len(token_list) == 0:
             return None
         else:
-            return torch.stack(token_list)[:1]
+            return torch.stack(token_list)
 
+    def update(self, token_ids: torch.Tensor):
+        '''
+        token_ids: the tokens generated thus far to reset the state of the
+        progress through constraints.
+        '''
+        self.init_state()
+        print("\n!!!START UPDATE\n\n")
+        for token in token_ids:
+            print("token", token)
+            complete, stepped = self.add(token)
+            print("complete, stepped", complete, stepped)
 
-    def update(self, token_id: int):
+        return self
+        
+
+    def add(self, token_id: int):
+        if self.completed:
+            return
+
         complete, stepped = False, False
         if self.inprogress_constraint is not None:
+            '''
+            In the middle of fulfilling a constraint. 
+
+            If the token just steps (make but an incremental progress to current job) it, do nothing.
+            '''
             stepped, complete, reset = self.inprogress_constraint.update(token_id)
             if reset:
-                self.pending_constraints.append(self.inprogress_constraint)
-                self.inprogress_constraint = None
+                '''
+                1. If the next token breaks the fulfillment, then we must restart.
+                    e.g. force the sequence "I love pies" and the next token after "I love" is "books".
+                '''
+                print("RESET")
+                self.pending_constraints.append(self.inprogress_constraint.copy())
+                self.inprogress_constraint = None                
+                print("self.pending_constraints", self.pending_constraints)
+
             if complete:
+                '''
+                2. If the next token completes the constraint, move it to completed list, set 
+                    inprogress to None. If there are no pending constraints either, then this
+                    full list of constraints is complete.
+                '''
                 self.complete_constraints.append(self.inprogress_constraint)
                 self.inprogress_constraint = None
 
                 if len(self.pending_constraints) == 0:
                     self.completed = True
         else:
+            '''
+            Not in the middle of fulfilling a constraint. 
+            '''
+            print("NOT IN THE MIDDLE", self.pending_constraints)
             for cidx, pending_constraint in enumerate(self.pending_constraints):
+                '''
+                1. Does it advance any of the pending constraints?
+                '''
                 if pending_constraint.does_advance(token_id):
                     stepped, complete, reset = pending_constraint.update(token_id)
                     if complete:
                         self.complete_constraints.append(pending_constraint)
-                        
-                    elif stepped:
+                        self.inprogress_constraint = None
+                    if not complete and stepped:
                         self.inprogress_constraint = pending_constraint
                     
                     if complete or stepped:
                         self.pending_constraints = self.pending_constraints[:cidx] + self.pending_constraints[cidx+1:]
+                        print("!!!self.pending_constraints", self.pending_constraints)
+                        print()
                         if len(self.pending_constraints) == 0 and self.inprogress_constraint is None:
                             self.completed = True 
 
                         break
 
+        return complete, stepped
         
                         
                     
