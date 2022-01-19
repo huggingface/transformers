@@ -248,7 +248,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
         self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
 
-        self.fill_match("bfloat16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
+        self.fill_match("bf16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
 
         # deepspeed's default mode is fp16 unless there is a config that says differently
         if self.is_true("bfoat16.enabled"):

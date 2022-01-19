@@ -8,7 +8,7 @@
         "min_loss_scale": 1
     },
 
-    "bfloat16": {
+    "bf16": {
         "enabled": "auto"
     },
 
