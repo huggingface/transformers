@@ -28,7 +28,7 @@ SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SwinConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SwinModel`]. It is used to instantiate an Swin
+    This is the configuration class to store the configuration of a [`SwinModel`]. It is used to instantiate a Swin
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Swin
     [microsoft/swin-tiny-patch4-window7-224](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224)
@@ -37,14 +37,13 @@ class SwinConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         image_size (`int`, *optional*, defaults to 224):
-            Size (resolution) of the input images.
+            The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 4):
-            Size of patches.
+            The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in input images.
+            The number of input channels.
         embed_dim (`int`, *optional*, defaults to 96):
             Dimensionality of patch embedding.
         depths (`list(int)`, *optional*, defaults to [2, 2, 6, 2]):
@@ -56,20 +55,20 @@ class SwinConfig(PretrainedConfig):
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             Ratio of MLP hidden dimesionality to embedding dimensionality.
         qkv_bias (`bool`, *optional*, defaults to True):
-            Whether or not learnable bias should be added to query, key, value
-        drop_rate (`float`, *optional*, defaults to 0.0):
-            Dropout rate.
-        attn_drop_rate (`float`, *optional*, defaults to 0.0):
-            Attention dropout rate.
+            Whether or not a learnable bias should be added to the queries, keys and values.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             Stochastic depth rate.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         use_absolute_embeddings (`bool`, *optional*, defaults to False):
-            Whether or not to add absolute position embedding to the patch embedding.
+            Whether or not to add absolute position embeddings to the patch embeddings.
         patch_norm (`bool`, *optional*, defaults to True):
-            Whether or not to add normalization after patch embedding.
+            Whether or not to add layer normalization after patch embedding.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):

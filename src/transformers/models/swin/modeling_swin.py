@@ -66,7 +66,7 @@ def window_partition(input_feature, window_size):
 
 def window_reverse(windows, window_size, height, width):
     """
-    Mergres windows to produce higher resolution features.
+    Merges windows to produce higher resolution features.
     """
     batch_size = int(windows.shape[0] / (height * width / window_size / window_size))
     windows = windows.view(batch_size, height // window_size, width // window_size, window_size, window_size, -1)
