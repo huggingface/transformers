@@ -371,8 +371,9 @@ class EncoderDecoderModel(PreTrainedModel):
                 )
 
             if "config" not in kwargs_encoder:
-                encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
-                encoder_config.update(kwargs_encoder)
+                encoder_config, kwargs_encoder = AutoConfig.from_pretrained(
+                    encoder_pretrained_model_name_or_path, **kwargs_encoder, return_unused_kwargs=True
+                )
 
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
                     logger.info(
@@ -384,9 +385,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
                 kwargs_encoder["config"] = encoder_config
 
-            encoder = AutoModel.from_pretrained(
-                encoder_pretrained_model_name_or_path, *model_args, config=kwargs_encoder["config"]
-            )
+            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
@@ -397,8 +396,9 @@ class EncoderDecoderModel(PreTrainedModel):
                 )
 
             if "config" not in kwargs_decoder:
-                decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
-                decoder_config.update(kwargs_decoder)
+                decoder_config, kwargs_decoder = AutoConfig.from_pretrained(
+                    decoder_pretrained_model_name_or_path, **kwargs_decoder, return_unused_kwargs=True
+                )
 
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
@@ -421,9 +421,7 @@ class EncoderDecoderModel(PreTrainedModel):
                     "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
-            decoder = AutoModelForCausalLM.from_pretrained(
-                decoder_pretrained_model_name_or_path, config=kwargs_decoder["config"]
-            )
+            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # instantiate config with corresponding kwargs
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
