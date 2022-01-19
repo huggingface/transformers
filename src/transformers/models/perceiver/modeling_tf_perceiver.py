@@ -8,7 +8,7 @@ from transformers.activations_tf import ACT2FN
 from transformers.modeling_tf_outputs import TFBaseModelOutputWithCrossAttentions
 from ...modeling_tf_utils import TFPreTrainedModel
 from .configuration_perceiver import PerceiverConfig
-from typing import Dict, Mapping, Callable, Any, Optional, Tuple
+from typing import Dict, Mapping, Callable, Any, Optional, Tuple, List
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
@@ -2764,7 +2764,7 @@ class TFPerceiverProjectionPostprocessor(tf.keras.layers.Layer):
     """
 
     def __init__(self, in_channels, out_channels):
-        super()).__init__()
+        super().__init__()
         self.classifier = tf.keras.layer.Dense(out_channels)
 
     def forward(self, inputs: tf.Tensor, pos: Optional[tf.Tensor] = None, modality_sizes=None) -> tf.Tensor:
