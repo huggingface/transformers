@@ -18,7 +18,7 @@ Processor class for ViLT.
 
 from typing import List, Optional, Union
 
-from transformers import BertTokenizer, BertTokenizerFast
+from transformers import BertTokenizerFast
 
 from ...file_utils import TensorType
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
@@ -29,14 +29,14 @@ class ViltProcessor:
     r"""
     Constructs a ViLT processor which wraps a BERT tokenizer and ViLT feature extractor into a single processor.
 
-    [`ViltProcessor`] offers all the functionalities of [`ViltFeatureExtractor`] and [`BertTokenizer`]. See the
+    [`ViltProcessor`] offers all the functionalities of [`ViltFeatureExtractor`] and [`BertTokenizerFast`]. See the
     docstring of [`~ViltProcessor.__call__`] and [`~ViltProcessor.decode`] for more information.
 
     Args:
         feature_extractor (`ViltFeatureExtractor`):
             An instance of [`ViltFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`BertTokenizer`):
-            An instance of [`BertTokenizer`]/['BertTokenizerFast`]. The tokenizer is a required input.
+        tokenizer (`BertTokenizerFast`):
+            An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
@@ -44,10 +44,8 @@ class ViltProcessor:
             raise ValueError(
                 f"`feature_extractor` has to be of type {ViltFeatureExtractor.__class__}, but is {type(feature_extractor)}"
             )
-        if not isinstance(tokenizer, (BertTokenizer, BertTokenizerFast)):
-            raise ValueError(
-                f"`tokenizer` has to be of type {BertTokenizer.__class__} or {BertTokenizerFast.__class__}, but is {type(tokenizer)}"
-            )
+        if not isinstance(tokenizer, BertTokenizerFast):
+            raise ValueError(f"`tokenizer` has to be of type {BertTokenizerFast.__class__}, but is {type(tokenizer)}")
 
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer
@@ -83,7 +81,7 @@ class ViltProcessor:
         <Tip>
 
         This class method is simply calling ViltFeatureExtractor's
-        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and BertTokenizer's
+        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and BertTokenizerFast's
         [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the docstrings of the methods
         above for more information.
 
@@ -105,7 +103,7 @@ class ViltProcessor:
                 [`PreTrainedTokenizer`]
         """
         feature_extractor = ViltFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        tokenizer = BertTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
@@ -131,7 +129,7 @@ class ViltProcessor:
     ) -> BatchEncoding:
         """
         This method uses [`ViltFeatureExtractor.__call__`] method to prepare image(s) for the model, and
-        [`BertTokenizer.__call__`] to prepare text for the model.
+        [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
         """
@@ -155,21 +153,20 @@ class ViltProcessor:
         )
         # add pixel_values + pixel_mask
         encoding_feature_extractor = self.feature_extractor(images, return_tensors=return_tensors)
-        encoding["pixel_values"] = encoding_feature_extractor.pixel_values
-        encoding["pixel_mask"] = encoding_feature_extractor.pixel_mask
+        encoding.update(encoding_feature_extractor)
 
         return encoding
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to BertTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
+        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to BertTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
-        docstring of this method for more information.
+        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
