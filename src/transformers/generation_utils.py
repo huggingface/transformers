@@ -38,6 +38,7 @@ from .generation_logits_process import (
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
+    SoftLengthLogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
@@ -665,6 +666,8 @@ class GenerationMixin:
         num_beam_groups: int,
         diversity_penalty: float,
         remove_invalid_values: bool,
+        length_regulation_start: int,
+        length_regulation_factor: float,
         logits_processor: Optional[LogitsProcessorList],
     ) -> LogitsProcessorList:
         """
@@ -695,6 +698,12 @@ class GenerationMixin:
         )
         remove_invalid_values = (
             remove_invalid_values if remove_invalid_values is not None else self.config.remove_invalid_values
+        )
+        length_regulation_start = (
+            length_regulation_start if length_regulation_start is not None else self.config.length_regulation_start
+        )
+        length_regulation_factor = (
+            length_regulation_factor if length_regulation_factor is not None else self.config.length_regulation_factor
         )
         # instantiate processors list
 
@@ -729,6 +738,8 @@ class GenerationMixin:
             processors.append(ForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
         if remove_invalid_values is True:
             processors.append(InfNanRemoveLogitsProcessor())
+        if length_regulation_factor is not None and length_regulation_start is not None:
+            processors.append(SoftLengthLogitsProcessor(length_regulation_start, length_regulation_factor, eos_token_id))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         return processors
 
@@ -843,7 +854,9 @@ class GenerationMixin:
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
-        synced_gpus: Optional[bool] = False,
+        synced_gpus: Optional[bool] = None,
+        length_regulation_start: Optional[int] = None,
+        length_regulation_factor: Optional[float] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -1191,6 +1204,8 @@ class GenerationMixin:
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
             remove_invalid_values=remove_invalid_values,
+            length_regulation_start=length_regulation_start,
+            length_regulation_factor=length_regulation_factor,
             logits_processor=logits_processor,
         )
 
