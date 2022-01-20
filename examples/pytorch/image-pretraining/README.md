@@ -18,7 +18,7 @@ limitations under the License.
 
 This directory contains a script, `run_mae.py`, that can be used to pre-train a Vision Transformer as a masked autoencoder (MAE), as proposed in [Masked Autoencoders Are Scalable Vision Learners](https://arxiv.org/abs/2111.06377). The script can be used to train a `ViTMAEForPreTraining` model in the Transformers library, using PyTorch. After self-supervised pre-training, one can load the weights of the encoder directly into a `ViTForImageClassification`. The MAE method allows for learning high-capacity models that generalize well: e.g., a vanilla ViT-Huge model achieves the best accuracy (87.8%) among methods that use only ImageNet-1K data.
 
-The goal for the model is to predict raw pixel values for the masked patches. As the model internally masks patches and learns to reconstruct them, there's no need for any labels.
+The goal for the model is to predict raw pixel values for the masked patches. As the model internally masks patches and learns to reconstruct them, there's no need for any labels. The model uses the mean squared error (MSE) between the reconstructed and original images in the pixel space.
 
 ## Using datasets from 🤗 `datasets`
 
@@ -28,7 +28,6 @@ One can use the following command to pre-train a `ViTMAEForPreTraining` model fr
 python run_mae.py \
     --output_dir ./outputs/ \
     --remove_unused_columns False \
-    --label_names bool_masked_pos \
     --do_train \
     --do_eval \
     --learning_rate 2e-5 \
@@ -70,7 +69,6 @@ python run_mae.py \
     --train_dir <path-to-train-root> \
     --output_dir ./outputs/ \
     --remove_unused_columns False \
-    --label_names bool_masked_pos \
     --do_train \
     --do_eval
 ```
