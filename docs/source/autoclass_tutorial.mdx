@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# AutoClasses
+# Load a pretrained instance with an AutoClass
 
 With so many different Transformer architectures, it can be challenging to create one for your checkpoint. As a part of 🤗 Transformers core philosophy to make the library easy, simple and flexible to use, the `AutoClasses` automatically infers and loads the correct architecture given a checkpoint. The `from_pretrained` method lets you quickly load a pretrained model for any architecture so you don't have to devote time and resources to train a model from scratch. Producing this type of checkpoint-agnostic code means if your code works for one checkpoint, it will work with another checkpoint (as long as it was trained for a similar task) even if the architecture is different.
 
@@ -75,7 +75,7 @@ Load a processor with the [`AutoProcessor.from_pretrained`] method:
 
 ## `AutoModel`
 
-Finally, the [`AutoModel`] class loads a pretrained model for a given task (see [here](model_doc/auto) for a complete list of available tasks). For example, if you want to load a model for sequence classification you should use [`AutoModelForSequenceClassification.from_pretrained`]:
+Finally, the `AutoModelFor` classes lets you load a pretrained model for a given task (see [here](model_doc/auto) for a complete list of available tasks). For example, if you want to load a model for sequence classification you should use [`AutoModelForSequenceClassification.from_pretrained`]:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification

@@ -10,7 +10,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Pipeline
+# Pipelines for inference
 
 The [`pipeline`] makes it simple to use any model from the [Model Hub](https://huggingface.co/models) for inference. You can use the [`pipeline`] for a variety of tasks such as text generation, image segmentation and audio classification. Even if you don't have experience with a specific modality or understand the code powering the models, you can still use them with the [`pipeline`]! This tutorial will teach you to:
 
@@ -63,7 +63,7 @@ Any additional parameters to your task can also be included in the [`pipeline`].
 
 ### Choose a model and tokenizer
 
-The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/models). You can use with the tags on the Model Hub to filter for a model you'd like to use for your task. Then you can load a model and tokenizer with the [`AutoModel`] and [`AutoTokenizer'] classes:
+The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/models). You can use with the tags on the Model Hub to filter for a model you'd like to use for your task. Then you can load a model and tokenizer with the appropriate `AutoModelFor` and [`AutoTokenizer'] class:
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -113,13 +113,17 @@ Pass the audio file to the [`pipeline`]:
 
 Finally, using a [`pipeline`] for vision tasks is nearly identical.
 
-Specify your vision task and pass your image to the classifier. The input can be a link or a local path to the image:
+Specify your vision task and pass your image to the classifier. For example, if you're interested in classifying the species of cat shown below:
+
+![pipeline-cat-chonk](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg)
+
+Pass your input as a link or a local path to the image:
 
 ```py
 >>> from transformers import pipeline
 
 >>> vision_classifier = pipeline(task="image-classification")
->>> vision_classifier(images="https://preview.redd.it/vzps93vfh1n21.jpg?width=960&crop=smart&auto=webp&s=767200d222c226522288985ea6fe8a2f72054aab")
+>>> vision_classifier(images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 [{'label': 'lynx, catamount', 'score': 0.4403027892112732},
  {'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor',
   'score': 0.03433405980467796},

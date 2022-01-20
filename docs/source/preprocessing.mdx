@@ -32,7 +32,7 @@ If you plan on using a pretrained model, it's important to use the associated pr
 
 </Tip>
 
-You can quickly get started by loading a pretrained tokenizer with the ['AutoTokenizer'] class. This downloads the _vocab_ used during pretraining or fine-tuning a model.
+You can quickly get started by loading a pretrained tokenizer with the [`AutoTokenizer`] class. This downloads the _vocab_ used during pretraining or fine-tuning a model.
 
 ### Tokenize
 
@@ -73,18 +73,18 @@ special tokens, but if they do, the tokenizer will automatically add them for yo
 If you have several sentences you want to process, you can do this efficiently by sending the sentences as a list to the tokenizer:
 
 ```py
->>> batch_sentences = ["The Road goes ever on and on", "Down from the door where it began", "Now far ahead the Road has gone"]
+>>> batch_sentences = ["But what about second breakfast?", "Don't think he knows about second breakfast, Pip.", "What about elevensies?"]
 >>> encoded_inputs = tokenizer(batch_sentences)
 >>> print(encoded_inputs)
-{'input_ids': [[101, 1996, 2346, 3632, 2412, 2006, 1998, 2006, 102], 
-               [101, 2091, 2013, 1996, 2341, 2073, 2009, 2211, 102], 
-               [101, 2085, 2521, 3805, 1996, 2346, 2038, 2908, 102]], 
- 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0]], 
- 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1], 
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1], 
-                    [1, 1, 1, 1, 1, 1, 1, 1, 1]]}
+{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102], 
+               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102], 
+               [101, 1327, 1164, 5450, 23434, 136, 102]], 
+ 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0], 
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
+                    [0, 0, 0, 0, 0, 0, 0]], 
+ 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1], 
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
+                    [1, 1, 1, 1, 1, 1, 1]]}
 ```
 
 ### Pad
@@ -94,18 +94,21 @@ This brings us to an important topic. When you process a batch of sentences, the
 Set the `padding` parameter to `True` to pad the shorter sequences in the batch to match the longest sequence:
 
 ```py
->>> batch_sentences = ["Pursuing it with eager feet", "Until it joins some larger way"]
+>>> batch_sentences = ["But what about second breakfast?", "Don't think he knows about second breakfast, Pip.", "What about elevensies?"]
 >>> encoded_input = tokenizer(batch_sentences, padding=True)
 >>> print(encoded_input)
-{'input_ids': [[101, 11828, 2009, 2007, 9461, 2519, 102, 0], 
-               [101, 2127, 2009, 9794, 2070, 3469, 2126, 102]], 
- 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0]], 
- 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 0], 
-                    [1, 1, 1, 1, 1, 1, 1, 1]]}
+{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0], 
+               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102], 
+               [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]], 
+ 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 
+ 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], 
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
+                    [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
 ```
 
-Notice the tokenizer padded the first sentence with a `0` because it is shorter!
+Notice the tokenizer padded the first and third sentences with a `0` because they are shorter!
 
 ### Truncation
 
@@ -114,15 +117,18 @@ On the other end of the spectrum, sometimes a sequence may be too long for a mod
 Set the `truncation` parameter to `True` to truncate a sequence to the maximum length accepted by the model:
 
 ```py
->>> batch_sentences = ["Pursuing it with eager feet", "Until it joins some larger way"]
+>>> batch_sentences = ["But what about second breakfast?", "Don't think he knows about second breakfast, Pip.", "What about elevensies?"]
 >>> encoded_input = tokenizer(batch_sentences, padding=True, truncation=True)
 >>> print(encoded_input)
-{'input_ids': [[101, 11828, 2009, 2007, 9461, 2519, 102, 0], 
-               [101, 2127, 2009, 9794, 2070, 3469, 2126, 102]], 
- 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0], 
-                    [0, 0, 0, 0, 0, 0, 0, 0]], 
- 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 0], 
-                    [1, 1, 1, 1, 1, 1, 1, 1]]}
+{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0], 
+               [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102], 
+               [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]], 
+ 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 
+ 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], 
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
+                    [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
 ```
 
 ### Build tensors
@@ -132,158 +138,29 @@ Finally, you want the tokenizer to return the actual tensors that are fed to the
 Set the `return_tensors` parameter to either `pt` for PyTorch, or `tf` for TensorFlow:
 
 ```py
->>> batch = ["Pursuing it with eager feet", "Until it joins some larger way"]
+>>> batch_sentences = batch_sentences = ["But what about second breakfast?", "Don't think he knows about second breakfast, Pip.", "What about elevensies?"]
 >>> encoded_input = tokenizer(batch, padding=True, truncation=True, return_tensors='pt')
 >>> print(encoded_input)
-{'input_ids': tensor([[  101, 11828,  2009,  2007,  9461,  2519,   102,     0],
-                      [  101,  2127,  2009,  9794,  2070,  3469,  2126,   102]]), 
- 'token_type_ids': tensor([[0, 0, 0, 0, 0, 0, 0, 0],
-                           [0, 0, 0, 0, 0, 0, 0, 0]]), 
- 'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 0],
-                           [1, 1, 1, 1, 1, 1, 1, 1]])}
+{'input_ids': tensor([[  101,   153,  7719, 21490,  1122,  1114,  9582,  1623,   102],
+                      [  101,  5226,  1122,  9649,  1199,  2610,  1236,   102,     0]]), 
+ 'token_type_ids': tensor([[0, 0, 0, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 0, 0, 0, 0]]), 
+ 'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1],
+                           [1, 1, 1, 1, 1, 1, 1, 1, 0]])}
 ===PT-TF-SPLIT===
->>> batch = ["Pursuing it with eager feet", "Until it joins some larger way"]
+>>> batch_sentences = batch_sentences = ["But what about second breakfast?", "Don't think he knows about second breakfast, Pip.", "What about elevensies?"]
 >>> encoded_input = tokenizer(batch, padding=True, truncation=True, return_tensors="tf")
 >>> print(encoded_input)
-{'input_ids': <tf.Tensor: shape=(2, 8), dtype=int32, numpy=
-array([[  101, 11828,  2009,  2007,  9461,  2519,   102,     0],
-       [  101,  2127,  2009,  9794,  2070,  3469,  2126,   102]],
+{'input_ids': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
+array([[  101,   153,  7719, 21490,  1122,  1114,  9582,  1623,   102],
+       [  101,  5226,  1122,  9649,  1199,  2610,  1236,   102,     0]],
       dtype=int32)>, 
- 'token_type_ids': <tf.Tensor: shape=(2, 8), dtype=int32, numpy=
-array([[0, 0, 0, 0, 0, 0, 0, 0],
-       [0, 0, 0, 0, 0, 0, 0, 0]], dtype=int32)>, 
- 'attention_mask': <tf.Tensor: shape=(2, 8), dtype=int32, numpy=
-array([[1, 1, 1, 1, 1, 1, 1, 0],
-       [1, 1, 1, 1, 1, 1, 1, 1]], dtype=int32)>}
-```
-
-### Preprocess pairs of sentences
-
-<Youtube id="0u3ioSwev3s"/>
-
-Sometimes the task requires your model accept a pair of sentences as input, such as question-answering tasks. In this case, you want to supply your sentences as two arguments instead of a list. As you just saw in the previous section, providing your sentences in a list will be interpreted as a batch of two single sentences.
-
-```py
->>> encoded_input = tokenizer("Where am I, and what is the time?' he said aloud to the ceiling.", "In the house of Elrond, and it is ten o'clock in the morning,' said a voice.")
->>> print(encoded_input)
-{'input_ids': [101, 2073, 2572, 1045, 1010, 1998, 2054, 2003, 1996, 2051, 1029, 1005, 2002, 2056, 12575, 2000, 1996, 5894, 1012, 102, 1999, 1996, 2160, 1997, 3449, 4948, 2094, 1010, 1998, 2009, 2003, 2702, 1051, 1005, 5119, 1999, 1996, 2851, 1010, 1005, 2056, 1037, 2376, 1012, 102], 
- 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
- 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
-```
-
-You can see the [token_type_ids](glossary#token-type-ids) indicate to the model which tokens correspond to the first sentence, and which tokens correspond to the second sentence.
-
-Decoding the `input_ids` will show that special tokens have been added:
-
-```py
->>> tokenizer.decode(encoded_input["input_ids"])
-'[CLS] Where am I, and what is the time?'he said aloud to the ceiling. [SEP] In the house of Elrond, and it is ten o'clock in the morning,'said a voice. [SEP]'
-```
-
-When you have a list of pairs of sequences you want to process, create two lists for your tokenizer:
-
-```py
->>> batch_sentences = ["Hello I'm a single sentence", "And another sentence", "And the very very last one"]
->>> batch_of_second_sentences = [
-...     "I'm a sentence that goes with the first sentence",
-...     "And I should be encoded with the second sentence",
-...     "And I go with the very last one",
-... ]
->>> encoded_inputs = tokenizer(batch_sentences, batch_of_second_sentences)
->>> print(encoded_inputs)
-{'input_ids': [[101, 8667, 146, 112, 182, 170, 1423, 5650, 102, 146, 112, 182, 170, 5650, 1115, 2947, 1114, 1103, 1148, 5650, 102], 
-               [101, 1262, 1330, 5650, 102, 1262, 146, 1431, 1129, 12544, 1114, 1103, 1248, 5650, 102], 
-               [101, 1262, 1103, 1304, 1304, 1314, 1141, 102, 1262, 146, 1301, 1114, 1103, 1304, 1314, 1141, 102]], 
-'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
-                   [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
-                   [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 
-'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
-                   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
-                   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}
-```
-
-Decoding the `input_ids` will show that each sentence is correctly separated and matched with their sentence pair:
-
-```py
->>> for ids in encoded_inputs["input_ids"]:
-...     print(tokenizer.decode(ids))
-[CLS] Hello I'm a single sentence [SEP] I'm a sentence that goes with the first sentence [SEP]
-[CLS] And another sentence [SEP] And I should be encoded with the second sentence [SEP]
-[CLS] And the very very last one [SEP] And I go with the very last one [SEP]
-```
-
-Lastly, you can apply a padding and truncation strategy, and return the tensors directly with the following:
-
-```py
->>> batch = tokenizer(batch_sentences, batch_of_second_sentences, padding=True, truncation=True, return_tensors="pt")
-===PT-TF-SPLIT===
->>> batch = tokenizer(batch_sentences, batch_of_second_sentences, padding=True, truncation=True, return_tensors="tf")
-```
-
-### Pre-tokenized inputs
-
-The tokenizer also accepts pre-tokenized inputs. This is particularly useful for tasks like [named entity recognition (NER)](task_summary#named-entity-recognition) or [part-of-speech tagging (POS tagging)](https://en.wikipedia.org/wiki/Part-of-speech_tagging).
-
-<Tip warning={true}>
-
-Pre-tokenized does not mean the inputs are already tokenized. It only means the inputs are already split into words. You still need to tokenize the inputs!
-
-</Tip>
-
-When dealing with pre-tokenized inputs, set `is_split_into_words=True`:
-
-```py
->>> encoded_input = tokenizer(["In", "a", "hole", "in", "the", "ground", "there", "lived", "a", "hobbit"], is_split_into_words=True)
->>> print(encoded_input)
-{'input_ids': [101, 1999, 1037, 4920, 1999, 1996, 2598, 2045, 2973, 1037, 7570, 10322, 4183, 102], 
- 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
- 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
-```
-
-Note that the tokenizer still adds the special token ids (if applicable) unless you pass `add_special_tokens=False`.
-
-Encode a batch of sentences like this:
-
-```py
->>> batch_sentences = [
-    ["Hello", "I'm", "a", "single", "sentence"],
-    ["And", "another", "sentence"],
-    ["And", "the", "very", "very", "last", "one"],
-]
->>> encoded_inputs = tokenizer(batch_sentences, is_split_into_words=True)
-```
-
-Or a batch of sentence pairs like this:
-
-```py
->>> batch_of_second_sentences = [
-    ["I'm", "a", "sentence", "that", "goes", "with", "the", "first", "sentence"],
-    ["And", "I", "should", "be", "encoded", "with", "the", "second", "sentence"],
-    ["And", "I", "go", "with", "the", "very", "last", "one"],
-]
->>> encoded_inputs = tokenizer(batch_sentences, batch_of_second_sentences, is_split_into_words=True)
-```
-
-Pad, truncate, and return the tensors like before:
-
-```py
->>> batch = tokenizer(
-...    batch_sentences,
-...     batch_of_second_sentences,
-...     is_split_into_words=True,
-...     padding=True,
-...     truncation=True,
-...     return_tensors="pt",
-)
-===PT-TF-SPLIT===
->>> batch = tokenizer(
-...     batch_sentences,
-...     batch_of_second_sentences,
-...     is_split_into_words=True,
-...     padding=True,
-...     truncation=True,
-...     return_tensors="tf",
-)
+ 'token_type_ids': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
+array([[0, 0, 0, 0, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=int32)>, 
+ 'attention_mask': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
+array([[1, 1, 1, 1, 1, 1, 1, 1, 1],
+       [1, 1, 1, 1, 1, 1, 1, 1, 0]], dtype=int32)>}
 ```
 
 ## Audio
@@ -377,6 +254,8 @@ Next, take a look at the image with 🤗 Datasets [`Image`](https://huggingface.
 ```py
 >>> dataset[0]["image"]
 ```
+
+![vision-preprocess-tutorial.png](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vision-preprocess-tutorial.png)
 
 ### Feature extractor
 
@@ -516,7 +395,7 @@ A processor combines the feature extractor and tokenizer. Load a processor with 
 >>> prepare_dataset(dataset[0])
 ```
 
-Awesome, you should now be able to preprocess data for any modality! In the next tutorial, you will learn how to train a model on the preprocessed data.
+Awesome, you should now be able to preprocess data for any modality! In the next tutorial, you will learn how to fine-tune a model on the preprocessed data.
 
 ## Everything you always wanted to know about padding and truncation
 
