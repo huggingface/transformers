@@ -1,0 +1,57 @@
+name: Delete dev documentation
+
+on:
+  pull_request:
+    types: [ closed ]
+
+
+jobs:
+  build_and_package:
+    runs-on: [self-hosted, doc-builder]
+    container:
+      image: huggingface/doc-builder-transformers
+      options: "-v /home/github_actions:/mnt"
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set env
+        run: echo "WRITE=$(cat /mnt/WRITE)" >> $GITHUB_ENV
+
+      - uses: actions/checkout@v2
+        with:
+          repository: 'huggingface/doc-build-dev'
+          path: doc-build-dev
+          token: ${{ env.WRITE }}
+
+      - name: Setup git
+        run: |
+          git config --global user.name "Hugging Face Doc Builder"
+          git config --global user.email docs@huggingface.co
+
+      - name: Push to repositories
+        run: |
+          cd doc-build-dev
+          ls
+          rm -rf transformers/pr_$PR_NUMBER
+          ls
+          git add .
+          git commit -m "Closed PR ${GITHUB_REF##*/}"
+          git push origin main
+
+      - name: Comment PR
+        uses: thollander/actions-comment-pull-request@v1
+        if: github.event.pull_request.merged == false
+
+        with:
+          message: 'Thank you for your PR. The documentation will now be removed from the staging environment - feel free to reopen this PR to recreate it.'
+          GITHUB_TOKEN: ${{ env.WRITE }}
+
+      - name: Comment PR
+        uses: thollander/actions-comment-pull-request@v1
+        if: github.event.pull_request.merged == true
+
+        with:
+          message: 'Great job merging this PR! the documentation will now be removed from the staging environment.'
+          GITHUB_TOKEN: ${{ env.WRITE }}

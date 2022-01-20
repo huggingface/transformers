@@ -942,6 +942,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "MobileBertTokenizer": BertConverter,
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
+    "RealmTokenizer": BertConverter,
     "ReformerTokenizer": ReformerConverter,
     "RemBertTokenizer": RemBertConverter,
     "RetriBertTokenizer": BertConverter,
