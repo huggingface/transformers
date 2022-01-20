@@ -63,8 +63,8 @@ class SwinConfig(PretrainedConfig):
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             Stochastic depth rate.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
+            `"selu"` and `"gelu_new"` are supported.
         use_absolute_embeddings (`bool`, *optional*, defaults to False):
             Whether or not to add absolute position embeddings to the patch embeddings.
         patch_norm (`bool`, *optional*, defaults to True):
