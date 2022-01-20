@@ -1,5 +1,5 @@
 {
-    "add_copied_from": false,
+    "add_copied_from": true,
     "old_model_type": "distilbert",
     "new_model_patterns": {
         "model_name": "BERT New",
