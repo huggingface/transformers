@@ -129,18 +129,18 @@ class PoolFormerEmbeddings(nn.Module):
         stride = to_2tuple(stride)
         padding = to_2tuple(padding)
 
-        self.projection = nn.Conv2d(
+        self.proj = nn.Conv2d(
             num_channels,
             hidden_size,
             kernel_size=patch_size,
             stride=stride,
             padding=padding
         )
-        self.normalise = norm_layer(hidden_size) if norm_layer else nn.Identity()
+        self.norm = norm_layer(hidden_size) if norm_layer else nn.Identity()
 
     def forward(self, pixel_values):
-        x = self.projection(pixel_values)
-        x = self.normalise(x)
+        x = self.proj(pixel_values)
+        x = self.norm(x)
         return x
 
 
@@ -166,35 +166,55 @@ class PoolFormerPooling(nn.Module):
     def forward(self, hidden_states):
         return self.pool(hidden_states) - hidden_states
 
-class PoolFormerIntermediate(nn.Module):
-    def __init__(self, config, dropout_prob, hidden_size, intermediate_size):
-        super().__init__()
-        self.conv = nn.Conv2d(hidden_size, intermediate_size, 1)
-        self.dropout = DropPath(dropout_prob)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
+# class PoolFormerIntermediate(nn.Module):
+#     def __init__(self, config, dropout_prob, hidden_size, intermediate_size):
+#         super().__init__()
+#         self.conv = nn.Conv2d(hidden_size, intermediate_size, 1)
+#         self.dropout = DropPath(dropout_prob)
+#         if isinstance(config.hidden_act, str):
+#             self.intermediate_act_fn = ACT2FN[config.hidden_act]
+#         else:
+#             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+#     def forward(self, hidden_states):
+#         hidden_states = self.conv(hidden_states)
+#         hidden_states = self.intermediate_act_fn(hidden_states)
+#         hidden_states = self.dropout(hidden_states)
 
-        return hidden_states
+#         return hidden_states
 
+
+# class PoolFormerOutput(nn.Module):
+#     def __init__(self, dropout_prob, hidden_size, intermediate_size):
+#         super().__init__()
+#         self.conv = nn.Conv2d(intermediate_size, hidden_size, 1)
+#         self.dropout = DropPath(dropout_prob)
+
+#     def forward(self, hidden_states, input_tensor):
+#         hidden_states = self.conv(hidden_states)
+#         hidden_states = self.dropout(hidden_states)
+
+#         hidden_states = hidden_states + input_tensor
+
+#         return hidden_states
 
 class PoolFormerOutput(nn.Module):
-    def __init__(self, dropout_prob, hidden_size, intermediate_size):
+    def __init__(self, config, dropout_prob, hidden_size, intermediate_size):
         super().__init__()
-        self.conv = nn.Conv2d(intermediate_size, hidden_size, 1)
-        self.dropout = DropPath(dropout_prob)
-
-    def forward(self, hidden_states, input_tensor):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        hidden_states = hidden_states + input_tensor
+        self.conv1 = nn.Conv2d(hidden_size, intermediate_size, 1)
+        self.conv2 = nn.Conv2d(intermediate_size, hidden_size, 1)
+        self.drop = DropPath(dropout_prob)
+        if isinstance(config.hidden_act, str):
+            self.act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.act_fn = config.hidden_act
+    
+    def forward(self, hidden_states):
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.drop(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = self.drop(hidden_states)
 
         return hidden_states
 
@@ -204,29 +224,49 @@ class PoolFormerLayer(nn.Module):
     def __init__(self, config, num_channels, pool_size, hidden_size, intermediate_size, drop_path):
         super().__init__()
         self.pooling = PoolFormerPooling(pool_size)
-        self.intermediate = PoolFormerIntermediate(config, drop_path, hidden_size, intermediate_size)
-        self.output = PoolFormerOutput(drop_path, hidden_size, intermediate_size)
+        self.output = PoolFormerOutput(config, drop_path, hidden_size, intermediate_size)
         self.before_norm = PoolFormerGroupNorm(num_channels)
         self.after_norm = PoolFormerGroupNorm(num_channels)
+        
+        # Useful for training neural nets
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.use_layer_scale = config.use_layer_scale
+        if config.use_layer_scale:
+            self.layer_scale_1 = nn.Parameter(
+                config.layer_scale_init_value * torch.ones((num_channels)), requires_grad=True
+            )
+            self.layer_scale_2 = nn.Parameter(
+                config.layer_scale_init_value * torch.ones((num_channels)), requires_grad=True
+            )
 
     def forward(self, hidden_states):
-        # DEBUG
-        # print(hidden_states.shape)
-        pooling_output = self.pooling(self.before_norm(hidden_states))
-        # print(pooling_output.shape)
-        # First residual connection
-        hidden_states = pooling_output + hidden_states
-        outputs = ()
+        if self.use_layer_scale:
+            pooling_output = self.pooling(self.before_norm(hidden_states))
+            scaled_op = self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * pooling_output
+            # First residual connection
+            hidden_states = hidden_states + self.drop_path(scaled_op)
+            outputs = ()
 
-        layer_output = self.intermediate(self.after_norm(hidden_states))
+            layer_output = self.output(self.after_norm(hidden_states))
+            scaled_op = self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * layer_output
+            # Second residual connection
+            output = hidden_states + self.drop_path(scaled_op)
 
-        # Second residual connection inside the PoolFormerOutput block
-        output = self.output(layer_output, hidden_states)
+            outputs = (output,) + outputs
+            return outputs
         
-        outputs = (output,) + outputs
-        # outputs = layer_output + output
-        
-        return outputs
+        else:
+            pooling_output = self.drop_path(self.pooling(self.before_norm(hidden_states)))
+            # First residual connection
+            hidden_states = pooling_output + hidden_states
+            outputs = ()
+
+            # Second residual connection inside the PoolFormerOutput block
+            layer_output = self.drop_path(self.output(self.after_norm(hidden_states)))
+            output = hidden_states + layer_output
+            
+            outputs = (output,) + outputs
+            return outputs
 
 
 class PoolFormerEncoder(nn.Module):
@@ -288,8 +328,6 @@ class PoolFormerEncoder(nn.Module):
             hidden_states = embedding_layer(hidden_states)
             # Send the embeddings through the blocks
             for i, blk in enumerate(block_layer):
-                # DEBUG
-                # print(i)
                 layer_outputs = blk(hidden_states)
                 hidden_states = layer_outputs[0]
             
@@ -494,12 +532,13 @@ class PoolFormerFinalPooler(nn.Module):
 class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
         self.num_labels = config.num_labels
         self.poolformer = PoolFormerModel(config)
 
+        # Final norm
+        self.norm = PoolFormerGroupNorm(config.hidden_sizes[-1])
         # Classifier head
-        self.classifier = nn.Linear(config.hidden_size[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.classifier = nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -550,7 +589,16 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        logits = self.classifier(sequence_output[:, 0, :])
+        batch_size = sequence_output.shape[0]
+
+        # reshape last hidden states to (batch_size, height*width, hidden_size)
+        batch_size = sequence_output.shape[0]
+        sequence_output = sequence_output.reshape(batch_size, -1, self.config.hidden_sizes[-1])
+
+        # global average pooling
+        sequence_output = sequence_output.mean(dim=1)
+        
+        logits = self.norm(sequence_output)
 
         loss = None
         if labels is not None:

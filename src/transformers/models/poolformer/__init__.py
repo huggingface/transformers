@@ -33,12 +33,7 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_poolformer"] = [
         "POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "PoolFormerForMaskedLM",
-        "PoolFormerForCausalLM",
-        "PoolFormerForMultipleChoice",
-        "PoolFormerForQuestionAnswering",
-        "PoolFormerForSequenceClassification",
-        "PoolFormerForTokenClassification",
+        "PoolFormerForImageClassification",
         "PoolFormerLayer",
         "PoolFormerModel",
         "PoolFormerPreTrainedModel",
