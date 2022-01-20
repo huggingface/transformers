@@ -41,6 +41,7 @@ jobs:
           git push origin main
 
       - name: Find Comment
+        if: ${{ always() }}
         uses: peter-evans/find-comment@v1
         id: fc
         with:
