@@ -44,7 +44,7 @@ jobs:
         uses: peter-evans/find-comment@v1
         id: fc
         with:
-          issue-number: $PR_NUMBER
+          issue-number: ${{ env.PR_NUMBER }}
           comment-author: HuggingFaceDocBuilder
       - run: |
           echo "COMMENT_ID=${{ steps.fc.outputs.comment-id }}" >> $GITHUB_ENV
