@@ -31,7 +31,16 @@ length where we see favorable performance relative to a standard pretrained Tran
 for evaluating performance on long sequences, our method achieves results consistent with softmax self-attention but with sizable 
 speed-ups and memory savings and often outperforms other efficient self-attention methods. Our code is available at this https URL*
 
-This model was contributed by [novice03](https://huggingface.co/novice03)`. The original code can be found [here](https://github.com/mlpen/YOSO).
+Tips:
+
+- The YOSO attention algorithm is implemented through custom CUDA kernels, functions written in CUDA C++ that can be executed multiple times
+in parallel on a GPU.
+- The kernels provide a fast_hash function, which approximates the random projections of the queries and keys using the Fast Hadamard Transform. Using these
+hash codes, the lsh_cumulation function approximates self-attention via LSH-based Bernoulli sampling.
+- To ensure that the kernels are compiled successfuly, the user must install the correct version of PyTorch and cudatoolkit. Alternatively,
+the user may set use_expectation = True to use YOSO-E, which does not require compiling CUDA kernels.
+
+This model was contributed by [novice03](https://huggingface.co/novice03). The original code can be found [here](https://github.com/mlpen/YOSO).
 
 
 ## YosoConfig

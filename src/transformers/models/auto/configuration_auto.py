@@ -198,7 +198,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("yoso", "Yoso"),
+        ("yoso", "YOSO"),
         ("vit_mae", "ViTMAE"),
         ("realm", "Realm"),
         ("nystromformer", "Nystromformer"),
