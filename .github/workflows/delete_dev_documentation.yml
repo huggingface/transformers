@@ -40,18 +40,20 @@ jobs:
           git commit -m "Closed PR ${GITHUB_REF##*/}"
           git push origin main
 
-      - name: Comment PR
-        uses: thollander/actions-comment-pull-request@v1
-        if: github.event.pull_request.merged == false
-
+      - name: Find Comment
+        if: ${{ always() }}
+        uses: peter-evans/find-comment@v1
+        id: fc
         with:
-          message: 'Thank you for your PR. The documentation will now be removed from the staging environment - feel free to reopen this PR to recreate it.'
-          GITHUB_TOKEN: ${{ env.WRITE }}
+          issue-number: ${{ env.PR_NUMBER }}
+          comment-author: HuggingFaceDocBuilder
 
-      - name: Comment PR
-        uses: thollander/actions-comment-pull-request@v1
-        if: github.event.pull_request.merged == true
-
+      - name: Update comment
+        if: ${{ always() }}
+        uses: peter-evans/create-or-update-comment@v1
         with:
-          message: 'Great job merging this PR! the documentation will now be removed from the staging environment.'
-          GITHUB_TOKEN: ${{ env.WRITE }}
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          token: ${{ env.WRITE }}
+          edit-mode: replace
+          body: |
+            _The documentation is not available anymore as the PR was closed or merged._
