@@ -675,7 +675,7 @@ We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozi
 
  Speaker        | Topic                           | Time                  | Video |
 |-------------|---------------------------------|------------------------|------------------------|
-| Gabriel Habayeb, Mozilla Common Voice | The Common Voice Dataset | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=Vvn984QmAVg)
+| Gabriel Habayeb, Mozilla Common Voice | Unlocking global speech with Mozilla Common Voice | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=Vvn984QmAVg)
 | Changhan Wang, Meta AI Research | XLS-R: Large-Scale Cross-lingual Speech Representation Learning on 128 Languages | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=ic_J7ZCROBM)
 
 ### Talks & Speakers
@@ -693,8 +693,8 @@ We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozi
 	- Jeremy is a machine learning engineer at Kensho Technologies and has worked on a variety of different topics including search and speech recognition. Before working at Kensho, he earned a PhD in experimental particle physics at MIT and continued doing physics research as a postdoc at the University of Colorado Boulder.
 
 #### Gabriel Habayeb, Data Engineer, Common Voice @ Mozilla
-- Talk: The Common Voice Dataset
-- Abstract: 
+- Talk: Unlocking global speech with Mozilla Common Voice
+- Abstract: Hear from Common Voice Data Engineer Gabriel Habayeb (Mozilla Foundation) as he talks about how Common Voice makes it easy to crowdsource voice data in global languages, as well as getting key insights into the dataset itself, how we maintain quality, use metadata - and our plans for the future!
 - Speaker info: Gabriel is a software developer with the Common Voice team at the Mozilla Foundation with a focus on data engineering. Before joining the Foundation, he spent the last six years working across different industries, including education, enterprise and not-for-profit organizations.
 
 #### Changhan Wang, Main author of XLS-R and Research Engineer, Meta AI Research
