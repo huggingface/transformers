@@ -1405,12 +1405,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
-<<<<<<< HEAD
         exponential_decay_length_penalty: Optional[Tuple] = None,
-=======
-        length_regulation_start: Optional[int] = None,
-        length_regulation_factor: Optional[float] = None,
->>>>>>> 19563a722 (fix rag integration, fix docstyling)
         **model_kwargs
     ):
         """
@@ -1627,12 +1622,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
             remove_invalid_values=remove_invalid_values,
-<<<<<<< HEAD
             exponential_decay_length_penalty=exponential_decay_length_penalty,
-=======
-            length_regulation_start=length_regulation_start,
-            length_regulation_factor=length_regulation_factor,
->>>>>>> 19563a722 (fix rag integration, fix docstyling)
             logits_processor=logits_processor,
         )
 
