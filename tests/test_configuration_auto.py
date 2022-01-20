@@ -28,16 +28,15 @@ from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
 SAMPLE_ROBERTA_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/dummy-config.json")
 
 
-def test_module_spec():
-    assert transformers.models.auto.__spec__ is not None
-    assert importlib.util.find_spec("transformers.models.auto") is not None
-
-
 class NewModelConfig(BertConfig):
     model_type = "new-model"
 
 
 class AutoConfigTest(unittest.TestCase):
+    def test_module_spec(self):
+        self.assertIsNotNone(transformers.models.auto.__spec__)
+        self.assertIsNotNone(importlib.util.find_spec("transformers.models.auto"))
+
     def test_config_from_model_shortcut(self):
         config = AutoConfig.from_pretrained("bert-base-uncased")
         self.assertIsInstance(config, BertConfig)
