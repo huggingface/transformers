@@ -614,3 +614,27 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
         scores[scores == float("inf")] = torch.finfo(scores.dtype).max
 
         return scores
+
+class SoftLengthLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] that exponentially increases the score of the eos_token_id after regulation_start has been reached.
+
+    Args:
+        regulation_start (`int`):
+            The index of the token to start the exponential increase.
+        regulation_factor (`float`):
+            The factor of the exponential increase.
+        eos_token_id (`int`):
+            The id of the token to force as the last generated token when `max_length` is reached.
+    """
+
+    def __init__(self, regulation_start: int, regulation_factor: int, eos_token_id: int):
+        self.regulation_start = regulation_start
+        self.regulation_factor = regulation_factor
+        self.eos_token_id = eos_token_id
+
+    def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.FloatTensor:
+        cur_len = input_ids.shape[-1]
+        if cur_len > self.regulation_start:
+            scores[:, self.eos_token_id] = scores[:, self.eos_token_id] * pow(self.regulation_factor, cur_len-self.regulation_start)
+        return scores
