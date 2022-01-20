@@ -47,13 +47,12 @@ jobs:
         with:
           issue-number: ${{ env.PR_NUMBER }}
           comment-author: HuggingFaceDocBuilder
-      - run: |
-          echo "COMMENT_ID=${{ steps.fc.outputs.comment-id }}" >> $GITHUB_ENV
 
       - name: Update comment
+        if: ${{ always() }}
         uses: peter-evans/create-or-update-comment@v1
         with:
-          comment-id: ${{ env.COMMENT_ID }}
+          comment-id: ${{ steps.fc.outputs.comment-id }}
           edit-mode: replace
           body: |
             _The documentation is not available anymore as the PR was closed or merged._
