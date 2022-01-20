@@ -600,7 +600,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Initialize the weights. This method should be overridden by derived class.
         """
-        raise NotImplementedError(f"Make sure `_init_weigths` is implemented for {self.__class__}")
+        raise NotImplementedError(f"Make sure `_init_weights` is implemented for {self.__class__}")
 
     def tie_weights(self):
         """
