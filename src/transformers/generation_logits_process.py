@@ -651,7 +651,8 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
 
 class SoftLengthLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] that exponentially increases the score of the eos_token_id after regulation_start has been reached.
+    [`LogitsProcessor`] that exponentially increases the score of the eos_token_id after regulation_start has been
+    reached.
 
     Args:
         regulation_start (`int`):
