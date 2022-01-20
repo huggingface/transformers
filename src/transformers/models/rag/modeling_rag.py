@@ -1535,10 +1535,18 @@ class RagTokenForGeneration(RagPreTrainedModel):
         remove_invalid_values = (
             remove_invalid_values if remove_invalid_values is not None else self.config.remove_invalid_values
         )
+<<<<<<< HEAD
         exponential_decay_length_penalty = (
             exponential_decay_length_penalty
             if exponential_decay_length_penalty is not None
             else self.config.exponential_decay_length_penalty
+=======
+        length_regulation_start = (
+            length_regulation_start if length_regulation_start is not None else self.config.length_regulation_start
+        )
+        length_regulation_factor = (
+            length_regulation_factor if length_regulation_factor is not None else self.config.length_regulation_factor
+>>>>>>> d8752bb64 (fix rag integration, fix docstyling)
         )
 
         # retrieve docs
@@ -1622,7 +1630,12 @@ class RagTokenForGeneration(RagPreTrainedModel):
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
             remove_invalid_values=remove_invalid_values,
+<<<<<<< HEAD
             exponential_decay_length_penalty=exponential_decay_length_penalty,
+=======
+            length_regulation_start=length_regulation_start,
+            length_regulation_factor=length_regulation_factor,
+>>>>>>> d8752bb64 (fix rag integration, fix docstyling)
             logits_processor=logits_processor,
         )
 
