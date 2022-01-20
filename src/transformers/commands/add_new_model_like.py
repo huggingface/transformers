@@ -1234,12 +1234,17 @@ def create_new_model_like(
             "used as the model type."
         )
 
-    # if not keep_old_tokenizer:
-    #    print(
-    #       "The constants at the start of the new tokenizer file created needs to be manually fixed. If your new "
-    #        "model has a tokenizer fast, you will also need to manually add the converter in the "
-    #        "`SLOW_TO_FAST_CONVERTERS` constant of `convert_slow_tokenizer.py`."
-    #    )
+    if not keep_old_processing:
+        if old_model_patterns.tokenizer_class is not None:
+            print(
+                "The constants at the start of the new tokenizer file created needs to be manually fixed. If your new "
+                "model has a tokenizer fast, you will also need to manually add the converter in the "
+                "`SLOW_TO_FAST_CONVERTERS` constant of `convert_slow_tokenizer.py`."
+            )
+        if old_model_patterns.feature_extractor_class is not None:
+            print("The constants at the start of the new feature extractor file created needs to be manually fixed.")
+        if old_model_patterns.processor_class is not None:
+            print("The constants at the start of the new processor file created needs to be manually fixed.")
 
 
 def add_new_model_like_command_factory(args: Namespace):
@@ -1373,6 +1378,8 @@ def get_user_input():
 
     old_model_info = retrieve_info_for_model(old_model_type)
     old_tokenizer_class = old_model_info["model_patterns"].tokenizer_class
+    old_feature_extractor_class = old_model_info["model_patterns"].feature_extractor_class
+    old_processor_class = old_model_info["model_patterns"].processor_class
     old_frameworks = old_model_info["frameworks"]
 
     model_name = get_user_field("What is the name for your new model?")
@@ -1399,18 +1406,41 @@ def get_user_input():
     )
     checkpoint = get_user_field("Please give a checkpoint identifier (on the model Hub) for this new model.")
 
-    keep_tokenizer = get_user_field(
-        f"Will your new model use the same tokenizer class as {old_model_type}?",
+    old_processing_classes = [
+        c for c in [old_feature_extractor_class, old_tokenizer_class, old_processor_class] if c is not None
+    ]
+    old_processing_classes = ", ".join(old_processing_classes)
+    keep_processing = get_user_field(
+        f"Will your new model use the same processing class as {old_model_type} ({old_processing_classes})?",
         convert_to=convert_to_bool,
         fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
     )
-    if keep_tokenizer:
+    if keep_processing:
+        feature_extractor_class = old_feature_extractor_class
+        processor_class = old_processor_class
         tokenizer_class = old_tokenizer_class
     else:
-        tokenizer_class = get_user_field(
-            "What will be the name of the tokenizer class for this model?",
-            default_value=f"{model_camel_cased}Tokenizer",
-        )
+        if old_tokenizer_class is not None:
+            tokenizer_class = get_user_field(
+                "What will be the name of the tokenizer class for this model?",
+                default_value=f"{model_camel_cased}Tokenizer",
+            )
+        else:
+            tokenizer_class = None
+        if old_feature_extractor_class is not None:
+            feature_extractor_class = get_user_field(
+                "What will be the name of the feature extractor class for this model?",
+                default_value=f"{model_camel_cased}FeatureExtractor",
+            )
+        else:
+            feature_extractor_class = None
+        if old_processor_class is not None:
+            processor_class = get_user_field(
+                "What will be the name of the processor class for this model?",
+                default_value=f"{model_camel_cased}Processor",
+            )
+        else:
+            processor_class = None
 
     model_patterns = ModelPatterns(
         model_name,
@@ -1421,6 +1451,8 @@ def get_user_input():
         model_upper_cased=model_upper_cased,
         config_class=config_class,
         tokenizer_class=tokenizer_class,
+        feature_extractor_class=feature_extractor_class,
+        processor_class=processor_class,
     )
 
     add_copied_from = get_user_field(
