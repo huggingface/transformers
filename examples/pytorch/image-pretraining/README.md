@@ -28,6 +28,7 @@ One can use the following command to pre-train a `ViTMAEForPreTraining` model fr
 python run_mae.py \
     --output_dir ./outputs/ \
     --remove_unused_columns False \
+    --label_names pixel_values \
     --do_train \
     --do_eval \
     --learning_rate 2e-5 \
@@ -69,6 +70,7 @@ python run_mae.py \
     --train_dir <path-to-train-root> \
     --output_dir ./outputs/ \
     --remove_unused_columns False \
+    --label_names pixel_values \
     --do_train \
     --do_eval
 ```
