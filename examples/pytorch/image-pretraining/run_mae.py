@@ -19,8 +19,6 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-import numpy as np
-import torch
 from datasets import load_dataset
 from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
 
@@ -30,10 +28,11 @@ from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
-    ViTMAEForPreTraining,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    ViTMAEForPreTraining,
+    default_data_collator,
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
@@ -132,11 +131,6 @@ class ModelArguments:
             "with private models)."
         },
     )
-
-
-def collate_fn(examples):
-    pixel_values = torch.stack([example["pixel_values"] for example in examples])
-    return {"pixel_values": pixel_values}
 
 
 def main():
@@ -247,17 +241,17 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        model = ViTMAEForPreTraining.from_config(config)
+        model = ViTMAEForPreTraining(config)
 
     # transformations as done in original MAE paper
     # source: https://github.com/facebookresearch/mae/blob/main/main_pretrain.py
     transforms = Compose(
         [
-        Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
-        RandomResizedCrop(feature_extractor.size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
-        RandomHorizontalFlip(),
-        ToTensor(),
-        Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
+            Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
+            RandomResizedCrop(feature_extractor.size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
+            RandomHorizontalFlip(),
+            ToTensor(),
+            Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
         ]
     )
 
@@ -293,7 +287,7 @@ def main():
         train_dataset=ds["train"] if training_args.do_train else None,
         eval_dataset=ds["validation"] if training_args.do_eval else None,
         tokenizer=feature_extractor,
-        data_collator=collate_fn,
+        data_collator=default_data_collator,
     )
 
     # Training

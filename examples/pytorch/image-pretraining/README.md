@@ -22,13 +22,10 @@ The goal for the model is to predict raw pixel values for the masked patches. As
 
 ## Using datasets from 🤗 `datasets`
 
-Here we show how to pre-train a `ViTMAEForPreTraining` model from scratch on the [cifar10](https://huggingface.co/datasets/cifar10) dataset.  
-
-Alternatively, one can decide to further pre-train an already pre-trained (or fine-tuned) checkpoint from the [hub](https://huggingface.co/). This can be done by setting the `model_name_or_path` argument to "facebook/vit-mae-base" for example (and not specifying the `model_type` argument).
+One can use the following command to pre-train a `ViTMAEForPreTraining` model from scratch on the [cifar10](https://huggingface.co/datasets/cifar10) dataset:
 
 ```bash
 python run_mae.py \
-    --model_type vit_mae \
     --output_dir ./outputs/ \
     --remove_unused_columns False \
     --label_names bool_masked_pos \
@@ -46,6 +43,9 @@ python run_mae.py \
     --save_total_limit 3 \
     --seed 1337
 ```
+
+Alternatively, one can decide to further pre-train an already pre-trained (or fine-tuned) checkpoint from the [hub](https://huggingface.co/). This can be done by setting the `model_name_or_path` argument to "facebook/vit-mae-base" for example.
+
 
 ## Using your own data
 
