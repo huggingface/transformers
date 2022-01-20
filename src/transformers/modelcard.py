@@ -706,6 +706,9 @@ def parse_keras_history(logs):
     """
     if hasattr(logs, "history"):
         # This looks like a `History` object
+        if not hasattr(logs, "epoch"):
+            # This history looks empty, return empty results
+            return None, [], dict()
         logs.history["epoch"] = logs.epoch
         logs = logs.history
     else:
