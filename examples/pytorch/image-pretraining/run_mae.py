@@ -19,8 +19,10 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
+import torch
 from datasets import load_dataset
 from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
+from torchvision.transforms.functional import InterpolationMode
 
 import transformers
 from transformers import (
@@ -32,7 +34,6 @@ from transformers import (
     Trainer,
     TrainingArguments,
     ViTMAEForPreTraining,
-    default_data_collator,
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
@@ -131,6 +132,11 @@ class ModelArguments:
             "with private models)."
         },
     )
+
+
+def collate_fn(examples):
+    pixel_values = torch.stack([example["pixel_values"] for example in examples])
+    return {"pixel_values": pixel_values}
 
 
 def main():
@@ -248,7 +254,7 @@ def main():
     transforms = Compose(
         [
             Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
-            RandomResizedCrop(feature_extractor.size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
+            RandomResizedCrop(feature_extractor.size, scale=(0.2, 1.0), interpolation=InterpolationMode.BICUBIC),
             RandomHorizontalFlip(),
             ToTensor(),
             Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
@@ -259,7 +265,6 @@ def main():
         """Preprocess a batch of images by applying transforms."""
 
         examples["pixel_values"] = [transforms(image) for image in examples["img"]]
-
         return examples
 
     if training_args.do_train:
@@ -287,7 +292,7 @@ def main():
         train_dataset=ds["train"] if training_args.do_train else None,
         eval_dataset=ds["validation"] if training_args.do_eval else None,
         tokenizer=feature_extractor,
-        data_collator=default_data_collator,
+        data_collator=collate_fn,
     )
 
     # Training
