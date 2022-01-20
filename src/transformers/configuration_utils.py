@@ -605,8 +605,8 @@ class PretrainedConfig(PushToHubMixin):
             logger.error(err)
             raise EnvironmentError(
                 "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
-                f"{pretrained_model_name_or_path} is not the path to a directory conaining a {CONFIG_NAME} file.\n"
-                "Checkout your internert connection or see how to run the library in offline mode at "
+                f"{pretrained_model_name_or_path} is not the path to a directory conaining a {configuration_file} "
+                "file.\nCheckout your internet connection or see how to run the library in offline mode at "
                 "'https://huggingface.co/docs/transformers/installation#offline-mode'."
             )
         except EnvironmentError as err:
