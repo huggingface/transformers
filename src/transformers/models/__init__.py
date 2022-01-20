@@ -104,6 +104,7 @@ from . import (
     trocr,
     unispeech,
     unispeech_sat,
+    vilt,
     vision_encoder_decoder,
     vision_text_dual_encoder,
     visual_bert,

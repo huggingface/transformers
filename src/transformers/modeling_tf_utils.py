@@ -170,7 +170,7 @@ class TFCausalLanguageModelingLoss:
     </Tip>
     """
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
@@ -186,7 +186,7 @@ class TFQuestionAnsweringLoss:
     Loss function suitable for question answering.
     """
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
@@ -207,7 +207,7 @@ class TFTokenClassificationLoss:
     </Tip>
     """
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
@@ -229,7 +229,7 @@ class TFSequenceClassificationLoss:
     Loss function suitable for sequence classification.
     """
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         if len(shape_list(logits)) == 1 or shape_list(logits)[1] == 1:
             loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         else:
@@ -243,7 +243,7 @@ class TFSequenceClassificationLoss:
 class TFMultipleChoiceLoss:
     """Loss function suitable for multiple choice tasks."""
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
@@ -273,7 +273,7 @@ class TFNextSentencePredictionLoss:
     </Tip>
     """
 
-    def compute_loss(self, labels, logits):
+    def hf_compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
@@ -868,6 +868,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             steps_per_execution=steps_per_execution,
             **kwargs,
         )
+
+    def compute_loss(self, *args, **kwargs):
+        if hasattr(tf.keras.Model, "compute_loss"):
+            # This will be true in TF 2.8 or greater
+            return super().compute_loss(*args, **kwargs)
+        else:
+            warnings.warn(
+                "The old compute_loss method is deprecated as it conflicts with the Keras compute_loss "
+                "method added in TF 2.8. If you want the original HF compute_loss, please call "
+                "hf_compute_loss() instead. From TF versions >= 2.8, or Transformers versions >= 5, "
+                "calling compute_loss() will get the Keras method instead.",
+                FutureWarning,
+            )
+            return self.hf_compute_loss(*args, **kwargs)
 
     def train_step(self, data):
         """

@@ -142,6 +142,48 @@ class EncoderDecoderMixin:
             outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
         )
 
+    def check_encoder_decoder_model_from_pretrained_using_model_paths(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        **kwargs
+    ):
+        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+            encoder_model.save_pretrained(encoder_tmp_dirname)
+            decoder_model.save_pretrained(decoder_tmp_dirname)
+            model_kwargs = {"encoder_hidden_dropout_prob": 0.0}
+
+            # BartConfig has no hidden_dropout_prob.
+            if not hasattr(decoder_config, "hidden_dropout_prob"):
+                model_kwargs["decoder_activation_function"] = "gelu"
+            else:
+                model_kwargs["decoder_hidden_dropout_prob"] = 0.0
+
+            enc_dec_model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+                encoder_tmp_dirname, decoder_tmp_dirname, **model_kwargs
+            )
+        enc_dec_model.to(torch_device)
+        outputs_encoder_decoder = enc_dec_model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+            return_dict=True,
+        )
+
+        self.assertEqual(
+            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+        )
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+        )
+
     def check_encoder_decoder_model_from_pretrained(
         self,
         config,
@@ -458,6 +500,10 @@ class EncoderDecoderMixin:
     def test_encoder_decoder_model_from_pretrained_return_dict(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=True)
+
+    def test_encoder_decoder_model_from_pretrained_using_model_paths(self):
+        input_ids_dict = self.prepare_config_and_inputs()
+        self.check_encoder_decoder_model_from_pretrained_using_model_paths(**input_ids_dict, return_dict=False)
 
     def test_save_and_load_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
