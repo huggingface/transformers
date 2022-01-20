@@ -845,11 +845,14 @@ def add_model_to_main_init(
 
             add_block = True
             if not with_processing:
-                for processing_class in [
+                processing_classes = [
                     old_model_patterns.tokenizer_class,
                     old_model_patterns.feature_extractor_class,
                     old_model_patterns.processor_class,
-                ]:
+                ]
+                # Only keep the ones that are not None
+                processing_classes = [c for c in processing_classes if c is not None]
+                for processing_class in processing_classes:
                     block = block.replace(f' "{processing_class}",', "")
                     block = block.replace(f', "{processing_class}"', "")
                     block = block.replace(f" {processing_class},", "")
