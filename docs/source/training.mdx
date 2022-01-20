@@ -14,9 +14,9 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-There are significant benefits when you use a pretrained model. It reduces computation costs and your carbon footprint, and allows you to use state-of-the-art models without having to train them from scratch. 🤗 Transformers provides access to thousands of pretrained models you can use across many domains. When you use a pretrained model, you just need to train it on a dataset specific to your task. This is referred to as fine-tuning, an incredibly powerful training technique. In this tutorial, you will fine-tune a pretrained model with a deep learning framework of your choice:
+There are significant benefits when you use a pretrained model. It reduces computation costs and your carbon footprint, and allows you to use state-of-the-art models without having to train them from scratch. 🤗 Transformers provides access to thousands of pretrained models you can use for a wide range of tasks. When you use a pretrained model, you just need to train it on a dataset specific to your task. This is referred to as fine-tuning, an incredibly powerful training technique. In this tutorial, you will fine-tune a pretrained model with a deep learning framework of your choice:
 
-* Fine-tune a pretrained model with 🤗 Transformers [`Trainer`] API.
+* Fine-tune a pretrained model with 🤗 Transformers [`Trainer`].
 * Fine-tune a pretrained model in TensorFlow with Keras.
 * Fine-tune a pretrained model in native PyTorch.
 
@@ -45,15 +45,19 @@ As you now know, you will need a tokenizer to process the text, and include a pa
 >>> from transformers import AutoTokenizer
 
 >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+
+
 >>> def tokenize_function(examples):
 ...     return tokenizer(examples["text"], padding="max_length", truncation=True)
+
+
 >>> tokenized_datasets = dataset.map(tokenize_function, batched=True)
 ```
 
 To speed things up in this tutorial, create a smaller subset of the full dataset to train on:
 
 ```py
->>> small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000)) 
+>>> small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
 >>> small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(1000))
 ```
 
@@ -61,11 +65,11 @@ Nice, your preprocessed dataset is now ready for fine-tuning!
 
 <a id='trainer'></a>
 
-## Fine-tune with the Trainer API
+## Fine-tune with `Trainer`
 
 <Youtube id="nvBXf7s7vTI"/>
 
-PyTorch does not provide a training loop, so you would have to manually write one (see how [here](training#fine-tune-in-native-pytorch)). For greater user ease, 🤗 Transformers has a [`Trainer`] class optimized for training 🤗 Transformers models. The [`Trainer`] API supports a wide range of training options and features such as logging, gradient accumulation, and mixed precision.
+PyTorch does not provide a training loop, so you would have to manually write one (see how [here](training#fine-tune-in-native-pytorch)). To make it easier for you to start training without writing your own training loop, 🤗 Transformers has a [`Trainer`] class optimized for training 🤗 Transformers models. The [`Trainer`] API supports a wide range of training options and features such as logging, gradient accumulation, and mixed precision.
 
 Start by loading your model, and specify the number of expected labels. From the Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields), you can see there are five labels:
 
@@ -78,14 +82,13 @@ Start by loading your model, and specify the number of expected labels. From the
 <Tip>
 
 You will see a warning about some of the pretrained weights not being used and some weights being randomly
-initialized. Don't worry, this is completely normal! The pretrained head of the BERT model is discarded, and replaced it with a randomly initialized classification head. You will fine-tune this new model head on your sequence classification task, transferring the knowledge
-of the pretrained model to it (which is why this is called transfer learning).
+initialized. Don't worry, this is completely normal! The pretrained head of the BERT model is discarded, and replaced with a randomly initialized classification head. You will fine-tune this new model head on your sequence classification task, transferring the knowledge of the pretrained model to it (which is why this is called transfer learning).
 
 </Tip>
 
 ### Training hyperparameters
 
-Next, create a [`TrainingArguments`] class which contains all the hyperparameters you can tune, as well as flags to activate for different training options. For this tutorial, you can start with the default training hyperparameters (but feel free to experiment with these if you'd like). All you need to do is specify where to save the checkpoints from your training:
+Next, create a [`TrainingArguments`] class which contains all the hyperparameters you can tune, as well as flags for activating different training options. For this tutorial, you can start with the default training hyperparameters (but feel free to experiment with these if you'd like). All you need to do is specify where to save the checkpoints from your training:
 
 ```python
 from transformers import TrainingArguments
@@ -104,7 +107,7 @@ training_args = TrainingArguments(output_dir="test_trainer")
 >>> metric = load_metric("accuracy")
 ```
 
-The `metric` has a `compute` method which calculates the accuracy of your predictions. But before you can pass your predictions to the `compute` method, you need to convert the predictions to logits (remember all 🤗 Transformers models return logits):
+`metric` has a `compute` method which calculates the accuracy of your predictions. But before you can pass your predictions to the `compute` method, you need to convert the predictions to logits (remember all 🤗 Transformers models return logits):
 
 ```py
 >>> def compute_metrics(eval_pred):
@@ -132,12 +135,12 @@ Create a [`Trainer`] with your model, training arguments, training and test data
 ...     train_dataset=small_train_dataset,
 ...     eval_dataset=small_eval_dataset,
 ...     compute_metrics=compute_metrics,
-)
+... )
 ```
 
 Then fine-tune your model by calling `train()`:
 
-```python
+```py
 >>> trainer.train()
 ```
 
@@ -147,11 +150,11 @@ Then fine-tune your model by calling `train()`:
 
 <Youtube id="rnTGBy2ax1c"/>
 
-🤗 Transformers models can also be trained natively in TensorFlow with the Keras API. There are only a few changes to make before you can fine-tune.
+🤗 Transformers models can also be trained natively in TensorFlow with the Keras API. You only need to make a few changes before you can fine-tune.
 
 ### Convert dataset to TensorFlow format
 
-First, you need a [`DataCollator`](main_classes/data_collator) to assemble your tensors into a batch. In this tutorial, you will use [`transformers.DataCollatorWithPadding`] to also apply a padding strategy. This will pad each input to the longest length in each batch (also known as _dynamic padding_), which will speed up your training. Make sure you specify `return_tensors` to return TensorFlow tensors:
+First, you need a [`DataCollator`](main_classes/data_collator) to assemble your tensors into a batch. You can use [`transformers.DataCollatorWithPadding`] to also apply a padding strategy. This will pad each input to the longest length in each batch (also known as _dynamic padding_), which will speed up your training. Make sure you specify `return_tensors` to return TensorFlow tensors:
 
 ```py
 >>> from transformers import DataCollatorWithPadding
@@ -161,7 +164,7 @@ First, you need a [`DataCollator`](main_classes/data_collator) to assemble your 
 
 <Tip>
 
-[`Trainer`] uses [`transformers.DataCollatorWithPadding`] by default, so you don't have to explicitly specify it.
+[`Trainer`] uses [`transformers.DataCollatorWithPadding`] by default so you don't have to explicitly specify it.
 
 </Tip>
 
@@ -174,7 +177,7 @@ Next, convert the tokenized datasets to TensorFlow datasets with the [`to_tf_dat
 ...     shuffle=True,
 ...     collate_fn=data_collator,
 ...     batch_size=8,
-)
+... )
 
 >>> tf_validation_dataset = small_eval_dataset.to_tf_dataset(
 ...     columns=["attention_mask", "input_ids", "token_type_ids"],
@@ -182,14 +185,14 @@ Next, convert the tokenized datasets to TensorFlow datasets with the [`to_tf_dat
 ...     shuffle=False,
 ...     collate_fn=data_collator,
 ...     batch_size=8,
-)
+... )
 ```
 
 ### Compile and fit
 
 Load a TensorFlow model with the expected number of labels:
 
-```python
+```py
 >>> import tensorflow as tf
 >>> from transformers import TFAutoModelForSequenceClassification
 
@@ -198,14 +201,14 @@ Load a TensorFlow model with the expected number of labels:
 
 Then you can compile and fine-tune your model with the `fit()` method as you would with any other Keras model:
 
-```python
+```py
 >>> model.compile(
-...    optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5),
-...    loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-...    metrics=tf.metrics.SparseCategoricalAccuracy(),
-)
+...     optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5),
+...     loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+...     metrics=tf.metrics.SparseCategoricalAccuracy(),
+... )
 
->>> model.fit(train_tf_dataset, validation_data=eval_tf_dataset, epochs=3)
+>>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3)
 ```
 
 <a id='pytorch_native'></a>
@@ -214,9 +217,9 @@ Then you can compile and fine-tune your model with the `fit()` method as you wou
 
 <Youtube id="Dh9CL8fyG80"/>
 
-[`Trainer`] takes care of the training loop, and allows you to fine-tune a model in a single line of code. For users who'd like to tinker with the code more and see what's happening behind the curtains, you can also fine-tune a 🤗 Transformers model natively with PyTorch.
+[`Trainer`] takes care of the training loop, and allows you to fine-tune a model in a single line of code. For users who prefer to write their own training loop, you can also fine-tune a 🤗 Transformers model natively with PyTorch.
 
-At this stage, you may need to restart your notebook or you can also execute the following code to free some memory:
+At this stage, you may need to restart your notebook or execute the following code to free some memory:
 
 ```py
 del model
@@ -225,9 +228,9 @@ del trainer
 torch.cuda.empty_cache()
 ```
 
-Next, you need to post-process your `tokenized_dataset` to get it ready for training.
+Next, post-process your `tokenized_dataset` to prepare it for training.
 
-1. Remove the `text` column because the model does not accept it as an input:
+1. Remove the `text` column because the model does not accept the raw text as an input:
 
     ```py
     >>> tokenized_datasets = tokenized_datasets.remove_columns(["text"])
@@ -248,7 +251,7 @@ Next, you need to post-process your `tokenized_dataset` to get it ready for trai
 Then you can create a smaller subset of the dataset as previously shown:
 
 ```py
->>> small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000)) 
+>>> small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
 >>> small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(1000))
 ```
 
@@ -266,9 +269,8 @@ Create a `DataLoader` for your training and test datasets:
 Load your model with the number of expected labels:
 
 ```py
->> from transformers import AutoModelForSequenceClassification
-
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+>>> from transformers import AutoModelForSequenceClassification
+model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
 ```
 
 ### Optimizer and learning rate scheduler
@@ -289,11 +291,8 @@ Next, create the default learning rate scheduler used in [`Trainer`]:
 >>> num_epochs = 3
 >>> num_training_steps = num_epochs * len(train_dataloader)
 >>> lr_scheduler = get_scheduler(
-...    name="linear",
-...    optimizer=optimizer,
-...    num_warmup_steps=0,
-...    num_training_steps=num_training_steps
-)
+...     name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
+... )
 ```
 
 Lastly, specify `device` to use a GPU if you have access to one. Otherwise, training on a CPU may take several hours instead of a couple of minutes.
@@ -318,16 +317,16 @@ Let's use the [tqdm](https://tqdm.github.io/) library to add a progress bar over
 
 >>> model.train()
 >>> for epoch in range(num_epochs):
-...    for batch in train_dataloader:
-...        batch = {k: v.to(device) for k, v in batch.items()}
-...        outputs = model(**batch)
-...        loss = outputs.loss
-...        loss.backward()
+...     for batch in train_dataloader:
+...         batch = {k: v.to(device) for k, v in batch.items()}
+...         outputs = model(**batch)
+...         loss = outputs.loss
+...         loss.backward()
 
-...        optimizer.step()
-...        lr_scheduler.step()
-...        optimizer.zero_grad()
-...        progress_bar.update(1)
+...         optimizer.step()
+...         lr_scheduler.step()
+...         optimizer.zero_grad()
+...         progress_bar.update(1)
 ```
 
 ### Metrics
@@ -338,13 +337,13 @@ Just like the [`Trainer`] class, you need to manually add an evaluation function
 >>> metric = load_metric("accuracy")
 >>> model.eval()
 >>> for batch in eval_dataloader:
-...    batch = {k: v.to(device) for k, v in batch.items()}
-...    with torch.no_grad():
-...        outputs = model(**batch)
-...
-...    logits = outputs.logits
-...    predictions = torch.argmax(logits, dim=-1)
-...    metric.add_batch(predictions=predictions, references=batch["labels"])
+...     batch = {k: v.to(device) for k, v in batch.items()}
+...     with torch.no_grad():
+...         outputs = model(**batch)
+
+...     logits = outputs.logits
+...     predictions = torch.argmax(logits, dim=-1)
+...     metric.add_batch(predictions=predictions, references=batch["labels"])
 
 >>> metric.compute()
 ```
