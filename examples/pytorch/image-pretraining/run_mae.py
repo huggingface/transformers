@@ -133,7 +133,9 @@ class ModelArguments:
     mask_ratio: float = field(
         default=0.75, metadata={"help": "The ratio of the number of masked tokens in the input sequence."}
     )
-    norm_pix_loss: bool = field(default=True, metadata={"Whether or not to train with normalized pixels."})
+    norm_pix_loss: bool = field(
+        default=True, metadata={"help": "The ratio of the number of masked tokens in the input sequence."}
+    )
 
 
 @dataclass
