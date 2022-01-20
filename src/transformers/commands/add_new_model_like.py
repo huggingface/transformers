@@ -145,7 +145,10 @@ def parse_module_content(content: str) -> List[str]:
 
     for line in lines:
         # End of an object
-        if not is_empty_line(line) and find_indent(line) == 0 and len(current_object) > 0:
+        is_valid_object = len(current_object) > 0
+        if is_valid_object and len(current_object) == 1:
+            is_valid_object = not current_object[0].startswith("# Copied from")
+        if not is_empty_line(line) and find_indent(line) == 0 and is_valid_object:
             # Closing parts should be included in current object
             if line in end_markers:
                 current_object.append(line)

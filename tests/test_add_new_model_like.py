@@ -119,6 +119,7 @@ CONSTANT_DEFINED_ON_SEVERAL_LINES = [
 def function(args):
     some code
 
+# Copied from transformers.some_module
 class SomeClass:
     some code
 """
@@ -128,9 +129,11 @@ class SomeClass:
             "CONSTANT_DEFINED_ON_SEVERAL_LINES = [\n    first_item,\n    second_item\n]",
             "",
             "def function(args):\n    some code\n",
-            "class SomeClass:\n    some code\n",
+            "# Copied from transformers.some_module\nclass SomeClass:\n    some code\n",
         ]
         self.assertEqual(parse_module_content(test_code), expected_parts)
+
+
 
     def test_add_content_to_text(self):
         test_text = """all_configs = {
