@@ -941,8 +941,8 @@ class YosoModel(YosoPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (:
-            obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Sequence of
+        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model is
             configured as a decoder.
         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -951,9 +951,8 @@ class YosoModel(YosoPreTrainedModel):
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (:
-            obj:*tuple(tuple(torch.FloatTensor))* of length `config.n_layers` with each tuple having 4 tensors of shape
-            `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key and value
+        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            Contains precomputed key and value
             hidden states of the attention blocks. Can be used to speed up decoding. If `past_key_values` are used, the
             user can optionally input only the last `decoder_input_ids` (those that don't have their past key value
             states given to this model) of shape `(batch_size, 1)` instead of all `decoder_input_ids` of shape
@@ -1214,9 +1213,8 @@ class YosoForCausalLM(YosoPreTrainedModel):
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (:
-            obj:*tuple(tuple(torch.FloatTensor))*, *optional*, returned when `use_cache=True` is passed or when
-            `config.use_cache=True`): Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple
             having 2 tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
             tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two
             additional tensors are only required when the model is used as a decoder in a Sequence to Sequence model.
