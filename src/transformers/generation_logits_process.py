@@ -615,6 +615,7 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
 
         return scores
 
+
 class SoftLengthLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that exponentially increases the score of the eos_token_id after regulation_start has been reached.
@@ -636,5 +637,7 @@ class SoftLengthLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
         if cur_len > self.regulation_start:
-            scores[:, self.eos_token_id] = scores[:, self.eos_token_id] * pow(self.regulation_factor, cur_len-self.regulation_start)
+            scores[:, self.eos_token_id] = scores[:, self.eos_token_id] * pow(
+                self.regulation_factor, cur_len - self.regulation_start
+            )
         return scores

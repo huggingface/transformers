@@ -718,7 +718,9 @@ class GenerationMixin:
         if remove_invalid_values is True:
             processors.append(InfNanRemoveLogitsProcessor())
         if length_regulation_factor is not None and length_regulation_start is not None:
-            processors.append(SoftLengthLogitsProcessor(length_regulation_start, length_regulation_factor, eos_token_id))
+            processors.append(
+                SoftLengthLogitsProcessor(length_regulation_start, length_regulation_factor, eos_token_id)
+            )
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         return processors
 
