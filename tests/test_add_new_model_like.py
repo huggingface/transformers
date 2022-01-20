@@ -133,8 +133,6 @@ class SomeClass:
         ]
         self.assertEqual(parse_module_content(test_code), expected_parts)
 
-
-
     def test_add_content_to_text(self):
         test_text = """all_configs = {
     "gpt": "GPTConfig",
@@ -387,6 +385,54 @@ NEW_BERT_CONSTANT = "value"
             self.init_file(file_name, bert_test)
             duplicate_module(file_name, bert_model_patterns, new_bert_model_patterns)
             self.check_result(dest_file_name, bert_expected_with_copied_from)
+
+            self.init_file(file_name, bert_test)
+            duplicate_module(file_name, bert_model_patterns, new_bert_model_patterns, add_copied_from=False)
+            self.check_result(dest_file_name, bert_expected)
+
+    def test_duplicate_module_with_copied_from(self):
+        bert_model_patterns = ModelPatterns("Bert", "bert-base-cased")
+        new_bert_model_patterns = ModelPatterns("New Bert", "huggingface/bert-new-base")
+        bert_test = '''# Copied from transformers.models.xxx.XxxModel with Xxx->Bert
+class TFBertPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = BertConfig
+    load_tf_weights = load_tf_weights_in_bert
+    base_model_prefix = "bert"
+    is_parallelizable = True
+    supports_gradient_checkpointing = True
+
+BERT_CONSTANT = "value"
+'''
+        bert_expected = '''# Copied from transformers.models.xxx.XxxModel with Xxx->NewBert
+class TFNewBertPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = NewBertConfig
+    load_tf_weights = load_tf_weights_in_new_bert
+    base_model_prefix = "new_bert"
+    is_parallelizable = True
+    supports_gradient_checkpointing = True
+
+NEW_BERT_CONSTANT = "value"
+'''
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            work_dir = os.path.join(tmp_dir, "transformers")
+            os.makedirs(work_dir)
+            file_name = os.path.join(work_dir, "bert_module.py")
+            dest_file_name = os.path.join(work_dir, "new_bert_module.py")
+
+            self.init_file(file_name, bert_test)
+            duplicate_module(file_name, bert_model_patterns, new_bert_model_patterns)
+            # There should not be a new Copied from statement, the old one should be adapated.
+            self.check_result(dest_file_name, bert_expected)
 
             self.init_file(file_name, bert_test)
             duplicate_module(file_name, bert_model_patterns, new_bert_model_patterns, add_copied_from=False)

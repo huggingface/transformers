@@ -469,7 +469,7 @@ def duplicate_module(
         # Regular classes functions
         old_obj = obj
         obj, replacement = replace_model_patterns(obj, old_model_patterns, new_model_patterns)
-        has_copied_from = re.search("^Copied from", obj, flags=re.MULTILINE)
+        has_copied_from = re.search("^#\s+Copied from", obj, flags=re.MULTILINE) is not None
         if add_copied_from and not has_copied_from and _re_class_func.search(obj) is not None and len(replacement) > 0:
             # Copied from statement must be added just before the class/function definition, which may not be the
             # first line because of decorators.
@@ -478,8 +478,6 @@ def duplicate_module(
             obj = add_content_to_text(
                 obj, f"# Copied from {module_name}.{old_object_name} with {replacement}", add_before=_re_class_func
             )
-        elif not add_copied_from and has_copied_from:
-            obj = re.sub("\n# Copied from [^\n]*\n", "\n", obj)
         # In all cases, we remove Copied from statement with indent on methods.
         obj = re.sub("\n[ ]+# Copied from [^\n]*\n", "\n", obj)
 
