@@ -314,12 +314,14 @@ GPT_NEW_NEW_CONSTANT = "value"
         new_roberta_model_patterns = ModelPatterns(
             "RoBERTa-New", "huggingface/roberta-new-base", model_camel_cased="RobertaNew"
         )
-        roberta_test = '''class RobertaModel(RobertaPreTrainedModel):
+        roberta_test = '''# Copied from transformers.models.bert.BertModel with Bert->Roberta
+class RobertaModel(RobertaPreTrainedModel):
     """ The base RoBERTa model. """
     checkpoint = roberta-base
     base_model_prefix = "roberta"
         '''
-        roberta_expected = '''class RobertaNewModel(RobertaNewPreTrainedModel):
+        roberta_expected = '''# Copied from transformers.models.bert.BertModel with Bert->RobertaNew
+class RobertaNewModel(RobertaNewPreTrainedModel):
     """ The base RoBERTa-New model. """
     checkpoint = huggingface/roberta-new-base
     base_model_prefix = "roberta_new"
