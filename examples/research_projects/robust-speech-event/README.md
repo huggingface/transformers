@@ -481,7 +481,7 @@ hyperparameters.
 ### Creating an OVHCloud account
 *TIP*: If you haven't created a project on OVHcloud yet, make sure you've received your GPU voucher code *beforehand*, 
 so that you can skip entering the credit card information.
-1. If you're a US citizen, create an account via [OVHcloud.CA](https://ovhcloud.ca/). 
+1. If you're a US citizen, create an account via [OVHcloud.US](https://us.ovhcloud.com/). 
 If you're from anywhere else in the world, create an account via [OVHcloud.COM](https://ovhcloud.com/).
 2. Once logged in, click `Public Cloud` from the top menu and then click `Create your first OVH Public Cloud project`. 
 Then enter a project name (e.g. "huggingface"), enter your voucher code, and click `Continue` -> `Create my project`.
