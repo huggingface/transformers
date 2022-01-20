@@ -855,9 +855,8 @@ YOSO_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (:
-            obj:*torch.FloatTensor* of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*): Mask to nullify
-            selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*): 
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -1203,9 +1202,8 @@ class YosoForCausalLM(YosoPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (:
-            obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model is
+        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*): 
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model is
             configured as a decoder.
         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
