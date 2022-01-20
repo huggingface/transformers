@@ -476,7 +476,7 @@ hyperparameters.
 
 ## How to finetune with OVH cloud
 
-For a more detailed guide on setting up OVHcloud please watch this video: TODO
+[![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/XkMnYocAEO0) For a more detailed guide on setting up OVHcloud please watch this video: https://youtu.be/XkMnYocAEO0
 
 ### Creating an OVHCloud account
 *TIP*: If you haven't created a project on OVHcloud yet, make sure you've received your GPU voucher code *beforehand*, 
@@ -510,6 +510,8 @@ Once logged in, you can close the page and click `HTTP Access` to launch a Jupyt
 like the one in step 5. The Dockerfile for it is available here: 
 [baaastijn/Dockerimages](https://github.com/baaastijn/Dockerimages/tree/main/Hugginface_challenge_speech).
 Once you've built your image, push it to https://hub.docker.com/ and select it during the OVHcloud job creation.
+
+For more quick tutorials about OVHcloud AI products, check out the showcase https://vimeo.com/showcase/8903300
 
 ## How to combine n-gram with acoustic model
 
