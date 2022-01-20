@@ -1236,17 +1236,12 @@ def create_new_model_like(
             "used as the model type."
         )
 
-    if not keep_old_processing:
-        if old_model_patterns.tokenizer_class is not None:
-            print(
-                "The constants at the start of the new tokenizer file created needs to be manually fixed. If your new "
-                "model has a tokenizer fast, you will also need to manually add the converter in the "
-                "`SLOW_TO_FAST_CONVERTERS` constant of `convert_slow_tokenizer.py`."
-            )
-        if old_model_patterns.feature_extractor_class is not None:
-            print("The constants at the start of the new feature extractor file created needs to be manually fixed.")
-        if old_model_patterns.processor_class is not None:
-            print("The constants at the start of the new processor file created needs to be manually fixed.")
+    if not keep_old_processing and old_model_patterns.tokenizer_class is not None:
+        print(
+            "The constants at the start of the new tokenizer file created needs to be manually fixed. If your new "
+            "model has a tokenizer fast, you will also need to manually add the converter in the "
+            "`SLOW_TO_FAST_CONVERTERS` constant of `convert_slow_tokenizer.py`."
+        )
 
 
 def add_new_model_like_command_factory(args: Namespace):
