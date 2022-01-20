@@ -52,7 +52,10 @@ python run_mae.py \
     --seed 1337
 ```
 
-Here we set `mask_ratio` to 0.75 §to mask 75% of the patches) and specify `norm_pix_loss` to use normalized pixel values as target. We also set the `base_learning_rate`. Note that the effective learning rate is computed by the [linear schedule](https://arxiv.org/abs/1706.02677): `lr` = `blr` * effective batch size / 256.
+Here we set:
+- `mask_ratio` to 0.75 (to mask 75% of the patches for each image)
+- `norm_pix_loss` to use normalized pixel values as target (the authors reported better representations with this enabled) 
+- `base_learning_rate` to 1.5e-4. Note that the effective learning rate is computed by the [linear schedule](https://arxiv.org/abs/1706.02677): `lr` = `blr` * total training batch size / 256. The total training batch size is computed as `training_args.train_batch_size` * `training_args.gradient_accumulation_steps` * `training_args.world_size`.
 
 Alternatively, one can decide to further pre-train an already pre-trained (or fine-tuned) checkpoint from the [hub](https://huggingface.co/). This can be done by setting the `model_name_or_path` argument to "facebook/vit-mae-base" for example.
 

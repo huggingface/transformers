@@ -134,7 +134,7 @@ class ModelArguments:
         default=0.75, metadata={"help": "The ratio of the number of masked tokens in the input sequence."}
     )
     norm_pix_loss: bool = field(
-        default=True, metadata={"help": "The ratio of the number of masked tokens in the input sequence."}
+        default=True, metadata={"help": "Whether or not to train with normalized pixel values as target."}
     )
 
 
