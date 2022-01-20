@@ -17,7 +17,6 @@ import importlib
 import io
 import unittest
 
-import requests
 import transformers
 
 # Try to import everything from transformers to ensure every object can be loaded.
