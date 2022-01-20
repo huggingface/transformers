@@ -502,7 +502,7 @@ Click `+ Launch a new job` on the AI Training page.
    * In `5. Configure your job` select **1** `GPU`.
    * Validate the info and Create the job.
 6. On the `AI Training Jobs` screen wait until the job's status changes from `Pending` to `Running`.
-7. Click `HTTP Access` and log in with the AI training user you've created earlier. 
+7. Click `HTTP Access` from the Job's details page and log in with the AI training user you've created earlier. 
 Once logged in, you can close the page and click `HTTP Access` to launch a JupyterLab notebook.
 8. Awesome, now you have a free GPU-enabled Jupyter instance!
 
