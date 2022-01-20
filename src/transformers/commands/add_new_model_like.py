@@ -384,7 +384,7 @@ SPECIAL_PATTERNS = {
     "_CHECKPOINT_FOR_DOC =": "checkpoint",
     "_CONFIG_FOR_DOC =": "config_class",
     "_TOKENIZER_FOR_DOC =": "tokenizer_class",
-    "_FEAT_EXTRACTOR_FOR_DOC =": "feature_extraction_class",
+    "_FEAT_EXTRACTOR_FOR_DOC =": "feature_extractor_class",
     "_PROCESSOR_FOR_DOC =": "processor_class",
 }
 
@@ -923,7 +923,7 @@ AUTO_CLASSES_PATTERNS = {
         '        ("{model_type}", "{config_class}"),',
         '        ("{model_type}", "{pretrained_archive_map}"),',
     ],
-    "feature_extration_auto.py": ['        ("{model_type}", "{feature_extractor_class}"),'],
+    "feature_extraction_auto.py": ['        ("{model_type}", "{feature_extractor_class}"),'],
     "modeling_auto.py": ['        ("{model_type}", "{any_pt_class}"),'],
     "modeling_tf_auto.py": ['        ("{model_type}", "{any_tf_class}"),'],
     "modeling_flax_auto.py": ['        ("{model_type}", "{any_flax_class}"),'],
