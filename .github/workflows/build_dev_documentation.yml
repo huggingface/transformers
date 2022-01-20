@@ -35,7 +35,7 @@ jobs:
 
       - name: Comment PR
         uses: thollander/actions-comment-pull-request@v1
-        if: github.event.action == 'opened' || github.event.action == 'reopened'
+        if: github.event.action == 'opened'
 
         with:
           message: 'The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_${{ env.PR_NUMBER }}). All of your documentation changes will be reflected on that endpoint.'
