@@ -26,13 +26,11 @@ from torchvision.transforms.functional import InterpolationMode
 
 import transformers
 from transformers import (
-    CONFIG_MAPPING,
-    FEATURE_EXTRACTOR_MAPPING,
-    AutoConfig,
-    AutoFeatureExtractor,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    ViTFeatureExtractor,
+    ViTMAEConfig,
     ViTMAEForPreTraining,
 )
 from transformers.trainer_utils import get_last_checkpoint
@@ -213,12 +211,11 @@ def main():
         "use_auth_token": True if model_args.use_auth_token else None,
     }
     if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
+        config = ViTMAEConfig.from_pretrained(model_args.config_name, **config_kwargs)
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+        config = ViTMAEConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
-        model_type = "vit_mae"
-        config = CONFIG_MAPPING[model_type]()
+        config = ViTMAEConfig()
         logger.warning("You are instantiating a new config instance from scratch.")
         if model_args.config_overrides is not None:
             logger.info(f"Overriding config: {model_args.config_overrides}")
@@ -226,15 +223,11 @@ def main():
             logger.info(f"New config: {config}")
 
     if model_args.feature_extractor_name:
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_args.feature_extractor_name, **config_kwargs)
+        feature_extractor = ViTFeatureExtractor.from_pretrained(model_args.feature_extractor_name, **config_kwargs)
     elif model_args.model_name_or_path:
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+        feature_extractor = ViTFeatureExtractor.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
-        FEATURE_EXTRACTOR_TYPES = {
-            conf.model_type: feature_extractor_class
-            for conf, feature_extractor_class in FEATURE_EXTRACTOR_MAPPING.items()
-        }
-        feature_extractor = FEATURE_EXTRACTOR_TYPES[model_type]()
+        feature_extractor = ViTFeatureExtractor()
 
     if model_args.model_name_or_path:
         model = ViTMAEForPreTraining.from_pretrained(
