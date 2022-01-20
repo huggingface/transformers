@@ -393,7 +393,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import FlaxVisionEncoderDecoderModel
+        >>> from transformers import FlaxVisionEncoderDecoderModel, ViTFeatureExtractor
         >>> from PIL import Image
         >>> import requests
 
