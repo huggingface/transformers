@@ -133,8 +133,18 @@ class PhrasalConstraint(Constraint):
         self.fulfilled_idx = -1 # the index of the currently fulfilled step
         self.completed = False
     
-    def copy(self):
-        return PhrasalConstraint(self.token_ids)
+    def remaining(self):
+        return self.seqlen - (self.fulfilled_idx + 1)
+
+    def copy(self, stateful=False):
+        new_constraint = PhrasalConstraint(self.token_ids)
+
+        if stateful:
+            new_constraint.seq_len = self.seqlen
+            new_constraint.fulfilled_idx = self.fulfilled_idx
+            new_constraint.completed = self.completed
+
+        return new_constraint
 
     def advance(self):
         return self.token_ids[self.fulfilled_idx + 1]
@@ -150,6 +160,11 @@ class PhrasalConstraint(Constraint):
         completed = False
         reset = False
 
+# '''
+# ------------------------------- Captured stdout --------------------------------
+# force_tokens tensor([48186,   220], device='cuda:0')
+# force_tokens_2 tensor([3174,  913,  220], device='cuda:0')
+# '''
         if self.does_advance(token_id):
             self.fulfilled_idx += 1
             stepped = True
@@ -167,20 +182,48 @@ class PhrasalConstraint(Constraint):
         self.fulfilled_idx = 0
 
         
+# force_tokens tensor([3375,  220], device='cuda:0')
+# force_tokens_2 tensor([23112], device='cuda:0')
+
 class ConstraintListState:
     def __init__(self, constraints: List[Constraint]):
         self.constraints = constraints
+
+        self.max_seqlen = max([c.seqlen for c in constraints])
         self.n_constraints = len(constraints)
         self.completed = False
 
         self.init_state()
 
+    def copy(self, stateful=True):
+        new_state = ConstraintListState(self.constraints)
+
+        if stateful:
+            new_state.complete_constraints = [
+                constraint.copy(stateful=True) 
+                for constraint in self.complete_constraints
+            ]
+            if self.inprogress_constraint is not None:
+                new_state.inprogress_constraint = self.inprogress_constraint.copy(stateful=True)
+            new_state.pending_constraints = [
+                constraint.copy()
+                for constraint in self.pending_constraints
+            ]
+
+        return new_state
 
     def init_state(self):
         self.complete_constraints = []
         self.inprogress_constraint = None
         self.pending_constraints = [constraint.copy() for constraint in self.constraints]
     
+    def get_bank(self):
+        add = 0
+        if self.inprogress_constraint:
+            add += self.max_seqlen - self.inprogress_constraint.remaining()
+
+        return (len(self.complete_constraints)*self.max_seqlen) + add
+
     def advance(self):
         '''The list of tokens to generate such that we can make progress.
 
@@ -189,8 +232,6 @@ class ConstraintListState:
         we'll return.
         '''
         if self.inprogress_constraint is None:
-            print("RUN ADVANCE NO PROGRESS")
-            print("self.pending_constraints", self.pending_constraints)
             token_list = []
             for constraint in self.pending_constraints:
                 advance = constraint.advance()
@@ -209,18 +250,15 @@ class ConstraintListState:
         progress through constraints.
         '''
         self.init_state()
-        print("\n!!!START UPDATE\n\n")
         for token in token_ids:
-            print("token", token)
             complete, stepped = self.add(token)
-            print("complete, stepped", complete, stepped)
 
         return self
         
 
     def add(self, token_id: int):
         if self.completed:
-            return
+            return True, True
 
         complete, stepped = False, False
         if self.inprogress_constraint is not None:
@@ -235,10 +273,8 @@ class ConstraintListState:
                 1. If the next token breaks the fulfillment, then we must restart.
                     e.g. force the sequence "I love pies" and the next token after "I love" is "books".
                 '''
-                print("RESET")
                 self.pending_constraints.append(self.inprogress_constraint.copy())
                 self.inprogress_constraint = None                
-                print("self.pending_constraints", self.pending_constraints)
 
             if complete:
                 '''
@@ -255,7 +291,6 @@ class ConstraintListState:
             '''
             Not in the middle of fulfilling a constraint. 
             '''
-            print("NOT IN THE MIDDLE", self.pending_constraints)
             for cidx, pending_constraint in enumerate(self.pending_constraints):
                 '''
                 1. Does it advance any of the pending constraints?
@@ -270,8 +305,6 @@ class ConstraintListState:
                     
                     if complete or stepped:
                         self.pending_constraints = self.pending_constraints[:cidx] + self.pending_constraints[cidx+1:]
-                        print("!!!self.pending_constraints", self.pending_constraints)
-                        print()
                         if len(self.pending_constraints) == 0 and self.inprogress_constraint is None:
                             self.completed = True 
 

@@ -19,6 +19,7 @@ from collections import UserDict
 from typing import List, Optional, Tuple
 
 import torch
+import numpy as np
 
 from .generation_beam_constraints import Constraint, ConstraintListState
 from .file_utils import add_start_docstrings
@@ -403,6 +404,10 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         self.num_beam_groups = num_beam_groups
         self.group_size = self.num_beams // self.num_beam_groups
         self.constraints = constraints
+        self.constraints_completed = [
+            [False] * self.group_size
+        ] * batch_size
+
         self._is_init = False
         self._beam_hyps = [
             BeamHypotheses(
@@ -500,12 +505,18 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 # add to generated hypotheses if end of sentence
                 if (eos_token_id is not None) and (next_token.item() == eos_token_id):
                     # if constraint not fulfilled, it should not be added.
-                    if not constraint_states[batch_idx].completed:
+                    if not self.constraints_completed[batch_idx][next_index]:
                         continue 
+                    else:
+                        print("NOT COMPLETE", self.constraints_completed)
+                        
                     # if beam_token does not belong to top num_beams tokens, it should not be added
                     is_beam_token_worse_than_top_num_beams = beam_token_rank >= self.group_size
                     if is_beam_token_worse_than_top_num_beams:
                         continue
+
+                    print("\n!\n!\n!\n!\n!\n!\n!\n!\n!TRULY COMPLETED SEQUENCE!!\n!\n!\n!")
+                    print("input_ids[batch_beam_idx].clone()", input_ids[batch_beam_idx].clone())
                     beam_hyp.add(
                         input_ids[batch_beam_idx].clone(),
                         next_score.item(),
@@ -520,26 +531,22 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 # once the beam for next step is full, don't add more tokens to it.
                 if beam_idx == self.group_size:
                     break
-            
-            print("scores_for_all_vocab", scores_for_all_vocab.size())
-            print("input_ids", input_ids.size())
-            print("next_beam_tokens", next_beam_tokens.size())
 
-            new_scores, new_tokens, new_indices = self.step_sentence_constraint(
+            new_completed, new_scores, new_tokens, new_indices = self.step_sentence_constraint(
                 batch_idx,
                 input_ids,
                 scores_for_all_vocab,
+                self.constraints_completed[batch_idx],
                 next_beam_scores[batch_idx].clone(),
                 next_beam_tokens[batch_idx].clone(),
                 next_beam_indices[batch_idx].clone(),
             )
-            print("!!new_scores", new_scores)
-            print("!!new_tokens", new_tokens)
-            print()
 
             next_beam_scores[batch_idx] = new_scores
             next_beam_tokens[batch_idx] = new_tokens
             next_beam_indices[batch_idx] = new_indices
+
+            self.constraints_completed[batch_idx] = new_completed
 
 
             if beam_idx < self.group_size:
@@ -565,6 +572,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         batch_idx,
         input_ids,
         vocab_scores,
+        constraints_completed,
         sent_beam_scores,
         sent_beam_tokens,
         sent_beam_indices,
@@ -582,7 +590,9 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         '''
         orig_len = sent_beam_indices.size(0)
         device = sent_beam_indices.get_device()
-        sent_constraint_state = self.make_constraint_states(orig_len)
+
+        topk_contraint_states = self.make_constraint_states(orig_len)
+        advance_constraint_states = self.make_constraint_states(orig_len)
 
         start_idx = batch_idx*orig_len
         end_idx = (batch_idx+1) * orig_len
@@ -590,64 +600,101 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         this_batch_input_ids = input_ids[start_idx : end_idx]
         this_batch_token_scores = vocab_scores[start_idx : end_idx]
 
-        print("this_batch_input_ids", this_batch_input_ids)
-        print("sent_beam_tokens", sent_beam_tokens)
-
         full_hypotheses = torch.cat((this_batch_input_ids, sent_beam_tokens.unsqueeze(-1)), dim=-1)
-        print("full_hypotheses", full_hypotheses)
         
         # need to make new hypothesis that advance the constraints
-        new_indices = []
         new_seqs = []
+        new_states = []
+        new_indices = []
+        new_tokens = []
         new_scores = []
         for seq_idx, pre_seq in enumerate(this_batch_input_ids):
-            new_state = sent_constraint_state[seq_idx]
-            print("\bRUN UPDATE\n")
-            new_state.update(pre_seq)
-            print("\nDONE UPDATE\n")
-            if not new_state.completed:
-                advance_tokens = new_state.advance()
+            topk_state = topk_contraint_states[sent_beam_indices[seq_idx].item()]
+            topk_state.update(full_hypotheses[seq_idx])
+            
+            if constraints_completed[seq_idx]:
+                continue
+            advance_state = advance_constraint_states[seq_idx]
+            advance_state.update(pre_seq)
+            if not advance_state.completed:
+                advance_tokens = advance_state.advance()
                 print(">>>>>advance_tokens", advance_tokens)
                 if advance_tokens.numel() != 0:
-                    advance_token = advance_tokens[:1]
-                    new_seq = torch.cat((pre_seq, advance_token), dim=0)
+                    new_state = advance_state.copy(stateful=True)
+                    new_state.add(advance_tokens[:1])
 
-                    new_score = this_batch_token_scores[seq_idx].take(advance_token[0])
-
-                    new_indices.append(seq_idx)
-                    new_seqs.append(new_seq)
-                    new_scores.append(new_score)
-
-        if len(new_indices) > 0:
-            new_indices = torch.add(torch.tensor(new_indices), batch_idx * orig_len).to(device)
-            new_seqs = torch.stack(new_seqs).to(device)
-            new_scores = torch.stack(new_scores).to(device)
-            # just force advancing
-            new_tokens = new_seqs[:, -1]
-
+                    for advance_token in advance_tokens:
+                        advance_seq = torch.cat((pre_seq, advance_token.unsqueeze(0)), -1).cpu().tolist()
+                        if advance_seq not in new_seqs:
+                            print("advance_seq", advance_seq)
+                            print("new_seqs", new_seqs)
+                            new_seqs.append(advance_seq)
+                            new_score = this_batch_token_scores[seq_idx].take(advance_token)
+                            new_indices.append(seq_idx)
+                            new_tokens.append(advance_token)
+                            new_scores.append(new_score)
+                            new_states.append(new_state)
+            # else:
+            #     # if it's a complete state
+            #     new_score, new_token = torch.max(this_batch_token_scores[seq_idx], 0)
+            #     new_indices.append(seq_idx)
+            #     new_tokens.append(new_token)
+            #     new_scores.append(new_score)
+            #     new_states.append(advance_state)
             
-            sent_beam_tokens = torch.cat((sent_beam_tokens, new_tokens[:1]), -1)
-            sent_beam_scores = torch.cat((sent_beam_scores, new_scores[:1]), -1)
-            sent_beam_indices = torch.cat((sent_beam_indices, new_indices[:1]), -1)
+        if len(new_indices) > 0:
+            new_indices = torch.tensor(new_indices).to(device)
+            new_tokens = torch.stack(new_tokens).to(device)
+            new_scores = torch.stack(new_scores).to(device)
+            
+            all_states = topk_contraint_states + new_states
+            all_tokens = torch.cat((sent_beam_tokens, new_tokens), -1)
+            all_scores = torch.cat((sent_beam_scores, new_scores), -1)
+            all_banks = torch.tensor([one.get_bank() for one in all_states]).to(device)
+            # ! only for testing!!
+            zipped = torch.stack((all_scores, all_banks, all_tokens))
+            zipped = torch.transpose(zipped, 0, 1)
 
-        print(">>>>>sent_beam_scores", sent_beam_scores)
-        print(">>>>>sent_beam_tokens", sent_beam_tokens)
-        print(">>>>>sent_beam_indices", sent_beam_indices)
-        
+            augmented_zipped = all_banks * 1000 + all_scores*10 
+            indices = augmented_zipped.sort(descending=True).indices
 
-        '''
-        2. Compute "banks" for each candidate.
-        If C is the number of constraints, we construct C banks, where ith bank
-        is the bank for candidates that have fulfilled ith constraint.
-        '''
+            sorted_banks = all_banks[indices] # C, C, C-1, C-2, ..., 1, 0, 0
+            
+            '''
+            Then we end up with 
+            {sorted among bank C}, {sorted among bank C-1}, ..., {sorted among bank 0}
+            '''        
+            counter = -1
+            cur_bank = sorted_banks[0]
+            increments = []
+            for bank in sorted_banks:
+                if bank == cur_bank:
+                    counter += 1
+                else:
+                    counter = 0
+                    cur_bank = bank
+                increments.append(counter)
+            rearrangers = torch.tensor(np.argsort(increments, kind="mergesort"))
 
+            print("PREZIP", zipped)
+            indices = indices[rearrangers]
+            print("POSTZIP", zipped[indices])
 
-        sent_beam_scores = sent_beam_scores[-orig_len:]
-        sent_beam_tokens = sent_beam_tokens[-orig_len:]
-        sent_beam_indices = sent_beam_indices[-orig_len:]
+            sent_beam_scores = all_scores[indices]
+            sent_beam_tokens = all_tokens[indices]
+            sent_beam_indices = torch.cat((sent_beam_indices, new_indices))[indices]
+            constraints_completed = [all_states[idx].completed for idx in indices[:orig_len]]
 
+            sent_beam_scores = sent_beam_scores[:orig_len]
+            sent_beam_tokens = sent_beam_tokens[:orig_len]
+            sent_beam_indices = sent_beam_indices[:orig_len]
 
-        return sent_beam_scores, sent_beam_tokens, sent_beam_indices
+            print(">>>>>sent_beam_scores", sent_beam_scores)
+            print(">>>>>sent_beam_tokens", sent_beam_tokens)
+            print(">>>>>sent_beam_indices", sent_beam_indices)
+            print(">>>>constraints_completed", constraints_completed)
+            
+        return constraints_completed, sent_beam_scores, sent_beam_tokens, sent_beam_indices
 
 
 

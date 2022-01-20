@@ -2735,6 +2735,8 @@ class GenerationMixin:
         synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
+        from transformers import GPT2Tokenizer
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         r"""
         Generates sequences for models with a language modeling head using beam search decoding.
 
@@ -2963,7 +2965,10 @@ class GenerationMixin:
             next_indices = (next_tokens / vocab_size).long()
             next_tokens = next_tokens % vocab_size
 
-            print("<<<<<<input_ids", input_ids)
+            print("\n\nINPUT\n")
+            for one in input_ids:
+                print(tokenizer.decode(one))
+            print("\n\n\n")
             # stateless
             beam_outputs = constrained_beam_scorer.process(
                 input_ids,
@@ -2978,11 +2983,12 @@ class GenerationMixin:
             beam_next_tokens = beam_outputs["next_beam_tokens"]
             beam_idx = beam_outputs["next_beam_indices"]
 
-            print("beam_idx", beam_idx)
-            print(">>>>>beam_next_tokens", beam_next_tokens)
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-            print(">>>>>input_ids", input_ids)
-
+            
+            print("\n\nOUTPUT\n")
+            for one in input_ids:
+                print(tokenizer.decode(one))
+            print("\n\n\n")
 
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
