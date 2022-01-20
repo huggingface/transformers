@@ -15,9 +15,10 @@
 """ PyTorch MaskFormer model."""
 
 from __future__ import annotations
+from lib2to3.pgen2.token import OP
 import math
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from numbers import Number
 from pprint import pprint
@@ -1414,8 +1415,7 @@ class MaskFormerSegmentationModule(nn.Module):
 
 @dataclass
 class MaskFormerOutput(ModelOutput):
-
-    pred_logits: torch.FloatTensor = None
+    pred_logits: torch.FloatTensor
     pred_masks: torch.FloatTensor = None
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
@@ -1504,13 +1504,14 @@ class MaskFormerModel(PreTrainedModel):
 
 
 @dataclass
-class MaskFormerForSemanticSegmentationOutput(MaskFormerOutput):
+class MaskFormerForSemanticSegmentationOutput(ModelOutput):
+    segmentation: torch.FloatTensor
+    pred_logits: torch.FloatTensor = None
+    pred_masks: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[Dict] = None
 
-    segmentation: torch.FloatTensor = None
 
-
-# is this the correct way to defined a model for a custom task?
-# this guy only works in inference/val mode
 class MaskFormerForSemanticSegmentation(nn.Module):
     def __init__(self, config: MaskFormerConfig):
         super().__init__()
@@ -1536,78 +1537,108 @@ class MaskFormerForSemanticSegmentation(nn.Module):
         return MaskFormerForSemanticSegmentationOutput(**outputs, segmentation=segmentation)
 
 
+@dataclass
+class MaskFormerSegment:
+    id: int
+    category_id: int
+    isthing: Optional[bool] = None
+
+
+@dataclass
+class MaskFormerForSemanticSegmentationOutput(ModelOutput):
+    segmentation: Tensor
+    pred_logits: torch.FloatTensor = None
+    pred_masks: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[Dict] = None
+    segments: List[MaskFormerSegment] = field(default_factory=list)
+
+
 class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
-    def __init__(self, object_mask_threshold: float, config: MaskFormerConfig):
+    def __init__(
+        self,
+        config: MaskFormerConfig,
+        object_mask_threshold: Optional[float] = 0.8,
+        overlap_mask_area_threshold: Optional[float] = 0.8,
+    ):
         super().__init__(config)
         self.object_mask_threshold = object_mask_threshold
+        self.overlap_mask_area_threshold = overlap_mask_area_threshold
+
+    def remove_low_and_no_objects(
+        self, masks: Tensor, scores: Tensor, labels: Tensor
+    ) -> Tuple[Tensor, Tensor, Tensor]:
+        assert (
+            masks.shape[0] == scores.shape[0] == labels.shape[0]
+        ), "mask, scores and labels must have the same shape!"
+        to_keep: Tensor = labels.ne(self.model.config.num_classes) & (scores > self.object_mask_threshold)
+
+        return masks[to_keep], scores[to_keep], labels[to_keep]
 
     def forward(self, *args, **kwargs):
         outputs = self.model(*args, **kwargs)
-        pred_logits: Tensor = outputs.pred_logits
-        pred_masks: Tensor = outputs.pred_masks
+        preds_logits: Tensor = outputs.pred_logits
+        preds_masks: Tensor = outputs.pred_masks
 
-        b, q, h, w = pred_masks.shape
+        b, q, h, w = preds_masks.shape
 
-        scores, labels = F.softmax(pred_logits, dim=-1).max(-1)
         # for each query, the best score and its index
-        mask_probs = pred_logits.sigmoid()
-        # we need to filter out low score predictions
-        # and the background class
-        to_keep = labels.ne(self.model.config.num_classes) & (scores > self.object_mask_threshold)
-        # NOTE we can't do it in a batch-wise fashion
-        # since to_keep may have differnt size for each prediction
+        pred_scores, pred_labels = F.softmax(preds_logits, dim=-1).max(-1)  # out = [BATH,NUM_QUERIES]
+        mask_probs = preds_masks.sigmoid()
 
-        cur_scores = scores[to_keep]
-        cur_classes = labels[to_keep]
-        cur_masks = mask_probs[to_keep]
-        cur_mask_cls = pred_logits[to_keep]
-        # remove the null class
-        cur_mask_cls = cur_mask_cls[:, :-1]
-        # weight each mask by its score
-        # why we collapse the batch class?
-        # oops we don't have to! original implementation is
-        # batch wise!!!
-        cur_prob_masks = cur_scores.view(-1, 1, 1) * cur_masks
+        for (mask_probs, pred_scores, pred_labels) in zip(mask_probs, pred_scores, pred_labels):
 
-        we_detect_something = cur_masks.shape[0] > 0
+            # NOTE we can't do it in a batch-wise fashion
+            # since to_keep may have differnt size for each prediction
+            mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(mask_probs, pred_scores, pred_labels)
+            we_detect_something: bool = mask_probs.shape[0] > 0
 
-        panoptic_seg = torch.zeros((h, w), dtype=torch.int32, device=cur_masks.device)
-        segments_info = []
+            panoptic_seg: Tensor = torch.zeros((h, w), dtype=torch.int32, device=mask_probs.device)
 
-        current_segment_id = 0
+            segments: List[MaskFormerSegment] = []
 
-        if we_detect_something:
-            # take argmax
-            cur_mask_ids = cur_prob_masks.argmax(0)
-            stuff_memory_list = {}
-            for k in range(cur_classes.shape[0]):
-                pred_class = cur_classes[k].item()
-                isthing = pred_class in self.metadata.thing_dataset_id_to_contiguous_id.values()
-                mask = cur_mask_ids == k
-                mask_area = mask.sum().item()
-                original_area = (cur_masks[k] >= 0.5).sum().item()
+            current_segment_id: int = 0
 
-                if mask_area > 0 and original_area > 0:
-                    if mask_area / original_area < self.overlap_threshold:
-                        continue
+            if we_detect_something:
+                # weight each mask by its score
+                mask_probs *= pred_scores.view(-1, 1, 1)
+                mask_labels: Tensor = mask_probs.argmax(0)
+                # mask_labels is a [H,W] where each pixel has a class label
+                # basically for each pixel we find out what is the most likely class to be there
+                stuff_memory_list = {}
+                # this is a map between stuff and segments id, the used it to keep track of the instances of one class
+
+                for k in range(pred_labels.shape[0]):
+                    print("-----------")
+                    print(pred_class)
+                    pred_class: int = pred_labels[k].item()
+                    # we are checking if pred_class is in the range of the continuous values allowed
+                    # why, no idea!
+                    is_stuff = True
+                    # get the mask associated with the k query
+                    mask_k: Tensor = mask_labels == k
+                    # create the area, since bool we just need to sum :)
+                    mask_k_area: Tensor = mask_k.sum()
+                    # this is the area of all the stuff in query k
+                    original_area: Tensor = (mask_probs[k] >= self.object_mask_threshold).sum()
+
+                    area_ratio = mask_k_area / original_area
+
+                    is_overlapping: bool = area_ratio.item() > self.overlap_mask_area_threshold
 
                     # merge stuff regions
-                    if not isthing:
-                        if int(pred_class) in stuff_memory_list.keys():
-                            panoptic_seg[mask] = stuff_memory_list[int(pred_class)]
-                            continue
+                    if not is_stuff and is_overlapping:
+                        if pred_class in stuff_memory_list:
+                            panoptic_seg[mask_k] = stuff_memory_list[pred_class]
                         else:
                             stuff_memory_list[int(pred_class)] = current_segment_id + 1
 
                     current_segment_id += 1
-                    panoptic_seg[mask] = current_segment_id
+                    # then we update out mask with the current segment
+                    panoptic_seg[mask_k] = current_segment_id
 
-                    segments_info.append(
-                        {
-                            "id": current_segment_id,
-                            "isthing": bool(isthing),
-                            "category_id": int(pred_class),
-                        }
+                    segments.append(
+                        MaskFormerSegment(id=current_segment_id, category_id=pred_class, is_thing=not is_stuff)
                     )
 
-            return panoptic_seg, segments_info
+                return panoptic_seg, segments

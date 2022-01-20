@@ -10,7 +10,9 @@ from pprint import pformat, pprint
 from typing import List, Any, Dict, Optional, Set
 from src.transformers.models.maskformer.modelling_maskformer import (
     MaskFormerConfig,
+    MaskFormerForPanopticSegmentation,
     MaskFormerForSemanticSegmentation,
+    MaskFormerForSemanticSegmentationOutput,
     MaskFormerModel,
 )
 from detectron2.config import get_cfg
@@ -59,7 +61,8 @@ class TrackedStateDict:
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    # url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    url = "https://farm3.staticflickr.com/2628/3761093143_0233b13a00_z.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -335,9 +338,12 @@ def test_with_img():
 
     tr = T.Compose(
         [
-            T.Resize((384, 384)),
+            # T.Resize((480, 600)),
             T.ToTensor(),
-            T.Normalize(mean=[123.675, 116.280, 103.530], std=[58.395, 57.120, 57.375]),
+            T.Normalize(
+                mean=torch.tensor([123.675, 116.280, 103.530]) / 255.0,
+                std=torch.tensor([58.395, 57.120, 57.375]) / 255.0,
+            ),
         ],
     )
 
@@ -360,7 +366,7 @@ def test_with_img():
         mask_former_for_seg.model.load_state_dict(mask_former.state_dict())
 
         original_outs = original_mask_former([{"image": x}])
-        outs = mask_former_for_seg(x.unsqueeze(0))
+        outs: MaskFormerForSemanticSegmentationOutput = mask_former_for_seg(x.unsqueeze(0))
 
         assert torch.allclose(original_outs[0]["sem_seg"], outs.segmentation, atol=1e-4)
 
@@ -369,31 +375,86 @@ def test_with_img():
 
         # for cat
 
-        img_with_mask = (to_tensor(im.resize((384, 384))) * 255).type(torch.uint8)
+        img_with_mask = (to_tensor(im) * 255).type(torch.uint8).permute(1, 2, 0).numpy()
 
-        for mask in outs.segmentation[0] > 0.5:
-            img_with_mask = draw_segmentation_masks(img_with_mask, masks=mask, alpha=0.6)
+        from detectron2.data import MetadataCatalog
+        from detectron2.engine.defaults import DefaultPredictor
+        from detectron2.utils.video_visualizer import VideoVisualizer
+        from detectron2.utils.visualizer import ColorMode, Visualizer
 
-        import numpy as np
-        import matplotlib.pyplot as plt
+        metadata = MetadataCatalog.get("coco_2017_val_panoptic")
+        visualizer = Visualizer(img_with_mask, metadata)
 
-        import torchvision.transforms.functional as F
+        mask = original_outs[0]["sem_seg"].argmax(dim=0)
+        vis_output = visualizer.draw_sem_seg(mask)
 
-        plt.rcParams["savefig.bbox"] = "tight"
+        vis_output.save("./test.png")
 
-        def show(imgs):
-            if not isinstance(imgs, list):
-                imgs = [imgs]
-            fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
-            for i, img in enumerate(imgs):
-                img = img.detach()
-                img = F.to_pil_image(img)
-                axs[0, i].imshow(np.asarray(img))
-                axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
+        # scores, labels = outs.pred_logits[0].softmax(-1).max(0)
+        # print(scores, labels)
+        # for mask in original_outs[0]["sem_seg"] > 0.5:
+        #     img_with_mask = draw_segmentation_masks(img_with_mask, masks=mask, alpha=0.1)
 
-        show(img_with_mask)
-        plt.show()
+        # import numpy as np
+        # import matplotlib.pyplot as plt
+
+        # import torchvision.transforms.functional as F
+
+        # plt.rcParams["savefig.bbox"] = "tight"
+
+        # def show(imgs):
+        #     if not isinstance(imgs, list):
+        #         imgs = [imgs]
+        #     fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
+        #     for i, img in enumerate(imgs):
+        #         img = img.detach()
+        #         img = F.to_pil_image(img)
+        #         axs[0, i].imshow(np.asarray(img))
+        #         axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
+
+        # show(img_with_mask)
+        # plt.show()
+
+
+def test_pan_seg():
+    im = prepare_img()
+
+    tr = T.Compose(
+        [
+            T.Resize((480, 600)),
+            T.ToTensor(),
+            T.Normalize(
+                mean=torch.tensor([123.675, 116.280, 103.530]) / 255.0,
+                std=torch.tensor([58.395, 57.120, 57.375]) / 255.0,
+            ),
+        ],
+    )
+
+    x = tr(im)
+
+    # x = torch.zeros((3, 384, 384))
+
+    cfg = setup_cfg(Args())
+
+    with torch.no_grad():
+
+        mask_former_kwargs = OriginalMaskFormer.from_config(cfg)
+        original_mask_former = OriginalMaskFormer(**mask_former_kwargs).eval()
+        original_mask_former.sem_seg_head.predictor.aux_loss = False
+        config = MaskFormerConfig()
+
+        mask_former = MaskFormerModel(config=config).eval()
+        replace_maskformer(mask_former, original_mask_former)
+
+        mask_former_for_seg = MaskFormerForPanopticSegmentation(config=config).eval()
+
+        mask_former_for_seg.model.load_state_dict(mask_former.state_dict())
+
+        original_outs = original_mask_former([{"image": x}])
+        outs: MaskFormerForSemanticSegmentationOutput = mask_former_for_seg(x.unsqueeze(0))
 
 
 # very_boring_test()
-test_with_img()
+# test_with_img()
+
+test_pan_seg()
