@@ -908,6 +908,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             y_pred = self(x, training=True)
             loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         # Run backwards pass.
+        import pdb; pdb.set_trace()
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
         # When y_pred is a ModelOutput and y is a tf.Tensor the metrics update
         # should be done only with the relevant ModelOutput param that is

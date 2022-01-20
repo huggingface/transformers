@@ -34,7 +34,13 @@ from ...modeling_tf_outputs import (
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
 )
-from ...modeling_tf_utils import DUMMY_INPUTS, TFPreTrainedModel, shape_list
+from ...modeling_tf_utils import (
+    TFPreTrainedModel,
+    TFSharedEmbeddings,
+    input_processing,
+    keras_serializable,
+    shape_list,
+)
 from ...utils import logging
 from .configuration_speech_to_text import Speech2TextConfig
 
@@ -144,8 +150,8 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
 class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        super().__init__()
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None, , **kwargs):
+        super().__init__(**kwargs)
         self.offset = 2
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
@@ -525,8 +531,6 @@ class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
         )
 
 
-## done up to here
-
 class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
     config_class = Speech2TextConfig
     base_model_prefix = "model"
@@ -561,8 +565,7 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
             )
         )
         attention_mask = tf.matmul(tf.ones((bsz, 1), dtype=attention_mask.dtype), mask_cols)
-
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
+        attention_mask = tf.cast(tf.reverse(tf.math.cumsum(tf.reverse(attention_mask, [-1]), -1), [-1]), tf.int64)
         return attention_mask
 
     @tf.function(
@@ -581,224 +584,182 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
         return self.serving_output(output)
 
 
-class Speech2TextPreTrainedModel(PreTrainedModel):
-    config_class = Speech2TextConfig
-    base_model_prefix = "model"
-    main_input_name = "input_features"
-    supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (Speech2TextDecoder, Speech2TextEncoder)):
-            module.gradient_checkpointing = value
-
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
-        """
-        Computes the output length of the convolutional layers
-        """
-        for i in range(self.config.num_conv_layers):
-            input_lengths = (input_lengths - 1) // 2 + 1
-
-        return input_lengths
-
-    def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
-        # generate creates 3D attention mask, because of the shape of input_features
-        # convert it to 2D if thats the case
-        if len(attention_mask.shape) > 2:
-            attention_mask = attention_mask[:, :, -1]
-
-        subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
-        bsz = attention_mask.size()[0]
-        attention_mask = torch.zeros(
-            (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-
-        # these two operations makes sure that all values
-        # before the output lengths indices are attended to
-        attention_mask[(torch.arange(bsz, device=attention_mask.device), subsampled_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
-        return attention_mask
-
-## partially done up to here
-
-
 SPEECH_TO_TEXT_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
+
+    <Tip>
+
+    TF 2.0 models accepts two formats as inputs:
+
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
+
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    tensors in the first argument of the model call function: `model(inputs)`.
+
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
+    first positional argument :
+
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    </Tip>
 
     Parameters:
         config ([`Speech2TextConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
 
 SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
     Args:
-        input_features (`torch.LongTensor` of shape `(batch_size, sequence_length, feature_size)`):
-            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
-            by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
-            via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`Speech2TextTokenizer`] should be used for extracting the fbank features, padding and conversion into a
-            tensor of type `torch.FloatTensor`. See [`~Speech2TextTokenizer.__call__`]
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
+        input_ids (`tf.Tensor` of shape `({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`Speech2TextTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`tf.Tensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+        decoder_input_ids (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SpeechToTextTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`Speech2TextTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            SpeechToText uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If
-            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
+            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
 
-            If you want to change padding behavior, you should read [`modeling_speech_to_text._prepare_decoder_inputs`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            For translation and summarization training, `decoder_input_ids` should be provided. If no
+            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
+            for denoising pre-training following the paper.
+        decoder_attention_mask (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
+        head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+        decoder_head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+        cross_attn_head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
+        encoder_outputs (`tf.FloatTensor`, *optional*):
+            hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+            of shape `(batch_size, sequence_length, hidden_size)` is a sequence of
+        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. decoder_inputs_embeds (`torch.FloatTensor`
-            of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-            `decoder_input_ids` you can choose to directly pass an embedded representation. If `past_key_values` is
-            used, optionally only the last `decoder_inputs_embeds` have to be input (see `past_key_values`). This is
-            useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
-            of `inputs_embeds`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
+            in eager mode, in graph mode the value will always be set to True.
+        training (`bool`, *optional*, defaults to `False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 
-class Speech2TextEncoder(Speech2TextPreTrainedModel):
+@keras_serializable
+class TFSpeech2TextEncoder(TFSpeech2TextPreTrainedModel):
+    config_class = Speech2TextConfig
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`Speech2TextEncoderLayer`].
+    [`TFSpeech2TextEncoderLayer`].
 
     Args:
         config: Speech2TextConfig
-        embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: Speech2TextConfig):
-        super().__init__(config)
+    def __init__(self, config: Speech2TextConfig, **kwargs):
+        super().__init__(**kwargs)
+        self.config = config
 
-        self.dropout = config.dropout
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
         self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_source_positions
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+        self.max_source_positions = config.max_position_embeddings
+        self.embed_scale = tf.math.sqrt(float(embed_dim)) if config.scale_embedding else 1.0
 
-        self.conv = Conv1dSubsampler(config)
+        self.conv = TFConv1dSubsampler(config)
 
-        self.embed_positions = Speech2TextSinusoidalPositionalEmbedding(
-            self.max_source_positions,
-            embed_dim,
-            self.padding_idx,
+        self.embed_positions = TFSpeech2TextSinusoidalPositionalEmbedding(
+            num_positions=config.max_position_embeddings,
+            embedding_dim=embed_dim,
+            padding_idx=self.padding_idx,
+            name="embed_sinusoidal_positions",
         )
-        self.layers = nn.ModuleList([Speech2TextEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layer_norm = nn.LayerNorm(config.d_model)
+        self.layers = [TFSpeech2TextEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
-        self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def forward(
+    def call(
         self,
-        input_features,
+        input_ids=None,
         attention_mask=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        training=False,
+        **kwargs,
     ):
-        r"""
+        """
         Args:
-            input_features (`torch.LongTensor` of shape `(batch_size, sequence_length, feature_size)`):
-                Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`Speech2TextTokenizer`] should be used for extracting the fbank features,
-                padding and conversion into a tensor of type `torch.FloatTensor`. See
-                [`~Speech2TextTokenizer.__call__`]
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
-                `[0, 1]`:
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
+
+                Indices can be obtained using [`Speech2TextTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
+
+                [What are input IDs?](../glossary#input-ids)
+            attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, `optional):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
@@ -813,124 +774,123 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        inputs_embeds = self.conv(input_features)
+
+        if inputs["input_ids"] is None:
+            raise ValueError("You have to specify input_ids")
+
+
+        inputs_embeds = self.conv(inputs["input_ids"])
         inputs_embeds = self.embed_scale * inputs_embeds
 
         # subsample attention mask if necessary
-        if attention_mask is not None:
-            attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
-            padding_mask = attention_mask.ne(1).long()
+        if inputs["attention_mask"] is not None:
+            attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], inputs["attention_mask"])
+            padding_mask = tf.cast(tf.math.not_equal(attention_mask, 1), tf.int64)
         else:
-            padding_mask = torch.zeros_like(inputs_embeds, dtype=torch.long)
+            padding_mask = tf.zeros_like(inputs_embeds, dtype=tf.int64)
 
         embed_pos = self.embed_positions(padding_mask)
 
-        hidden_states = inputs_embeds + embed_pos
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = inputs["inputs_embeds"] + embed_pos
+        hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
-        # expand attention_mask
-        if attention_mask is not None:
+        # check attention mask and invert
+        if inputs["attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _expand_mask(inputs["attention_mask"])
+        else:
+            attention_mask = None
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
+        encoder_states = () if inputs["output_hidden_states"] else None
+        all_attentions = () if inputs["output_attentions"] else None
 
         # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+        # The tf.debugging asserts are not compliant with XLA then they have to be disabled in other modes than eager.
+        if inputs["head_mask"] is not None and tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(inputs["head_mask"])[0],
+                len(self.layers),
+                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}.",
+            )
 
         for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
+            if inputs["output_hidden_states"]:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
-                layer_outputs = (None, None)
-            else:
-                if self.gradient_checkpointing and self.training:
+            if inputs["training"] and (dropout_probability < self.layerdrop):  # skip the layer
+                continue
 
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
+            hidden_states, attn = encoder_layer(
+                hidden_states,
+                attention_mask,
+                inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
+                training=training
+            )
 
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
-
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+            if inputs["output_attentions"]:
+                all_attentions += (attn,)
 
         hidden_states = self.layer_norm(hidden_states)
-        if output_hidden_states:
+        if inputs["output_hidden_states"]:
             encoder_states = encoder_states + (hidden_states,)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
+        return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
 
-class Speech2TextDecoder(Speech2TextPreTrainedModel):
+@keras_serializable
+class TFSpeech2TextDecoder(TFSpeech2TextPreTrainedModel):
+    config_class = Speech2TextConfig
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`Speech2TextDecoderLayer`]
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TFSpeech2TextDecoderLayer`]
 
     Args:
         config: Speech2TextConfig
-        embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: Speech2TextConfig):
-        super().__init__(config)
-        self.dropout = config.dropout
+    def __init__(self, config: Speech2TextConfig, **kwargs):
+        super().__init__(**kwargs)
+        self.config = config
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_target_positions
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        self.embed_tokens = TFSharedEmbeddings(config.vocab_size, config.d_model)
 
-        self.embed_positions = Speech2TextSinusoidalPositionalEmbedding(
-            self.max_target_positions,
-            config.d_model,
-            self.padding_idx,
+        self.embed_positions = TFSpeech2TextSinusoidalPositionalEmbedding(
+            num_positions=config.max_position_embeddings,
+            embedding_dim=config.d_model,
+            padding_idx=self.padding_idx,
+            name="embed_sinusoidal_positions",
         )
 
-        self.layers = nn.ModuleList([Speech2TextDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = [TFSpeech2TextDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
-        self.layer_norm = nn.LayerNorm(config.d_model)
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
 
-        self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
+    def get_embed_tokens(self):
         return self.embed_tokens
 
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
+    def set_embed_tokens(self, embed_tokens):
+        self.embed_tokens = embed_tokens
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
@@ -939,7 +899,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
                 input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-            ).to(self.device)
+            )
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -950,24 +910,26 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
         return combined_attention_mask
 
-    def forward(
+    def call(
         self,
         input_ids=None,
+        inputs_embeds=None,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         head_mask=None,
         cross_attn_head_mask=None,
         past_key_values=None,
-        inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        training=False,
+        **kwargs,
     ):
         r"""
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
@@ -975,17 +937,17 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            encoder_hidden_states (`tf.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
+            encoder_attention_mask (`tf.Tensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
                 Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
                 selected in `[0, 1]`:
 
@@ -993,31 +955,26 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
-                on hidden heads. Mask values selected in `[0, 1]`:
+            cross_attn_head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+                Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
+                decoding.
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
-                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`tf.Tensor` of
+                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
                 embedding lookup matrix.
@@ -1030,138 +987,125 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            inputs_embeds=inputs_embeds,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
+        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
+        elif inputs["input_ids"] is not None:
+            input_shape = shape_list(inputs["input_ids"])
+        elif inputs["inputs_embeds"] is not None:
+            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = (
+            shape_list(inputs["past_key_values"][0][0])[2] if inputs["past_key_values"] is not None else 0
+        )
 
-        if inputs_embeds is None:
+        if inputs["inputs_embeds"] is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        else:
+            inputs_embeds = inputs["inputs_embeds"]
 
         attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
+            inputs["attention_mask"], input_shape, inputs_embeds, past_key_values_length
         )
 
         # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
+        if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            encoder_attention_mask = _expand_mask(
+                inputs["encoder_attention_mask"], inputs_embeds.dtype, tgt_len=input_shape[-1]
+            )
 
         # embed positions
-        positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
+        positions = self.embed_positions(input_shape, past_key_values_length=past_key_values_length)
 
         hidden_states = inputs_embeds + positions
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
         # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-        next_decoder_cache = () if use_cache else None
+        all_hidden_states = () if inputs["output_hidden_states"] else None
+        all_self_attns = () if inputs["output_attentions"] else None
+        all_cross_attns = () if (inputs["output_attentions"] and inputs["encoder_hidden_states"] is not None) else None
+        next_decoder_cache = () if inputs["use_cache"] else None
 
-        # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
-            if attn_mask is not None:
-                assert attn_mask.size()[0] == (
-                    len(self.layers)
-                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+        # check if head_mask and cross_attn_head_mask have a correct number of layers specified if desired
+        # The tf.debugging asserts are not compliant with XLA then they have to be disabled in other modes than eager.
+        for attn_mask in ["head_mask", "cross_attn_head_mask"]:
+            if inputs[attn_mask] is not None and tf.executing_eagerly():
+                tf.debugging.assert_equal(
+                    shape_list(inputs[attn_mask])[0],
+                    len(self.layers),
+                    message=f"The {attn_mask} should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs[attn_mask])[0]}.",
+                )
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            if output_hidden_states:
+            if inputs["output_hidden_states"]:
                 all_hidden_states += (hidden_states,)
             dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
+            if inputs["training"] and (dropout_probability < self.layerdrop):
                 continue
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
+            past_key_value = inputs["past_key_values"][idx] if inputs["past_key_values"] is not None else None
 
-            if self.gradient_checkpointing and self.training:
+            hidden_states, layer_self_attn, layer_cross_attn, present_key_value = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                encoder_hidden_states=inputs["encoder_hidden_states"],
+                encoder_attention_mask=inputs["encoder_attention_mask"],
+                layer_head_mask=inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
+                cross_attn_layer_head_mask=inputs["cross_attn_head_mask"][idx]
+                if inputs["cross_attn_head_mask"] is not None
+                else None,
+                past_key_value=past_key_value,
+            )
 
-                if use_cache:
-                    logger.warning(
-                        "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache = False`..."
-                    )
-                    use_cache = False
+            if inputs["use_cache"]:
+                next_decoder_cache += (present_key_value,)
 
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
+            if inputs["output_attentions"]:
+                all_self_attns += (layer_self_attn,)
 
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
-                )
-            else:
-
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
-                    past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                )
-            hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
+                if inputs["encoder_hidden_states"] is not None:
+                    all_cross_attns += (layer_cross_attn,)
 
         hidden_states = self.layer_norm(hidden_states)
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
         next_cache = next_decoder_cache if use_cache else None
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
-                if v is not None
-            )
-        return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            past_key_values=next_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
-        )
 
+        if not inputs["return_dict"]:
+            return hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attns
+        else:
+            return TFBaseModelOutputWithPastAndCrossAttentions(
+                last_hidden_state=hidden_states,
+                past_key_values=next_cache,
+                hidden_states=all_hidden_states,
+                attentions=all_self_attns,
+                cross_attentions=all_cross_attns,
+            )
+
+
+## done up to here
+## partially done up to here
 
 @add_start_docstrings(
     "The bare Speech2Text Model outputting raw hidden-states without any specific head on top.",
