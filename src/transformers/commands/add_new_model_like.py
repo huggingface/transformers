@@ -962,7 +962,9 @@ def add_model_to_auto_classes(
                     old_model_patterns.feature_extractor_class is not None
                     and new_model_patterns.feature_extractor_class is not None
                 ):
-                    new_patterns.append(pattern.replace("{feature_extractor_class}", old_model_patterns.feature_extractor_class))
+                    new_patterns.append(
+                        pattern.replace("{feature_extractor_class}", old_model_patterns.feature_extractor_class)
+                    )
             elif "{processor_class}" in pattern:
                 if old_model_patterns.processor_class is not None and new_model_patterns.processor_class is not None:
                     new_patterns.append(pattern.replace("{processor_class}", old_model_patterns.processor_class))
