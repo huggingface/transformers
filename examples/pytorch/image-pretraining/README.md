@@ -16,6 +16,8 @@ limitations under the License.
 
 # Image pretraining examples
 
+NOTE: If you encounter problems/have suggestions for improvement, open an issue on Github and tag @NielsRogge.
+
 This directory contains a script, `run_mae.py`, that can be used to pre-train a Vision Transformer as a masked autoencoder (MAE), as proposed in [Masked Autoencoders Are Scalable Vision Learners](https://arxiv.org/abs/2111.06377). The script can be used to train a `ViTMAEForPreTraining` model in the Transformers library, using PyTorch. After self-supervised pre-training, one can load the weights of the encoder directly into a `ViTForImageClassification`. The MAE method allows for learning high-capacity models that generalize well: e.g., a vanilla ViT-Huge model achieves the best accuracy (87.8%) among methods that use only ImageNet-1K data.
 
 The goal for the model is to predict raw pixel values for the masked patches. As the model internally masks patches and learns to reconstruct them, there's no need for any labels. The model uses the mean squared error (MSE) between the reconstructed and original images in the pixel space.
@@ -26,13 +28,19 @@ One can use the following command to pre-train a `ViTMAEForPreTraining` model fr
 
 ```bash
 python run_mae.py \
-    --output_dir ./outputs/ \
+    --dataset_name cifar10 \
+    --output_dir ./vit-mae-demo \
     --remove_unused_columns False \
     --label_names pixel_values \
+    --mask_ratio 0.75 \
+    --norm_pix_loss \
     --do_train \
     --do_eval \
-    --learning_rate 2e-5 \
+    --base_learning_rate 1.5e-4 \
+    --lr_scheduler_type cosine \
+    --weight_decay 0.05 \
     --num_train_epochs 800 \
+    --warmup_ratio 0.05 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \
@@ -43,6 +51,8 @@ python run_mae.py \
     --save_total_limit 3 \
     --seed 1337
 ```
+
+Here we set `mask_ratio` to 0.75 §to mask 75% of the patches) and specify `norm_pix_loss` to use normalized pixel values as target. We also set the `base_learning_rate`. Note that the effective learning rate is computed by the [linear schedule](https://arxiv.org/abs/1706.02677): `lr` = `blr` * effective batch size / 256.
 
 Alternatively, one can decide to further pre-train an already pre-trained (or fine-tuned) checkpoint from the [hub](https://huggingface.co/). This can be done by setting the `model_name_or_path` argument to "facebook/vit-mae-base" for example.
 
@@ -61,7 +71,7 @@ root/cat/nsdf3.png
 root/cat/[...]/asd932_.png
 ```
 
-Once you've prepared your dataset, you can run the script like this:
+Note that you can put images in dummy subfolders, whose names will be ignored by default (as labels aren't required). You can also just place all images into a single dummy subfolder. Once you've prepared your dataset, you can run the script like this:
 
 ```bash
 python run_mae.py \

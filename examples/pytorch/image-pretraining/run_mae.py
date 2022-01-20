@@ -136,6 +136,13 @@ class ModelArguments:
     norm_pix_loss: bool = field(default=True, metadata={"Whether or not to train with normalized pixels."})
 
 
+@dataclass
+class CustomTrainingArguments(TrainingArguments):
+    base_learning_rate: float = field(
+        default=1e-3, metadata={"help": "Base learning rate: absolute_lr = base_lr * total_batch_size / 256."}
+    )
+
+
 def collate_fn(examples):
     pixel_values = torch.stack([example["pixel_values"] for example in examples])
     return {"pixel_values": pixel_values}
@@ -146,7 +153,7 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, CustomTrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -291,6 +298,13 @@ def main():
             )
         # Set the validation transforms
         ds["validation"].set_transform(preprocess_images)
+
+    # Compute absolute learning rate
+    total_train_batch_size = (
+        training_args.train_batch_size * training_args.gradient_accumulation_steps * training_args.world_size
+    )
+    if training_args.base_learning_rate is not None:
+        training_args.learning_rate = training_args.base_learning_rate * total_train_batch_size / 256
 
     # Initialize our trainer
     trainer = Trainer(
