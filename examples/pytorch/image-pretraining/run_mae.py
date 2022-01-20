@@ -130,6 +130,10 @@ class ModelArguments:
             "with private models)."
         },
     )
+    mask_ratio: float = field(
+        default=0.75, metadata={"help": "The ratio of the number of masked tokens in the input sequence."}
+    )
+    norm_pix_loss: bool = field(default=True, metadata={"Whether or not to train with normalized pixels."})
 
 
 def collate_fn(examples):
@@ -222,6 +226,15 @@ def main():
             config.update_from_string(model_args.config_overrides)
             logger.info(f"New config: {config}")
 
+    # adapt config
+    config.update(
+        {
+            "mask_ratio": model_args.mask_ratio,
+            "norm_pix_loss": model_args.norm_pix_loss,
+        }
+    )
+
+    # create feature extractor
     if model_args.feature_extractor_name:
         feature_extractor = ViTFeatureExtractor.from_pretrained(model_args.feature_extractor_name, **config_kwargs)
     elif model_args.model_name_or_path:
@@ -229,6 +242,7 @@ def main():
     else:
         feature_extractor = ViTFeatureExtractor()
 
+    # create model
     if model_args.model_name_or_path:
         model = ViTMAEForPreTraining.from_pretrained(
             model_args.model_name_or_path,

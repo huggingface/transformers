@@ -32,7 +32,7 @@ python run_mae.py \
     --do_train \
     --do_eval \
     --learning_rate 2e-5 \
-    --num_train_epochs 5 \
+    --num_train_epochs 800 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \
@@ -61,7 +61,7 @@ root/cat/nsdf3.png
 root/cat/[...]/asd932_.png
 ```
 
-Once you've prepared your dataset, you can can run the script like this:
+Once you've prepared your dataset, you can run the script like this:
 
 ```bash
 python run_mae.py \
