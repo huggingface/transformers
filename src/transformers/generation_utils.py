@@ -759,6 +759,47 @@ class GenerationMixin:
         default_list.extend(custom_list)
         return default_list
 
+    def compute_transition_beam_scores(
+        self,
+        sequences: torch.Tensor,
+        scores: Tuple[torch.Tensor],
+        beam_indices: torch.Tensor,
+        eos_token_id: int = None,
+        dummy=None,
+    ):
+        """compute the transition probabilities of sequences given generation
+        scores and beam indices"""
+        # reshape scores
+        scores = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
+
+        # start of generated tokens
+        cut_idx = sequences.shape[-1] - scores.shape[-1]
+
+        # adjust for beam indices
+        beam_sequence_indices = torch.tensor(beam_indices, device=sequences.device) * self.config.vocab_size
+
+        # compute real indices
+        indices = sequences[:, cut_idx:] + beam_sequence_indices
+
+        # gather scores and run
+        transition_scores = scores.gather(0, indices)
+
+        # make sure that if EOS token was used before length of sequence `sequence.shape[-1]`
+        # get first occurence of EOS token
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+
+        if eos_token_id is not None:
+            is_eos_token_id = sequences[:, cut_idx:] == eos_token_id
+            # make sure first eos token still contributes to transition probs
+            is_eos_token_id[:, -1] = False
+            is_eos_token_id = is_eos_token_id.roll(1, -1)
+            # all indices after eos shoud be masked
+            zero_transition_prob_mask = is_eos_token_id.cumsum(-1).bool()
+            # zero out padded probs
+            transition_scores.masked_fill_(zero_transition_prob_mask, 0.0)
+
+        return transition_scores
+
     @torch.no_grad()
     def generate(
         self,
