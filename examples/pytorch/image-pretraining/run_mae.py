@@ -339,7 +339,6 @@ def main():
 
     # Write model card and (optionally) push to hub
     kwargs = {
-        "finetuned_from": model_args.model_name_or_path,
         "tasks": "masked-auto-encoding",
         "dataset": data_args.dataset_name,
         "tags": ["masked-auto-encoding"],
