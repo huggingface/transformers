@@ -29,6 +29,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
         ("yoso", "YosoModel"),
+        ("swin", "SwinModel"),
         ("vilt", "ViltModel"),
         ("vit_mae", "ViTMAEModel"),
         ("nystromformer", "NystromformerModel"),
@@ -266,6 +267,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
                 "PerceiverForImageClassificationConvProcessing",
             ),
         ),
+        ("swin", "SwinForImageClassification"),
     ]
 )
 

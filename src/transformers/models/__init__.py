@@ -98,6 +98,7 @@ from . import (
     speech_to_text_2,
     splinter,
     squeezebert,
+    swin,
     t5,
     tapas,
     transfo_xl,
