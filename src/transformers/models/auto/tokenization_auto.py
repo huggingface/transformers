@@ -20,8 +20,6 @@ import os
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
-from requests import HTTPError
-
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import (
     RepositoryNotFoundError,
@@ -370,7 +368,7 @@ def get_tokenizer_config(
             "for this model name. Check the model page at "
             f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
         )
-    except HTTPError:
+    except EnvironmentError:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
 
