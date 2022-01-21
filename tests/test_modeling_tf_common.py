@@ -419,10 +419,11 @@ class TFModelTesterMixin:
                 # Some models' output class don't have `loss` attribute despite `labels` is used.
                 tf_loss = getattr(tfo, "loss", None)
                 pt_loss = getattr(pto, "loss", None)
+
                 # Some models require extra condition to return loss. For example, `BertForPreTraining` requires both
                 # `labels` and `next_sentence_label`.
-                self.assertTrue((tf_loss is not None and pt_loss is not None) or (tf_loss is None and pt_loss is None))
-                if tf_loss is not None:
+                # Moreover, some PT models return loss while the corresponding TF/Flax models don't.
+                if tf_loss and pt_loss:
 
                     tf_loss = tf.math.reduce_mean(tf_loss)
                     max_diff = np.amax(np.abs(tf_loss - pt_loss))
