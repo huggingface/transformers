@@ -14,10 +14,6 @@
 # limitations under the License.
 """ PyTorch ConvNext model."""
 
-
-import collections.abc
-import math
-
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -26,7 +22,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_convnext import ConvNextConfig
 
@@ -73,10 +69,11 @@ class DropPath(nn.Module):
 
 
 class ConvNextLayerNorm(nn.Module):
-    r""" LayerNorm that supports two data formats: channels_last (default) or channels_first.
+    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
+
     def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(normalized_shape))
@@ -84,9 +81,9 @@ class ConvNextLayerNorm(nn.Module):
         self.eps = eps
         self.data_format = data_format
         if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError 
-        self.normalized_shape = (normalized_shape, )
-    
+            raise NotImplementedError
+        self.normalized_shape = (normalized_shape,)
+
     def forward(self, x):
         if self.data_format == "channels_last":
             return torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
@@ -100,40 +97,44 @@ class ConvNextLayerNorm(nn.Module):
 
 class ConvNextBlock(nn.Module):
     """This corresponds to the ConvNextBlock class in the original implementation.
-    
+
     There are two equivalent implementations: (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv;
     all in (N, C, H, W) (2) DwConv -> Permute to (N, H, W, C); LayerNorm (channels_last) -> Linear -> GELU -> Linear;
-    Permute back 
-    
+    Permute back
+
     The authors used (2) as they find it slightly faster in PyTorch.
-    
+
     Args:
         config ([`ConvNextConfig`]): Model configuration class.
         dim (`int`): Number of input channels.
         drop_path (`float`): Stochastic depth rate. Default: 0.0.
     """
+
     def __init__(self, config, dim, drop_path=0):
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim) # depthwise conv
+        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
         self.norm = ConvNextLayerNorm(dim, eps=1e-6)
-        self.pwconv1 = nn.Linear(dim, 4 * dim) # pointwise/1x1 convs, implemented with linear layers
+        self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = nn.GELU()
         self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), 
-                                    requires_grad=True) if config.layer_scale_init_value > 0 else None
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.gamma = (
+            nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            if config.layer_scale_init_value > 0
+            else None
+        )
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, hidden_states):
         input = hidden_states
         x = self.dwconv(hidden_states)
-        x = x.permute(0, 2, 3, 1) # (N, C, H, W) -> (N, H, W, C)
+        x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
         x = self.norm(x)
         x = self.pwconv1(x)
         x = self.act(x)
         x = self.pwconv2(x)
         if self.gamma is not None:
             x = self.gamma * x
-        x = x.permute(0, 3, 1, 2) # (N, H, W, C) -> (N, C, H, W)
+        x = x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
 
         x = input + self.drop_path(x)
         return x
@@ -202,32 +203,35 @@ class ConvNextModel(ConvNextPreTrainedModel):
         self.config = config
 
         # stem and intermediate downsampling conv layers
-        self.downsample_layers = nn.ModuleList() 
+        self.downsample_layers = nn.ModuleList()
         stem = nn.Sequential(
             nn.Conv2d(config.num_channels, config.dims[0], kernel_size=4, stride=4),
-            ConvNextLayerNorm(config.dims[0], eps=1e-6, data_format="channels_first")
+            ConvNextLayerNorm(config.dims[0], eps=1e-6, data_format="channels_first"),
         )
         self.downsample_layers.append(stem)
         for i in range(config.num_stages - 1):
             downsample_layer = nn.Sequential(
-                    ConvNextLayerNorm(config.dims[i], eps=1e-6, data_format="channels_first"),
-                    nn.Conv2d(config.dims[i], config.dims[i+1], kernel_size=2, stride=2),
+                ConvNextLayerNorm(config.dims[i], eps=1e-6, data_format="channels_first"),
+                nn.Conv2d(config.dims[i], config.dims[i + 1], kernel_size=2, stride=2),
             )
             self.downsample_layers.append(downsample_layer)
 
         # feature resolution stages, each consisting of multiple residual blocks
-        self.stages = nn.ModuleList() 
-        dp_rates=[x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))] 
+        self.stages = nn.ModuleList()
+        dp_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         cur = 0
         for i in range(config.num_stages):
             stage = nn.Sequential(
-                *[ConvNextBlock(config, dim=config.dims[i], drop_path=dp_rates[cur + j]) for j in range(config.depths[i])]
+                *[
+                    ConvNextBlock(config, dim=config.dims[i], drop_path=dp_rates[cur + j])
+                    for j in range(config.depths[i])
+                ]
             )
             self.stages.append(stage)
             cur += config.depths[i]
 
         # final norm layer
-        self.layernorm = nn.LayerNorm(config.dims[-1], eps=config.layer_norm_eps) 
+        self.layernorm = nn.LayerNorm(config.dims[-1], eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -269,13 +273,13 @@ class ConvNextModel(ConvNextPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         x = pixel_values
-        
+
         for i in range(self.config.num_stages):
             x = self.downsample_layers[i](x)
             x = self.stages[i](x)
-        
+
         # global average pooling, (N, C, H, W) -> (N, C)
-        pooled_output = self.layernorm(x.mean([-2, -1])) 
+        pooled_output = self.layernorm(x.mean([-2, -1]))
 
         return pooled_output
 

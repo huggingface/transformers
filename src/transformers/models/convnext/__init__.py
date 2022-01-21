@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_vision_available, is_torch_available
+from ...file_utils import _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -35,8 +35,6 @@ if is_torch_available():
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
 
@@ -48,7 +46,6 @@ if TYPE_CHECKING:
             ConvNextModel,
             ConvNextPreTrainedModel,
         )
-
 
 
 else:

@@ -64,15 +64,15 @@ class ConvNextConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-    
+
     Example:
     ```python
-    >>> from transformers import ViTModel, ViTConfig
+    >>> from transformers import ConvNextModel, ConvNextConfig
 
-    >>> # Initializing a ViT vit-base-patch16-224 style configuration
-    >>> configuration = ViTConfig()
-    >>> # Initializing a model from the vit-base-patch16-224 style configuration
-    >>> model = ViTModel(configuration)
+    >>> # Initializing a ConvNext convnext-tiny-224 style configuration
+    >>> configuration = ConvNextConfig()
+    >>> # Initializing a model from the convnext-tiny-224 style configuration
+    >>> model = ConvNextModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""

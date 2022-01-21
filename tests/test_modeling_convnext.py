@@ -336,7 +336,9 @@ def prepare_img():
 class ConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return ConvNextFeatureExtractor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
+        return (
+            ConvNextFeatureExtractor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
