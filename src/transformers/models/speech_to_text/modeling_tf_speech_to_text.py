@@ -15,7 +15,6 @@
 """ TensorFlow Speech2Text model."""
 
 
-import math
 import random
 from typing import Optional, Tuple
 
@@ -35,6 +34,7 @@ from ...modeling_tf_outputs import (
     TFSeq2SeqModelOutput,
 )
 from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     TFSharedEmbeddings,
     input_processing,
@@ -1104,45 +1104,161 @@ class TFSpeech2TextDecoder(TFSpeech2TextPreTrainedModel):
             )
 
 
-## done up to here
-## partially done up to here
+@keras_serializable
+class TFSpeech2TextMainLayer(tf.keras.layers.Layer):
+    config_class = Speech2TextConfig
+
+    def __init__(self, config: Speech2TextConfig, **kwargs):
+        super().__init__(**kwargs)
+        self.config = config
+
+        self.encoder = TFSpeech2TextEncoder(config, name="encoder")
+        self.decoder = TFSpeech2TextDecoder(config, name="decoder")
+
+    def get_input_embeddings(self):
+        return self.decoder.embed_tokens
+
+    def set_input_embeddings(self, new_embeddings):
+        self.decoder.embed_tokens = new_embeddings
+
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        encoder_outputs = None,
+        past_key_values=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+        **kwargs
+    ):
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+
+        # if the attribute is not set, fetch it from the config
+        for attr in ("output_attentions", "output_hidden_states", "use_cache"):
+            if inputs[attr] is None:
+                inputs[attr] = getattr(self.config, attr)
+        inputs["return_dict"] = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+        )
+
+        if inputs["encoder_outputs"] is None:
+            inputs["encoder_outputs"] = self.encoder(
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                head_mask=inputs["head_mask"],
+                inputs_embeds=inputs["inputs_embeds"],
+                output_attentions=inputs["output_attentions"],
+                output_hidden_states=inputs["output_hidden_states"],
+                return_dict=inputs["return_dict"],
+                training=inputs["training"],
+            )
+        # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
+        elif inputs["return_dict"] and not isinstance(inputs["encoder_outputs"], TFBaseModelOutput):
+            inputs["encoder_outputs"] = TFBaseModelOutput(
+                last_hidden_state=inputs["encoder_outputs"][0],
+                hidden_states=inputs["encoder_outputs"][1] if len(inputs["encoder_outputs"]) > 1 else None,
+                attentions=inputs["encoder_outputs"][2] if len(inputs["encoder_outputs"]) > 2 else None,
+            )
+        # If the user passed a TFBaseModelOutput for encoder_outputs, we wrap it in a tuple when return_dict=False
+        elif not inputs["return_dict"] and not isinstance(inputs["encoder_outputs"], tuple):
+            inputs["encoder_outputs"] = inputs["encoder_outputs"].to_tuple()
+
+        # downsample encoder attention mask
+        if inputs["attention_mask"] is not None:
+            inputs["encoder_attention_mask"] = self._get_feature_vector_attention_mask(
+                inputs["encoder_outputs"][0].shape[1], inputs["attention_mask"]
+            )
+        else:
+            inputs["encoder_outputs"] = None
+
+        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+        decoder_outputs = self.decoder(
+            inputs["decoder_input_ids"],
+            attention_mask=inputs["decoder_attention_mask"],
+            encoder_hidden_states=inputs["encoder_outputs"][0],
+            encoder_attention_mask=inputs["attention_mask"],
+            head_mask=inputs["decoder_head_mask"],
+            cross_attn_head_mask=inputs["cross_attn_head_mask"],
+            past_key_values=inputs["past_key_values"],
+            inputs_embeds=inputs["decoder_inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
+        if not inputs["return_dict"]:
+            return decoder_outputs + inputs["encoder_outputs"]
+
+        return TFSeq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=inputs["encoder_outputs"].last_hidden_state,
+            encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
+            encoder_attentions=inputs["encoder_outputs"].attentions,
+        )
+
 
 @add_start_docstrings(
     "The bare Speech2Text Model outputting raw hidden-states without any specific head on top.",
     SPEECH_TO_TEXT_START_DOCSTRING,
 )
-class Speech2TextModel(Speech2TextPreTrainedModel):
-    def __init__(self, config: Speech2TextConfig):
-        super().__init__(config)
+class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
+    def __init__(self, config: Speech2TextConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
 
-        self.encoder = Speech2TextEncoder(config)
-        self.decoder = Speech2TextDecoder(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.decoder.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.decoder.embed_tokens = value
+        self.model = TFSpeech2TextMainLayer(config, name="model")
 
     def get_encoder(self):
-        return self.encoder
+        return self.model.encoder
 
     def get_decoder(self):
-        return self.decoder
+        return self.model.decoder
 
     @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqModelOutput,
+        output_type=TFSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    def forward(
+    def call(
         self,
-        input_features=None,
+        input_ids=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
@@ -1156,67 +1272,68 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        training=False,
+        **kwargs
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                input_features,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-
-        # downsample encoder attention mask
-        if attention_mask is not None:
-            encoder_attention_mask = self._get_feature_vector_attention_mask(
-                encoder_outputs[0].shape[1], attention_mask
-            )
-        else:
-            encoder_attention_mask = None
-
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
-        decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=encoder_attention_mask,
-            head_mask=decoder_head_mask,
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
+            encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
         )
 
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
+        outputs = self.model(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            decoder_input_ids=inputs["decoder_input_ids"],
+            decoder_attention_mask=inputs["decoder_attention_mask"],
+            head_mask=inputs["head_mask"],
+            decoder_head_mask=inputs["decoder_head_mask"],
+            cross_attn_head_mask=inputs["cross_attn_head_mask"],
+            encoder_outputs=inputs["encoder_outputs"],
+            past_key_values=inputs["past_key_values"],
+            inputs_embeds=inputs["inputs_embeds"],
+            decoder_inputs_embeds=inputs["decoder_inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
 
-        return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
+        return outputs
+
+    def serving_output(self, output):
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
+        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
+        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
+        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
+        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
+
+        return TFSeq2SeqModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            past_key_values=pkv,
+            decoder_hidden_states=dec_hs,
+            decoder_attentions=dec_attns,
+            cross_attentions=cross_attns,
+            encoder_last_hidden_state=output.encoder_last_hidden_state,
+            encoder_hidden_states=enc_hs,
+            encoder_attentions=enc_attns,
         )
 
 
@@ -1224,8 +1341,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     "The Speech2Text Model with a language modeling head. Can be used for summarization.",
     SPEECH_TO_TEXT_START_DOCSTRING,
 )
-class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
-    base_model_prefix = "model"
+class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCausalLanguageModelingLoss):
     _keys_to_ignore_on_load_missing = [
         r"encoder\.version",
         r"decoder\.version",
@@ -1239,11 +1355,8 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
 
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
-        self.model = Speech2TextModel(config)
-        self.lm_head = nn.Linear(config.d_model, self.config.vocab_size, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
+        self.model = TFSpeech2TextModel(config)
+        self.lm_head = tf.keras.layers.Dense(self.config.vocab_size, use_bias=False)
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -1251,7 +1364,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: int) -> tf.Variable:
         new_embeddings = super().resize_token_embeddings(new_num_tokens)
         return new_embeddings
 
@@ -1262,10 +1375,10 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
+    @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    def call(
         self,
-        input_features=None,
+        input_ids=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
@@ -1280,25 +1393,26 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        training=False,
+        **kwargs
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
-            or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
-            only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
 
         Example:
 
         ```python
-        >>> import torch
-        >>> from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
+        >>> from transformers import TFSpeech2TextProcessor, TFSpeech2TextForConditionalGeneration
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
-        >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
+        >>> model = TFSpeech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
+        >>> processor = TFSpeech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
 
         >>> def map_to_array(batch):
@@ -1309,51 +1423,73 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
+        >>> dataset.set_format(type='tf')
 
         >>> input_features = processor(
-        ...     ds["speech"][0], sampling_rate=16000, return_tensors="pt"
+        ...     ds["speech"][0], sampling_rate=16000, return_tensors="tf"
         >>> ).input_features  # Batch size 1
         >>> generated_ids = model.generate(inputs=input_features)
 
         >>> transcription = processor.batch_decode(generated_ids)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if labels is not None:
-            if decoder_input_ids is None:
-                decoder_input_ids = shift_tokens_right(
-                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
-                )
-
-        outputs = self.model(
-            input_features,
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
-            encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
+            encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             decoder_inputs_embeds=decoder_inputs_embeds,
+            labels=labels,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+
+        inputs["return_dict"] = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+        )
+
+        if inputs["labels"] is not None:
+            if inputs["decoder_input_ids"] is None:
+                inputs["decoder_input_ids"] = shift_tokens_right(
+                    inputs["labels"], self.config.pad_token_id, self.config.decoder_start_token_id
+                )
+
+        outputs = self.model(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            decoder_input_ids=inputs["decoder_input_ids"],
+            encoder_outputs=inputs["encoder_outputs"],
+            decoder_attention_mask=inputs["decoder_attention_mask"],
+            head_mask=inputs["head_mask"],
+            decoder_head_mask=inputs["decoder_head_mask"],
+            cross_attn_head_mask=inputs["cross_attn_head_mask"],
+            past_key_values=inputs["past_key_values"],
+            decoder_inputs_embeds=inputs["decoder_inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
         )
         lm_logits = self.lm_head(outputs[0])
+        masked_lm_loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], lm_logits)
 
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (lm_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
-        return Seq2SeqLMOutput(
-            loss=loss,
+        return TFSeq2SeqLMOutput(
+            loss=masked_lm_loss,
             logits=lm_logits,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
@@ -1393,7 +1529,15 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
+        if len(past) == 1:
+            return past
+
+        past_key_values = past[1]
+
         reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
-        return reordered_past
+        for layer_past_key_values in past_key_values:
+            reordered_past += (
+                tuple(tf.gather(layer_past_key_value, beam_idx) for layer_past_key_value in layer_past_key_values[:2])
+                + layer_past_key_values[2:],
+            )
+        return (past[0], reordered_past)
