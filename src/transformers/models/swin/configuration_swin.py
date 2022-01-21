@@ -53,7 +53,7 @@ class SwinConfig(PretrainedConfig):
         window_size (`int`, *optional*, defaults to 7):
             Size of windows.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
-            Ratio of MLP hidden dimesionality to embedding dimensionality.
+            Ratio of MLP hidden dimensionality to embedding dimensionality.
         qkv_bias (`bool`, *optional*, defaults to True):
             Whether or not a learnable bias should be added to the queries, keys and values.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
