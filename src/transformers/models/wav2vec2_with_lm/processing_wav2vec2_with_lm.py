@@ -313,6 +313,9 @@ class Wav2Vec2ProcessorWithLM:
             hotword_weight=hotword_weight,
         )
 
+        # clone multi-processing pool
+        pool.close()
+
         # extract text
         batch_texts = [d[0][0] for d in decoded_beams]
 
