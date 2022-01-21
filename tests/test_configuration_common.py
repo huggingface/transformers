@@ -313,6 +313,7 @@ class ConfigTestUtils(unittest.TestCase):
 class ConfigurationVersioningTest(unittest.TestCase):
     def test_local_versioning(self):
         configuration = AutoConfig.from_pretrained("bert-base-cased")
+        configuration.configuration_files = ["config.4.0.0.json"]
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             configuration.save_pretrained(tmp_dir)
@@ -325,6 +326,9 @@ class ConfigurationVersioningTest(unittest.TestCase):
 
             # Will need to be adjusted if we reach v42 and this test is still here.
             # Should pick the old configuration file as the version of Transformers is < 4.42.0
+            configuration.configuration_files = ["config.42.0.0.json"]
+            configuration.hidden_size = 768
+            configuration.save_pretrained(tmp_dir)
             shutil.move(os.path.join(tmp_dir, "config.4.0.0.json"), os.path.join(tmp_dir, "config.42.0.0.json"))
             new_configuration = AutoConfig.from_pretrained(tmp_dir)
             self.assertEqual(new_configuration.hidden_size, 768)
