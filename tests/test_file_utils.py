@@ -23,6 +23,8 @@ import transformers
 from transformers import *  # noqa F406
 from transformers.file_utils import (
     CONFIG_NAME,
+    FLAX_WEIGHTS_NAME,
+    TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
     ContextManagers,
     EntryNotFoundError,
@@ -30,6 +32,7 @@ from transformers.file_utils import (
     RevisionNotFoundError,
     filename_to_url,
     get_from_cache,
+    has_file,
     hf_bucket_url,
 )
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
@@ -117,6 +120,11 @@ class GetFromCacheTests(unittest.TestCase):
         filepath = get_from_cache(url, force_download=True)
         metadata = filename_to_url(filepath)
         self.assertEqual(metadata, (url, f'"{PINNED_SHA256}"'))
+
+    def test_has_file(self):
+        self.assertTrue(has_file("hf-internal-testing/tiny-bert-pt-only", WEIGHTS_NAME))
+        self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", TF2_WEIGHTS_NAME))
+        self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", FLAX_WEIGHTS_NAME))
 
 
 class ContextManagerTests(unittest.TestCase):

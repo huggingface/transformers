@@ -2112,6 +2112,56 @@ def get_from_cache(
     return cache_path
 
 
+def has_file(
+    path_or_repo: Union[str, os.PathLike],
+    filename: str,
+    revision: Optional[str] = None,
+    mirror: Optional[str] = None,
+    proxies: Optional[Dict[str, str]] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+):
+    """
+    Checks if a repo contains a given file wihtout downloading it. Works for remote repos and local folders.
+
+    <Tip warning={false}>
+
+    This function will raise an error if the repository `path_or_repo` is not valid or if `revision` does not exist for
+    this repo, but will return False for regular connection errors.
+
+    </Tip>
+    """
+    if os.path.isdir(path_or_repo):
+        return os.path.isfile(os.path.join(path_or_repo, filename))
+
+    url = hf_bucket_url(path_or_repo, filename=filename, revision=revision, mirror=mirror)
+
+    headers = {"user-agent": http_user_agent()}
+    if isinstance(use_auth_token, str):
+        headers["authorization"] = f"Bearer {use_auth_token}"
+    elif use_auth_token:
+        token = HfFolder.get_token()
+        if token is None:
+            raise EnvironmentError("You specified use_auth_token=True, but a huggingface token was not found.")
+        headers["authorization"] = f"Bearer {token}"
+
+    r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=10)
+    try:
+        _raise_for_status(r)
+        return True
+    except RepositoryNotFoundError as e:
+        logger.error(e)
+        raise EnvironmentError(f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'.")
+    except RevisionNotFoundError as e:
+        logger.error(e)
+        raise EnvironmentError(
+            f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
+            "model name. Check the model page at 'https://huggingface.co/{path_or_repo}' for available revisions."
+        )
+    except requests.HTTPError:
+        # We return false for EntryNotFoundError (logical) as well as any connection error.
+        return False
+
+
 def get_list_of_files(
     path_or_repo: Union[str, os.PathLike],
     revision: Optional[str] = None,
