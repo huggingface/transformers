@@ -78,18 +78,13 @@ def get_convnext_config(checkpoint_url):
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config):
-    rename_keys = []
-
-    # layernorm + classification head
-    rename_keys.extend(
-        [
-            ("norm.weight", "convnext.layernorm.weight"),
-            ("norm.bias", "convnext.layernorm.bias"),
-            ("head.weight", "classifier.weight"),
-            ("head.bias", "classifier.bias"),
-        ]
-    )
+def create_rename_keys():
+    rename_keys = [
+        ("norm.weight", "layernorm.weight"),
+        ("norm.bias", "layernorm.bias"),
+        ("head.weight", "classifier.weight"),
+        ("head.bias", "classifier.bias"),
+    ]
 
     return rename_keys
 
@@ -112,28 +107,35 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     Copy/paste/tweak model's weights to our ConvNext structure.
     """
 
-    # define ConvNext configuration
+    # define ConvNext configuration based on URL
     config, expected_shape = get_convnext_config(checkpoint_url)
     # load original state_dict from URL
-    state_dict = torch.hub.load_state_dict_from_url()
-    rename_keys = create_rename_keys(config)
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)['model']
+    rename_keys = create_rename_keys()
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
+    # add prefix
+    for key in state_dict.copy().keys():
+        val = state_dict.pop(key)
+        if not key.startswith("classifier"):
+            key = "convnext." + key
+        state_dict[key] = val
 
-    # load HuggingFace model
+    # load HuggingFace model    
     model = ConvNextForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by ViTFeatureExtractor
-    feature_extractor = ViTFeatureExtractor(size=config.image_size)
+    feature_extractor = ViTFeatureExtractor()
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
     outputs = model(pixel_values)
     logits = outputs.logits
 
-    # TODO assert
+    # TODO assert values
     print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
+    print("Shape of logits:", logits.shape)
     assert outputs.logits.shape == torch.Size(expected_shape)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
@@ -153,7 +155,7 @@ if __name__ == "__main__":
         help="URL of the ConvNext original checkpoint you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model directory."
     )
 
     args = parser.parse_args()

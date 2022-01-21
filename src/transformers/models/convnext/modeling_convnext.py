@@ -296,10 +296,10 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.convnext = ConvNextModel(config, add_pooling_layer=False)
+        self.convnext = ConvNextModel(config)
 
         # Classifier head
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.classifier = nn.Linear(config.dims[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -349,7 +349,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = outputs[0]
+        pooled_output = outputs
 
         logits = self.classifier(pooled_output)
 
@@ -370,6 +370,6 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            hidden_states=None,
+            attentions=None,
         )
