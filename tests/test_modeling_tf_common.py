@@ -357,17 +357,19 @@ class TFModelTesterMixin:
             tf_model = model_class(config)
             pt_model = pt_model_class(config)
 
+            tf_inputs_dict_maybe_with_labels = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tf_inputs_dict = copy.copy(tf_inputs_dict_maybe_with_labels)
+            tf_inputs_dict.pop("labels", None)
+
             # Check we can load pt model in tf and vice-versa with model => model functions
 
-            tf_model = transformers.load_pytorch_model_in_tf2_model(
-                tf_model, pt_model, tf_inputs=self._prepare_for_class(inputs_dict, model_class)
-            )
+            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
             pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
 
-            # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
+            # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
             pt_model.eval()
             pt_inputs_dict = {}
-            for name, key in self._prepare_for_class(inputs_dict, model_class).items():
+            for name, key in tf_inputs_dict.items():
                 if type(key) == bool:
                     pt_inputs_dict[name] = key
                 elif name == "input_values":
@@ -377,13 +379,18 @@ class TFModelTesterMixin:
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
 
+            pt_inputs_dict_maybe_with_labels = copy.copy(pt_inputs_dict)
+            if "labels" in tf_inputs_dict_maybe_with_labels:
+                key = tf_inputs_dict_maybe_with_labels["labels"]
+                pt_inputs_dict_maybe_with_labels["labels"] = torch.from_numpy(key.numpy()).to(torch.long)
+
             # need to rename encoder-decoder "inputs" for PyTorch
             if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
                 pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
 
             with torch.no_grad():
                 pto = pt_model(**pt_inputs_dict)
-            tfo = tf_model(self._prepare_for_class(inputs_dict, model_class), training=False)
+            tfo = tf_model(tf_inputs_dict, training=False)
 
             tf_hidden_states = tfo[0].numpy()
             pt_hidden_states = pto[0].numpy()
@@ -399,6 +406,35 @@ class TFModelTesterMixin:
             max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
             self.assertLessEqual(max_diff, 4e-2)
 
+            # Check the case where `labels` is passed
+            if "labels" in tf_inputs_dict_maybe_with_labels:
+
+                with torch.no_grad():
+                    pto = pt_model(**pt_inputs_dict_maybe_with_labels)
+                tfo = tf_model(tf_inputs_dict_maybe_with_labels, training=False)
+
+                tf_loss = tf.math.reduce_mean(tfo.loss).numpy()
+                pt_loss = pto.loss.numpy()
+                max_diff = np.amax(np.abs(tf_loss - pt_loss))
+                self.assertLessEqual(max_diff, 4e-2)
+
+                tf_hidden_states = tfo[1].numpy()
+                pt_hidden_states = pto[1].numpy()
+
+                # check on the shape
+                self.assertEqual(tf_hidden_states.shape, pt_hidden_states.shape)
+
+                tf_nans = np.copy(np.isnan(tf_hidden_states))
+                pt_nans = np.copy(np.isnan(pt_hidden_states))
+
+                pt_hidden_states[tf_nans] = 0
+                tf_hidden_states[tf_nans] = 0
+                pt_hidden_states[pt_nans] = 0
+                tf_hidden_states[pt_nans] = 0
+
+                max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
+                self.assertLessEqual(max_diff, 4e-2)
+
             # Check we can load pt model in tf and vice-versa with checkpoint => model functions
             with tempfile.TemporaryDirectory() as tmpdirname:
                 pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
@@ -409,10 +445,10 @@ class TFModelTesterMixin:
                 tf_model.save_weights(tf_checkpoint_path)
                 pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
 
-            # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
+            # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
             pt_model.eval()
             pt_inputs_dict = {}
-            for name, key in self._prepare_for_class(inputs_dict, model_class).items():
+            for name, key in tf_inputs_dict.items():
                 if type(key) == bool:
                     key = np.array(key, dtype=bool)
                     pt_inputs_dict[name] = torch.from_numpy(key).to(torch.long)
@@ -428,7 +464,7 @@ class TFModelTesterMixin:
 
             with torch.no_grad():
                 pto = pt_model(**pt_inputs_dict)
-            tfo = tf_model(self._prepare_for_class(inputs_dict, model_class))
+            tfo = tf_model(tf_inputs_dict)
             tfo = tfo[0].numpy()
             pto = pto[0].numpy()
             tf_nans = np.copy(np.isnan(tfo))
