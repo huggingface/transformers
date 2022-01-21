@@ -18,7 +18,7 @@ Speech processor class for Wav2Vec2
 import os
 from contextlib import contextmanager
 from dataclasses import dataclass
-from multiprocessing import Pool
+from multiprocessing import get_context
 from typing import TYPE_CHECKING, Iterable, List, Optional, Union
 
 import numpy as np
@@ -300,7 +300,7 @@ class Wav2Vec2ProcessorWithLM:
 
         # create multiprocessing pool and list numpy arrays
         logits_list = [array for array in logits]
-        pool = Pool(num_processes)
+        pool = get_context("fork").Pool(num_processes)
 
         # pyctcdecode
         decoded_beams = self.decoder.decode_beams_batch(
@@ -312,6 +312,9 @@ class Wav2Vec2ProcessorWithLM:
             hotwords=hotwords,
             hotword_weight=hotword_weight,
         )
+
+        # clone multi-processing pool
+        pool.close()
 
         # extract text
         batch_texts = [d[0][0] for d in decoded_beams]
