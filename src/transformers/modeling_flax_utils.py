@@ -26,16 +26,21 @@ from flax.core.frozen_dict import FrozenDict, unfreeze
 from flax.serialization import from_bytes, to_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax.random import PRNGKey
+from requests import HTTPError
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
     FLAX_WEIGHTS_NAME,
     WEIGHTS_NAME,
+    EntryNotFoundError,
     PushToHubMixin,
+    RepositoryNotFoundError,
+    RevisionNotFoundError,
     add_code_sample_docstrings,
     add_start_docstrings_to_model_forward,
     cached_path,
     copy_func,
+    has_file,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
@@ -450,17 +455,25 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)):
                     # Load from a Flax checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)
+                # At this stage we don't have a weight file so we will raise an error.
+                elif os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME):
+                    raise EnvironmentError(
+                        f"Error no file named {FLAX_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} "
+                        "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from those "
+                        "weights."
+                    )
                 else:
                     raise EnvironmentError(
-                        f"Error no file named {[FLAX_WEIGHTS_NAME, WEIGHTS_NAME]} found in directory "
-                        f"{pretrained_model_name_or_path} or `from_pt` set to False"
+                        f"Error no file named {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME} found in directory "
+                        f"{pretrained_model_name_or_path}."
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             else:
+                filename = WEIGHTS_NAME if from_pt else FLAX_WEIGHTS_NAME
                 archive_file = hf_bucket_url(
                     pretrained_model_name_or_path,
-                    filename=WEIGHTS_NAME if from_pt else FLAX_WEIGHTS_NAME,
+                    filename=filename,
                     revision=revision,
                 )
 
@@ -476,15 +489,59 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     use_auth_token=use_auth_token,
                     user_agent=user_agent,
                 )
+
+            except RepositoryNotFoundError as err:
+                logger.error(err)
+                raise EnvironmentError(
+                    f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
+                    "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a "
+                    "token having permission to this repo with `use_auth_token` or log in with `huggingface-cli "
+                    "login` and pass `use_auth_token=True`."
+                )
+            except RevisionNotFoundError as err:
+                logger.error(err)
+                raise EnvironmentError(
+                    f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for "
+                    "this model name. Check the model page at "
+                    f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
+                )
+            except EntryNotFoundError as err:
+                logger.error(err)
+                if filename == FLAX_WEIGHTS_NAME:
+                    has_file_kwargs = {"revision": revision, "proxies": proxies, "use_auth_token": use_auth_token}
+                    if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
+                        raise EnvironmentError(
+                            f"{pretrained_model_name_or_path} does not appear to have a file named {FLAX_WEIGHTS_NAME} "
+                            "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from "
+                            "those weights."
+                        )
+                    else:
+                        logger.error(err)
+                        raise EnvironmentError(
+                            f"{pretrained_model_name_or_path} does not appear to have a file named {FLAX_WEIGHTS_NAME} "
+                            f"or {WEIGHTS_NAME}."
+                        )
+                else:
+                    raise EnvironmentError(
+                        f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
+                    )
+            except HTTPError as err:
+                logger.error(err)
+                raise EnvironmentError(
+                    "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
+                    f"{pretrained_model_name_or_path} is not the path to a directory conaining a a file named "
+                    f"{FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
+                    "Checkout your internet connection or see how to run the library in offline mode at "
+                    "'https://huggingface.co/docs/transformers/installation#offline-mode'."
+                )
             except EnvironmentError as err:
                 logger.error(err)
-                msg = (
-                    f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
-                    f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
-                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named {WEIGHTS_NAME}.\n\n"
+                raise EnvironmentError(
+                    f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                    "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                    f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                    f"containing a file named {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME}."
                 )
-                raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:
                 logger.info(f"loading weights file {archive_file}")
