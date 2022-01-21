@@ -748,7 +748,9 @@ class SwinModel(SwinPreTrainedModel):
             return (sequence_output,) + encoder_outputs[1:]
 
         return BaseModelOutput(
-            last_hidden_state=sequence_output, hidden_states=encoder_outputs.hidden_states, attentions=encoder_outputs.attentions
+            last_hidden_state=sequence_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
