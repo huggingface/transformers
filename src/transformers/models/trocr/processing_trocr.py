@@ -20,9 +20,16 @@ from contextlib import contextmanager
 from transformers import AutoFeatureExtractor, AutoTokenizer
 from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.models.roberta.tokenization_roberta import RobertaTokenizer
-from transformers.models.roberta.tokenization_roberta_fast import RobertaTokenizerFast
-from transformers.models.xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
-from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
+
+from ...file_utils import is_sentencepiece_available, is_tokenizers_available
+
+
+if is_tokenizers_available():
+    from transformers.models.roberta.tokenization_roberta_fast import RobertaTokenizerFast
+
+if is_sentencepiece_available():
+    from transformers.models.xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
+    from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
 
 
 class TrOCRProcessor:
