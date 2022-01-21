@@ -416,8 +416,9 @@ class TFModelTesterMixin:
                     pto = pt_model(**pt_inputs_dict_maybe_with_labels)
                 tfo = tf_model(tf_inputs_dict_maybe_with_labels, training=False)
 
-                tf_loss = tfo.loss
-                pt_loss = pto.loss
+                # Some models' output class don't have `loss` attribute despite `labels` is used.
+                tf_loss = getattr(tfo, "loss", None)
+                pt_loss = getattr(pto, "loss", None)
                 # Some models require extra condition to return loss. For example, `BertForPreTraining` requires both
                 # `labels` and `next_sentence_label`.
                 self.assertTrue((tf_loss is not None and pt_loss is not None) or (tf_loss is None and pt_loss is None))
