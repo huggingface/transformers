@@ -43,6 +43,7 @@ SRC_DIRS = [
         "speech-recognition",
         "audio-classification",
         "speech-pretraining",
+        "image-pretraining",
     ]
 ]
 sys.path.extend(SRC_DIRS)
