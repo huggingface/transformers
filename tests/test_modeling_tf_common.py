@@ -346,6 +346,21 @@ class TFModelTesterMixin:
 
         import transformers
 
+        def prepare_pt_inputs_from_tf_inputs(tf_inputs_dict):
+
+            pt_inputs_dict = {}
+            for name, key in tf_inputs_dict.items():
+                if type(key) == bool:
+                    pt_inputs_dict[name] = key
+                elif name == "input_values":
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+                elif name == "pixel_values":
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+                else:
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
+
+            return pt_inputs_dict
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -367,21 +382,9 @@ class TFModelTesterMixin:
 
             # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
             pt_model.eval()
-            pt_inputs_dict = {}
-            for name, key in tf_inputs_dict.items():
-                if type(key) == bool:
-                    pt_inputs_dict[name] = key
-                elif name == "input_values":
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-                elif name == "pixel_values":
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-                else:
-                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
 
-            pt_inputs_dict_maybe_with_labels = copy.copy(pt_inputs_dict)
-            if "labels" in tf_inputs_dict_maybe_with_labels:
-                key = tf_inputs_dict_maybe_with_labels["labels"]
-                pt_inputs_dict_maybe_with_labels["labels"] = torch.from_numpy(key.numpy()).to(torch.long)
+            pt_inputs_dict = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
+            pt_inputs_dict_maybe_with_labels = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict_maybe_with_labels)
 
             # need to rename encoder-decoder "inputs" for PyTorch
             if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
@@ -413,27 +416,33 @@ class TFModelTesterMixin:
                     pto = pt_model(**pt_inputs_dict_maybe_with_labels)
                 tfo = tf_model(tf_inputs_dict_maybe_with_labels, training=False)
 
-                tf_loss = tf.math.reduce_mean(tfo.loss).numpy()
-                pt_loss = pto.loss.numpy()
-                max_diff = np.amax(np.abs(tf_loss - pt_loss))
-                self.assertLessEqual(max_diff, 4e-2)
+                tf_loss = tfo.loss
+                pt_loss = pto.loss
+                # Some models require extra condition to return loss. For example, `BertForPreTraining` requires both
+                # `labels` and `next_sentence_label`.
+                self.assertTrue((tf_loss is not None and pt_loss is not None) or (tf_loss is None and pt_loss is None))
+                if tf_loss is not None:
 
-                tf_hidden_states = tfo[1].numpy()
-                pt_hidden_states = pto[1].numpy()
+                    tf_loss = tf.math.reduce_mean(tf_loss)
+                    max_diff = np.amax(np.abs(tf_loss - pt_loss))
+                    self.assertLessEqual(max_diff, 4e-2)
 
-                # check on the shape
-                self.assertEqual(tf_hidden_states.shape, pt_hidden_states.shape)
+                    tf_hidden_states = tfo[1].numpy()
+                    pt_hidden_states = pto[1].numpy()
 
-                tf_nans = np.copy(np.isnan(tf_hidden_states))
-                pt_nans = np.copy(np.isnan(pt_hidden_states))
+                    # check on the shape
+                    self.assertEqual(tf_hidden_states.shape, pt_hidden_states.shape)
 
-                pt_hidden_states[tf_nans] = 0
-                tf_hidden_states[tf_nans] = 0
-                pt_hidden_states[pt_nans] = 0
-                tf_hidden_states[pt_nans] = 0
+                    tf_nans = np.copy(np.isnan(tf_hidden_states))
+                    pt_nans = np.copy(np.isnan(pt_hidden_states))
 
-                max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
-                self.assertLessEqual(max_diff, 4e-2)
+                    pt_hidden_states[tf_nans] = 0
+                    tf_hidden_states[tf_nans] = 0
+                    pt_hidden_states[pt_nans] = 0
+                    tf_hidden_states[pt_nans] = 0
+
+                    max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
+                    self.assertLessEqual(max_diff, 4e-2)
 
             # Check we can load pt model in tf and vice-versa with checkpoint => model functions
             with tempfile.TemporaryDirectory() as tmpdirname:
