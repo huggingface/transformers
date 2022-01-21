@@ -341,12 +341,12 @@ class TFPerceiverAttention(tf.keras.layers.Layer):
 
         self.self = TFPerceiverSelfAttention(
             config=config,
-            is_cross_attention=is_cross_attention,
+            # is_cross_attention=is_cross_attention,
             qk_channels=qk_channels,
             v_channels=v_channels,
             num_heads=num_heads,
             q_dim=q_dim,
-            kv_dim=kv_dim,
+            # kv_dim=kv_dim,
         )
         # dense block
         output_channels = None
@@ -356,7 +356,7 @@ class TFPerceiverAttention(tf.keras.layers.Layer):
             if output_channels is None:
                 output_channels = v_channels
 
-        self.layer_output = TFPerceiverSelfOutput(config, output_channels)
+        self.layer_output = TFPerceiverSelfOutput(output_channels)
         self.use_query_residual = use_query_residual
 
     def prune_heads(self, heads):
@@ -2328,9 +2328,9 @@ def space_to_depth(frames: tf.Tensor, temporal_block_size: int = 1, spatial_bloc
     if frames_dim == 4:
         batch_size, num_channels, height, width = frames_shape
         # split up dimensions (height by spatial_block_size, width by spatial_block_size)
-        frames = tf.transpose(
+        frames = tf.reshape(
             frames,
-            perm=[
+            shape=[
                 batch_size,
                 num_channels,
                 height // spatial_block_size,
@@ -2342,9 +2342,9 @@ def space_to_depth(frames: tf.Tensor, temporal_block_size: int = 1, spatial_bloc
         # move blocks to last dimension: (batch_size, H//bs, W//bs, bs, bs, C)
         frames = tf.transpose(frames, perm=[0, 2, 4, 3, 5, 1])
         # concatenate blocks along channel dimension: (batch_size, H//bs, W//bs, bs*bs*C)
-        frames = tf.transpose(
+        frames = tf.reshape(
             frames,
-            perm=[
+            shape=[
                 batch_size,
                 height // spatial_block_size,
                 width // spatial_block_size,
@@ -2355,9 +2355,9 @@ def space_to_depth(frames: tf.Tensor, temporal_block_size: int = 1, spatial_bloc
     elif frames_dim == 5:
         batch_size, time, num_channels, height, width = frames_shape
         # split up dimensions (time by temporal_block_size, height by spatial_block_size, width by spatial_block_size)
-        frames = tf.transpose(
+        frames = tf.reshape(
             frames,
-            perm=[
+            shape=[
                 batch_size,
                 time // temporal_block_size,
                 temporal_block_size,
@@ -2371,9 +2371,9 @@ def space_to_depth(frames: tf.Tensor, temporal_block_size: int = 1, spatial_bloc
         # move blocks to last dimension: (batch_size, T//ts, H//bs, W//bs, ts, bs, bs, C)
         frames = tf.transpose(frames, perm=[0, 1, 4, 6, 2, 5, 7, 3])
         # concatenate blocks along channel dimension: (batch_size, T//ts, H//bs, W//bs, ts*bs*bs*C)
-        frames = tf.transpose(
+        frames = tf.reshape(
             frames,
-            perm=[
+            shape=[
                 batch_size,
                 time // temporal_block_size,
                 height // spatial_block_size,
@@ -2984,10 +2984,11 @@ class TFPerceiverImagePreprocessor(TFAbstractPreprocessor):
             inputs = space_to_depth(
                 inputs, temporal_block_size=self.temporal_downsample, spatial_block_size=self.spatial_downsample
             )
-
+            inputs_shape = shape_list(inputs)
+            inputs_dim = len(inputs_shape)
             if inputs_dim == 5 and inputs_shape[1] == 1:
                 # for flow
-                inputs = inputs.squeeze(dim=1)
+                inputs = tf.squeeze(inputs, axis=1)
 
             # Optionally apply conv layer.
             inputs = self.conv_after_patches(inputs)
