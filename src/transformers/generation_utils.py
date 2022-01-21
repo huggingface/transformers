@@ -765,11 +765,13 @@ class GenerationMixin:
         scores: Tuple[torch.Tensor],
         beam_indices: torch.Tensor,
         eos_token_id: int = None,
-        dummy=None,
     ):
         """compute the transition probabilities of sequences given generation
         scores and beam indices"""
-        # reshape scores
+
+        # reshape scores as [vocab_size * batch_size, # generation steps]
+        # with batch_size being 2 * vocab_size and # generation steps being
+        # seq_len - input_length
         scores = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
 
         # start of generated tokens
