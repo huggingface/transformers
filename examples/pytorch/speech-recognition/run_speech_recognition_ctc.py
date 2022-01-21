@@ -325,7 +325,11 @@ def create_vocabulary_from_data(
         lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]), vocabs.values()
     )
 
-    vocab_dict = {v: k for k, v in enumerate(sorted(list(vocab_set)))}
+    # remove | if its already present in dataset
+    vocab_list = list(vocab_set)
+    vocab_list.remove("|")
+
+    vocab_dict = {v: k for k, v in enumerate(sorted(vocab_list))}
 
     # replace white space with delimiter token
     if word_delimiter_token is not None:
