@@ -28,7 +28,7 @@ CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ConvNextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~ConvNextModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`ConvNextModel`]. It is used to instantiate an
     ConvNeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the ConvNeXT
     [facebook/convnext-tiny-224](https://huggingface.co/facebook/convnext-tiny-224) architecture.
@@ -37,7 +37,7 @@ class ConvNextConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        num_channels (`int`, *optional*, defaults to `3`):
+        num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_stages (`int`, optional, defaults to 4):
             The number of stages in the model.
