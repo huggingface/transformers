@@ -1384,7 +1384,6 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         ```python
         >>> import tensorflow as tf
         >>> from transformers import LayoutLMTokenizer, TFLayoutLMForTokenClassification
-        >>> import torch
 
         >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = TFLayoutLMForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased")
