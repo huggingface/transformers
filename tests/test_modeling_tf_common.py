@@ -423,7 +423,7 @@ class TFModelTesterMixin:
                 # Some models require extra condition to return loss. For example, `BertForPreTraining` requires both
                 # `labels` and `next_sentence_label`.
                 # Moreover, some PT models return loss while the corresponding TF/Flax models don't.
-                if tf_loss and pt_loss:
+                if tf_loss is not None and pt_loss is not None:
 
                     tf_loss = tf.math.reduce_mean(tf_loss)
                     max_diff = np.amax(np.abs(tf_loss - pt_loss))
