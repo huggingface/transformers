@@ -44,6 +44,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
+        ("swin", "ViTFeatureExtractor"),
         ("vit_mae", "ViTFeatureExtractor"),
     ]
 )
