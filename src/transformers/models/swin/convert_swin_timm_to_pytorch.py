@@ -6,6 +6,8 @@ from PIL import Image
 import requests
 import timm
 from transformers import AutoFeatureExtractor, SwinConfig, SwinForImageClassification
+import json
+from huggingface_hub import cached_download, hf_hub_url
 
 
 def get_swin_config(swin_name):
@@ -37,6 +39,12 @@ def get_swin_config(swin_name):
         num_classes = 21841
     else:
         num_classes = 1000
+        repo_id = "datasets/huggingface/label-files"
+        filename = "imagenet-1k-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
 
     config.image_size = img_size
     config.num_labels = num_classes
@@ -127,15 +135,13 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
     model = SwinForImageClassification(config)
     model.eval()
 
-    feature_extractor = AutoFeatureExtractor(size=config.image_size)
-
     new_state_dict = convert_state_dict(timm_model.state_dict(), model)
     model.load_state_dict(new_state_dict)
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
+    feature_extractor = AutoFeatureExtractor.from_pretrained('microsoft/{}'.format(swin_name.replace('_', '-')))
     image = Image.open(requests.get(url, stream=True).raw)
-    feature_extractor = AutoFeatureExtractor(size=config.image_size)
     inputs = feature_extractor(images=image, return_tensors="pt")
 
     timm_outs = timm_model(inputs["pixel_values"])
