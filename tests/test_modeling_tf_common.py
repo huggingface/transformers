@@ -357,9 +357,8 @@ class TFModelTesterMixin:
             tf_model = model_class(config)
             pt_model = pt_model_class(config)
 
+            tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             tf_inputs_dict_maybe_with_labels = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            tf_inputs_dict = copy.copy(tf_inputs_dict_maybe_with_labels)
-            tf_inputs_dict.pop("labels", None)
 
             # Check we can load pt model in tf and vice-versa with model => model functions
 
@@ -406,7 +405,8 @@ class TFModelTesterMixin:
             max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
             self.assertLessEqual(max_diff, 4e-2)
 
-            # Check the case where `labels` is passed
+            # Currently, let's check at least the case where `labels` is passed.
+            # (ideally, we would like to test for all cases, like QA or NSP tasks)
             if "labels" in tf_inputs_dict_maybe_with_labels:
 
                 with torch.no_grad():
