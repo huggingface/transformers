@@ -32,7 +32,12 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+# these archs are known to Deepspeed-Inference and are handled automatically
+inference_auto_map = ["gpt_neo", "gptj", "gpt2", "bert"]
 
+# these archs are known to Deepspeed-Inference but they need to specify which of their linear layers
+# require `all_reduce`, and the rest is automated. For details study the `replace_module` function
+# in DeepSpeed.
 inference_custom_map = dict(
     electra=dict(ElectraLayer=("output.dense")),
     roberta=dict(RobertaLayer=("output.dense")),
@@ -43,8 +48,6 @@ inference_custom_map = dict(
     deberta_v2=dict(DebertaV2Layer=("output.dense")),
     wav2vec2=dict(Wav2Vec2EncoderLayer=("attention.out_proj", "feed_forward.output_dense")),
 )
-
-inference_auto_map = ["gpt_neo", "gptj", "gpt2", "bert"]
 
 
 def deepspeed_inference_init(trainer):
