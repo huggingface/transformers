@@ -356,15 +356,6 @@ class YosoSelfAttention(nn.Module):
                 groups=config.num_attention_heads,
             )
 
-        if not self.use_expectation:
-            loaded = load_cuda_kernels()
-
-            if not loaded:
-                raise ValueError(
-                    """Failed to compile CUDA kernels. Ensure that the correct versions of PyTorch and cudatoolkit
-                    are installed and try again. Alternatively, avoid loading CUDA kernels by using YOSO Expectation by
-                    setting use_expectation=True."""
-                )
 
     def transpose_for_scores(self, layer):
         new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -648,6 +639,17 @@ class YosoEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+
+        if not self.config.use_expectation:
+            loaded = load_cuda_kernels()
+
+            if not loaded:
+                raise ValueError(
+                    """Failed to compile CUDA kernels. Ensure that the correct versions of PyTorch and cudatoolkit
+                    are installed and try again. Alternatively, avoid loading CUDA kernels by using YOSO Expectation by
+                    setting use_expectation=True."""
+                )
+
         self.layer = nn.ModuleList([YosoLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
