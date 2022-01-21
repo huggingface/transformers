@@ -24,7 +24,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import ViTFeatureExtractor, ConvNextConfig, ConvNextForImageClassification
+from transformers import ConvNextConfig, ConvNextForImageClassification, ViTFeatureExtractor
 from transformers.utils import logging
 
 
@@ -35,22 +35,30 @@ logger = logging.get_logger(__name__)
 def get_convnext_config(checkpoint_url):
     config = ConvNextConfig()
 
-    if "tiny" not in checkpoint_url:
+    if "tiny" in checkpoint_url:
+        depths = [3, 3, 9, 3]
+        dims = [96, 192, 384, 768]
+    elif "small" in checkpoint_url:
         depths = [3, 3, 27, 3]
-    
-    if "base" in checkpoint_url:
+        dims = [96, 192, 384, 768]
+    elif "base" in checkpoint_url:
+        depths = [3, 3, 27, 3]
         dims = [128, 256, 512, 1024]
     elif "large" in checkpoint_url:
+        depths = [3, 3, 27, 3]
         dims = [192, 384, 768, 1536]
     elif "xlarge" in checkpoint_url:
+        depths = [3, 3, 27, 3]
         dims = [256, 512, 1024, 2048]
 
     if "22k" in checkpoint_url:
         num_labels = 21841
         filename = "imagenet-22k-id2label.json"
+        expected_shape = (1, 21841)
     else:
         num_labels = 1000
         filename = "imagenet-1k-id2label.json"
+        expected_shape = (1, 1000)
 
     repo_id = "datasets/huggingface/label-files"
     config.num_labels = num_labels
@@ -66,30 +74,18 @@ def get_convnext_config(checkpoint_url):
     config.dims = dims
     config.depths = depths
 
-    return config
+    return config, expected_shape
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def create_rename_keys(config):
     rename_keys = []
-    for i in range(config.num_hidden_layers):
-        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"vit.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"vit.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"vit.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"vit.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"blocks.{i}.norm2.weight", f"vit.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"blocks.{i}.norm2.bias", f"vit.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"vit.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"vit.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"vit.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"vit.encoder.layer.{i}.output.dense.bias"))
 
     # layernorm + classification head
     rename_keys.extend(
         [
-            ("norm.weight", "vit.layernorm.weight"),
-            ("norm.bias", "vit.layernorm.bias"),
+            ("norm.weight", "convnext.layernorm.weight"),
+            ("norm.bias", "convnext.layernorm.bias"),
             ("head.weight", "classifier.weight"),
             ("head.bias", "classifier.bias"),
         ]
@@ -117,7 +113,7 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     """
 
     # define ConvNext configuration
-    config = get_convnext_config(checkpoint_url)
+    config, expected_shape = get_convnext_config(checkpoint_url)
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url()
     rename_keys = create_rename_keys(config)
@@ -132,9 +128,13 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     feature_extractor = ViTFeatureExtractor(size=config.image_size)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
+
     outputs = model(pixel_values)
+    logits = outputs.logits
 
     # TODO assert
+    print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
+    assert outputs.logits.shape == torch.Size(expected_shape)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
