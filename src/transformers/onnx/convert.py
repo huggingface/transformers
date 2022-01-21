@@ -117,7 +117,6 @@ def export(
         if parse(torch.__version__) < parse("1.11.0.dev0"):
             # export can work with named args but the dict containing named args
             # has to be the last element of the args tuple.
-            print(torch_version)
             export(
                 model,
                 (model_inputs,),
