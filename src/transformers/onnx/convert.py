@@ -164,7 +164,7 @@ def validate_model_outputs(
 
     # Create ONNX Runtime session
     options = SessionOptions()
-    session = InferenceSession(onnx_model.as_posix(), options)
+    session = InferenceSession(onnx_model.as_posix(), options, providers=["CPUExecutionProvider"])
 
     # Compute outputs from the reference model
     ref_outputs = reference_model(**reference_model_inputs)
