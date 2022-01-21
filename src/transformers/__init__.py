@@ -201,6 +201,7 @@ _import_structure = {
         "CLIPVisionConfig",
     ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
+    "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
@@ -638,6 +639,7 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -835,6 +837,15 @@ if is_torch_available():
             "ConvBertModel",
             "ConvBertPreTrainedModel",
             "load_tf_weights_in_convbert",
+        ]
+    )
+    _import_structure["models.convnext"].extend(
+        [
+            "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConvNextForImageClassification",
+            "ConvNextLayer",
+            "ConvNextModel",
+            "ConvNextPreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -2391,6 +2402,7 @@ if TYPE_CHECKING:
         CLIPVisionConfig,
     )
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
+    from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
@@ -2710,6 +2722,7 @@ if TYPE_CHECKING:
         from .utils.dummy_pytorch_quantization_and_torch_objects import *
 
     if is_torch_available():
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -2920,6 +2933,13 @@ if TYPE_CHECKING:
             ConvBertModel,
             ConvBertPreTrainedModel,
             load_tf_weights_in_convbert,
+        )
+        from .models.convnext import (
+            CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvNextForImageClassification,
+            ConvNextLayer,
+            ConvNextModel,
+            ConvNextPreTrainedModel,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
