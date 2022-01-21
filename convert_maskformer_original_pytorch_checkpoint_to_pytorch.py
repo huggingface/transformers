@@ -1,5 +1,6 @@
 from __future__ import annotations
 from ast import Tuple
+from pathlib import Path
 from PIL import Image
 import requests
 import torch
@@ -11,6 +12,7 @@ from typing import List, Any, Dict, Optional, Set
 from src.transformers.models.maskformer.modelling_maskformer import (
     MaskFormerConfig,
     MaskFormerForPanopticSegmentation,
+    MaskFormerForPanopticSegmentationOutput,
     MaskFormerForSemanticSegmentation,
     MaskFormerForSemanticSegmentationOutput,
     MaskFormerModel,
@@ -61,14 +63,17 @@ class TrackedStateDict:
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    # url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    url = "https://farm3.staticflickr.com/2628/3761093143_0233b13a00_z.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    # url = "https://farm3.staticflickr.com/2628/3761093143_0233b13a00_z.jpg"
+    # img_data = requests.get(url, stream=True).raw
+    img_data = "/home/zuppif/Documents/Work/hugging_face/maskformer/input3.jpg"
+    im = Image.open(img_data)
     return im
 
 
+@dataclass
 class Args:
-    config_file = "/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs/coco-panoptic/swin/maskformer_panoptic_swin_base_IN21k_384_bs64_554k.yaml"
+    config_file: str = "/home/zuppif/Documents/Work/hugging_face/transformers/MaskFormer/configs/ade20k-150/swin/maskformer_swin_base_IN21k_384_bs16_160k_res640.yaml"
 
 
 def setup_cfg(args):
@@ -338,7 +343,7 @@ def test_with_img():
 
     tr = T.Compose(
         [
-            # T.Resize((480, 600)),
+            T.Resize((640, 640)),
             T.ToTensor(),
             T.Normalize(
                 mean=torch.tensor([123.675, 116.280, 103.530]) / 255.0,
@@ -353,12 +358,20 @@ def test_with_img():
 
     with torch.no_grad():
 
+        from detectron2.checkpoint import DetectionCheckpointer
+
         mask_former_kwargs = OriginalMaskFormer.from_config(cfg)
         original_mask_former = OriginalMaskFormer(**mask_former_kwargs).eval()
-        original_mask_former.sem_seg_head.predictor.aux_loss = False
-        config = MaskFormerConfig()
 
+        DetectionCheckpointer(original_mask_former).load(
+            "/home/zuppif/Documents/Work/hugging_face/maskformer_swin_base_IN21k_384_bs16_160k_res640.pkl"
+        )
+
+        original_mask_former.sem_seg_head.predictor.aux_loss = False
+        original_mask_former.eval()
+        config = MaskFormerConfig()
         mask_former = MaskFormerModel(config=config).eval()
+        # copy weights
         replace_maskformer(mask_former, original_mask_former)
 
         mask_former_for_seg = MaskFormerForSemanticSegmentation(config=config).eval()
@@ -373,19 +386,18 @@ def test_with_img():
         from torchvision.utils import draw_segmentation_masks
         from torchvision.transforms.functional import to_tensor
 
-        # for cat
-
-        img_with_mask = (to_tensor(im) * 255).type(torch.uint8).permute(1, 2, 0).numpy()
+        img_with_mask = (to_tensor(im.resize((640, 640))) * 255).type(torch.uint8).permute(1, 2, 0).numpy()
 
         from detectron2.data import MetadataCatalog
         from detectron2.engine.defaults import DefaultPredictor
         from detectron2.utils.video_visualizer import VideoVisualizer
         from detectron2.utils.visualizer import ColorMode, Visualizer
 
-        metadata = MetadataCatalog.get("coco_2017_val_panoptic")
+        metadata = MetadataCatalog.get("ade20k_sem_seg_val")
         visualizer = Visualizer(img_with_mask, metadata)
 
         mask = original_outs[0]["sem_seg"].argmax(dim=0)
+        mask = outs.segmentation[0].argmax(dim=0)
         vis_output = visualizer.draw_sem_seg(mask)
 
         vis_output.save("./test.png")
@@ -421,7 +433,7 @@ def test_pan_seg():
 
     tr = T.Compose(
         [
-            T.Resize((480, 600)),
+            T.Resize((800, 1200)),
             T.ToTensor(),
             T.Normalize(
                 mean=torch.tensor([123.675, 116.280, 103.530]) / 255.0,
@@ -432,26 +444,56 @@ def test_pan_seg():
 
     x = tr(im)
 
-    # x = torch.zeros((3, 384, 384))
-
-    cfg = setup_cfg(Args())
+    cfg = setup_cfg(
+        Args(
+            config_file="/home/zuppif/Documents/Work/hugging_face/transformers/MaskFormer/configs/coco-panoptic/swin/maskformer_panoptic_swin_base_IN21k_384_bs64_554k.yaml"
+        )
+    )
 
     with torch.no_grad():
 
+        from detectron2.checkpoint import DetectionCheckpointer
+
+        from detectron2.data import MetadataCatalog
+        from detectron2.engine.defaults import DefaultPredictor
+        from detectron2.utils.video_visualizer import VideoVisualizer
+        from detectron2.utils.visualizer import ColorMode, Visualizer
+        from torchvision.transforms.functional import to_tensor
+
         mask_former_kwargs = OriginalMaskFormer.from_config(cfg)
         original_mask_former = OriginalMaskFormer(**mask_former_kwargs).eval()
-        original_mask_former.sem_seg_head.predictor.aux_loss = False
-        config = MaskFormerConfig()
 
+        DetectionCheckpointer(original_mask_former).load(
+            "/home/zuppif/Documents/Work/hugging_face/maskformer_panoptic_swin_base_IN21k_384_bs64_554k.pkl"
+        )
+        original_mask_former.panoptic_on = True
+        original_mask_former.sem_seg_head.predictor.aux_loss = False
+        original_mask_former.eval()
+        config = MaskFormerConfig(num_classes=133)
         mask_former = MaskFormerModel(config=config).eval()
+        # copy weights
         replace_maskformer(mask_former, original_mask_former)
 
         mask_former_for_seg = MaskFormerForPanopticSegmentation(config=config).eval()
-
         mask_former_for_seg.model.load_state_dict(mask_former.state_dict())
 
-        original_outs = original_mask_former([{"image": x}])
-        outs: MaskFormerForSemanticSegmentationOutput = mask_former_for_seg(x.unsqueeze(0))
+        # original_outs = original_mask_former([{"image": x}])
+        outs: MaskFormerForPanopticSegmentationOutput = mask_former_for_seg(x.unsqueeze(0))
+
+        img_with_mask = (to_tensor(im.resize((1200, 800))) * 255).type(torch.uint8).permute(1, 2, 0).numpy()
+
+        metadata = MetadataCatalog.get("coco_2017_val_panoptic")
+        visualizer = Visualizer(img_with_mask, metadata)
+
+        # mask = original_outs[0]["panoptic_seg"][0]
+        # segments = original_outs[0]["panoptic_seg"][1]
+
+        mask = outs.segmentation
+        segments = outs.segments
+
+        vis_output = visualizer.draw_panoptic_seg(mask, segments)
+
+        vis_output.save("./test_pan.png")
 
 
 # very_boring_test()

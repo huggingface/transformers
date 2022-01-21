@@ -32,7 +32,7 @@ class MaskFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormer`]. It is used to instantiate a MaskFormer
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the <TODO!!> "maskformer_panoptic_swin_base_IN21k_384_bs64_554k" architecture.
+    defaults will yield a similar configuration to that of the <TODO!!> "maskformer_swin_base_IN21k_384_bs16_160k_res640" architecture trained on ade20k-150
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -45,7 +45,7 @@ class MaskFormerConfig(PretrainedConfig):
         self,
         fpn_feature_size: Optional[int] = 256,
         mask_feature_size: Optional[int] = 256,
-        num_classes: Optional[int] = 133,
+        num_classes: Optional[int] = 150,
         no_object_weight: Optional[float] = 0.1,
         num_queries: Optional[int] = 100,
         swin_pretrain_img_size: Optional[int] = 384,

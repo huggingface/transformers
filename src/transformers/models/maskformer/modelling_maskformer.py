@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 import math
 from numbers import Number
 from pprint import pprint
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -1505,7 +1505,7 @@ class MaskFormerModel(PreTrainedModel):
 
 @dataclass
 class MaskFormerForSemanticSegmentationOutput(ModelOutput):
-    segmentation: torch.FloatTensor
+    segmentation: torch.FloatTensor = None
     pred_logits: torch.FloatTensor = None
     pred_masks: torch.FloatTensor = None
     loss: Optional[torch.FloatTensor] = None
@@ -1534,9 +1534,10 @@ class MaskFormerForSemanticSegmentation(nn.Module):
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
         segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", mask_classes, mask_probs)
 
-        return MaskFormerForSemanticSegmentationOutput(**outputs, segmentation=segmentation)
+        return MaskFormerForSemanticSegmentationOutput(segmentation=segmentation, **outputs)
 
 
+# can't use it ...
 @dataclass
 class MaskFormerSegment:
     id: int
@@ -1545,13 +1546,13 @@ class MaskFormerSegment:
 
 
 @dataclass
-class MaskFormerForSemanticSegmentationOutput(ModelOutput):
-    segmentation: Tensor
+class MaskFormerForPanopticSegmentationOutput:
+    segmentation: Tensor = None
+    segments: List[Dict[str, Any]] = None
     pred_logits: torch.FloatTensor = None
     pred_masks: torch.FloatTensor = None
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    segments: List[MaskFormerSegment] = field(default_factory=list)
 
 
 class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
@@ -1580,7 +1581,7 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
         preds_logits: Tensor = outputs.pred_logits
         preds_masks: Tensor = outputs.pred_masks
 
-        b, q, h, w = preds_masks.shape
+        _, _, h, w = preds_masks.shape
 
         # for each query, the best score and its index
         pred_scores, pred_labels = F.softmax(preds_logits, dim=-1).max(-1)  # out = [BATH,NUM_QUERIES]
@@ -1593,9 +1594,9 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
             mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(mask_probs, pred_scores, pred_labels)
             we_detect_something: bool = mask_probs.shape[0] > 0
 
-            panoptic_seg: Tensor = torch.zeros((h, w), dtype=torch.int32, device=mask_probs.device)
+            segmentation: Tensor = torch.zeros((h, w), dtype=torch.int32, device=mask_probs.device)
 
-            segments: List[MaskFormerSegment] = []
+            segments: List[Dict[str, Any]] = []
 
             current_segment_id: int = 0
 
@@ -1609,12 +1610,10 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                 # this is a map between stuff and segments id, the used it to keep track of the instances of one class
 
                 for k in range(pred_labels.shape[0]):
-                    print("-----------")
-                    print(pred_class)
                     pred_class: int = pred_labels[k].item()
                     # we are checking if pred_class is in the range of the continuous values allowed
                     # why, no idea!
-                    is_stuff = True
+                    is_stuff = False
                     # get the mask associated with the k query
                     mask_k: Tensor = mask_labels == k
                     # create the area, since bool we just need to sum :)
@@ -1629,16 +1628,14 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                     # merge stuff regions
                     if not is_stuff and is_overlapping:
                         if pred_class in stuff_memory_list:
-                            panoptic_seg[mask_k] = stuff_memory_list[pred_class]
+                            segmentation[mask_k] = stuff_memory_list[pred_class]
                         else:
                             stuff_memory_list[int(pred_class)] = current_segment_id + 1
 
                     current_segment_id += 1
                     # then we update out mask with the current segment
-                    panoptic_seg[mask_k] = current_segment_id
+                    segmentation[mask_k] = current_segment_id
 
-                    segments.append(
-                        MaskFormerSegment(id=current_segment_id, category_id=pred_class, is_thing=not is_stuff)
-                    )
+                    segments.append({"id": current_segment_id, "category_id": pred_class, "isthing": not is_stuff})
 
-                return panoptic_seg, segments
+            return MaskFormerForPanopticSegmentationOutput(segmentation=segmentation, segments=segments, **outputs)
