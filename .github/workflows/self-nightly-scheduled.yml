@@ -154,7 +154,7 @@ jobs:
 
             - name: Install dependencies
               run: |
-                  apt -y update && apt install -y libsndfile1-dev git espeak-ng
+                  apt -y update && apt install -y libaio-dev libsndfile1-dev git espeak-ng
                   pip install --upgrade pip
                   pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
                   pip install .[testing,deepspeed]
@@ -196,7 +196,7 @@ jobs:
 
             - name: Install dependencies
               run: |
-                  apt -y update && apt install -y libsndfile1-dev git espeak-ng
+                  apt -y update && apt install -y libaio-dev libsndfile1-dev git espeak-ng
                   pip install --upgrade pip
                   pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
                   rm -rf ~/.cache/torch_extensions/ # shared between conflicting builds
