@@ -28,10 +28,9 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import ConvNextForImageClassification, ConvNextModel
-    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers.models.convnext.modeling_convnext import CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -152,20 +151,24 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=ConvNextConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
 
+    def create_and_test_config_common_properties(self):
+        return
+
+    @unittest.skip(reason="ConvNext does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # ConvNext does not use inputs_embeds
         pass
 
+    @unittest.skip(reason="ConvNext does not support input and output embeddings")
     def test_model_common_attributes(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+        pass
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -198,15 +201,13 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
-            expected_num_stages = getattr(
-                self.model_tester, "expected_num_stages", self.model_tester.num_stages
-            )
+            expected_num_stages = getattr(self.model_tester, "expected_num_stages", self.model_tester.num_stages)
             self.assertEqual(len(hidden_states), expected_num_stages)
 
             # ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -221,13 +222,34 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+        outputs = model(**inputs)
+        output = outputs[0]
+
+        hidden_states = outputs.hidden_states[0]
+        hidden_states.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(hidden_states.grad)
+
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ConvNextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -262,6 +284,6 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.0750,  0.2478,  0.5982]).to(torch_device)
+        expected_slice = torch.tensor([-0.0750, 0.2478, 0.5982]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

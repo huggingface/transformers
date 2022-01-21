@@ -1111,14 +1111,14 @@ def load_tf_weights_in_convbert(*args, **kwargs):
 CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ConvNextForImageClassification(metaclass=DummyObject):
+class ConvNextBlock(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ConvNextLayer(metaclass=DummyObject):
+class ConvNextForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
