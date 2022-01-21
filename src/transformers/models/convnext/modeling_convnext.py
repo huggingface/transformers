@@ -14,14 +14,22 @@
 # limitations under the License.
 """ PyTorch ConvNext model."""
 
+from dataclasses import dataclass
+from typing import Optional, Tuple
+
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
+from ...file_utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
+from ...modeling_outputs import SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_convnext import ConvNextConfig
@@ -36,6 +44,27 @@ CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/convnext-tiny-224",
     # See all ConvNext models at https://huggingface.co/models?filter=convnext
 ]
+
+
+@dataclass
+class ConvNextModelOutput(ModelOutput):
+    """
+    Args:
+    Class for [`ConvNextModel`]'s outputs, with potential hidden states.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Output feature map of the last stage of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, config.dim[-1])`):
+            Global average pooling of the last feature map followed by a layernorm.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+        when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, num_channels,
+            height, width)`. Hidden-states of the model at the output of each layer.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    pooler_output: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
 
 # Stochastic depth implementation
 # Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
@@ -115,7 +144,7 @@ class ConvNextBlock(nn.Module):
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
         self.norm = ConvNextLayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
-        self.act = nn.GELU()
+        self.act = ACT2FN[config.hidden_act]
         self.pwconv2 = nn.Linear(4 * dim, dim)
         self.gamma = (
             nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
@@ -237,7 +266,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ConvNextModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -272,16 +301,26 @@ class ConvNextModel(ConvNextPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        x = pixel_values
-
+        all_hidden_states = () if output_hidden_states else None
         for i in range(self.config.num_stages):
-            x = self.downsample_layers[i](x)
-            x = self.stages[i](x)
+            if i == 0:
+                hidden_states = pixel_values
+            hidden_states = self.downsample_layers[i](hidden_states)
+            hidden_states = self.stages[i](hidden_states)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
         # global average pooling, (N, C, H, W) -> (N, C)
-        pooled_output = self.layernorm(x.mean([-2, -1]))
+        pooled_output = self.layernorm(hidden_states.mean([-2, -1]))
 
-        return pooled_output
+        if not return_dict:
+            return (hidden_states, pooled_output) + all_hidden_states
+
+        return ConvNextModelOutput(
+            last_hidden_state=hidden_states,
+            pooler_output=pooled_output,
+            hidden_states=all_hidden_states,
+        )
 
 
 @add_start_docstrings(
@@ -349,7 +388,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = outputs
+        pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
         logits = self.classifier(pooled_output)
 
@@ -370,6 +409,6 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=None,
+            hidden_states=outputs.hidden_states,
             attentions=None,
         )

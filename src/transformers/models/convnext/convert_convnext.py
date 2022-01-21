@@ -110,7 +110,7 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # define ConvNext configuration based on URL
     config, expected_shape = get_convnext_config(checkpoint_url)
     # load original state_dict from URL
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)['model']
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
     rename_keys = create_rename_keys()
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
@@ -121,7 +121,7 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
             key = "convnext." + key
         state_dict[key] = val
 
-    # load HuggingFace model    
+    # load HuggingFace model
     model = ConvNextForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
@@ -155,7 +155,11 @@ if __name__ == "__main__":
         help="URL of the ConvNext original checkpoint you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model directory.",
     )
 
     args = parser.parse_args()

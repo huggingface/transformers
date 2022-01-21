@@ -45,6 +45,9 @@ class ConvNextConfig(PretrainedConfig):
             Dimensionality of each stage.
         depths (`List[int]`, *optional*, defaults to [3, 3, 9, 3]):
             Depth (number of blocks) for each stage.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
+            `"selu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -73,6 +76,7 @@ class ConvNextConfig(PretrainedConfig):
         num_stages=4,
         dims=[96, 192, 384, 768],
         depths=[3, 3, 9, 3],
+        hidden_act="gelu",
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         is_encoder_decoder=False,
@@ -86,6 +90,7 @@ class ConvNextConfig(PretrainedConfig):
         self.num_stages = num_stages
         self.dims = dims
         self.depths = depths
+        self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.layer_scale_init_value = layer_scale_init_value
