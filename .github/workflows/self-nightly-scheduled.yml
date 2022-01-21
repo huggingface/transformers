@@ -35,7 +35,6 @@ jobs:
               run: |
                   apt -y update && apt install -y libsndfile1-dev git espeak-ng
                   pip install --upgrade pip
-                  pip install https://github.com/kpu/kenlm/archive/master.zip
                   pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
                   pip install https://github.com/kpu/kenlm/archive/master.zip
                   pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html -U
