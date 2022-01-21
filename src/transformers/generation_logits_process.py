@@ -660,7 +660,7 @@ class SoftLengthLogitsProcessor(LogitsProcessor):
         regulation_factor (`float`):
             The factor of the exponential increase.
         eos_token_id (`int`):
-            The id of the token to force as the last generated token when `max_length` is reached.
+            The id of the *end-of-sequence* token.
     """
 
     def __init__(self, regulation_start: int, regulation_factor: int, eos_token_id: int):
