@@ -64,9 +64,11 @@ def context_fr():
     print("Au revoir!")
 
 
-def test_module_spec():
-    assert transformers.__spec__ is not None
-    assert importlib.util.find_spec("transformers") is not None
+class TestImportMechanisms(unittest.TestCase):
+    def test_module_spec_available(self):
+        # If the spec is missing, importlib would not be able to import the module dynamically.
+        assert transformers.__spec__ is not None
+        assert importlib.util.find_spec("transformers") is not None
 
 
 class GetFromCacheTests(unittest.TestCase):
