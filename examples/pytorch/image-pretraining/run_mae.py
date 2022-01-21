@@ -63,6 +63,9 @@ class DataTrainingArguments:
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
+    image_column_name: Optional[str] = field(
+        default=None, metadata={"help": "The column name of the images in the files."}
+    )
     train_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the training data."})
     validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."})
     train_val_split: Optional[float] = field(
@@ -265,6 +268,20 @@ def main():
         logger.info("Training new model from scratch")
         model = ViTMAEForPreTraining(config)
 
+    if training_args.do_train:
+        column_names = ds["train"].column_names
+    else:
+        column_names = ds["validation"].column_names
+
+    if data_args.image_column_name is not None:
+        image_column_name = data_args.image_column_name
+    elif "image" in column_names:
+        image_column_name = "image"
+    elif "img" in column_names:
+        image_column_name = "img"
+    else:
+        image_column_name = column_names[0]
+
     # transformations as done in original MAE paper
     # source: https://github.com/facebookresearch/mae/blob/main/main_pretrain.py
     transforms = Compose(
@@ -280,7 +297,7 @@ def main():
     def preprocess_images(examples):
         """Preprocess a batch of images by applying transforms."""
 
-        examples["pixel_values"] = [transforms(image) for image in examples["img"]]
+        examples["pixel_values"] = [transforms(image) for image in examples[image_column_name]]
         return examples
 
     if training_args.do_train:
