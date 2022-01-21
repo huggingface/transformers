@@ -356,7 +356,6 @@ class YosoSelfAttention(nn.Module):
                 groups=config.num_attention_heads,
             )
 
-
     def transpose_for_scores(self, layer):
         new_layer_shape = layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         layer = layer.view(*new_layer_shape)
