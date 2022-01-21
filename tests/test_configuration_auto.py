@@ -13,10 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import os
 import tempfile
 import unittest
 
+import transformers.models.auto
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.bert.configuration_bert import BertConfig
 from transformers.models.roberta.configuration_roberta import RobertaConfig
@@ -31,6 +33,10 @@ class NewModelConfig(BertConfig):
 
 
 class AutoConfigTest(unittest.TestCase):
+    def test_module_spec(self):
+        self.assertIsNotNone(transformers.models.auto.__spec__)
+        self.assertIsNotNone(importlib.util.find_spec("transformers.models.auto"))
+
     def test_config_from_model_shortcut(self):
         config = AutoConfig.from_pretrained("bert-base-uncased")
         self.assertIsInstance(config, BertConfig)

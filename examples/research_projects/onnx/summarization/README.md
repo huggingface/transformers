@@ -15,7 +15,7 @@ limitations under the License.
 
 # Bart + Beam Search to ONNX
 
-
+Author: [@fatcat-z](https://github.com/fatcat-z)
 
 This folder contains an example of exporting Bart + Beam Search generation (`BartForConditionalGeneration`) to ONNX.
 
