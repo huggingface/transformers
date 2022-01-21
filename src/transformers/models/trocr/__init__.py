@@ -28,7 +28,7 @@ _import_structure = {
 }
 
 if is_vision_available():
-    _import_structure["tokenization_trocr"] = ["TrOCRProcessor"]
+    _import_structure["processing_trocr"] = ["TrOCRProcessor"]
 
 if is_torch_available():
     _import_structure["modeling_trocr"] = [

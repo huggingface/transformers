@@ -18,12 +18,12 @@ Processor class for ViLT.
 
 from typing import List, Optional, Union
 
-from transformers import BertTokenizerFast
-
-from ...file_utils import TensorType
+from ...file_utils import TensorType, is_tokenizers_available
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from .feature_extraction_vilt import ViltFeatureExtractor
 
+if is_tokenizers_available():
+    from transformers import BertTokenizerFast
 
 class ViltProcessor:
     r"""
