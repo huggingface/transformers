@@ -14,7 +14,8 @@
 # limitations under the License.
 """ MaskFormer model configuration"""
 
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import List, Optional, Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -26,6 +27,18 @@ MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+class ClassSpec:
+    label: int
+    is_thing: bool
+    name: str
+
+
+@dataclass
+class DatasetMetadata:
+    class_specs: Dict[int, ClassSpec]
 
 
 class MaskFormerConfig(PretrainedConfig):
@@ -43,6 +56,7 @@ class MaskFormerConfig(PretrainedConfig):
 
     def __init__(
         self,
+        dataset_metadata: DatasetMetadata = None,
         fpn_feature_size: Optional[int] = 256,
         mask_feature_size: Optional[int] = 256,
         num_classes: Optional[int] = 150,
@@ -78,8 +92,9 @@ class MaskFormerConfig(PretrainedConfig):
         scale_embedding: Optional[int] = False,
         auxiliary_loss: Optional[int] = False,
         dilation: Optional[int] = False,
-        **kwargs
+        **kwargs,
     ):
+        self.dataset_metadata = dataset_metadata
 
         self.fpn_feature_size = fpn_feature_size
         self.mask_feature_size = mask_feature_size

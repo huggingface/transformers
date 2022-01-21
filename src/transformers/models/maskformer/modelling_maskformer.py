@@ -49,6 +49,7 @@ from ...utils import logging
 from ..detr import DetrConfig
 from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput
 from .configuration_maskformer import MaskFormerConfig
+from typing import TypedDict
 
 
 logger = logging.get_logger(__name__)
@@ -210,7 +211,7 @@ def sigmoid_focal_loss(
     return loss
 
 
-def pair_wise_dice_loss(self, inputs: Tensor, targets: Tensor) -> Tensor:
+def pair_wise_dice_loss(inputs: Tensor, targets: Tensor) -> Tensor:
     """
     A pair wise version of the dice loss, see `dice_loss` for usage
 
@@ -291,7 +292,7 @@ class MaskFormerHungarianMatcher(nn.Module):
         self.cost_dice = cost_dice
 
     @torch.no_grad()
-    def forward(self, outputs: Dict[str, Tensor], targets: List[Dict[str, Tensor]]) -> List[Tuple[Tensor]]:
+    def forward(self, outputs: Dict[str, Tensor], targets: Dict[str, Tensor]) -> List[Tuple[Tensor]]:
         """Performs the matching
 
         Params:
@@ -314,24 +315,22 @@ class MaskFormerHungarianMatcher(nn.Module):
 
         indices: List[Tuple[np.array]] = []
 
+        preds_masks: Tensor = outputs["pred_masks"]
+        targets_masks: Tensor = targets["masks"]
+        preds_probs: Tensor = outputs["pred_logits"].softmax(dim=-1)
+        # downsample all masks in one go -> save memory
+        targets_masks: Tensor = F.interpolate(targets_masks, size=preds_masks.shape[-2:], mode="nearest")
         # iterate through batch size
-        for i, (pred_logit, pred_mask) in enumerate(zip(outputs["pred_logits"], outputs["pred_masks"])):
-            pred_probs: Tensor = pred_logit.softmax(dim=-1)  # [num_queries, num_classes]
-            labels: Tensor = targets[i]["labels"]
-            # gt masks are already padded when preparing target
-            target_mask: Tensor = targets[i]["masks"].to(pred_mask)
+        for pred_probs, pred_mask, target_mask, labels in zip(
+            preds_probs, preds_masks, targets_masks, targets["labels"]
+        ):
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
             # The 1 is a constant that doesn't change the matching, it can be ommitted.
             cost_class: Tensor = -pred_probs[:, labels]
-            # TODO this can be done in one gpu -> assuming the masks have the same dimensions
-            # also weird to add a dimension there, why not in the first one?
-            # downsample gt masks to save memory
-            target_mask: Tensor = F.interpolate(target_mask[:, None], size=pred_mask.shape[-2:], mode="nearest")
-            # Flatten spatial dimension
-            pred_mask_flat: Tensor = rearrange(pred_mask, "q h w -> q (h w)")  # [batch_size * num_queries, H*W]
-            # still not sure why we didn't add a batch dimension
-            target_mask_flat: Tensor = rearrange(target_mask[:, 0], "c h w -> c (h w)")  # [num_total_targets, H*W]
+            # flatten spatial dimension
+            pred_mask_flat: Tensor = rearrange(pred_mask, "q h w -> q (h w)")  # [num_queries, H*W]
+            target_mask_flat: Tensor = rearrange(target_mask, "c h w -> c (h w)")  # [num_total_targets, H*W]
             # compute the focal loss between each mask pairs -> shape [NUM_QUERIES, CLASSES]
             cost_mask: Tensor = pair_wise_sigmoid_focal_loss(pred_mask_flat, target_mask_flat)
             # Compute the dice loss betwen each mask pairs -> shape [NUM_QUERIES, CLASSES]
@@ -340,12 +339,9 @@ class MaskFormerHungarianMatcher(nn.Module):
             cost_matrix: Tensor = (
                 self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
             )
-            # TODO the following line is completely unnecesary, shape is already [NUM_QUERIES, CLASSES]
-            # cost_matrix_flat: Tensor = cost_matrix.reshape(num_queries, -1).cpu()
+            # do the assigmented using the hungarian algorithm in scipy
             assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
-            # mmm the matching will be always ([NUM_QUERIES], [NUM_QUERIS])
-            # because we need num_queries matches
 
         # TODO this is a little weird, they can be stacked in one tensor
         matched_indices = [
@@ -399,7 +395,7 @@ class MaskFormerLoss(nn.Module):
         self.register_buffer("empty_weight", empty_weight)
 
     def loss_labels(
-        self, outputs: Dict[str, Tensor], targets: List[Dict[str, Tensor]], indices: Tuple[np.array], num_masks: float
+        self, outputs: Dict[str, Tensor], targets: Dict[str, Tensor], indices: Tuple[np.array], num_masks: float
     ) -> Dict[str, Tensor]:
         """Classification loss (NLL)
         # TODO this doc was copied by the authors
@@ -411,7 +407,7 @@ class MaskFormerLoss(nn.Module):
 
         idx = self._get_src_permutation_idx(indices)
         # shape = [BATCH, N_QUERIES]
-        target_classes_o: Tensor = torch.cat([target["labels"][j] for target, (_, j) in zip(targets, indices)])
+        target_classes_o: Tensor = torch.cat([target[j] for target, (_, j) in zip(targets["labels"], indices)])
         # shape = [BATCH, N_QUERIES]
         target_classes: Tensor = torch.full(
             (b, q), fill_value=self.num_classes, dtype=torch.int64, device=pred_logits.device
@@ -422,7 +418,7 @@ class MaskFormerLoss(nn.Module):
         return losses
 
     def loss_masks(
-        self, outputs: Dict[str, Tensor], targets: List[Dict[str, Tensor]], indices: Tuple[np.array], num_masks: int
+        self, outputs: Dict[str, Tensor], targets: Dict[str, Tensor], indices: Tuple[np.array], num_masks: int
     ) -> Dict[str, Tensor]:
         """Compute the losses related to the masks: the focal loss and the dice loss.
         targets dicts must contain the key "masks" containing a tensor of dim [nb_target_masks, h, w]
@@ -433,18 +429,10 @@ class MaskFormerLoss(nn.Module):
         tgt_idx = self._get_tgt_permutation_idx(indices)
         pred_masks = outputs["pred_masks"]
         pred_masks = pred_masks[src_idx]
-        masks = [t["masks"] for t in targets]
-        # TODO use valid to mask invalid areas due to padding in loss
-        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
-        target_masks = target_masks.to(pred_masks)
-        # if masks are the same size always
-        # target_masks = masks
-        target_masks = target_masks[tgt_idx]
+        target_masks = targets["masks"]
         # upsample predictions to the target size
-        pred_masks = F.interpolate(
-            pred_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
-        )
-        pred_masks = pred_masks[:, 0].flatten(1)
+        pred_masks = F.interpolate(pred_masks, size=target_masks.shape[-2:], mode="bilinear", align_corners=False)
+        pred_masks = pred_masks.flatten(1)
 
         target_masks = target_masks.flatten(1)
         target_masks = target_masks.view(pred_masks.shape)
@@ -471,7 +459,7 @@ class MaskFormerLoss(nn.Module):
         assert loss in loss_map, f"{loss} not in loss_map"
         return loss_map[loss](outputs, targets, indices, num_masks)
 
-    def forward(self, outputs: Dict[str, Tensor], targets: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
+    def forward(self, outputs: Dict[str, Tensor], targets: Dict[str, Tensor]) -> Dict[str, Tensor]:
         """This performs the loss computation.
         Parameters:
              outputs: dict of tensors, see the output specification of the model for the format
@@ -502,9 +490,9 @@ class MaskFormerLoss(nn.Module):
 
         return losses
 
-    def get_num_masks(self, targets: List[Dict[str, Tensor]], device: torch.device) -> Number:
+    def get_num_masks(self, targets: Dict[str, Tensor], device: torch.device) -> Number:
         # Compute the average number of target masks accross all nodes, for normalization purposes
-        num_masks: int = sum(len(t["labels"]) for t in targets)
+        num_masks: int = targets["labels"].shape[0]
         num_masks_pt: Tensor = torch.as_tensor([num_masks], dtype=torch.float, device=device)
         if is_dist_avail_and_initialized():
             torch.distributed.all_reduce(num_masks_pt)
@@ -1504,12 +1492,8 @@ class MaskFormerModel(PreTrainedModel):
 
 
 @dataclass
-class MaskFormerForSemanticSegmentationOutput(ModelOutput):
+class MaskFormerForSemanticSegmentationOutput(MaskFormerOutput):
     segmentation: torch.FloatTensor = None
-    pred_logits: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
 
 
 class MaskFormerForSemanticSegmentation(nn.Module):
@@ -1537,22 +1521,15 @@ class MaskFormerForSemanticSegmentation(nn.Module):
         return MaskFormerForSemanticSegmentationOutput(segmentation=segmentation, **outputs)
 
 
-# can't use it ...
-@dataclass
-class MaskFormerSegment:
+class PanopticSegmentationSegment(TypedDict):
     id: int
     category_id: int
-    isthing: Optional[bool] = None
+    is_thing: bool
 
 
 @dataclass
-class MaskFormerForPanopticSegmentationOutput:
-    segmentation: Tensor = None
-    segments: List[Dict[str, Any]] = None
-    pred_logits: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
+class MaskFormerForPanopticSegmentationOutput(MaskFormerForSemanticSegmentationOutput):
+    segments: List[PanopticSegmentationSegment] = None
 
 
 class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
@@ -1590,13 +1567,13 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
         for (mask_probs, pred_scores, pred_labels) in zip(mask_probs, pred_scores, pred_labels):
 
             # NOTE we can't do it in a batch-wise fashion
-            # since to_keep may have differnt size for each prediction
+            # since to_keep may have different sizes in each prediction
             mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(mask_probs, pred_scores, pred_labels)
             we_detect_something: bool = mask_probs.shape[0] > 0
 
             segmentation: Tensor = torch.zeros((h, w), dtype=torch.int32, device=mask_probs.device)
 
-            segments: List[Dict[str, Any]] = []
+            segments: List[PanopticSegmentationSegment] = []
 
             current_segment_id: int = 0
 
@@ -1606,21 +1583,20 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                 mask_labels: Tensor = mask_probs.argmax(0)
                 # mask_labels is a [H,W] where each pixel has a class label
                 # basically for each pixel we find out what is the most likely class to be there
-                stuff_memory_list = {}
+                stuff_memory_list: Dict[str, int] = {}
                 # this is a map between stuff and segments id, the used it to keep track of the instances of one class
 
                 for k in range(pred_labels.shape[0]):
                     pred_class: int = pred_labels[k].item()
                     # we are checking if pred_class is in the range of the continuous values allowed
-                    # why, no idea!
-                    is_stuff = False
+                    is_stuff = not self.config.dataset_metadata[pred_class].is_thing
                     # get the mask associated with the k query
                     mask_k: Tensor = mask_labels == k
                     # create the area, since bool we just need to sum :)
                     mask_k_area: Tensor = mask_k.sum()
                     # this is the area of all the stuff in query k
                     original_area: Tensor = (mask_probs[k] >= self.object_mask_threshold).sum()
-
+                    # find out how much of the all area mask_k is using
                     area_ratio = mask_k_area / original_area
 
                     is_overlapping: bool = area_ratio.item() > self.overlap_mask_area_threshold
@@ -1636,6 +1612,6 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                     # then we update out mask with the current segment
                     segmentation[mask_k] = current_segment_id
 
-                    segments.append({"id": current_segment_id, "category_id": pred_class, "isthing": not is_stuff})
+                    segments.append({"id": current_segment_id, "category_id": pred_class, "is_thing": not is_stuff})
 
             return MaskFormerForPanopticSegmentationOutput(segmentation=segmentation, segments=segments, **outputs)

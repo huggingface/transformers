@@ -477,19 +477,19 @@ def test_pan_seg():
         mask_former_for_seg = MaskFormerForPanopticSegmentation(config=config).eval()
         mask_former_for_seg.model.load_state_dict(mask_former.state_dict())
 
-        # original_outs = original_mask_former([{"image": x}])
-        outs: MaskFormerForPanopticSegmentationOutput = mask_former_for_seg(x.unsqueeze(0))
+        original_outs = original_mask_former([{"image": x}])
+        # outs: MaskFormerForPanopticSegmentationOutput = mask_former_for_seg(x.unsqueeze(0))
 
         img_with_mask = (to_tensor(im.resize((1200, 800))) * 255).type(torch.uint8).permute(1, 2, 0).numpy()
 
         metadata = MetadataCatalog.get("coco_2017_val_panoptic")
         visualizer = Visualizer(img_with_mask, metadata)
 
-        # mask = original_outs[0]["panoptic_seg"][0]
-        # segments = original_outs[0]["panoptic_seg"][1]
+        mask = original_outs[0]["panoptic_seg"][0]
+        segments = original_outs[0]["panoptic_seg"][1]
 
-        mask = outs.segmentation
-        segments = outs.segments
+        # mask = outs.segmentation
+        # segments = outs.segments
 
         vis_output = visualizer.draw_panoptic_seg(mask, segments)
 
