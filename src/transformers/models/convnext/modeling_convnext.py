@@ -301,6 +301,8 @@ class ConvNextModel(ConvNextPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        print("Shape of pixel values:", pixel_values.shape)
+
         all_hidden_states = () if output_hidden_states else None
         for i in range(self.config.num_stages):
             if i == 0:

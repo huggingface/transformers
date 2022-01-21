@@ -45,18 +45,15 @@ class ConvNextModelTester:
         self,
         parent,
         batch_size=13,
-        image_size=30,
-        patch_size=2,
+        image_size=32,
         num_channels=3,
+        num_stages=4,
+        dims=[10, 20, 30, 40],
+        depths=[2, 2, 3, 2],
         is_training=True,
         use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
         type_sequence_label_size=10,
         initializer_range=0.02,
         num_labels=3,
@@ -65,17 +62,14 @@ class ConvNextModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
-        self.patch_size = patch_size
         self.num_channels = num_channels
+        self.num_stages = num_stages
+        self.dims = dims
+        self.depths = depths
         self.is_training = is_training
         self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
@@ -93,16 +87,11 @@ class ConvNextModelTester:
 
     def get_config(self):
         return ConvNextConfig(
-            image_size=self.image_size,
-            patch_size=self.patch_size,
             num_channels=self.num_channels,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
+            dims=self.dims,
+            depths=self.depths,
+            num_stages=self.num_stages,
             hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
@@ -112,11 +101,11 @@ class ConvNextModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = to_2tuple(self.image_size)
-        patch_size = to_2tuple(self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        # expected last hidden states: B, C, H // 32, W // 32
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.dims[-1], self.image_size // 32, self.image_size // 32),
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -209,17 +198,12 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            expected_num_stages = getattr(
+                self.model_tester, "expected_num_stages", self.model_tester.num_stages
             )
-            self.assertEqual(len(hidden_states), expected_num_layers)
+            self.assertEqual(len(hidden_states), expected_num_stages)
 
-            # ConvNext has a different seq_length
-            image_size = to_2tuple(self.model_tester.image_size)
-            patch_size = to_2tuple(self.model_tester.patch_size)
-            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-            seq_length = num_patches + 1
-
+            # ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [seq_length, self.model_tester.hidden_size],
@@ -259,11 +243,12 @@ def prepare_img():
 class ConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
+        return AutoFeatureExtractor.from_pretrained("nielsr/convnext-tiny-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224").to(torch_device)
+        # TODO replace nielsr by facebook
+        model = ConvNextForImageClassification.from_pretrained("nielsr/convnext-tiny-224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -277,6 +262,6 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
+        expected_slice = torch.tensor([-0.0750,  0.2478,  0.5982]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
