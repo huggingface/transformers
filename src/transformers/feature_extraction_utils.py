@@ -379,10 +379,6 @@ class FeatureExtractionMixin:
                 use_auth_token=use_auth_token,
                 user_agent=user_agent,
             )
-            # Load feature_extractor dict
-            with open(resolved_feature_extractor_file, "r", encoding="utf-8") as reader:
-                text = reader.read()
-            feature_extractor_dict = json.loads(text)
 
         except RepositoryNotFoundError as err:
             logger.error(err)
