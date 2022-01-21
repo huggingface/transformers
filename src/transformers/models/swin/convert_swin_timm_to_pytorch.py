@@ -1,13 +1,13 @@
 import argparse
+import json
 
 import torch
 from PIL import Image
 
 import requests
 import timm
-from transformers import AutoFeatureExtractor, SwinConfig, SwinForImageClassification
-import json
 from huggingface_hub import cached_download, hf_hub_url
+from transformers import AutoFeatureExtractor, SwinConfig, SwinForImageClassification
 
 
 def get_swin_config(swin_name):
@@ -140,7 +140,7 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    feature_extractor = AutoFeatureExtractor.from_pretrained('microsoft/{}'.format(swin_name.replace('_', '-')))
+    feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(swin_name.replace("_", "-")))
     image = Image.open(requests.get(url, stream=True).raw)
     inputs = feature_extractor(images=image, return_tensors="pt")
 
