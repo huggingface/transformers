@@ -24,8 +24,13 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 
+from requests import HTTPError
+
 from .file_utils import (
     FEATURE_EXTRACTOR_NAME,
+    EntryNotFoundError,
+    RepositoryNotFoundError,
+    RevisionNotFoundError,
     TensorType,
     _is_jax,
     _is_numpy,
@@ -374,28 +379,54 @@ class FeatureExtractionMixin:
                 use_auth_token=use_auth_token,
                 user_agent=user_agent,
             )
+
+        except RepositoryNotFoundError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier listed on "
+                "'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token having "
+                "permission to this repo with `use_auth_token` or log in with `huggingface-cli login` and pass "
+                "`use_auth_token=True`."
+            )
+        except RevisionNotFoundError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
+                f"model name. Check the model page at 'https://huggingface.co/{pretrained_model_name_or_path}' for "
+                "available revisions."
+            )
+        except EntryNotFoundError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"{pretrained_model_name_or_path} does not appear to have a file named {FEATURE_EXTRACTOR_NAME}."
+            )
+        except HTTPError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
+                f"{pretrained_model_name_or_path} is not the path to a directory conaining a "
+                f"{FEATURE_EXTRACTOR_NAME} file.\nCheckout your internet connection or see how to run the library in "
+                "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
+            )
+        except EnvironmentError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"Can't load feature extractor for '{pretrained_model_name_or_path}'. If you were trying to load it "
+                "from 'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                f"containing a {FEATURE_EXTRACTOR_NAME} file"
+            )
+
+        try:
             # Load feature_extractor dict
             with open(resolved_feature_extractor_file, "r", encoding="utf-8") as reader:
                 text = reader.read()
             feature_extractor_dict = json.loads(text)
 
-        except EnvironmentError as err:
-            logger.error(err)
-            msg = (
-                f"Can't load feature extractor for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
-                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
-                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {FEATURE_EXTRACTOR_NAME} file\n\n"
-            )
-            raise EnvironmentError(msg)
-
         except json.JSONDecodeError:
-            msg = (
-                f"Couldn't reach server at '{feature_extractor_file}' to download feature extractor configuration file or "
-                "feature extractor configuration file is not a valid JSON file. "
-                f"Please check network or file content here: {resolved_feature_extractor_file}."
+            raise EnvironmentError(
+                f"It looks like the config file at '{resolved_feature_extractor_file}' is not a valid JSON file."
             )
-            raise EnvironmentError(msg)
 
         if resolved_feature_extractor_file == feature_extractor_file:
             logger.info(f"loading feature extractor configuration file {feature_extractor_file}")
