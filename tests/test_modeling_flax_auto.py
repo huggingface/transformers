@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,16 +14,69 @@
 
 import unittest
 
-from transformers import is_flax_available
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax
+from transformers import AutoConfig, AutoTokenizer, BertConfig, TensorType, is_flax_available
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, slow
 
 
 if is_flax_available():
-    from transformers import FlaxAutoModel
+    import jax
+    from transformers.models.auto.modeling_flax_auto import FlaxAutoModel
+    from transformers.models.bert.modeling_flax_bert import FlaxBertModel
+    from transformers.models.roberta.modeling_flax_roberta import FlaxRobertaModel
 
 
 @require_flax
 class FlaxAutoModelTest(unittest.TestCase):
+    @slow
+    def test_bert_from_pretrained(self):
+        for model_name in ["bert-base-cased", "bert-large-uncased"]:
+            with self.subTest(model_name):
+                config = AutoConfig.from_pretrained(model_name)
+                self.assertIsNotNone(config)
+                self.assertIsInstance(config, BertConfig)
+
+                model = FlaxAutoModel.from_pretrained(model_name)
+                self.assertIsNotNone(model)
+                self.assertIsInstance(model, FlaxBertModel)
+
+    @slow
+    def test_roberta_from_pretrained(self):
+        for model_name in ["roberta-base", "roberta-large"]:
+            with self.subTest(model_name):
+                config = AutoConfig.from_pretrained(model_name)
+                self.assertIsNotNone(config)
+                self.assertIsInstance(config, BertConfig)
+
+                model = FlaxAutoModel.from_pretrained(model_name)
+                self.assertIsNotNone(model)
+                self.assertIsInstance(model, FlaxRobertaModel)
+
+    @slow
+    def test_bert_jax_jit(self):
+        for model_name in ["bert-base-cased", "bert-large-uncased"]:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = FlaxBertModel.from_pretrained(model_name)
+            tokens = tokenizer("Do you support jax jitted function?", return_tensors=TensorType.JAX)
+
+            @jax.jit
+            def eval(**kwargs):
+                return model(**kwargs)
+
+            eval(**tokens).block_until_ready()
+
+    @slow
+    def test_roberta_jax_jit(self):
+        for model_name in ["roberta-base", "roberta-large"]:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = FlaxRobertaModel.from_pretrained(model_name)
+            tokens = tokenizer("Do you support jax jitted function?", return_tensors=TensorType.JAX)
+
+            @jax.jit
+            def eval(**kwargs):
+                return model(**kwargs)
+
+            eval(**tokens).block_until_ready()
+
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"
