@@ -90,7 +90,6 @@ class PoolFormerConfig(PretrainedConfig):
     def __init__(
         self,
         num_channels=3,
-        num_labels=1000,
         patch_size=16,
         stride=16,
         pool_size=3,
