@@ -150,7 +150,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig", "PoolFormerTokenizer"],
+    "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -643,16 +643,10 @@ if is_torch_available():
     _import_structure["models.poolformer"].extend(
         [
             "POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PoolFormerForMaskedLM",
-            "PoolFormerForCausalLM",
-            "PoolFormerForMultipleChoice",
-            "PoolFormerForQuestionAnswering",
-            "PoolFormerForSequenceClassification",
-            "PoolFormerForTokenClassification",
             "PoolFormerLayer",
             "PoolFormerModel",
             "PoolFormerPreTrainedModel",
-            "load_tf_weights_in_poolformer",
+            "PoolFormerForImageClassification",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -2365,7 +2359,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig, PoolFormerTokenizer
+    from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2605,7 +2599,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.poolformer import PoolFormerTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2732,16 +2725,10 @@ if TYPE_CHECKING:
 
         from .models.poolformer import (
             POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PoolFormerForMaskedLM,
-            PoolFormerForCausalLM,
-            PoolFormerForMultipleChoice,
-            PoolFormerForQuestionAnswering,
-            PoolFormerForSequenceClassification,
-            PoolFormerForTokenClassification,
             PoolFormerLayer,
             PoolFormerModel,
             PoolFormerPreTrainedModel,
-            load_tf_weights_in_poolformer,
+            PoolFormerForImageClassification,
         )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark

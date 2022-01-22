@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,6 @@ import requests
 from huggingface_hub import cached_download, hf_hub_url
 from transformers import (
     PoolFormerConfig,
-    PoolFormerFeatureExtractor,
     PoolFormerForImageClassification,
 )
 from transformers.utils import logging

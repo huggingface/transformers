@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Sea AI Lab and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -45,9 +45,7 @@ POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
+# Copied from transformers.models.vit.modeling_vit.to_2tuple
 def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
@@ -129,7 +127,7 @@ class PoolFormerEmbeddings(nn.Module):
         stride = to_2tuple(stride)
         padding = to_2tuple(padding)
 
-        self.proj = nn.Conv2d(
+        self.projection = nn.Conv2d(
             num_channels,
             hidden_size,
             kernel_size=patch_size,
@@ -139,7 +137,7 @@ class PoolFormerEmbeddings(nn.Module):
         self.norm = norm_layer(hidden_size) if norm_layer else nn.Identity()
 
     def forward(self, pixel_values):
-        x = self.proj(pixel_values)
+        x = self.projection(pixel_values)
         x = self.norm(x)
         return x
 
@@ -166,37 +164,6 @@ class PoolFormerPooling(nn.Module):
     def forward(self, hidden_states):
         return self.pool(hidden_states) - hidden_states
 
-# class PoolFormerIntermediate(nn.Module):
-#     def __init__(self, config, dropout_prob, hidden_size, intermediate_size):
-#         super().__init__()
-#         self.conv = nn.Conv2d(hidden_size, intermediate_size, 1)
-#         self.dropout = DropPath(dropout_prob)
-#         if isinstance(config.hidden_act, str):
-#             self.intermediate_act_fn = ACT2FN[config.hidden_act]
-#         else:
-#             self.intermediate_act_fn = config.hidden_act
-
-#     def forward(self, hidden_states):
-#         hidden_states = self.conv(hidden_states)
-#         hidden_states = self.intermediate_act_fn(hidden_states)
-#         hidden_states = self.dropout(hidden_states)
-
-#         return hidden_states
-
-
-# class PoolFormerOutput(nn.Module):
-#     def __init__(self, dropout_prob, hidden_size, intermediate_size):
-#         super().__init__()
-#         self.conv = nn.Conv2d(intermediate_size, hidden_size, 1)
-#         self.dropout = DropPath(dropout_prob)
-
-#     def forward(self, hidden_states, input_tensor):
-#         hidden_states = self.conv(hidden_states)
-#         hidden_states = self.dropout(hidden_states)
-
-#         hidden_states = hidden_states + input_tensor
-
-#         return hidden_states
 
 class PoolFormerOutput(nn.Module):
     def __init__(self, config, dropout_prob, hidden_size, intermediate_size):
@@ -387,57 +354,14 @@ POOLFORMER_START_DOCSTRING = r"""
 
 POOLFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using :class:`transformers.PoolFormerTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
-
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
-
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
-
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
-
-            `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`PoolFormerFeatureExtractor`]. See
+            [`PoolFormerFeatureExtractor.__call__`] for details.
 """
 
 
 @add_start_docstrings(
-    "The bare ViT Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare PoolFormer Model transformer outputting raw hidden-states without any specific head on top.",
     POOLFORMER_START_DOCSTRING,
 )
 class PoolFormerModel(PoolFormerPreTrainedModel):
@@ -447,8 +371,6 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
 
         self.encoder = PoolFormerEncoder(config)
 
-        # self.layernorm = PoolFormerGroupNorm(config)
-        # self.pooler = PoolFormerFinalPooler(config) if add_pooling_layer else None
         self.pooler = None
         # Initialize weights and apply final processing
         self.post_init()
