@@ -1396,7 +1396,6 @@ class MaskFormerSegmentationModule(nn.Module):
             out.update({"pred_logits": classes})
         # sum up over the channels
         binary_masks: Tensor = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embbeddings)
-        # TODO add a MaskFormer<>Output for this module too! REVIEW -> ask!
         out.update({"pred_masks": binary_masks})
         return out
 
