@@ -440,7 +440,9 @@ class TFModelTesterMixin:
                         # `TFFunnelForTokenClassification` (and potentially other TF token classification models) give
                         # large difference (up to 0.1x). PR #15294 addresses this issue. Before it is merged, set a
                         # higher threshold here to pass the test.
-                        self.assertLessEqual(max_diff, 5e-5)
+                        # self.assertLessEqual(max_diff, 5e-5)
+                        if max_diff > 5e-5:
+                            self.assertEqual(model_class.__name__, "test")
 
                     tf_hidden_states = tfo[1].numpy()
                     pt_hidden_states = pto[1].numpy()
