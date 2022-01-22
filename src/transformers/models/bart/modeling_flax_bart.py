@@ -1527,6 +1527,7 @@ FLAX_BART_CONDITIONAL_GENERATION_DOCSTRING = """
     Mask filling example:
 
     ```python
+    >>> import jax
     >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
 
     >>> model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large")
@@ -1538,7 +1539,7 @@ FLAX_BART_CONDITIONAL_GENERATION_DOCSTRING = """
     >>> logits = model(input_ids).logits
     >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero()[0].item()
     >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
-    >>> values, predictions = jax.lax.top_k(probs)
+    >>> values, predictions = jax.lax.top_k(probs, k=1)
 
     >>> tokenizer.decode(predictions).split()
     ```
