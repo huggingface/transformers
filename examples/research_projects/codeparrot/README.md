@@ -113,6 +113,8 @@ Recall that you can see the full set of possible options with descriptions (for 
 python scripts/codeparrot_training.py --help
 ```
 
+_Note:_ If you wish to train on TPUs, please follow the instructions for setting up your TPU with Pytorch XLA: https://cloud.google.com/tpu/docs/pytorch-xla-ug-tpu-vm
+
 ## Evaluation
 For evaluating the language modeling loss on the validation set or any other dataset you can use the following command:
 ```bash
