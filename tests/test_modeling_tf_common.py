@@ -408,8 +408,6 @@ class TFModelTesterMixin:
             max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
             self.assertLessEqual(max_diff, 4e-2)
 
-            # Currently, let's check at least the case where `labels` is passed.
-            # (ideally, we would like to test for all cases, like QA or NSP tasks)
             has_labels = any(
                 x in tf_inputs_dict_maybe_with_labels for x in ["labels", "next_sentence_label", "start_positions"]
             )
