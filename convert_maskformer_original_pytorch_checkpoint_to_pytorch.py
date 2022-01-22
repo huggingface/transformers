@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch import Tensor
 from dataclasses import dataclass, field
 from pprint import pformat, pprint
-from typing import List, Any, Dict, Optional, Set
+from typing import Iterator, List, Any, Dict, Optional, Set
 from src.transformers.models.maskformer.configuration_maskformer import DatasetMetadata
 from src.transformers.models.maskformer.modelling_maskformer import (
     MaskFormerConfig,
@@ -25,14 +25,18 @@ from MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskF
 from detectron2.layers.wrappers import Conv2d as DetectronConv2d
 import pytorch_lightning as pl
 import torchvision.transforms as T
-from transformers.utils import logging
 from detectron2.checkpoint import DetectionCheckpointer
 from functools import partial
+import logging
 
 pl.seed_everything(42)
 
 StateDict = Dict[str, Tensor]
-logger = logging.get_logger(__name__)
+# easier to use pythong logging instead of going trough the hf utility logging file
+# main issues there is the polluated namespace so I can't call `logging` directly
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler())
 
 
 class TrackedStateDict:
@@ -80,7 +84,7 @@ def prepare_img():
 class Args:
     """Fake command line arguments needed by maskformer/detectron implementation"""
 
-    config_file: str = "/home/zuppif/Documents/Work/hugging_face/transformers/MaskFormer/configs/ade20k-150/swin/maskformer_swin_base_IN21k_384_bs16_160k_res640.yaml"
+    config_file: str
 
 
 def setup_cfg(args: Args):
@@ -127,7 +131,7 @@ class OriginalMaskFormerConfigToOursConverter:
             encoder_layers=6,
             encoder_ffn_dim=2048,
             encoder_attention_heads=8,
-            decoder_layers=mask_former.DIM_FEEDFORWARD,
+            decoder_layers=mask_former.DEC_LAYERS,
             decoder_ffn_dim=mask_former.DIM_FEEDFORWARD,
             decoder_attention_heads=mask_former.NHEADS,
             encoder_layerdrop=0.0,
@@ -340,13 +344,15 @@ class MaskFormerCheckpointConverter:
         self.replace_transformer_module(dst_state_dict, src_state_dict)
         self.replace_segmentation_module(dst_state_dict, src_state_dict)
 
-        logger.info(f"missed keys are {pformat(dst_state_dict.diff())}")
-
+        logger.info(f"Missed keys are {pformat(dst_state_dict.diff())}")
+        logger.info("🙌 Done")
         self.to_model.load_state_dict(dst_state_dict)
 
+        return self.to_model
+
     @classmethod
-    def from_original_config_file_and_checkpoint(
-        self, original_config_file: str, original_checkpoint_file: str
+    def from_original_config_and_checkpoint_file(
+        cls, original_config_file: str, original_checkpoint_file: str
     ) -> MaskFormerCheckpointConverter:
         original_config = setup_cfg(Args(config_file=original_config_file))
         mask_former_kwargs = OriginalMaskFormer.from_config(original_config)
@@ -359,32 +365,36 @@ class MaskFormerCheckpointConverter:
 
         to_model = MaskFormerModel(config=config).eval()
 
-        return MaskFormerCheckpointConverter(original_model, to_model)
+        return cls(original_model, to_model)
+
+    @staticmethod
+    def using_dirs(checkpoints_dir: Path, config_dir: Path) -> Iterator[MaskFormerCheckpointConverter]:
+        checkpoints: List[Path] = checkpoints_dir.glob("**/*.pkl")
+
+        for checkpoint in checkpoints:
+            logger.info(f"💪 Converting {checkpoint.stem}")
+            # find associated config file
+            config: Path = config_dir / checkpoint.parents[0].stem / "swin" / f"{checkpoint.stem}.yaml"
+            yield MaskFormerCheckpointConverter.from_original_config_and_checkpoint_file(str(config), str(checkpoint))
 
 
-model_checkpoints_converter = {
-    "maskformer_swin_base_IN21k_384_bs16_160k_res640": partial(
-        MaskFormerCheckpointConverter.from_original_config_file,
-        "/home/zuppif/Documents/Work/hugging_face/transformers/MaskFormer/configs/ade20k-150/swin/maskformer_swin_base_IN21k_384_bs16_160k_res640.yaml",
-        "/home/zuppif/Documents/Work/hugging_face/maskformer_swin_base_IN21k_384_bs16_160k_res640.pkl",
-    )
-}
+# model_checkpoints_converter = {
+#     "maskformer_swin_base_IN21k_384_bs16_160k_res640": partial(
+#         MaskFormerCheckpointConverter.from_original_config_and_checkpoint_file,
+#         "/home/zuppif/Documents/Work/hugging_face/transformers/MaskFormer/configs/ade20k-150/swin/maskformer_swin_base_IN21k_384_bs16_160k_res640.yaml",
+#         "/home/zuppif/Documents/Work/hugging_face/maskformer_swin_base_IN21k_384_bs16_160k_res640.pkl",
+#     )
+# }
 
 
-model_checkpoints_converter["maskformer_swin_base_IN21k_384_bs16_160k_res640"]()
+# model_checkpoints_converter["maskformer_swin_base_IN21k_384_bs16_160k_res640"]()
+
+checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
+config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs")
 
 
-def very_boring_test():
+def test(src, dst):
     with torch.no_grad():
-        cfg = setup_cfg(Args())
-
-        mask_former_kwargs = OriginalMaskFormer.from_config(cfg)
-        src = OriginalMaskFormer(**mask_former_kwargs).eval()
-        config = MaskFormerConfig()
-        dst = MaskFormerModel(config=config).eval()
-
-        converter = MaskFormerCheckpointConverter(src, dst)
-        converter()
 
         x = torch.zeros((1, 3, 384, 384))
 
@@ -402,12 +412,8 @@ def very_boring_test():
         src.sem_seg_head.predictor.aux_loss = False
         src_transformer_out = src.sem_seg_head.predictor(src_features["res5"], src_pixel_out[0])
 
-        # print(src.sem_seg_head.predictor)
         dst_queries = dst.transformer_module(dst_pixel_out[0])
         dst_transformer_out = dst.segmentation_module(dst_queries, dst_pixel_out[1])
-
-        # LOOKING at them they seems equal!!!
-        print((src_transformer_out["pred_logits"] - dst_transformer_out["pred_logits"]).sum())
 
         assert torch.allclose(src_transformer_out["pred_logits"], dst_transformer_out["pred_logits"], atol=1e-4)
 
@@ -415,12 +421,39 @@ def very_boring_test():
 
         src_out = src([{"image": x.squeeze(0)}])
 
-        dst_for_seg = MaskFormerForSemanticSegmentation(config=config).eval()
+        dst_for_seg = MaskFormerForSemanticSegmentation(config=dst.config).eval()
         dst_for_seg.model.load_state_dict(dst.state_dict())
 
         dst_out = dst_for_seg(x)
 
         assert torch.allclose(src_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
+
+        im = prepare_img()
+
+        tr = T.Compose(
+            [
+                T.Resize((640, 640)),
+                T.ToTensor(),
+                T.Normalize(
+                    mean=torch.tensor([123.675, 116.280, 103.530]) / 255.0,
+                    std=torch.tensor([58.395, 57.120, 57.375]) / 255.0,
+                ),
+            ],
+        )
+
+        x = tr(im)
+
+        src_out = src([{"image": x}])
+        dst_out = dst_for_seg(x.unsqueeze(0))
+
+        assert torch.allclose(src_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
+
+        logging.info("✅ Test passed!")
+
+
+for converter in MaskFormerCheckpointConverter.using_dirs(checkpoints_dir, config_dir):
+    converted = converter()
+    test(converter.original_model, converted)
 
 
 def test_with_img():
