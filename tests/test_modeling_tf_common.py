@@ -436,8 +436,9 @@ class TFModelTesterMixin:
 
                     if not tf_nans:
                         max_diff = np.amax(np.abs(tf_loss - pt_loss))
-                        # `TFFunnelForTokenClassification` gives large difference (up to 0.1x).
-                        # There might be some problem to check, but let's increase the tolerance for now to pass test.
+                        # `TFFunnelForTokenClassification` (and potentially other TF token classification models) give
+                        # large difference (up to 0.1x). PR #15294 addresses this issue. Before it is merged, set a
+                        # higher threshold here to pass the test.
                         self.assertLessEqual(max_diff, 2e-1)
 
                     tf_hidden_states = tfo[1].numpy()
