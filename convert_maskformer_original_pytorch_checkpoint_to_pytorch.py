@@ -9,6 +9,7 @@ from torch import Tensor
 from dataclasses import dataclass, field
 from pprint import pformat, pprint
 from typing import List, Any, Dict, Optional, Set
+from src.transformers.models.maskformer.configuration_maskformer import DatasetMetadata
 from src.transformers.models.maskformer.modelling_maskformer import (
     MaskFormerConfig,
     MaskFormerForPanopticSegmentation,
@@ -25,6 +26,8 @@ from detectron2.layers.wrappers import Conv2d as DetectronConv2d
 import pytorch_lightning as pl
 import torchvision.transforms as T
 from transformers.utils import logging
+from detectron2.checkpoint import DetectionCheckpointer
+from functools import partial
 
 pl.seed_everything(42)
 
@@ -88,6 +91,57 @@ def setup_cfg(args: Args):
     cfg.merge_from_file(args.config_file)
     cfg.freeze()
     return cfg
+
+
+class OriginalMaskFormerConfigToOursConverter:
+    def get_dataset_metadata(self, original_config: object) -> DatasetMetadata:
+        pass
+
+    def __call__(self, original_config: object) -> MaskFormerConfig:
+
+        model = original_config.MODEL
+        mask_former = model.MASK_FORMER
+        swin = model.SWIN
+
+        return MaskFormerConfig(
+            dataset_metadata=self.get_dataset_metadata(original_config),
+            fpn_feature_size=model.SEM_SEG_HEAD.CONVS_DIM,
+            mask_feature_size=model.SEM_SEG_HEAD.MASK_DIM,
+            num_classes=model.SEM_SEG_HEAD.NUM_CLASSES,
+            no_object_weight=mask_former.NO_OBJECT_WEIGHT,
+            num_queries=mask_former.NUM_OBJECT_QUERIES,
+            swin_pretrain_img_size=swin.PRETRAIN_IMG_SIZE,
+            swin_in_channels=3,
+            swin_patch_size=swin.PATCH_SIZE,
+            swin_embed_dim=swin.EMBED_DIM,
+            swin_depths=swin.DEPTHS,
+            swin_num_heads=swin.NUM_HEADS,
+            swin_window_size=swin.WINDOW_SIZE,
+            # TODO miss swin_attn_drop_rage, path_norm
+            swin_drop_path_rate=swin.DROP_PATH_RATE,
+            dice_weight=mask_former.DICE_WEIGHT,
+            ce_weight=1.0,
+            mask_weight=mask_former.MASK_WEIGHT,
+            mask_classification=True,
+            max_position_embeddings=1024,
+            encoder_layers=6,
+            encoder_ffn_dim=2048,
+            encoder_attention_heads=8,
+            decoder_layers=mask_former.DIM_FEEDFORWARD,
+            decoder_ffn_dim=mask_former.DIM_FEEDFORWARD,
+            decoder_attention_heads=mask_former.NHEADS,
+            encoder_layerdrop=0.0,
+            decoder_layerdrop=0.0,
+            d_model=mask_former.HIDDEN_DIM,
+            dropout=mask_former.DROPOUT,
+            attention_dropout=0.0,
+            activation_dropout=0.0,
+            init_std=0.02,
+            init_xavier_std=1.0,
+            scale_embedding=False,
+            auxiliary_loss=False,
+            dilation=False,
+        )
 
 
 class MaskFormerCheckpointConverter:
@@ -289,6 +343,35 @@ class MaskFormerCheckpointConverter:
         logger.info(f"missed keys are {pformat(dst_state_dict.diff())}")
 
         self.to_model.load_state_dict(dst_state_dict)
+
+    @classmethod
+    def from_original_config_file_and_checkpoint(
+        self, original_config_file: str, original_checkpoint_file: str
+    ) -> MaskFormerCheckpointConverter:
+        original_config = setup_cfg(Args(config_file=original_config_file))
+        mask_former_kwargs = OriginalMaskFormer.from_config(original_config)
+
+        original_model = OriginalMaskFormer(**mask_former_kwargs).eval()
+
+        DetectionCheckpointer(original_model).load(original_checkpoint_file)
+
+        config: MaskFormerConfig = OriginalMaskFormerConfigToOursConverter()(original_config)
+
+        to_model = MaskFormerModel(config=config).eval()
+
+        return MaskFormerCheckpointConverter(original_model, to_model)
+
+
+model_checkpoints_converter = {
+    "maskformer_swin_base_IN21k_384_bs16_160k_res640": partial(
+        MaskFormerCheckpointConverter.from_original_config_file,
+        "/home/zuppif/Documents/Work/hugging_face/transformers/MaskFormer/configs/ade20k-150/swin/maskformer_swin_base_IN21k_384_bs16_160k_res640.yaml",
+        "/home/zuppif/Documents/Work/hugging_face/maskformer_swin_base_IN21k_384_bs16_160k_res640.pkl",
+    )
+}
+
+
+model_checkpoints_converter["maskformer_swin_base_IN21k_384_bs16_160k_res640"]()
 
 
 def very_boring_test():
@@ -498,7 +581,7 @@ def test_pan_seg():
         vis_output.save("./test_pan.png")
 
 
-very_boring_test()
+# very_boring_test()
 # test_with_img()
 
 # test_pan_seg()
