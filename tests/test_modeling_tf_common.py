@@ -410,7 +410,10 @@ class TFModelTesterMixin:
 
             # Currently, let's check at least the case where `labels` is passed.
             # (ideally, we would like to test for all cases, like QA or NSP tasks)
-            if "labels" in tf_inputs_dict_maybe_with_labels:
+            has_labels = any(
+                x in tf_inputs_dict_maybe_with_labels for x in ["labels", "next_sentence_label", "start_positions"]
+            )
+            if has_labels:
 
                 with torch.no_grad():
                     pto = pt_model(**pt_inputs_dict_maybe_with_labels)
