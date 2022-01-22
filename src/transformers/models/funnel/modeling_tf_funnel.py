@@ -1706,7 +1706,13 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
         sequence_output = self.dropout(sequence_output, training=inputs["training"])
         logits = self.classifier(sequence_output)
 
-        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
+        loss = None
+        if inputs["labels"] is not None:
+            # Only keep active parts of the loss
+            if inputs["attention_mask"] is not None:
+                active_loss = inputs["attention_mask"] == 1
+                inputs["labels"] = tf.where(condition=active_loss, x=inputs["labels"], y=-100)
+            loss = self.hf_compute_loss(inputs["labels"], logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[1:]
