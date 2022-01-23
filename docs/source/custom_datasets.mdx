@@ -310,6 +310,10 @@ input and labels. Realign the labels and tokens by:
    them.
 3. Only labeling the first token of a given word. Assign `-100` to the other subtokens from the same word.
 
+```python
+label_all_tokens = False
+```
+
 Here is how you can create a function that will realign the labels and tokens:
 
 ```python
@@ -326,7 +330,9 @@ def tokenize_and_align_labels(examples):
                 label_ids.append(-100)
             elif word_idx != previous_word_idx:  # Only label the first token of a given word.
                 label_ids.append(label[word_idx])
-
+            else:
+                label_ids.append(label[word_idx] if label_all_tokens else -100)
+            previous_word_idx = word_idx
         labels.append(label_ids)
 
     tokenized_inputs["labels"] = labels
