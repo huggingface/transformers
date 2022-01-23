@@ -1737,7 +1737,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
         self.post_init()
 
     def to(self, *args, **kwargs):
-        """Override `torch.module.to` in order to prevent `self.block_emb`, which would largely consume gpu resources, from
+        """Override `torch.nn.Module.to` in order to prevent `self.block_emb`, which would largely consume gpu resources, from
         sending to cuda."""
         import warnings
 
