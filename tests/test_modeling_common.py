@@ -75,7 +75,6 @@ if is_torch_available():
         AdaptiveEmbedding,
         BertConfig,
         BertModel,
-        CharacterCnn,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -1311,7 +1310,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Embedding, AdaptiveEmbedding, CharacterCnn))
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Embedding, AdaptiveEmbedding))
             model.set_input_embeddings(nn.Embedding(10, 10))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
