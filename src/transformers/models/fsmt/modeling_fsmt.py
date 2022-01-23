@@ -199,16 +199,19 @@ FSMT_START_DOCSTRING = r"""
 FSMT_GENERATION_EXAMPLE = r"""
     Translation example::
 
-        from transformers import FSMTTokenizer, FSMTForConditionalGeneration
+    ```python
+    >>> from transformers import FSMTTokenizer, FSMTForConditionalGeneration
 
-        mname = "facebook/wmt19-ru-en" model = FSMTForConditionalGeneration.from_pretrained(mname) tokenizer =
-        FSMTTokenizer.from_pretrained(mname)
+    >>> mname = "facebook/wmt19-ru-en"
+    >>> model = FSMTForConditionalGeneration.from_pretrained(mname)
+    >>> tokenizer = FSMTTokenizer.from_pretrained(mname)
 
-        src_text = "Машинное обучение - это здорово, не так ли?" input_ids = tokenizer.encode(src_text,
-        return_tensors='pt') outputs = model.generate(input_ids, num_beams=5, num_return_sequences=3) for i, output in
-        enumerate(outputs):
-            decoded = tokenizer.decode(output, skip_special_tokens=True) print(f"{i}: {decoded})
-         # 1: Machine learning is great, isn't it? ...
+    >>> src_text = "Машинное обучение - это здорово, не так ли?"
+    >>> input_ids = tokenizer(src_text, return_tensors="pt")
+    >>> outputs = model.generate(input_ids, num_beams=5, num_return_sequences=3)
+    >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
+    "Machine learning is great, isn't it?"
+    ```
 
 """
 

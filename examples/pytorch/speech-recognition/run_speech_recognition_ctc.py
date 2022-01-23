@@ -396,7 +396,10 @@ def main():
 
     if training_args.do_train:
         raw_datasets["train"] = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            split=data_args.train_split_name,
+            use_auth_token=data_args.use_auth_token,
         )
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
@@ -418,7 +421,10 @@ def main():
 
     if training_args.do_eval:
         raw_datasets["eval"] = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, split=data_args.eval_split_name
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            split=data_args.eval_split_name,
+            use_auth_token=data_args.use_auth_token,
         )
 
         if data_args.max_eval_samples is not None:

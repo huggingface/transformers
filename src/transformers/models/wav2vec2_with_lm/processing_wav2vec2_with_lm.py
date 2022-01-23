@@ -18,7 +18,7 @@ Speech processor class for Wav2Vec2
 import os
 from contextlib import contextmanager
 from dataclasses import dataclass
-from multiprocessing import Pool
+from multiprocessing import get_context
 from typing import TYPE_CHECKING, Iterable, List, Optional, Union
 
 import numpy as np
@@ -166,7 +166,14 @@ class Wav2Vec2ProcessorWithLM:
             # BeamSearchDecoderCTC has no auto class
             kwargs.pop("_from_auto", None)
 
-            decoder = BeamSearchDecoderCTC.load_from_hf_hub(pretrained_model_name_or_path, **kwargs)
+            # make sure that only relevant filenames are downloaded
+            language_model_filenames = os.path.join(BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*")
+            alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
+            allow_regex = [language_model_filenames, alphabet_filename]
+
+            decoder = BeamSearchDecoderCTC.load_from_hf_hub(
+                pretrained_model_name_or_path, allow_regex=allow_regex, **kwargs
+            )
 
         # set language model attributes
         for attribute in ["alpha", "beta", "unk_score_offset", "score_boundary"]:
@@ -293,7 +300,7 @@ class Wav2Vec2ProcessorWithLM:
 
         # create multiprocessing pool and list numpy arrays
         logits_list = [array for array in logits]
-        pool = Pool(num_processes)
+        pool = get_context("fork").Pool(num_processes)
 
         # pyctcdecode
         decoded_beams = self.decoder.decode_beams_batch(
@@ -305,6 +312,9 @@ class Wav2Vec2ProcessorWithLM:
             hotwords=hotwords,
             hotword_weight=hotword_weight,
         )
+
+        # clone multi-processing pool
+        pool.close()
 
         # extract text
         batch_texts = [d[0][0] for d in decoded_beams]

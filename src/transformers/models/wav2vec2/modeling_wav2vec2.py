@@ -41,7 +41,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, torch_int_div
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
 
@@ -1104,7 +1104,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return (input_length - kernel_size) // stride + 1
+            return torch_int_div(input_length - kernel_size, stride) + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
