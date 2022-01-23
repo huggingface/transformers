@@ -1736,6 +1736,34 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         self.post_init()
 
+    def to(self, *args, **kwargs):
+        """Override `torch.module.to` in order to prevent `self.block_emb`, which would largely consume gpu resources, from sending to cuda.
+        """
+        import warnings
+
+        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(*args, **kwargs)
+
+        if dtype is not None:
+            if not (dtype.is_floating_point or dtype.is_complex):
+                raise TypeError('nn.Module.to only accepts floating point or complex '
+                                'dtypes, but got desired dtype={}'.format(dtype))
+            if dtype.is_complex:
+                warnings.warn(
+                    "Complex modules are a new feature under active development whose design may change, "
+                    "and some modules might not work as expected when using complex tensors as parameters or buffers. "
+                    "Please file an issue at https://github.com/pytorch/pytorch/issues/new?template=bug-report.md "
+                    "if a complex module does not work as expected.")
+
+        def convert(t):
+            if t is self.block_emb: # Prevent self.block_emb from sending to cuda.
+                return t
+            if convert_to_format is not None and t.dim() in (4, 5):
+                return t.to(device, dtype if t.is_floating_point() or t.is_complex() else None,
+                            non_blocking, memory_format=convert_to_format)
+            return t.to(device, dtype if t.is_floating_point() or t.is_complex() else None, non_blocking)
+
+        return self._apply(convert)
+
     @property
     def beam_size(self):
         if self.training:
@@ -1787,16 +1815,21 @@ class RealmForOpenQA(RealmPreTrainedModel):
         question_outputs = self.embedder(
             input_ids=input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask, return_dict=True
         )
-
         # [1, projection_size]
         question_projection = question_outputs[0]
+
+        # CPU computation starts.
         # [1, block_emb_size]
-        batch_scores = torch.einsum("BD,QD->QB", self.block_emb, question_projection)
+        batch_scores = torch.einsum("BD,QD->QB", self.block_emb, question_projection.to(self.block_emb.device))
         # [1, searcher_beam_size]
         _, retrieved_block_ids = torch.topk(batch_scores, k=self.beam_size, dim=-1)
         # [searcher_beam_size]
-        # Must convert to cpu tensor for subsequent numpy operations
-        retrieved_block_ids = retrieved_block_ids.squeeze().cpu()
+        retrieved_block_ids = retrieved_block_ids.squeeze()
+        # [searcher_beam_size, projection_size]
+        retrieved_block_emb = torch.index_select(
+            self.block_emb, dim=0, index=retrieved_block_ids
+        )
+        # CPU computation ends.
 
         # Retrieve possible answers
         has_answers, start_pos, end_pos, concat_inputs = self.retriever(
@@ -1810,13 +1843,9 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         concat_inputs = concat_inputs.to(self.reader.device)
 
-        # [searcher_beam_size, projection_size]
-        retrieved_block_emb = torch.index_select(
-            self.block_emb, dim=0, index=retrieved_block_ids.to(self.block_emb.device)
-        )
         # [searcher_beam_size]
         retrieved_logits = torch.einsum(
-            "D,BD->B", question_projection.squeeze(), retrieved_block_emb.to(question_projection.device)
+            "D,BD->B", question_projection.squeeze(), retrieved_block_emb.to(self.reader.device)
         )
 
         reader_output = self.reader(
