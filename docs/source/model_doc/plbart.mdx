@@ -56,8 +56,8 @@ inside the context manager [`~PLBartTokenizer.as_target_tokenizer`] to encode ta
 >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-base", src_lang="en_XX", tgt_lang="python")
 >>> example_python_phrase = "def maximum(a,b,c):NEW_LINE_INDENTreturn max([a,b,c])"
 >>> expected_translation_english = "Returns the maximum value of a b c."
->>> inputs = tokenizer(example_python_phrase, return_tensors="pt) 
->>> with tokenizer.as_target_tokenizer(): 
+>>> inputs = tokenizer(example_python_phrase, return_tensors="pt")
+>>> with tokenizer.as_target_tokenizer():
 ...     labels = tokenizer(expected_translation_english, return_tensors="pt")
 >>> inputs["labels"] = labels["input_ids"]
 >>> # forward pass

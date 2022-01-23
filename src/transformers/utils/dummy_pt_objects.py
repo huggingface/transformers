@@ -2081,8 +2081,10 @@ LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
+
 class LukeForEntityClassification(metaclass=DummyObject):
     _backends = ["torch"]
+
 
 class PerceiverForImageClassificationConvProcessing:
     def __init__(self, *args, **kwargs):
@@ -2110,12 +2112,15 @@ class LukeForEntityPairClassification(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+
 class PerceiverForMultimodalAutoencoding:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+
 class LukeForEntitySpanClassification(metaclass=DummyObject):
     _backends = ["torch"]
+
 
 class PerceiverForOpticalFlow:
     def __init__(self, *args, **kwargs):
@@ -2124,11 +2129,13 @@ class PerceiverForOpticalFlow:
 
 class LukeForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
+
+
 class PerceiverForSequenceClassification:
-        requires_backends(self, ["torch"])
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
 
 class LukeModel(metaclass=DummyObject):
     _backends = ["torch"]
@@ -2145,6 +2152,7 @@ class PerceiverLayer:
 class LukePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
+
 class PerceiverModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2153,6 +2161,7 @@ class PerceiverModel:
 class LxmertEncoder(metaclass=DummyObject):
     _backends = ["torch"]
 
+
 class PerceiverPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2160,6 +2169,7 @@ class PerceiverPreTrainedModel:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
 
 class LxmertForPreTraining(metaclass=DummyObject):
     _backends = ["torch"]
@@ -2178,6 +2188,7 @@ class PLBartForCausalLM:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
 
 class LxmertForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
@@ -2202,6 +2213,7 @@ class PLBartForSequenceClassification:
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
         requires_backends(cls, ["torch"])
+
 
 class LxmertPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
@@ -2452,9 +2464,9 @@ class MobileBertForQuestionAnswering(metaclass=DummyObject):
 
 class MobileBertForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
+
     def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2462,9 +2474,9 @@ class MobileBertForSequenceClassification(metaclass=DummyObject):
 
 class MobileBertForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
+
     def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2472,9 +2484,9 @@ class MobileBertForTokenClassification(metaclass=DummyObject):
 
 class MobileBertLayer(metaclass=DummyObject):
     _backends = ["torch"]
+
     def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2482,9 +2494,9 @@ class MobileBertLayer(metaclass=DummyObject):
 
 class MobileBertModel(metaclass=DummyObject):
     _backends = ["torch"]
+
     def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2492,9 +2504,9 @@ class MobileBertModel(metaclass=DummyObject):
 
 class MobileBertPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
+
     def forward(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

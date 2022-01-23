@@ -937,6 +937,7 @@ class XGLMConverter(SpmConverter):
             ],
         )
 
+
 class BlenderbotConverter(Converter):
     def converted(self) -> Tokenizer:
         ot = self.original_tokenizer

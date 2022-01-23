@@ -104,6 +104,7 @@ class MT5Tokenizer(metaclass=DummyObject):
 class PegasusTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
+
 class PLBartTokenizer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece"])

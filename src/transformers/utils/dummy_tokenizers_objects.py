@@ -230,6 +230,7 @@ class OpenAIGPTTokenizerFast(metaclass=DummyObject):
 class PegasusTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
+
 class PLBartTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
