@@ -17,10 +17,7 @@
 import unittest
 
 from transformers import is_torch_available
-# from transformers.testing_utils import require_torch, torch_device
-from transformers.testing_utils import require_torch
-
-torch_device = "cpu"
+from transformers.testing_utils import require_torch, torch_device
 
 from .test_modeling_common import floats_tensor, ids_tensor
 
@@ -28,12 +25,8 @@ from .test_modeling_common import floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers.generation_beam_search import BeamHypotheses, BeamSearchScorer, ConstrainedBeamSearchScorer
-    from transformers.generation_beam_constraints import (
-        Constraint,
-        PhrasalConstraint,
-        ConstraintListState
-    )
+    from transformers.generation_beam_search import BeamHypotheses, BeamSearchScorer
+
 
 class BeamSearchTester:
     def __init__(
@@ -255,4 +248,3 @@ class BeamSearchTest(unittest.TestCase):
     def test_beam_scorer_finalize(self):
         inputs = self.beam_search_tester.prepare_inputs()
         self.beam_search_tester.check_beam_scores_finalize(*inputs)
-
