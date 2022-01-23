@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
+    require_pyctcdecode,
     require_tf,
     require_torch,
     require_torchaudio,
@@ -96,6 +97,37 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "(Applaudissements)"})
+
+    @slow
+    @require_torch
+    @require_pyctcdecode
+    def test_large_model_pt_with_lm(self):
+        dataset = load_dataset("Narsil/asr_dummy")
+        filename = dataset["test"][3]["file"]
+
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm",
+            framework="pt",
+        )
+        self.assertEqual(speech_recognizer.type, "ctc_with_lm")
+
+        output = speech_recognizer(filename)
+        self.assertEqual(
+            output,
+            {"text": "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumaje"},
+        )
+
+        # Override back to pure CTC
+        speech_recognizer.type = "ctc"
+        output = speech_recognizer(filename)
+        # plumajre != plumaje
+        self.assertEqual(
+            output,
+            {
+                "text": "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumajre"
+            },
+        )
 
     @require_tf
     def test_small_model_tf(self):
@@ -247,6 +279,70 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(output, {"text": "a man said to the universe sir i exist"})
 
     @require_torch
+    def test_chunking_fast(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-wav2vec2",
+            chunk_length_s=10.0,
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        n_repeats = 2
+        audio_tiled = np.tile(audio, n_repeats)
+        output = speech_recognizer([audio_tiled], batch_size=2)
+        self.assertEqual(output, [{"text": ANY(str)}])
+        self.assertEqual(output[0]["text"][:6], "ZBT ZC")
+
+    @require_torch
+    @require_pyctcdecode
+    def test_chunking_fast_with_lm(self):
+        speech_recognizer = pipeline(
+            model="hf-internal-testing/processor_with_lm",
+            chunk_length_s=10.0,
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        n_repeats = 2
+        audio_tiled = np.tile(audio, n_repeats)
+        # Batch_size = 1
+        output1 = speech_recognizer([audio_tiled], batch_size=1)
+        self.assertEqual(output1, [{"text": ANY(str)}])
+        self.assertEqual(output1[0]["text"][:6], "<s> <s")
+
+        # batch_size = 2
+        output2 = speech_recognizer([audio_tiled], batch_size=2)
+        self.assertEqual(output2, [{"text": ANY(str)}])
+        self.assertEqual(output2[0]["text"][:6], "<s> <s")
+
+        # TODO There is an offby one error because of the ratio.
+        # Maybe logits get affected by the padding on this random
+        # model is more likely. Add some masking ?
+        # self.assertEqual(output1, output2)
+
+    @require_torch
+    @require_pyctcdecode
+    def test_with_lm_fast(self):
+        speech_recognizer = pipeline(
+            model="hf-internal-testing/processor_with_lm",
+        )
+        self.assertEqual(speech_recognizer.type, "ctc_with_lm")
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        n_repeats = 2
+        audio_tiled = np.tile(audio, n_repeats)
+
+        output = speech_recognizer([audio_tiled], batch_size=2)
+
+        self.assertEqual(output, [{"text": ANY(str)}])
+        self.assertEqual(output[0]["text"][:6], "<s> <s")
+
+    @require_torch
     @slow
     def test_chunking(self):
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
@@ -261,6 +357,24 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             chunk_length_s=10.0,
         )
 
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        n_repeats = 10
+        audio = np.tile(audio, n_repeats)
+        output = speech_recognizer([audio], batch_size=2)
+        expected_text = "A MAN SAID TO THE UNIVERSE SIR I EXIST " * n_repeats
+        expected = [{"text": expected_text.strip()}]
+        self.assertEqual(output, expected)
+
+    @require_torch
+    @slow
+    def test_chunking_with_lm(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="patrickvonplaten/wav2vec2-base-100h-with-lm",
+            chunk_length_s=10.0,
+        )
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         audio = ds[40]["audio"]["array"]
 

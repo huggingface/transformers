@@ -175,7 +175,7 @@ class DPREncoder(DPRPreTrainedModel):
 
     def __init__(self, config: DPRConfig):
         super().__init__(config)
-        self.bert_model = BertModel(config)
+        self.bert_model = BertModel(config, add_pooling_layer=False)
         assert self.bert_model.config.hidden_size > 0, "Encoder hidden_size can't be zero"
         self.projection_dim = config.projection_dim
         if self.projection_dim > 0:
@@ -202,8 +202,9 @@ class DPREncoder(DPRPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        sequence_output, pooled_output = outputs[:2]
+        sequence_output = outputs[0]
         pooled_output = sequence_output[:, 0, :]
+
         if self.projection_dim > 0:
             pooled_output = self.encode_proj(pooled_output)
 

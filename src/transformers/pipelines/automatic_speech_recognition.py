@@ -66,14 +66,34 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     return audio
 
 
-def apply_stride(tokens, stride):
-    max_token_n = tokens.shape[-1]
+def rescale_stride(tokens_or_logits, stride):
+    """
+    Rescales the stride values from audio space to tokens/logits space.
+
+    (160_000, 16_000, 16_000) -> (2000, 200, 200) for instance.
+    """
+    # Shape is [B, SEQ] for tokens
+    # [B, SEQ, V] for logits
+
+    max_token_n = tokens_or_logits.shape[1]
     max_input_n = max(input_n for input_n, _, _ in stride)
     ratio = max_token_n / max_input_n
-    for i, (input_n, left, right) in enumerate(stride):
+    new_strides = []
+    for input_n, left, right in stride:
         token_n = int(round(input_n * ratio))
-        left_token = int(round(left / input_n * token_n))
-        right_token = int(round((input_n - right) / input_n * token_n))
+        left = int(round(left / input_n * token_n))
+        right = int(round(right / input_n * token_n))
+        new_stride = (token_n, left, right)
+        new_strides.append(new_stride)
+
+    return new_strides
+
+
+def apply_stride(tokens, stride):
+    new_stride = rescale_stride(tokens, stride)
+    for i, (input_n, left, right) in enumerate(new_stride):
+        left_token = left
+        right_token = input_n - right
         # This is CTC to preseve decoding, we need to duplicate
         # next letter, and last letter
 
@@ -144,7 +164,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
 
         self.check_model_type(dict(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()))
-        self.is_ctc = self.model.__class__ in MODEL_FOR_CTC_MAPPING.values()
+
+        if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
+            self.type = "seq2seq"
+        elif (
+            self.feature_extractor._processor_class
+            and self.feature_extractor._processor_class.endswith("WithLM")
+            and kwargs.get("decoder", None) is not None
+        ):
+            self.decoder = kwargs["decoder"]
+            self.type = "ctc_with_lm"
+        else:
+            self.type = "ctc"
 
     def __call__(
         self,
@@ -204,7 +235,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate))
             stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate))
 
-            if not self.is_ctc:
+            if self.type not in {"ctc", "ctc_with_lm"}:
                 raise ValueError(
                     "`chunk_length_s` is only valid for CTC models, use other chunking options for other models"
                 )
@@ -222,8 +253,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
     def _forward(self, model_inputs):
         is_last = model_inputs.pop("is_last")
-        model_class = self.model.__class__
-        if model_class in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
+        if self.type == "seq2seq":
             encoder = self.model.get_encoder()
             # we need to pass `processed.get("attention_mask")` here since audio encoder
             # attention mask  length is different from expected text decoder `encoder_attention_mask` length
@@ -232,7 +262,21 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             tokens = self.model.generate(
                 encoder_outputs=encoder(**model_inputs), attention_mask=model_inputs.get("attention_mask")
             )
-        elif model_class in MODEL_FOR_CTC_MAPPING.values():
+            out = {"tokens": tokens}
+        elif self.type == "ctc_with_lm":
+            stride = model_inputs.pop("stride", None)
+            outputs = self.model(**model_inputs)
+            logits = outputs.logits
+            out = {"logits": logits}
+            if stride is not None:
+                # Send stride to `postprocess`.
+                # it needs to be handled there where
+                # the pieces are to be concatenated.
+                if isinstance(stride, tuple):
+                    out["stride"] = rescale_stride(logits, [stride])[0]
+                else:
+                    out["stride"] = rescale_stride(logits, stride)
+        elif self.type == "ctc":
             stride = model_inputs.pop("stride", None)
             outputs = self.model(**model_inputs)
             tokens = outputs.logits.argmax(dim=-1)
@@ -241,16 +285,40 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     stride = [stride]
 
                 apply_stride(tokens, stride)
+            out = {"tokens": tokens}
         else:
             logger.warning("This is an unknown class, treating it as CTC.")
             outputs = self.model(**model_inputs)
             tokens = outputs.logits.argmax(dim=-1)
-        return {"tokens": tokens, "is_last": is_last}
+            out = {"tokens": tokens}
+        return {"is_last": is_last, **out}
 
     def postprocess(self, model_outputs):
-        skip_special_tokens = False if "CTC" in self.tokenizer.__class__.__name__ else True
-        tokens = np.concatenate([outputs["tokens"].numpy() for outputs in model_outputs], axis=-1)
-        tokens = tokens.squeeze(0)
+        if self.type == "ctc_with_lm":
+            final_logits = []
+            for outputs in model_outputs:
+                logits = outputs["logits"].numpy()
+                stride = outputs.get("stride", None)
+                if stride is not None:
+                    try:
+                        total_n, left, right = stride
+                    except Exception:
+                        import ipdb
 
-        recognized_string = self.tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
-        return {"text": recognized_string}
+                        ipdb.set_trace()
+                    # Total_n might be < logits.shape[1]
+                    # because of padding, that's why
+                    # we need to reconstruct this information
+                    # This won't work with left padding (which doesn't exist right now)
+                    right_n = total_n - right
+                    logits = logits[:, left:right_n]
+                final_logits.append(logits)
+            logits = np.concatenate(final_logits, axis=1)
+            logits = logits.squeeze(0)
+            text = self.decoder.decode_beams(logits)[0][0]
+        else:
+            skip_special_tokens = self.type != "ctc"
+            tokens = np.concatenate([outputs["tokens"].numpy() for outputs in model_outputs], axis=-1)
+            tokens = tokens.squeeze(0)
+            text = self.tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
+        return {"text": text}

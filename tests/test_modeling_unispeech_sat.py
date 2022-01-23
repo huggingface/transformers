@@ -541,6 +541,10 @@ class UniSpeechSatModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertEqual(logits.shape, (4, 1498, 32))
 
+    @unittest.skip(reason="Feed forward chunking is not implemented")
+    def test_feed_forward_chunking(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model = UniSpeechSatModel.from_pretrained("microsoft/unispeech-sat-base-plus")
@@ -775,6 +779,10 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
         ).logits
 
         self.assertEqual(logits.shape, (1, 1498, 32))
+
+    @unittest.skip(reason="Feed forward chunking is not implemented")
+    def test_feed_forward_chunking(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):
