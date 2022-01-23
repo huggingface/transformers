@@ -409,6 +409,8 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         loss = model(**inputs).reader_output.loss
         loss.backward()
 
+        self.assertEqual(model.block_emb.device, torch.device("cpu"))
+
     @slow
     def test_embedder_from_pretrained(self):
         model = RealmEmbedder.from_pretrained("google/realm-cc-news-pretrained-embedder")

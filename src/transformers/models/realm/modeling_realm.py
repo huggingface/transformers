@@ -1737,29 +1737,36 @@ class RealmForOpenQA(RealmPreTrainedModel):
         self.post_init()
 
     def to(self, *args, **kwargs):
-        """Override `torch.module.to` in order to prevent `self.block_emb`, which would largely consume gpu resources, from sending to cuda.
-        """
+        """Override `torch.module.to` in order to prevent `self.block_emb`, which would largely consume gpu resources, from
+        sending to cuda."""
         import warnings
 
         device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(*args, **kwargs)
 
         if dtype is not None:
             if not (dtype.is_floating_point or dtype.is_complex):
-                raise TypeError('nn.Module.to only accepts floating point or complex '
-                                'dtypes, but got desired dtype={}'.format(dtype))
+                raise TypeError(
+                    "nn.Module.to only accepts floating point or complex "
+                    "dtypes, but got desired dtype={}".format(dtype)
+                )
             if dtype.is_complex:
                 warnings.warn(
                     "Complex modules are a new feature under active development whose design may change, "
                     "and some modules might not work as expected when using complex tensors as parameters or buffers. "
                     "Please file an issue at https://github.com/pytorch/pytorch/issues/new?template=bug-report.md "
-                    "if a complex module does not work as expected.")
+                    "if a complex module does not work as expected."
+                )
 
         def convert(t):
-            if t is self.block_emb: # Prevent self.block_emb from sending to cuda.
+            if t is self.block_emb:  # Prevent self.block_emb from sending to cuda.
                 return t
             if convert_to_format is not None and t.dim() in (4, 5):
-                return t.to(device, dtype if t.is_floating_point() or t.is_complex() else None,
-                            non_blocking, memory_format=convert_to_format)
+                return t.to(
+                    device,
+                    dtype if t.is_floating_point() or t.is_complex() else None,
+                    non_blocking,
+                    memory_format=convert_to_format,
+                )
             return t.to(device, dtype if t.is_floating_point() or t.is_complex() else None, non_blocking)
 
         return self._apply(convert)
@@ -1826,9 +1833,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
         # [searcher_beam_size]
         retrieved_block_ids = retrieved_block_ids.squeeze()
         # [searcher_beam_size, projection_size]
-        retrieved_block_emb = torch.index_select(
-            self.block_emb, dim=0, index=retrieved_block_ids
-        )
+        retrieved_block_emb = torch.index_select(self.block_emb, dim=0, index=retrieved_block_ids)
         # CPU computation ends.
 
         # Retrieve possible answers
