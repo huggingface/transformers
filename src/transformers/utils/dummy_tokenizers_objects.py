@@ -230,26 +230,20 @@ class OpenAIGPTTokenizerFast(metaclass=DummyObject):
 class PegasusTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
-
-class PLBartTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["tokenizers"])
 
+class PLBartTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
 
-class PLBartMultiTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["tokenizers"])
 
+class PLBartMultiTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
 
-class ReformerTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
 

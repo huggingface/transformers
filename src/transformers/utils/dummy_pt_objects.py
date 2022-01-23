@@ -2079,29 +2079,9 @@ class LongformerSelfAttention(metaclass=DummyObject):
 LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class LukeForEntityClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
-
-class PerceiverForImageClassificationConvProcessing:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerceiverForImageClassificationFourier:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerceiverForImageClassificationLearned:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerceiverForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2113,16 +2093,9 @@ class LukeForEntityPairClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class PerceiverForMultimodalAutoencoding:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class LukeForEntitySpanClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
-
-class PerceiverForOpticalFlow:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2130,21 +2103,13 @@ class PerceiverForOpticalFlow:
 class LukeForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
-
-class PerceiverForSequenceClassification:
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class LukeModel(metaclass=DummyObject):
     _backends = ["torch"]
 
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PerceiverLayer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2152,8 +2117,6 @@ class PerceiverLayer:
 class LukePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
-
-class PerceiverModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2161,43 +2124,20 @@ class PerceiverModel:
 class LxmertEncoder(metaclass=DummyObject):
     _backends = ["torch"]
 
-
-class PerceiverPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
 
 class LxmertForPreTraining(metaclass=DummyObject):
     _backends = ["torch"]
 
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class PLBartForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
 
 class LxmertForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PLBartForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2205,24 +2145,13 @@ class PLBartForConditionalGeneration:
 class LxmertModel(metaclass=DummyObject):
     _backends = ["torch"]
 
-
-class PLBartForSequenceClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
 
 class LxmertPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PLBartModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2230,8 +2159,6 @@ class PLBartModel:
 class LxmertVisualFeatureEncoder(metaclass=DummyObject):
     _backends = ["torch"]
 
-
-class PLBartPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -2465,18 +2392,12 @@ class MobileBertForQuestionAnswering(metaclass=DummyObject):
 class MobileBertForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
 class MobileBertForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
-
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2485,18 +2406,12 @@ class MobileBertForTokenClassification(metaclass=DummyObject):
 class MobileBertLayer(metaclass=DummyObject):
     _backends = ["torch"]
 
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
 class MobileBertModel(metaclass=DummyObject):
     _backends = ["torch"]
-
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -2505,18 +2420,12 @@ class MobileBertModel(metaclass=DummyObject):
 class MobileBertPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
 def load_tf_weights_in_mobilebert(*args, **kwargs):
     requires_backends(load_tf_weights_in_mobilebert, ["torch"])
-
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
 
 
 MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -2804,58 +2713,46 @@ class PerceiverPreTrainedModel(metaclass=DummyObject):
 PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class PLBartForCausalLM:
+class PLBartForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
+class PLBartForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
 
-class PLBartForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
+class PLBartForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
 
-class PLBartForQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
+class PLBartForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
 
-class PLBartForSequenceClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
+class PLBartModel(metaclass=DummyObject):
+    _backends = ["torch"]
 
-class PLBartModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
+class PLBartPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
 
-class PLBartPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
 
 PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = None

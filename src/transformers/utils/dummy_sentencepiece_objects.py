@@ -104,26 +104,20 @@ class MT5Tokenizer(metaclass=DummyObject):
 class PegasusTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
-
-class PLBartTokenizer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["sentencepiece"])
 
+class PLBartTokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
 
-class PLBartMultiTokenizer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["sentencepiece"])
 
+class PLBartMultiTokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
 
-class ReformerTokenizer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece"])
 

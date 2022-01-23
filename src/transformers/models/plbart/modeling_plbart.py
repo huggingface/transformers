@@ -53,58 +53,8 @@ _TOKENIZER_FOR_DOC = "PLBartTokenizer"
 
 PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uclanlp/plbart-base",
-    "uclanlp/plbart-c-cpp-defect-detection",
     "uclanlp/plbart-cs-java",
-    "uclanlp/plbart-en_XX-java",
-    "uclanlp/plbart-go-en_XX",
-    "uclanlp/plbart-java-clone-detection",
-    "uclanlp/plbart-java-cs",
-    "uclanlp/plbart-java-en_XX",
-    "uclanlp/plbart-javascript-en_XX",
     "uclanlp/plbart-multi_task-all",
-    "uclanlp/plbart-multi_task-compiled",
-    "uclanlp/plbart-multi_task-dynamic",
-    "uclanlp/plbart-multi_task-go",
-    "uclanlp/plbart-multi_task-interpreted",
-    "uclanlp/plbart-multi_task-java",
-    "uclanlp/plbart-multi_task-js",
-    "uclanlp/plbart-multi_task-php",
-    "uclanlp/plbart-multi_task-python",
-    "uclanlp/plbart-multi_task-ruby",
-    "uclanlp/plbart-multi_task-static",
-    "uclanlp/plbart-multi_task-strong",
-    "uclanlp/plbart-multi_task-weak",
-    "uclanlp/plbart-php-en_XX",
-    "uclanlp/plbart-python-en_XX",
-    "uclanlp/plbart-refine-java-medium",
-    "uclanlp/plbart-refine-java-small",
-    "uclanlp/plbart-ruby-en_XX",
-    "uclanlp/plbart-single_task-all-generation",
-    "uclanlp/plbart-single_task-all-summarization",
-    "uclanlp/plbart-single_task-compiled-generation",
-    "uclanlp/plbart-single_task-compiled-summarization",
-    "uclanlp/plbart-single_task-dynamic-generation",
-    "uclanlp/plbart-single_task-dynamic-summarization",
-    "uclanlp/plbart-single_task-en_go",
-    "uclanlp/plbart-single_task-en_java",
-    "uclanlp/plbart-single_task-en_js",
-    "uclanlp/plbart-single_task-en_php",
-    "uclanlp/plbart-single_task-en_python",
-    "uclanlp/plbart-single_task-en_ruby",
-    "uclanlp/plbart-single_task-go_en",
-    "uclanlp/plbart-single_task-interpreted-generation",
-    "uclanlp/plbart-single_task-interpreted-summarization",
-    "uclanlp/plbart-single_task-java_en",
-    "uclanlp/plbart-single_task-js_en",
-    "uclanlp/plbart-single_task-php_en",
-    "uclanlp/plbart-single_task-python_en",
-    "uclanlp/plbart-single_task-ruby_en",
-    "uclanlp/plbart-single_task-static-generation",
-    "uclanlp/plbart-single_task-static-summarization",
-    "uclanlp/plbart-single_task-strong-generation",
-    "uclanlp/plbart-single_task-strong-summarization",
-    "uclanlp/plbart-single_task-weak-generation",
-    "uclanlp/plbart-single_task-weak-summarization",
     # See all PLBART models at https://huggingface.co/models?filter=plbart
 ]
 
@@ -395,6 +345,7 @@ class PLBartEncoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->PLBart
 class PLBartDecoderLayer(nn.Module):
     def __init__(self, config: PLBartConfig):
         super().__init__()
@@ -436,11 +387,11 @@ class PLBartDecoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`torch.FloatTensor`): input to the layer of shape *(batch, seq_len, embed_dim)*
             attention_mask (`torch.FloatTensor`): attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
-            encoder_hidden_states (:
-                obj:*torch.FloatTensor*): cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+            encoder_hidden_states (`torch.FloatTensor`):
+                cross attention input to the layer of shape *(batch, seq_len, embed_dim)*
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -714,6 +665,7 @@ PLBART_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.bart.modeling_bart.BartEncoder with Bart->PLBart
 class PLBartEncoder(PLBartPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -746,10 +698,16 @@ class PLBartEncoder(PLBartPreTrainedModel):
         )
         self.layers = nn.ModuleList([PLBartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
-        # self.layer_norm = nn.LayerNorm(config.d_model) # TODO: Check if this is okay
 
-        self.init_weights()
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
 
     def forward(
         self,
@@ -767,8 +725,8 @@ class PLBartEncoder(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PLBartTokenizer`] or [`PLBartMultiTokenizer`] depending on the
-                checkpoint. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+                Indices can be obtained using [`PLBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -784,11 +742,10 @@ class PLBartEncoder(PLBartPreTrainedModel):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            inputs_embeds (:
-                obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally,
-                instead of passing `input_ids` you can choose to directly pass an embedded representation. This is
-                useful if you want more control over how to convert `input_ids` indices into associated vectors than
-                the model's internal embedding lookup matrix.
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -834,9 +791,11 @@ class PLBartEncoder(PLBartPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+            if head_mask.size()[0] != (len(self.layers)):
+                raise ValueError(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                )
+
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
@@ -872,8 +831,6 @@ class PLBartEncoder(PLBartPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
-        # hidden_states = self.layer_norm(hidden_states) # TODO: Check if this is okay
-
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -884,6 +841,7 @@ class PLBartEncoder(PLBartPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bart.modeling_bart.BartDecoder with Bart->PLBart
 class PLBartDecoder(PLBartPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`PLBartDecoderLayer`]
@@ -912,10 +870,10 @@ class PLBartDecoder(PLBartPreTrainedModel):
         )
         self.layers = nn.ModuleList([PLBartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
-        # self.layer_norm = nn.LayerNorm(config.d_model) # TODO: Check if this is okay
 
-        self.init_weights()
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -923,7 +881,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -963,8 +920,8 @@ class PLBartDecoder(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PLBartTokenizer`] or [`PLBartMultiTokenizer`] depending on the
-                checkpoint. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+                Indices can be obtained using [`PLBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -974,14 +931,12 @@ class PLBartDecoder(PLBartPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (:
-                obj:*torch.FloatTensor* of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
-            encoder_attention_mask (:
-                obj:*torch.LongTensor* of shape `(batch_size, encoder_sequence_length)`, *optional*): Mask to avoid
-                performing cross-attention on padding tokens indices of encoder input_ids. Mask values selected in `[0,
-                1]`:
+            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
+                Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
+                selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
@@ -993,31 +948,28 @@ class PLBartDecoder(PLBartPreTrainedModel):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            cross_attn_head_mask (:
-                obj:*torch.Tensor* of shape `(decoder_layers, decoder_attention_heads)`, *optional*): Mask to nullify
-                selected heads of the cross-attention modules in the decoder to avoid performing cross-attention on
-                hidden heads. Mask values selected in `[0, 1]`:
+            cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+                Mask to nullify selected heads of the cross-attention modules in the decoder to avoid performing
+                cross-attention on hidden heads. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (:
-                obj:*tuple(tuple(torch.FloatTensor))*, *optional*, returned when `use_cache=True` is passed or when
-                `config.use_cache=True`): Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each
-                tuple having 2 tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2
-                additional tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
                 cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`.
-            inputs_embeds (:
-                obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally,
-                instead of passing `input_ids` you can choose to directly pass an embedded representation. This is
-                useful if you want more control over how to convert `input_ids` indices into associated vectors than
-                the model's internal embedding lookup matrix.
+                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
+                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
+                control over how to convert `input_ids` indices into associated vectors than the model's internal
+                embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1077,9 +1029,11 @@ class PLBartDecoder(PLBartPreTrainedModel):
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
-                assert attn_mask.size()[0] == (
-                    len(self.layers)
-                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                if attn_mask.size()[0] != (len(self.layers)):
+                    raise ValueError(
+                        "The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                    )
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
@@ -1094,7 +1048,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
 
                 if use_cache:
                     logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
 
@@ -1140,8 +1094,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
 
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
-
-        # hidden_states = self.layer_norm(hidden_states) # TODO: Check if this is okay
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
