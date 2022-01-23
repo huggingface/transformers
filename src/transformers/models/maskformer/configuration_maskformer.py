@@ -14,8 +14,8 @@
 # limitations under the License.
 """ MaskFormer model configuration"""
 
-from dataclasses import dataclass
-from typing import List, Optional, Dict
+from dataclasses import dataclass, field
+from typing import List, Optional, Dict, Tuple
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,17 +28,18 @@ MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 logger = logging.get_logger(__name__)
 
+RGB = Tuple[int, int, int]
 
 @dataclass
 class ClassSpec:
-    label: int
     is_thing: bool
-    name: str
+    label: str
+    colour: RGB
 
 
 @dataclass
 class DatasetMetadata:
-    class_specs: Dict[int, ClassSpec]
+    classes: List[ClassSpec] = field(default_factory=list)
 
 
 class MaskFormerConfig(PretrainedConfig):

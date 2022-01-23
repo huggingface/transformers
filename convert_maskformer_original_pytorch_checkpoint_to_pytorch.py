@@ -3,13 +3,14 @@ from ast import Tuple
 from pathlib import Path
 from PIL import Image
 import requests
+from sqlalchemy import over
 import torch
 import torch.nn as nn
 from torch import Tensor
 from dataclasses import dataclass, field
 from pprint import pformat, pprint
 from typing import Iterator, List, Any, Dict, Optional, Set
-from src.transformers.models.maskformer.configuration_maskformer import DatasetMetadata
+from src.transformers.models.maskformer.configuration_maskformer import ClassSpec, DatasetMetadata
 from src.transformers.models.maskformer.modelling_maskformer import (
     MaskFormerConfig,
     MaskFormerForPanopticSegmentation,
@@ -28,12 +29,13 @@ import torchvision.transforms as T
 from detectron2.checkpoint import DetectionCheckpointer
 from functools import partial
 import logging
+from detectron2.data import MetadataCatalog
 
 pl.seed_everything(42)
 
 StateDict = Dict[str, Tensor]
 # easier to use pythong logging instead of going trough the hf utility logging file
-# main issues there is the polluated namespace so I can't call `logging` directly
+# main issue there is the polluted namespace so I can't call `logging` directly
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler())
@@ -99,7 +101,26 @@ def setup_cfg(args: Args):
 
 class OriginalMaskFormerConfigToOursConverter:
     def get_dataset_metadata(self, original_config: object) -> DatasetMetadata:
-        pass
+        ds_name: str = original_config.DATASETS.TEST[0]
+        logging.info(f"Getting metadata from {ds_name}")
+        metadata = MetadataCatalog.get(ds_name)
+        # thing_classes and stuff_classes are equal
+        labels = metadata.stuff_classes
+        # same for colors
+        colors = metadata.stuff_colors
+        if metadata.get('thing_dataset_id_to_contiguous_id') is not None:
+            print('thing_dataset_id_to_contiguous_id in', ds_name)
+            thing_ids = metadata.thing_dataset_id_to_contiguous_id.values()
+        else: 
+            thing_ids = list(range(0, len(labels)))
+        
+        dataset_metadata = DatasetMetadata()
+        dataset_metadata.classes = [None] * len(labels)
+        for class_id, label, color in zip(range(len(labels)), labels, colors):
+            dataset_metadata.classes[class_id] = ClassSpec(class_id in thing_ids, label, color)
+        
+        assert None not in dataset_metadata.classes
+        return dataset_metadata
 
     def __call__(self, original_config: object) -> MaskFormerConfig:
 
@@ -378,17 +399,6 @@ class MaskFormerCheckpointConverter:
             yield MaskFormerCheckpointConverter.from_original_config_and_checkpoint_file(str(config), str(checkpoint))
 
 
-# model_checkpoints_converter = {
-#     "maskformer_swin_base_IN21k_384_bs16_160k_res640": partial(
-#         MaskFormerCheckpointConverter.from_original_config_and_checkpoint_file,
-#         "/home/zuppif/Documents/Work/hugging_face/transformers/MaskFormer/configs/ade20k-150/swin/maskformer_swin_base_IN21k_384_bs16_160k_res640.yaml",
-#         "/home/zuppif/Documents/Work/hugging_face/maskformer_swin_base_IN21k_384_bs16_160k_res640.pkl",
-#     )
-# }
-
-
-# model_checkpoints_converter["maskformer_swin_base_IN21k_384_bs16_160k_res640"]()
-
 checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
 config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs")
 
@@ -396,37 +406,37 @@ config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskForme
 def test(src, dst):
     with torch.no_grad():
 
-        x = torch.zeros((1, 3, 384, 384))
+        # x = torch.zeros((1, 3, 384, 384))
 
-        src_features = src.backbone(x)
-        dst_features = dst.pixel_level_module.backbone(x.clone())
+        # src_features = src.backbone(x)
+        # dst_features = dst.pixel_level_module.backbone(x.clone())
 
-        for src_feature, dst_feature in zip(src_features.values(), dst_features):
-            assert torch.allclose(src_feature, dst_feature)
+        # for src_feature, dst_feature in zip(src_features.values(), dst_features):
+        #     assert torch.allclose(src_feature, dst_feature)
 
-        src_pixel_out = src.sem_seg_head.pixel_decoder.forward_features(src_features)
-        dst_pixel_out = dst.pixel_level_module(x)
+        # src_pixel_out = src.sem_seg_head.pixel_decoder.forward_features(src_features)
+        # dst_pixel_out = dst.pixel_level_module(x)
 
-        assert torch.allclose(src_pixel_out[0], dst_pixel_out[1])
-        # turn off aux_loss loss
-        src.sem_seg_head.predictor.aux_loss = False
-        src_transformer_out = src.sem_seg_head.predictor(src_features["res5"], src_pixel_out[0])
+        # assert torch.allclose(src_pixel_out[0], dst_pixel_out[1])
+        # # turn off aux_loss loss
+        # src.sem_seg_head.predictor.aux_loss = False
+        # src_transformer_out = src.sem_seg_head.predictor(src_features["res5"], src_pixel_out[0])
 
-        dst_queries = dst.transformer_module(dst_pixel_out[0])
-        dst_transformer_out = dst.segmentation_module(dst_queries, dst_pixel_out[1])
+        # dst_queries = dst.transformer_module(dst_pixel_out[0])
+        # dst_transformer_out = dst.segmentation_module(dst_queries, dst_pixel_out[1])
 
-        assert torch.allclose(src_transformer_out["pred_logits"], dst_transformer_out["pred_logits"], atol=1e-4)
+        # assert torch.allclose(src_transformer_out["pred_logits"], dst_transformer_out["pred_logits"], atol=1e-4)
 
-        assert torch.allclose(src_transformer_out["pred_masks"], dst_transformer_out["pred_masks"], atol=1e-4)
+        # assert torch.allclose(src_transformer_out["pred_masks"], dst_transformer_out["pred_masks"], atol=1e-4)
 
-        src_out = src([{"image": x.squeeze(0)}])
+        # src_out = src([{"image": x.squeeze(0)}])
 
-        dst_for_seg = MaskFormerForSemanticSegmentation(config=dst.config).eval()
-        dst_for_seg.model.load_state_dict(dst.state_dict())
+        # dst_for_seg = MaskFormerForSemanticSegmentation(config=dst.config).eval()
+        # dst_for_seg.model.load_state_dict(dst.state_dict())
 
-        dst_out = dst_for_seg(x)
+        # dst_out: MaskFormerForSemanticSegmentationOutput = dst_for_seg(x)
 
-        assert torch.allclose(src_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
+        # assert torch.allclose(src_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
 
         im = prepare_img()
 
@@ -443,10 +453,29 @@ def test(src, dst):
 
         x = tr(im)
 
-        src_out = src([{"image": x}])
-        dst_out = dst_for_seg(x.unsqueeze(0))
+        # src_out = src([{"image": x}])
+        # dst_out = dst_for_seg(x.unsqueeze(0))
 
-        assert torch.allclose(src_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
+        # assert torch.allclose(src_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
+
+
+        dst_for_pan_seg = MaskFormerForPanopticSegmentation(config=dst.config, overlap_mask_area_threshold=src.overlap_threshold, object_mask_threshold=src.object_mask_threshold).eval()
+        dst_for_pan_seg.model.load_state_dict(dst.state_dict())
+
+        src.panoptic_on = True
+
+        src_out = src([{"image": x}])
+        dst_out: MaskFormerForPanopticSegmentationOutput = dst_for_pan_seg(x.unsqueeze(0))
+        # NOTE not all ds supports panoptic seg
+        src_seg = src_out[0]["panoptic_seg"]
+        print(src_seg[0].sum())
+        print(dst_out.segmentation.sum())
+        assert torch.allclose(src_out[0]["panoptic_seg"][0], dst_out.segmentation, atol=1e-4)
+
+        for src_segment, dst_segment in zip(src_seg[1], dst_out.segments):
+            assert src_segment['id'] == dst_segment['id']
+            assert src_segment['category_id'] == dst_segment['category_id']
+            assert src_segment['isthing'] == dst_segment['is_thing']
 
         logging.info("✅ Test passed!")
 

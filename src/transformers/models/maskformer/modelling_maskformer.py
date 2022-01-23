@@ -48,7 +48,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ..detr import DetrConfig
 from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput
-from .configuration_maskformer import MaskFormerConfig
+from .configuration_maskformer import ClassSpec, MaskFormerConfig
 from typing import TypedDict
 
 
@@ -1588,29 +1588,31 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                 for k in range(pred_labels.shape[0]):
                     pred_class: int = pred_labels[k].item()
                     # we are checking if pred_class is in the range of the continuous values allowed
-                    is_stuff = not self.config.dataset_metadata[pred_class].is_thing
+                    class_spec: ClassSpec = self.model.config.dataset_metadata.classes[pred_class]
+                    is_stuff = not class_spec.is_thing
                     # get the mask associated with the k query
                     mask_k: Tensor = mask_labels == k
                     # create the area, since bool we just need to sum :)
                     mask_k_area: Tensor = mask_k.sum()
                     # this is the area of all the stuff in query k
-                    original_area: Tensor = (mask_probs[k] >= self.object_mask_threshold).sum()
+                    original_area: Tensor = (mask_probs[k] >= 0.5).sum()
                     # find out how much of the all area mask_k is using
-                    area_ratio = mask_k_area / original_area
+                    masks_do_exist: bool = mask_k_area > 0 and original_area > 0
 
-                    is_overlapping: bool = area_ratio.item() > self.overlap_mask_area_threshold
-
-                    # merge stuff regions
-                    if not is_stuff and is_overlapping:
-                        if pred_class in stuff_memory_list:
-                            segmentation[mask_k] = stuff_memory_list[pred_class]
-                        else:
-                            stuff_memory_list[int(pred_class)] = current_segment_id + 1
-
-                    current_segment_id += 1
-                    # then we update out mask with the current segment
-                    segmentation[mask_k] = current_segment_id
-
-                    segments.append({"id": current_segment_id, "category_id": pred_class, "is_thing": not is_stuff})
+                    if masks_do_exist:
+                        area_ratio: float = mask_k_area / original_area
+                        mask_k_is_overlapping_enough: bool = area_ratio.item() > self.overlap_mask_area_threshold
+                        
+                        if mask_k_is_overlapping_enough:
+                            # merge stuff regions
+                            if pred_class in stuff_memory_list:
+                                current_segment_id = stuff_memory_list[pred_class]
+                            else:
+                                current_segment_id += 1
+                            # then we update out mask with the current segment
+                            segmentation[mask_k] = current_segment_id
+                            segments.append({"id": current_segment_id, "category_id": pred_class, "is_thing": not is_stuff, "label": class_spec.label})
+                            if is_stuff:
+                                stuff_memory_list[pred_class] = current_segment_id
 
             return MaskFormerForPanopticSegmentationOutput(segmentation=segmentation, segments=segments, **outputs)
