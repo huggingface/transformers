@@ -15,6 +15,7 @@
 """ PyTorch DETR model."""
 
 
+import copy
 import math
 import random
 from dataclasses import dataclass
@@ -262,6 +263,10 @@ class DeformableDetrSegmentationOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+def _get_clones(module, N):
+    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
 # BELOW: utilities copied from
@@ -1178,13 +1183,56 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         position_embeddings = build_position_encoding(config)
         self.backbone = DeformableDetrConvModel(backbone, position_embeddings)
 
-        # Create projection layer
-        self.input_projection = nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
+        # Create input projection layers
+        # TODO update backbone attributes
+        if config.num_feature_levels > 1:
+            num_backbone_outs = len(backbone.strides)
+            input_proj_list = []
+            for _ in range(num_backbone_outs):
+                in_channels = backbone.num_channels[_]
+                input_proj_list.append(
+                    nn.Sequential(
+                        nn.Conv2d(in_channels, config.d_model, kernel_size=1),
+                        nn.GroupNorm(32, config.d_model),
+                    )
+                )
+            for _ in range(config.num_feature_levels - num_backbone_outs):
+                input_proj_list.append(
+                    nn.Sequential(
+                        nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1),
+                        nn.GroupNorm(32, config.d_model),
+                    )
+                )
+                in_channels = config.d_model
+            self.input_proj = nn.ModuleList(input_proj_list)
+        else:
+            self.input_proj = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Conv2d(backbone.num_channels[0], config.d_model, kernel_size=1),
+                        nn.GroupNorm(32, config.d_model),
+                    )
+                ]
+            )
 
-        self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
+        # Create projection layer (original DETR)
+        # self.input_projection = nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
+
+        if not config.two_stage:
+            self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model * 2)
 
         self.encoder = DeformableDetrEncoder(config)
         self.decoder = DeformableDetrDecoder(config)
+
+        self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
+
+        if config.two_stage:
+            self.enc_output = nn.Linear(config.d_model, config.d_model)
+            self.enc_output_norm = nn.LayerNorm(config.d_model)
+            self.pos_trans = nn.Linear(config.d_model * 2, config.d_model * 2)
+            self.pos_trans_norm = nn.LayerNorm(config.d_model * 2)
+        else:
+            self.reference_points = nn.Linear(config.d_model, 2)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1331,16 +1379,42 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
     def __init__(self, config: DeformableDetrConfig):
         super().__init__(config)
 
-        # DETR encoder-decoder model
+        # Deformable DETR encoder-decoder model
         self.model = DeformableDetrModel(config)
 
-        # Object detection heads
-        self.class_labels_classifier = nn.Linear(
-            config.d_model, config.num_labels + 1
-        )  # We add one for the "no object" class
-        self.bbox_predictor = DeformableDetrMLPPredictionHead(
+        # Detection heads on top
+        self.class_embed = nn.Linear(config.d_model, config.num_labels + 1)
+        self.bbox_embed = DeformableDetrMLPPredictionHead(
             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
         )
+
+        # if two-stage, the last class_embed and bbox_embed is for region proposal generation
+        num_pred = (config.decoder_layers + 1) if config.two_stage else config.decoder_layers
+        if config.with_box_refine:
+            self.class_embed = _get_clones(self.class_embed, num_pred)
+            self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
+            nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
+            # hack implementation for iterative bounding box refinement
+            self.model.decoder.bbox_embed = self.bbox_embed
+        else:
+            nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
+            self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
+            self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
+            self.model.decoder.bbox_embed = None
+        if config.two_stage:
+            # hack implementation for two-stage
+            # TODO define class_embed in Transformer decoder (?)
+            self.model.decoder.class_embed = self.class_embed
+            for box_embed in self.bbox_embed:
+                nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
+
+        # # Object detection heads (original DETR)
+        # self.class_labels_classifier = nn.Linear(
+        #     config.d_model, config.num_labels + 1
+        # )  # We add one for the "no object" class
+        # self.bbox_predictor = DeformableDetrMLPPredictionHead(
+        #     input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+        # )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1632,7 +1706,9 @@ class DeformableDetrForSegmentation(DeformableDetrPreTrainedModel):
 
         seg_masks = self.mask_head(projected_feature_map, bbox_mask, [features[2][0], features[1][0], features[0][0]])
 
-        pred_masks = seg_masks.view(batch_size, self.deformable_detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
+        pred_masks = seg_masks.view(
+            batch_size, self.deformable_detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1]
+        )
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:

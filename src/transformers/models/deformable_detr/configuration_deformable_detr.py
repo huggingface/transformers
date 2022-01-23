@@ -100,6 +100,18 @@ class DeformableDetrConfig(PretrainedConfig):
             Relative weight of the generalized IoU loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.1):
             Relative classification weight of the 'no-object' class in the object detection loss.
+        num_feature_levels (`int`, *optional*, defaults to 4):
+            ...
+        encoder_n_points (`int`, *optional*, defaults to 4):
+            ...
+        decoder_n_points (`int`, *optional*, defaults to 4):
+            ...
+        two_stage (`bool`, *optional*, defaults to `False`):
+            ...
+        two_stage_num_proposals (`int`, *optional*, defaults to 300):
+            ...
+        with_box_refine (`bool`, *optional*, defaults to `False`):
+            Whether to apply iterative bounding box refinement.
 
     Examples:
 
@@ -147,6 +159,11 @@ class DeformableDetrConfig(PretrainedConfig):
         position_embedding_type="sine",
         backbone="resnet50",
         dilation=False,
+        num_feature_levels=4,
+        encoder_n_points=4,
+        decoder_n_points=4,
+        two_stage=False,
+        two_stage_num_proposals=300,
         class_cost=1,
         bbox_cost=5,
         giou_cost=2,
@@ -180,6 +197,12 @@ class DeformableDetrConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
         self.dilation = dilation
+        # deformable attributes
+        self.num_feature_levels = num_feature_levels
+        self.encoder_n_points = encoder_n_points
+        self.decoder_n_points = decoder_n_points
+        self.two_stage = two_stage
+        self.two_stage_num_proposals = two_stage_num_proposals
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
