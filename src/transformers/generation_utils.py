@@ -2965,10 +2965,6 @@ class GenerationMixin:
             next_indices = (next_tokens / vocab_size).long()
             next_tokens = next_tokens % vocab_size
 
-            print("\n\nINPUT\n")
-            for one in input_ids:
-                print(tokenizer.decode(one))
-            print("\n\n\n")
             # stateless
             beam_outputs = constrained_beam_scorer.process(
                 input_ids,
@@ -2985,11 +2981,6 @@ class GenerationMixin:
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
             
-            print("\n\nOUTPUT\n")
-            for one in input_ids:
-                print(tokenizer.decode(one))
-            print("\n\n\n")
-
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
