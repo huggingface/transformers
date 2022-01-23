@@ -225,7 +225,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gptj", "GPT-J"),
         ("beit", "BEiT"),
         ("plbart", "PLBart"),
-        ("beit", "BeiT"),
         ("rembert", "RemBERT"),
         ("layoutlmv2", "LayoutLMv2"),
         ("visual_bert", "VisualBert"),

@@ -163,7 +163,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
         ("plbart", "PLBartForConditionalGeneration"),
-        ("imagegpt", "ImageGPTForCausalLM"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -219,7 +218,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         # Model for Causal LM mapping
         ("xglm", "XGLMForCausalLM"),
         ("plbart", "PLBartForCausalLM"),
-        ("imagegpt", "ImageGPTForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),

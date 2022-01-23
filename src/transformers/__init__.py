@@ -432,7 +432,6 @@ if is_tokenizers_available():
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
-    _import_structure["models.plbart"].append("PLBartTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -643,7 +642,6 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
