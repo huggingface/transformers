@@ -325,7 +325,7 @@ class PLBartAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped, past_key_value
 
-
+# Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->PLBart
 class PLBartEncoderLayer(nn.Module):
     def __init__(self, config: PLBartConfig):
         super().__init__()
@@ -352,13 +352,13 @@ class PLBartEncoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (:obj:`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+            hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
+                *(encoder_attention_heads,)*.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
         residual = hidden_states
@@ -435,20 +435,20 @@ class PLBartDecoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (:obj:`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
             encoder_hidden_states (:
-                obj:`torch.FloatTensor`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
-            cross_attn_layer_head_mask (:obj:`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size `(decoder_attention_heads,)`.
-            past_key_value (:obj:`Tuple(torch.FloatTensor)`): cached past key and value projection states
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                obj:*torch.FloatTensor*): cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
+                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
+                *(encoder_attention_heads,)*.
+            cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
+                size *(decoder_attention_heads,)*.
+            past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
         residual = hidden_states
@@ -568,19 +568,19 @@ class PLBartPreTrainedModel(PreTrainedModel):
 
 
 PLBART_START_DOCSTRING = r"""
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
     subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.PLBartConfig`):
+        config ([`PLBartConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
-            :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 PLBART_GENERATION_EXAMPLE = r"""
@@ -588,142 +588,143 @@ PLBART_GENERATION_EXAMPLE = r"""
 
         >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration, PLBartConfig
 
-        >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base') >>> tokenizer =
-        PLBartTokenizer.from_pretrained('uclanlp/plbart-base', src_lang='java', tgt_lang='java')
+        >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base')
+        >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base', src_lang='java', tgt_lang='java')
 
-        >>> METHOD_TO_FILL = "public static main (String args[0]) { data=Date(); System.out. String.format("Current
-        Date : % tc", ));}" >>> inputs = tokenizer([METHOD_TO_FILL], max_length=1024, return_tensors='pt')
+        >>> METHOD_TO_FILL = "public static main (String args[0]) { data=Date(); System.out. String.format("Current Date : % tc", ));}"
+        >>> inputs = tokenizer([METHOD_TO_FILL], max_length=1024, return_tensors='pt')
 
-        >>> # Generate Filled Code >>> generated_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5,
-        early_stopping=True) >>> print([tokenizer.decode(g, skip_special_tokens=True,
-        clean_up_tokenization_spaces=False) for g in generated_ids])
+        >>> # Generate Filled Code
+        >>> generated_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
+        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in generated_ids])
 
     Mask-filling example::
 
-        >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration >>> tokenizer =
-        PLBartTokenizer.from_pretrained('uclanlp/plbart-base') >>> # en_XX is the language symbol id <LID> for English
+        >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration 
+        >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-base') 
+        >>> # en_XX is the language symbol id <LID> for English
         >>> TXT = "</s> Is 0 the <mask> Fibonacci <mask> ? </s> en_XX"
 
-        >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base') >>> input_ids =
-        tokenizer([TXT], add_special_tokens=False, return_tensors='pt')['input_ids'] >>> logits =
-        model(input_ids).logits
+        >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base')
+        >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors='pt')['input_ids']
+        >>> logits = model(input_ids).logits
 
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item() >>> probs = logits[0,
-        masked_index].softmax(dim=0) >>> values, predictions = probs.topk(5)
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+        >>> probs = logits[0, masked_index].softmax(dim=0)
+        >>> values, predictions = probs.topk(5)
 
         >>> tokenizer.decode(predictions).split()
 """
 
 PLBART_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.PLBartTokenizer` or
-            :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`PLBartTokenizer`] or
+            [`PLBartMultiTokenizer`] depending on the checkpoint. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.PLBartTokenizer` or
-            :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`PLBartTokenizer`] or
+            [`PLBartMultiTokenizer`] depending on the checkpoint. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            PLBart uses a specific language id token as the starting token for :obj:`decoder_input_ids` generation that
-            varies according to source and target language, *e.g.* 50003 for `en_XX`, and 50001 for `java`. If
-            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
-            :obj:`past_key_values`).
+            PLBart uses a specific language id token as the starting token for `decoder_input_ids` generation that
+            varies according to source and target language, *e.g.* 50003 for *en_XX*, and 50001 for *java*. If
+            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
 
-            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
+            For translation and summarization training, `decoder_input_ids` should be provided. If no
+            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to
             the right for denoising pre-training following the paper.
         decoder_attention_mask (:
-            obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`): Default behavior:
-            generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will also be used by
+            obj:*torch.LongTensor* of shape `(batch_size, target_sequence_length)`, *optional*): Default behavior:
+            generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also be used by
             default.
-        head_mask (:obj:`torch.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
+        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        decoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
+        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
         cross_attn_head_mask (:
-            obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`): Mask to nullify
-            selected heads of the cross-attention modules in the decoder. Mask values selected in ``[0, 1]``:
+            obj:*torch.Tensor* of shape `(decoder_layers, decoder_attention_heads)`, *optional*): Mask to nullify
+            selected heads of the cross-attention modules in the decoder. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
-            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
-            `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*:
+            `attentions`) `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`,
+            *optional*) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
             cross-attention of the decoder.
         past_key_values (:
-            obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when
-            ``config.use_cache=True``): Tuple of :obj:`tuple(torch.FloatTensor)` of length :obj:`config.n_layers`, with
-            each tuple having 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`)
-            and 2 additional tensors of shape :obj:`(batch_size, num_heads, encoder_sequence_length,
-            embed_size_per_head)`.
+            obj:*tuple(tuple(torch.FloatTensor))*, *optional*, returned when `use_cache=True` is passed or when
+            `config.use_cache=True`): Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with
+            each tuple having 2 tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+            and 2 additional tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential decoding.
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
+            instead of all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`.
         inputs_embeds (:
-            obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
+            obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:
-            obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
-            representation. If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_inputs_embeds`
-            have to be input (see :obj:`past_key_values`). This is useful if you want more control over how to convert
-            :obj:`decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            obj:*torch.FloatTensor* of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds`
+            have to be input (see `past_key_values`). This is useful if you want more control over how to convert
+            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
 
-            If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset, :obj:`decoder_inputs_embeds`
-            takes the value of :obj:`inputs_embeds`.
-        use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`).
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds`
+            takes the value of `inputs_embeds`.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
+            decoding (see `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 class PLBartEncoder(PLBartPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    :class:`PLBartEncoderLayer`.
+    [`PLBartEncoderLayer`].
 
     Args:
         config: PLBartConfig
@@ -769,42 +770,42 @@ class PLBartEncoder(PLBartPreTrainedModel):
     ):
         r"""
         Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.PLBartTokenizer` or
-                :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                Indices can be obtained using [`PLBartTokenizer`] or
+                [`PLBartMultiTokenizer`] depending on the checkpoint. See
+                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`]
                 for details.
 
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+                [What are input IDs?](../glossary#input-ids)
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`torch.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
+                [What are attention masks?](../glossary#attention-mask)
+            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
             inputs_embeds (:
-                obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
+                obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
+                representation. This is useful if you want more control over how to convert `input_ids` indices
                 into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -894,7 +895,7 @@ class PLBartEncoder(PLBartPreTrainedModel):
 
 class PLBartDecoder(PLBartPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`PLBartDecoderLayer`
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`PLBartDecoderLayer`]
 
     Args:
         config: PLBartConfig
@@ -967,78 +968,76 @@ class PLBartDecoder(PLBartPreTrainedModel):
     ):
         r"""
         Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.PLBartTokenizer` or
-                :class:`~transformers.PLBartMultiTokenizer` depending on the checkpoint. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                Indices can be obtained using [`PLBartTokenizer`] or
+                [`PLBartMultiTokenizer`] depending on the checkpoint. See
+                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`]
                 for details.
 
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+                [What are input IDs?](../glossary#input-ids)
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
+                [What are attention masks?](../glossary#attention-mask)
             encoder_hidden_states (:
-                obj:`torch.FloatTensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`,
-                `optional`): Sequence of hidden-states at the output of the last layer of the encoder. Used in the
+                obj:*torch.FloatTensor* of shape `(batch_size, encoder_sequence_length, hidden_size)`,
+                *optional*): Sequence of hidden-states at the output of the last layer of the encoder. Used in the
                 cross-attention of the decoder.
             encoder_attention_mask (:
-                obj:`torch.LongTensor` of shape :obj:`(batch_size, encoder_sequence_length)`, `optional`): Mask to
+                obj:*torch.LongTensor* of shape `(batch_size, encoder_sequence_length)`, *optional*): Mask to
                 avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values selected
-                in ``[0, 1]``:
+                in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
+                [What are attention masks?](../glossary#attention-mask)
+            head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
             cross_attn_head_mask (:
-                obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`): Mask to
+                obj:*torch.Tensor* of shape `(decoder_layers, decoder_attention_heads)`, *optional*): Mask to
                 nullify selected heads of the cross-attention modules in the decoder to avoid performing
-                cross-attention on hidden heads. Mask values selected in ``[0, 1]``:
+                cross-attention on hidden heads. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
             past_key_values (:
-                obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when
-                ``config.use_cache=True``): Tuple of :obj:`tuple(torch.FloatTensor)` of length :obj:`config.n_layers`,
-                with each tuple having 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length,
-                embed_size_per_head)`) and 2 additional tensors of shape :obj:`(batch_size, num_heads,
-                encoder_sequence_length, embed_size_per_head)`.
+                obj:*tuple(tuple(torch.FloatTensor))*, *optional*, returned when `use_cache=True` is passed or when
+                `config.use_cache=True`): Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`,
+                with each tuple having 2 tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see :obj:`past_key_values` input) to speed up sequential
+                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential
                 decoding.
 
-                If :obj:`past_key_values` are used, the user can optionally input only the last
-                :obj:`decoder_input_ids` (those that don't have their past key value states given to this model) of
-                shape :obj:`(batch_size, 1)` instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size,
+                If `past_key_values` are used, the user can optionally input only the last
+                `decoder_input_ids` (those that don't have their past key value states given to this model) of
+                shape `(batch_size, 1)` instead of all ``decoder_input_ids``` of shape `(batch_size,
                 sequence_length)`.
             inputs_embeds (:
-                obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
+                obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
+                representation. This is useful if you want more control over how to convert `input_ids` indices
                 into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1362,10 +1361,9 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
-            config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ..., config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
 
