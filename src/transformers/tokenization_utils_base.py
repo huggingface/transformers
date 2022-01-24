@@ -50,7 +50,7 @@ from .file_utils import (
     add_end_docstrings,
     cached_path,
     copy_func,
-    get_list_of_files,
+    get_file_from_repo,
     hf_bucket_url,
     is_flax_available,
     is_offline_mode,
@@ -1649,12 +1649,26 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             vocab_files[file_id] = pretrained_model_name_or_path
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
-            fast_tokenizer_file = get_fast_tokenizer_file(
+
+            # Try to get the tokenizer config to see if there are versioned tokenizer files.
+            fast_tokenizer_file = FULL_TOKENIZER_FILE
+            resolved_config_file = get_file_from_repo(
                 pretrained_model_name_or_path,
-                revision=revision,
+                TOKENIZER_CONFIG_FILE,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
                 use_auth_token=use_auth_token,
+                revision=revision,
                 local_files_only=local_files_only,
             )
+            if resolved_config_file is not None:
+                with open(resolved_config_file, encoding="utf-8") as reader:
+                    tokenizer_config = json.load(reader)
+                    if "fast_tokenizer_files" in tokenizer_config:
+                        fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+
             additional_files_names = {
                 "added_tokens_file": ADDED_TOKENS_FILE,
                 "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
