@@ -1357,7 +1357,7 @@ class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall, facebook/bart-large->facebook/blenderbot_small-90M
 class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
@@ -1479,8 +1479,10 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
         ```python
         >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForCausalLM
 
-        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/bart-large")
-        >>> model = BlenderbotSmallForCausalLM.from_pretrained("facebook/bart-large", add_cross_attention=False)
+        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+        >>> model = BlenderbotSmallForCausalLM.from_pretrained(
+        ...     "facebook/blenderbot_small-90M", add_cross_attention=False
+        ... )
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

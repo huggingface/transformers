@@ -25,10 +25,15 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 from packaging import version
 
+from requests import HTTPError
+
 from . import __version__
 from .file_utils import (
     CONFIG_NAME,
+    EntryNotFoundError,
     PushToHubMixin,
+    RepositoryNotFoundError,
+    RevisionNotFoundError,
     cached_path,
     copy_func,
     get_list_of_files,
@@ -520,8 +525,6 @@ class PretrainedConfig(PushToHubMixin):
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
         [`PretrainedConfig`] using `from_dict`.
 
-
-
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
@@ -578,30 +581,51 @@ class PretrainedConfig(PushToHubMixin):
                 use_auth_token=use_auth_token,
                 user_agent=user_agent,
             )
-            # Load config dict
-            config_dict = cls._dict_from_json_file(resolved_config_file)
 
+        except RepositoryNotFoundError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier listed on "
+                "'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token having "
+                "permission to this repo with `use_auth_token` or log in with `huggingface-cli login` and pass "
+                "`use_auth_token=True`."
+            )
+        except RevisionNotFoundError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
+                f"model name. Check the model page at 'https://huggingface.co/{pretrained_model_name_or_path}' for "
+                "available revisions."
+            )
+        except EntryNotFoundError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"{pretrained_model_name_or_path} does not appear to have a file named {configuration_file}."
+            )
+        except HTTPError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
+                f"{pretrained_model_name_or_path} is not the path to a directory conaining a {configuration_file} "
+                "file.\nCheckout your internet connection or see how to run the library in offline mode at "
+                "'https://huggingface.co/docs/transformers/installation#offline-mode'."
+            )
         except EnvironmentError as err:
             logger.error(err)
-            msg = (
-                f"Can't load config for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
-                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
-                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {CONFIG_NAME} file\n\n"
+            raise EnvironmentError(
+                f"Can't load config for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                f"containing a {configuration_file} file"
             )
 
-            if revision is not None:
-                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
-
-            raise EnvironmentError(msg)
-
+        try:
+            # Load config dict
+            config_dict = cls._dict_from_json_file(resolved_config_file)
         except (json.JSONDecodeError, UnicodeDecodeError):
-            msg = (
-                f"Couldn't reach server at '{config_file}' to download configuration file or "
-                "configuration file is not a valid JSON file. "
-                f"Please check network or file content here: {resolved_config_file}."
+            raise EnvironmentError(
+                f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file."
             )
-            raise EnvironmentError(msg)
 
         if resolved_config_file == config_file:
             logger.info(f"loading configuration file {config_file}")
@@ -842,9 +866,13 @@ def get_configuration_file(
         `str`: The configuration file to use.
     """
     # Inspect all files from the repo/folder.
-    all_files = get_list_of_files(
-        path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
-    )
+    try:
+        all_files = get_list_of_files(
+            path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
+        )
+    except Exception:
+        return FULL_CONFIGURATION_FILE
+
     configuration_files_map = {}
     for file_name in all_files:
         search = _re_configuration_file.search(file_name)

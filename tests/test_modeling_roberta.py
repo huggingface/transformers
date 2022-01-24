@@ -485,7 +485,8 @@ class RobertaModelIntegrationTest(TestCasePlus):
         model = RobertaForMaskedLM.from_pretrained("roberta-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            output = model(input_ids)[0]
         expected_shape = torch.Size((1, 11, 50265))
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
@@ -504,7 +505,8 @@ class RobertaModelIntegrationTest(TestCasePlus):
         model = RobertaModel.from_pretrained("roberta-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            output = model(input_ids)[0]
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
             [[[-0.0231, 0.0782, 0.0074], [-0.1854, 0.0540, -0.0175], [0.0548, 0.0799, 0.1687]]]
@@ -521,7 +523,8 @@ class RobertaModelIntegrationTest(TestCasePlus):
         model = RobertaForSequenceClassification.from_pretrained("roberta-large-mnli")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            output = model(input_ids)[0]
         expected_shape = torch.Size((1, 3))
         self.assertEqual(output.shape, expected_shape)
         expected_tensor = torch.tensor([[-0.9469, 0.3913, 0.5118]])
