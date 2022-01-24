@@ -42,6 +42,7 @@ from transformers import (
     AutoModelForTokenClassification,
     AutoTokenizer,
     DataCollatorForTokenClassification,
+    PretrainedConfig,
     SchedulerType,
     default_data_collator,
     get_scheduler,
@@ -321,20 +322,12 @@ def main():
 
     if isinstance(features[label_column_name].feature, ClassLabel):
         label_list = features[label_column_name].feature.names
-        # No need to convert the labels since they are already ints.
-        label_to_id = {i: i for i in range(len(label_list))}
+        label_keys = list(range(len(label_list)))
     else:
         label_list = get_label_list(raw_datasets["train"][label_column_name])
-        label_to_id = {l: i for i, l in enumerate(label_list)}
-    num_labels = len(label_list)
+        label_keys = label_list
 
-    # Map that sends B-Xxx label to its I-Xxx counterpart
-    b_to_i_label = []
-    for idx, label in enumerate(label_list):
-        if label.startswith("B-") and label.replace("B-", "I-") in label_list:
-            b_to_i_label.append(label_list.index(label.replace("B-", "I-")))
-        else:
-            b_to_i_label.append(idx)
+    num_labels = len(label_list)
 
     # Load pretrained model and tokenizer
     #
@@ -371,6 +364,30 @@ def main():
         model = AutoModelForTokenClassification.from_config(config)
 
     model.resize_token_embeddings(len(tokenizer))
+
+    if model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
+        label_name_to_id = {k: v for k, v in model.config.label2id.items()}
+        if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
+            label_to_id = {k: int(label_name_to_id[k]) for k in label_keys}
+        else:
+            logger.warning(
+                "Your model seems to have been trained with labels, but they don't match the dataset: ",
+                f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
+                "\nIgnoring the model labels as a result.",
+            )
+    else:
+        label_to_id = {k: i for i, k in enumerate(label_keys)}
+
+    model.config.label2id = label_to_id
+    model.config.id2label = {i: l for l, i in label_to_id.items()}
+
+    # Map that sends B-Xxx label to its I-Xxx counterpart
+    b_to_i_label = []
+    for idx, label in enumerate(label_list):
+        if label.startswith("B-") and label.replace("B-", "I-") in label_list:
+            b_to_i_label.append(label_list.index(label.replace("B-", "I-")))
+        else:
+            b_to_i_label.append(idx)
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.
