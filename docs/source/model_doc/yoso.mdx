@@ -35,10 +35,10 @@ Tips:
 
 - The YOSO attention algorithm is implemented through custom CUDA kernels, functions written in CUDA C++ that can be executed multiple times
 in parallel on a GPU.
-- The kernels provide a fast_hash function, which approximates the random projections of the queries and keys using the Fast Hadamard Transform. Using these
-hash codes, the lsh_cumulation function approximates self-attention via LSH-based Bernoulli sampling.
+- The kernels provide a `fast_hash` function, which approximates the random projections of the queries and keys using the Fast Hadamard Transform. Using these
+hash codes, the `lsh_cumulation` function approximates self-attention via LSH-based Bernoulli sampling.
 - To ensure that the kernels are compiled successfuly, the user must install the correct version of PyTorch and cudatoolkit. Alternatively,
-the user may set use_expectation = True to use YOSO-E, which does not require compiling CUDA kernels.
+the user may set `config.use_expectation = True` to use YOSO-E, which does not require compiling CUDA kernels.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/yoso_architecture.jpg"
 alt="drawing" width="600"/> 

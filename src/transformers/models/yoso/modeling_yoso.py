@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "uw-madison/yoso-4096"
 _CONFIG_FOR_DOC = "YosoConfig"
-_TOKENIZER_FOR_DOC = "NystromformerTokenizer"
+_TOKENIZER_FOR_DOC = "AutoTokenizer"
 
 YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uw-madison/yoso-4096",
@@ -452,7 +452,7 @@ class YosoSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Yoso
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class YosoSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
