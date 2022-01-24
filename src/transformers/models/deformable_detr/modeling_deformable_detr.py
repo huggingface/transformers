@@ -25,6 +25,8 @@ from typing import Dict, List, Optional, Tuple
 import torch
 from torch import Tensor, nn
 
+import MultiScaleDeformableAttention as MSDA
+
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
