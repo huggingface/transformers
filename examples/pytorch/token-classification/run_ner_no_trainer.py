@@ -323,12 +323,9 @@ def main():
     if isinstance(features[label_column_name].feature, ClassLabel):
         label_list = features[label_column_name].feature.names
         label_keys = list(range(len(label_list)))
-        # # No need to convert the labels since they are already ints.
-        # label_to_id = {i: i for i in range(len(label_list))}
     else:
         label_list = get_label_list(raw_datasets["train"][label_column_name])
         label_keys = label_list
-        # label_to_id = {l: i for i, l in enumerate(label_list)}
 
     num_labels = len(label_list)
 
