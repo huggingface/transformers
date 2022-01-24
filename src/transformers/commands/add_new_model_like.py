@@ -1000,7 +1000,7 @@ def add_model_to_auto_classes(
 
 DOC_OVERVIEW_TEMPLATE = """## Overview
 
-The {model_name} model was proposed in [<INSERT PAPER NAME HERE>(<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The {model_name} model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -1011,7 +1011,7 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
+This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 """
