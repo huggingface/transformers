@@ -518,6 +518,10 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertEqual(logits.shape, (1, 1498, 32))
 
+    @unittest.skip(reason="Feed forward chunking is not implemented")
+    def test_feed_forward_chunking(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model = UniSpeechModel.from_pretrained("microsoft/unispeech-large-1500h-cv")

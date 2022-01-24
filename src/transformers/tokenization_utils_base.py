@@ -31,13 +31,16 @@ from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequenc
 import numpy as np
 from packaging import version
 
-import requests
+from requests import HTTPError
 
 from . import __version__
 from .file_utils import (
+    EntryNotFoundError,
     ExplicitEnum,
     PaddingStrategy,
     PushToHubMixin,
+    RepositoryNotFoundError,
+    RevisionNotFoundError,
     TensorType,
     _is_jax,
     _is_numpy,
@@ -1704,9 +1707,28 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     else:
                         raise error
 
-                except requests.exceptions.HTTPError as err:
+                except RepositoryNotFoundError as err:
+                    logger.error(err)
+                    raise EnvironmentError(
+                        f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
+                        "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
+                        "pass a token having permission to this repo with `use_auth_token` or log in with "
+                        "`huggingface-cli login` and pass `use_auth_token=True`."
+                    )
+                except RevisionNotFoundError as err:
+                    logger.error(err)
+                    raise EnvironmentError(
+                        f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
+                        "for this model name. Check the model page at "
+                        f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
+                    )
+                except EntryNotFoundError:
+                    logger.debug(f"{pretrained_model_name_or_path} does not contain a file named {file_path}.")
+                    resolved_vocab_files[file_id] = None
+
+                except HTTPError as err:
                     if "404 Client Error" in str(err):
-                        logger.debug(err)
+                        logger.debug(f"Connection problem to access {file_path}.")
                         resolved_vocab_files[file_id] = None
                     else:
                         raise err
@@ -1718,17 +1740,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
-            msg = (
-                f"Can't load tokenizer for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
-                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
-                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
+            raise EnvironmentError(
+                f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                f"containing all relevant tokenizer files."
             )
-
-            if revision is not None:
-                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
-
-            raise EnvironmentError(msg)
 
         for file_id, file_path in vocab_files.items():
             if file_id not in resolved_vocab_files:
@@ -3504,9 +3521,13 @@ def get_fast_tokenizer_file(
         `str`: The tokenizer file to use.
     """
     # Inspect all files from the repo/folder.
-    all_files = get_list_of_files(
-        path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
-    )
+    try:
+        all_files = get_list_of_files(
+            path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
+        )
+    except Exception:
+        return FULL_TOKENIZER_FILE
+
     tokenizer_files_map = {}
     for file_name in all_files:
         search = _re_tokenizer_file.search(file_name)

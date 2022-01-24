@@ -60,7 +60,7 @@
   - local: debugging
     title: Debugging
   - local: serialization
-    title: Exporting transformers models
+    title: Exporting 🤗 Transformers models
   - local: pr_checks
     title: Checks on a Pull Request
   title: Advanced guides
@@ -86,6 +86,8 @@
       title: Logging
     - local: main_classes/model
       title: Models
+    - local: main_classes/onnx
+      title: ONNX
     - local: main_classes/optimizer_schedules
       title: Optimization
     - local: main_classes/output
@@ -214,6 +216,8 @@
       title: MPNet
     - local: model_doc/mt5
       title: MT5
+    - local: model_doc/nystromformer
+      title: Nyströmformer
     - local: model_doc/openai-gpt
       title: OpenAI GPT
     - local: model_doc/gpt2
@@ -236,6 +240,8 @@
       title: QDQBert
     - local: model_doc/rag
       title: RAG
+    - local: model_doc/realm
+      title: REALM
     - local: model_doc/reformer
       title: Reformer
     - local: model_doc/rembert
@@ -262,6 +268,8 @@
       title: Splinter
     - local: model_doc/squeezebert
       title: SqueezeBERT
+    - local: model_doc/swin
+      title: Swin Transformer
     - local: model_doc/t5
       title: T5
     - local: model_doc/t5v1.1
@@ -276,12 +284,16 @@
       title: UniSpeech
     - local: model_doc/unispeech-sat
       title: UniSpeech-SAT
+    - local: model_doc/vilt
+      title: ViLT
     - local: model_doc/vision-encoder-decoder
       title: Vision Encoder Decoder Models
     - local: model_doc/vision-text-dual-encoder
       title: Vision Text Dual Encoder
     - local: model_doc/vit
       title: Vision Transformer (ViT)
+    - local: model_doc/vit_mae
+      title: ViTMAE
     - local: model_doc/visual_bert
       title: VisualBERT
     - local: model_doc/wav2vec2

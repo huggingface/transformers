@@ -41,7 +41,8 @@ _re_args = re.compile("^\s*(Args?|Arguments?|Params?|Parameters?):\s*$")
 _re_returns = re.compile("^\s*Returns?:\s*$")
 # Matches the special tag to ignore some paragraphs.
 _re_doc_ignore = re.compile(r"(\.\.|#)\s*docstyle-ignore")
-
+# Re pattern that matches <Tip>, </Tip> and <Tip warning={true}> blocks.
+_re_tip = re.compile("^\s*</?Tip(>|\s+warning={true}>)\s*$")
 
 DOCTEST_PROMPTS = [">>>", "..."]
 
@@ -275,6 +276,8 @@ def style_docstring(docstring, max_len):
         new_paragraph = new_paragraph or list_search is not None
         # Code block beginning
         new_paragraph = new_paragraph or code_search is not None
+        # Beginning/end of tip
+        new_paragraph = new_paragraph or _re_tip.search(line)
 
         # In this case, we treat the current paragraph
         if not in_code and new_paragraph and current_paragraph is not None and len(current_paragraph) > 0:
@@ -318,6 +321,14 @@ def style_docstring(docstring, max_len):
         elif _re_args.search(line):
             new_lines.append(line)
             param_indent = find_indent(lines[idx + 1])
+        elif _re_tip.search(line):
+            # Add a new line before if not present
+            if not is_empty_line(new_lines[-1]):
+                new_lines.append("")
+            new_lines.append(line)
+            # Add a new line after if not present
+            if idx < len(lines) - 1 and not is_empty_line(lines[idx + 1]):
+                new_lines.append("")
         elif current_paragraph is None or find_indent(line) != current_indent:
             indent = find_indent(line)
             # Special behavior for parameters intros.
@@ -356,9 +367,34 @@ def style_docstring(docstring, max_len):
     return "\n".join(new_lines), "\n\n".join(black_errors)
 
 
+def style_docstrings_in_code(code, max_len=119):
+    """
+    Style all docstrings in some code.
+
+    Args:
+        code (`str`): The code in which we want to style the docstrings.
+        max_len (`int`): The maximum number of characters per line.
+
+    Returns:
+        `Tuple[str, str]`: A tuple with the clean code and the black errors (if any)
+    """
+    # fmt: off
+    splits = code.split('\"\"\"')
+    splits = [
+        (s if i % 2 == 0 or _re_doc_ignore.search(splits[i - 1]) is not None else style_docstring(s, max_len=max_len))
+        for i, s in enumerate(splits)
+    ]
+    black_errors = "\n\n".join([s[1] for s in splits if isinstance(s, tuple) and len(s[1]) > 0])
+    splits = [s[0] if isinstance(s, tuple) else s for s in splits]
+    clean_code = '\"\"\"'.join(splits)
+    # fmt: on
+
+    return clean_code, black_errors
+
+
 def style_file_docstrings(code_file, max_len=119, check_only=False):
     """
-    Style all docstrings in  a given file.
+    Style all docstrings in a given file.
 
     Args:
         code_file (`str` or `os.PathLike`): The file in which we want to style the docstring.
@@ -371,16 +407,8 @@ def style_file_docstrings(code_file, max_len=119, check_only=False):
     """
     with open(code_file, "r", encoding="utf-8", newline="\n") as f:
         code = f.read()
-    # fmt: off
-    splits = code.split('\"\"\"')
-    splits = [
-        (s if i % 2 == 0 or _re_doc_ignore.search(splits[i - 1]) is not None else style_docstring(s, max_len=max_len))
-        for i, s in enumerate(splits)
-    ]
-    black_errors = "\n\n".join([s[1] for s in splits if isinstance(s, tuple) and len(s[1]) > 0])
-    splits = [s[0] if isinstance(s, tuple) else s for s in splits]
-    clean_code = '\"\"\"'.join(splits)
-    # fmt: on
+
+    clean_code, black_errors = style_docstrings_in_code(code, max_len=max_len)
 
     diff = clean_code != code
     if not check_only and diff:
@@ -433,6 +461,9 @@ def style_mdx_file(mdx_file, max_len=119, check_only=False):
             current_code.append(line)
         else:
             new_lines.append(line)
+
+    if in_code:
+        raise ValueError(f"There was a problem when styling {mdx_file}. A code block is opened without being closed.")
 
     clean_content = "\n".join(new_lines)
     diff = clean_content != content

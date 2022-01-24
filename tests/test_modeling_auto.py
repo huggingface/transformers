@@ -389,3 +389,30 @@ class AutoModelTest(unittest.TestCase):
             ):
                 if NewModelConfig in mapping._extra_content:
                     del mapping._extra_content[NewModelConfig]
+
+    def test_repo_not_found(self):
+        with self.assertRaisesRegex(
+            EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"
+        ):
+            _ = AutoModel.from_pretrained("bert-base")
+
+    def test_revision_not_found(self):
+        with self.assertRaisesRegex(
+            EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
+        ):
+            _ = AutoModel.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
+
+    def test_model_file_not_found(self):
+        with self.assertRaisesRegex(
+            EnvironmentError,
+            "hf-internal-testing/config-no-model does not appear to have a file named pytorch_model.bin",
+        ):
+            _ = AutoModel.from_pretrained("hf-internal-testing/config-no-model")
+
+    def test_model_from_tf_suggestion(self):
+        with self.assertRaisesRegex(EnvironmentError, "Use `from_tf=True` to load this model"):
+            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
+
+    def test_model_from_flax_suggestion(self):
+        with self.assertRaisesRegex(EnvironmentError, "Use `from_flax=True` to load this model"):
+            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
