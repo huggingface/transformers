@@ -1953,7 +1953,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         outputs = model.generate(input_ids=input_ids)
 
         transition_scores = model.compute_transition_beam_scores(
-            outputs.sequences, outputs.scores, outputs.beam_indices, None, outputs.sequences_scores
+            outputs.sequences, outputs.scores, outputs.beam_indices
         )
         transition_scores_sum = transition_scores.sum(-1)
 
