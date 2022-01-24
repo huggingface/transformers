@@ -304,10 +304,11 @@ def main():
 
     num_labels = len(label_list)
 
-    # Load pretrained vocab, model and tokenizer
+    # Load pretrained model and tokenizer
     #
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
+    # download model & vocab.
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
