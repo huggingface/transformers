@@ -9,7 +9,7 @@ on:
       - "src/**"
       - "tests/**"
       - ".github/**"
-    types: [assigned, opened, synchronize, reopened]
+    types: [opened, synchronize, reopened]
 
 jobs:
   run_tests_templates:
