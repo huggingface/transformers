@@ -39,7 +39,7 @@ Tips:
 in parallel on a GPU.
 - The kernels provide a `fast_hash` function, which approximates the random projections of the queries and keys using the Fast Hadamard Transform. Using these
 hash codes, the `lsh_cumulation` function approximates self-attention via LSH-based Bernoulli sampling.
-- To use the custom kernels, the user should set `config.use_expectation = False`. To ensure that the kernels are compiled successfuly, 
+- To use the custom kernels, the user should set `config.use_expectation = False`. To ensure that the kernels are compiled successfully, 
 the user must install the correct version of PyTorch and cudatoolkit. By default, `config.use_expectation = True`, which uses YOSO-E and 
 does not require compiling CUDA kernels.
 
