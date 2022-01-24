@@ -2290,6 +2290,12 @@ def get_list_of_files(
         local_files_only (`bool`, *optional*, defaults to `False`):
             Whether or not to only rely on local files and not to attempt to download any files.
 
+    <Tip warning={true}>
+
+    This API is not optimized, so calling it a lot may result in connection errors.
+
+    </Tip>
+
     Returns:
         `List[str]`: The list of files available in `path_or_repo`.
     """
