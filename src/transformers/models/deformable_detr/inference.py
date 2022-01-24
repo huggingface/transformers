@@ -2,7 +2,6 @@ import torch
 
 from transformers import DeformableDetrConfig, DeformableDetrModel
 
-
 # import MultiScaleDeformableAttention as MSDA
 
 config = DeformableDetrConfig()
