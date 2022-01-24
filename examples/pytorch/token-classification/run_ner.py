@@ -304,7 +304,10 @@ def main():
 
     num_labels = len(label_list)
 
-    # download model & vocab.
+    # Load pretrained vocab, model and tokenizer
+    #
+    # Distributed training:
+    # The .from_pretrained methods guarantee that only one local process can concurrently
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
@@ -352,7 +355,7 @@ def main():
 
     if model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
         # Some have all caps in their config, some don't.
-        label_name_to_id = {k.lower(): v for k, v in model.config.label2id.items()}
+        label_name_to_id = {k: v for k, v in model.config.label2id.items()}
         if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
             label_to_id = {k: int(label_name_to_id[k]) for k in label_keys}
         else:
