@@ -2,8 +2,12 @@ import enum
 
 from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
-from ..file_utils import add_end_docstrings
+from ..file_utils import add_end_docstrings, is_tf_available
 from .base import PIPELINE_INIT_ARGS, Pipeline
+
+
+if is_tf_available():
+    import tensorflow as tf
 
 
 class ReturnType(enum.Enum):
@@ -208,7 +212,10 @@ class TextGenerationPipeline(Pipeline):
         prompt_text = model_inputs.pop("prompt_text")
         generated_sequence = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
         out_b = generated_sequence.shape[0]
-        generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
+        if self.framework == "pt":
+            generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
+        elif self.framework == "tf":
+            generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
         return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text}
 
     def postprocess(self, model_outputs, return_type=ReturnType.FULL_TEXT, clean_up_tokenization_spaces=True):

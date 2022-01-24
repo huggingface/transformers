@@ -155,12 +155,15 @@ class Text2TextGenerationPipeline(Pipeline):
         self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         out_b = output_ids.shape[0]
-        output_ids = output_ids.reshape(in_b, out_b // in_b, *output_ids.shape[1:])
+        if self.framework == "pt":
+            output_ids = output_ids.reshape(in_b, out_b // in_b, *output_ids.shape[1:])
+        elif self.framework == "tf":
+            output_ids = tf.reshape(output_ids, (in_b, out_b // in_b, *output_ids.shape[1:]))
         return {"output_ids": output_ids}
 
     def postprocess(self, model_outputs, return_type=ReturnType.TEXT, clean_up_tokenization_spaces=False):
         records = []
-        for output_ids in model_outputs["output_ids"]:
+        for output_ids in model_outputs["output_ids"][0]:
             if return_type == ReturnType.TENSORS:
                 record = {f"{self.return_name}_token_ids": model_outputs}
             elif return_type == ReturnType.TEXT:
