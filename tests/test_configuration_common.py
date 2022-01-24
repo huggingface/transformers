@@ -334,18 +334,18 @@ class ConfigurationVersioningTest(unittest.TestCase):
             self.assertEqual(new_configuration.hidden_size, 768)
 
     def test_repo_versioning_before(self):
-        # This repo has two configuration files, one for v5.0.0 and above with an added token, one for versions lower.
-        repo = "microsoft/layoutxlm-base"
+        # This repo has two configuration files, one for v4.0.0 and above with a different hidden size.
+        repo = "hf-internal-testing/test-two-configs"
 
         import transformers as new_transformers
 
-        new_transformers.configuration_utils.__version__ = "v5.0.0"
+        new_transformers.configuration_utils.__version__ = "v4.0.0"
         new_configuration = new_transformers.models.auto.AutoConfig.from_pretrained(repo)
-        self.assertEqual(new_configuration.tokenizer_class, None)
+        self.assertEqual(new_configuration.hidden_size, 2)
 
         # Testing an older version by monkey-patching the version in the module it's used.
         import transformers as old_transformers
 
         old_transformers.configuration_utils.__version__ = "v3.0.0"
         old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
-        self.assertEqual(old_configuration.tokenizer_class, "XLMRobertaTokenizer")
+        self.assertEqual(old_configuration.hidden_size, 768)
