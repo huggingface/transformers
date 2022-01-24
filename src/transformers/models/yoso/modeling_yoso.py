@@ -646,7 +646,7 @@ class YosoEncoder(nn.Module):
                 raise ValueError(
                     """Failed to compile CUDA kernels. Ensure that the correct versions of PyTorch and cudatoolkit
                     are installed and try again. Alternatively, avoid loading CUDA kernels by using YOSO Expectation by
-                    setting use_expectation=True."""
+                    setting use_expectation=True in the configuration."""
                 )
 
         self.layer = nn.ModuleList([YosoLayer(config) for _ in range(config.num_hidden_layers)])
