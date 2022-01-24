@@ -1017,116 +1017,73 @@ def load_tf_weights_in_canine(*args, **kwargs):
 CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class CharacterBertForMaskedLM:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+class CharacterBertForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class CharacterBertForMultipleChoice:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class CharacterBertForNextSentencePrediction:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class CharacterBertForPreTraining:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class CharacterBertForQuestionAnswering:
+class CharacterBertForMultipleChoice(metaclass=DummyObject):
+    _backends = ["torch"]
+
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+class CharacterBertForNextSentencePrediction(metaclass=DummyObject):
+    _backends = ["torch"]
 
-
-class CharacterBertForSequenceClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+class CharacterBertForPreTraining(metaclass=DummyObject):
+    _backends = ["torch"]
 
-
-class CharacterBertForTokenClassification:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+class CharacterBertForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
 
-
-class CharacterBertLMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+class CharacterBertForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
 
-
-class CharacterBertModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
-    def forward(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+class CharacterBertForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
 
-
-class CharacterBertPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
-    def forward(self, *args, **kwargs):
+class CharacterBertLMHeadModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CharacterBertModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CharacterBertPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
