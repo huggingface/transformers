@@ -45,7 +45,6 @@ jobs:
 
       - name: Run style changes
         run: |
-          git fetch origin master:master
           make style && make quality && make repo-consistency
 
       - name: Failure short reports
