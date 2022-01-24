@@ -30,7 +30,15 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+<<<<<<< HEAD
         ("mask_former", "MaskFormerConfig"),
+=======
+        ("swin", "SwinConfig"),
+        ("vilt", "ViltConfig"),
+        ("vit_mae", "ViTMAEConfig"),
+        ("realm", "RealmConfig"),
+        ("nystromformer", "NystromformerConfig"),
+>>>>>>> e239fc3b0baf1171079a5e0177a69254350a063b
         ("imagegpt", "ImageGPTConfig"),
         ("qdqbert", "QDQBertConfig"),
         ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
@@ -117,7 +125,15 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
+<<<<<<< HEAD
         ("mask_former", "MASK_FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+=======
+        ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vit_mae", "VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("realm", "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("nystromformer", "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+>>>>>>> e239fc3b0baf1171079a5e0177a69254350a063b
         ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -192,7 +208,15 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+<<<<<<< HEAD
         ("mask_former", "MaskFormer"),
+=======
+        ("swin", "Swin"),
+        ("vilt", "ViLT"),
+        ("vit_mae", "ViTMAE"),
+        ("realm", "Realm"),
+        ("nystromformer", "Nystromformer"),
+>>>>>>> e239fc3b0baf1171079a5e0177a69254350a063b
         ("imagegpt", "ImageGPT"),
         ("qdqbert", "QDQBert"),
         ("vision-encoder-decoder", "Vision Encoder decoder"),

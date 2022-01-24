@@ -35,7 +35,7 @@ if is_torch_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_maskformer import  MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, 
+    from .configuration_maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
 
     if is_vision_available():
         # TODO code it!
@@ -43,12 +43,12 @@ if TYPE_CHECKING:
         pass
     if is_torch_available():
         from .modeling_maskformer import (
-        MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        MaskFormerForPanopticSegmentation,
-        MaskFormerForSemanticSegmentation,
-        MaskFormerForSemanticSegmentationOutput,
-        MaskFormerForPanopticSegmentationOutput,
-        MaskFormerModel
+            MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+            MaskFormerForPanopticSegmentation,
+            MaskFormerForSemanticSegmentation,
+            MaskFormerForSemanticSegmentationOutput,
+            MaskFormerForPanopticSegmentationOutput,
+            MaskFormerModel,
         )
 
 

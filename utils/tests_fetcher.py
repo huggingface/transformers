@@ -255,7 +255,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "modeling_tf_utils.py": ["test_modeling_tf_common.py", "test_modeling_tf_core.py"],
     "modeling_utils.py": ["test_modeling_common.py", "test_offline.py"],
     "models/auto/modeling_auto.py": ["test_modeling_auto.py", "test_modeling_tf_pytorch.py", "test_modeling_bort.py"],
-    "models/auto/modeling_flax_auto.py": "test_flax_auto.py",
+    "models/auto/modeling_flax_auto.py": "test_modeling_flax_auto.py",
     "models/auto/modeling_tf_auto.py": [
         "test_modeling_tf_auto.py",
         "test_modeling_tf_pytorch.py",
