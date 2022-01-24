@@ -776,16 +776,12 @@ class GenerationMixin:
 
         # start of generated tokens
         cut_idx = sequences.shape[-1] - scores.shape[-1]
-
         # adjust for beam indices
         beam_sequence_indices = torch.tensor(beam_indices, device=sequences.device) * self.config.vocab_size
-
         # compute real indices
         indices = sequences[:, cut_idx:] + beam_sequence_indices
-
         # gather scores and run
         transition_scores = scores.gather(0, indices)
-
         # make sure that if EOS token was used before length of sequence `sequence.shape[-1]`
         # get first occurence of EOS token
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
