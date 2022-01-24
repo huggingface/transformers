@@ -1,17 +1,31 @@
 from __future__ import annotations
+import enum
+
+import logging
+from argparse import ArgumentParser
 from ast import Tuple
+from dataclasses import dataclass
 from pathlib import Path
-from PIL import Image
-import requests
-from sqlalchemy import over
+from pprint import pformat
+from typing import Any, Dict, Iterator, List, Set
+
+import pytorch_lightning as pl
 import torch
-import torch.nn as nn
+import torchvision.transforms as T
+from PIL import Image
 from torch import Tensor
-from dataclasses import dataclass, field
-from pprint import pformat, pprint
-from typing import Iterator, List, Any, Dict, Optional, Set
-from src.transformers.models.maskformer.configuration_maskformer import ClassSpec, DatasetMetadata
-from src.transformers.models.maskformer.modelling_maskformer import (
+
+import requests
+from detectron2.checkpoint import DetectionCheckpointer
+from detectron2.config import get_cfg
+from detectron2.data import MetadataCatalog
+from detectron2.projects.deeplab import add_deeplab_config
+from MaskFormer.mask_former import add_mask_former_config
+from MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
+
+
+from transformers.models.maskformer import ClassSpec, DatasetMetadata
+from transformers.models.maskformer import (
     MaskFormerConfig,
     MaskFormerForPanopticSegmentation,
     MaskFormerForPanopticSegmentationOutput,
@@ -19,19 +33,7 @@ from src.transformers.models.maskformer.modelling_maskformer import (
     MaskFormerForSemanticSegmentationOutput,
     MaskFormerModel,
 )
-from detectron2.config import get_cfg
-from detectron2.projects.deeplab import add_deeplab_config
-from MaskFormer.mask_former import add_mask_former_config, config
-from MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
-from detectron2.layers.wrappers import Conv2d as DetectronConv2d
-import pytorch_lightning as pl
-import torchvision.transforms as T
-from detectron2.checkpoint import DetectionCheckpointer
-from functools import partial
-import logging
-from detectron2.data import MetadataCatalog
 
-pl.seed_everything(42)
 
 StateDict = Dict[str, Tensor]
 # easier to use pythong logging instead of going trough the hf utility logging file
@@ -75,9 +77,7 @@ class TrackedStateDict:
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    # url = "https://farm3.staticflickr.com/2628/3761093143_0233b13a00_z.jpg"
-    # img_data = requests.get(url, stream=True).raw
-    img_data = "/home/zuppif/Documents/Work/hugging_face/maskformer/input3.jpg"
+    img_data = requests.get(url, stream=True).raw
     im = Image.open(img_data)
     return im
 
@@ -108,17 +108,17 @@ class OriginalMaskFormerConfigToOursConverter:
         labels = metadata.stuff_classes
         # same for colors
         colors = metadata.stuff_colors
-        if metadata.get('thing_dataset_id_to_contiguous_id') is not None:
-            print('thing_dataset_id_to_contiguous_id in', ds_name)
+        if metadata.get("thing_dataset_id_to_contiguous_id") is not None:
+            print("thing_dataset_id_to_contiguous_id in", ds_name)
             thing_ids = metadata.thing_dataset_id_to_contiguous_id.values()
-        else: 
+        else:
             thing_ids = list(range(0, len(labels)))
-        
+
         dataset_metadata = DatasetMetadata()
         dataset_metadata.classes = [None] * len(labels)
         for class_id, label, color in zip(range(len(labels)), labels, colors):
             dataset_metadata.classes[class_id] = ClassSpec(class_id in thing_ids, label, color)
-        
+
         assert None not in dataset_metadata.classes
         return dataset_metadata
 
@@ -128,8 +128,10 @@ class OriginalMaskFormerConfigToOursConverter:
         mask_former = model.MASK_FORMER
         swin = model.SWIN
 
-        return MaskFormerConfig(
-            dataset_metadata=self.get_dataset_metadata(original_config),
+        dataset_metadata: DatasetMetadata = self.get_dataset_metadata(original_config)
+
+        config: MaskFormerConfig = MaskFormerConfig(
+            dataset_metadata=dataset_metadata,
             fpn_feature_size=model.SEM_SEG_HEAD.CONVS_DIM,
             mask_feature_size=model.SEM_SEG_HEAD.MASK_DIM,
             num_classes=model.SEM_SEG_HEAD.NUM_CLASSES,
@@ -166,6 +168,25 @@ class OriginalMaskFormerConfigToOursConverter:
             scale_embedding=False,
             auxiliary_loss=False,
             dilation=False,
+            # default pretrained config values
+            id2label={k: c.label for k, c in enumerate(dataset_metadata.classes)},
+            label2id={c.label: k for k, c in enumerate(dataset_metadata.classes)},
+            num_labels=len(dataset_metadata.classes),
+        )
+
+        return config
+
+
+class OriginalMaskFormerConfigToFeatureExtractorConverter:
+    def __call__(self, original_config: object) -> Dict:
+        model = original_config.MODEL
+        model_input = original_config.INPUT
+        # TODO return a real Feature Extractor
+        return dict(
+            mean=torch.tensor(model.PIXEL_MEAN) / 255,
+            std=torch.tensor(model.PIXEL_STD) / 255,
+            min_size=model_input.MIN_SIZE_TEST,
+            max_size=model_input.MAX_SIZE_TEST,
         )
 
 
@@ -389,14 +410,19 @@ class MaskFormerCheckpointConverter:
         return cls(original_model, to_model)
 
     @staticmethod
-    def using_dirs(checkpoints_dir: Path, config_dir: Path) -> Iterator[MaskFormerCheckpointConverter]:
+    def using_dirs(
+        checkpoints_dir: Path, config_dir: Path
+    ) -> Iterator[Tuple[MaskFormerCheckpointConverter, Path, Path]]:
         checkpoints: List[Path] = checkpoints_dir.glob("**/*.pkl")
 
         for checkpoint in checkpoints:
             logger.info(f"💪 Converting {checkpoint.stem}")
             # find associated config file
             config: Path = config_dir / checkpoint.parents[0].stem / "swin" / f"{checkpoint.stem}.yaml"
-            yield MaskFormerCheckpointConverter.from_original_config_and_checkpoint_file(str(config), str(checkpoint))
+
+            yield MaskFormerCheckpointConverter.from_original_config_and_checkpoint_file(
+                str(config), str(checkpoint)
+            ), config, checkpoint
 
 
 checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
@@ -406,37 +432,37 @@ config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskForme
 def test(src, dst):
     with torch.no_grad():
 
-        # x = torch.zeros((1, 3, 384, 384))
+        x = torch.zeros((1, 3, 384, 384))
 
-        # src_features = src.backbone(x)
-        # dst_features = dst.pixel_level_module.backbone(x.clone())
+        src_features = src.backbone(x)
+        dst_features = dst.pixel_level_module.backbone(x.clone())
 
-        # for src_feature, dst_feature in zip(src_features.values(), dst_features):
-        #     assert torch.allclose(src_feature, dst_feature)
+        for src_feature, dst_feature in zip(src_features.values(), dst_features):
+            assert torch.allclose(src_feature, dst_feature)
 
-        # src_pixel_out = src.sem_seg_head.pixel_decoder.forward_features(src_features)
-        # dst_pixel_out = dst.pixel_level_module(x)
+        src_pixel_out = src.sem_seg_head.pixel_decoder.forward_features(src_features)
+        dst_pixel_out = dst.pixel_level_module(x)
 
-        # assert torch.allclose(src_pixel_out[0], dst_pixel_out[1])
-        # # turn off aux_loss loss
-        # src.sem_seg_head.predictor.aux_loss = False
-        # src_transformer_out = src.sem_seg_head.predictor(src_features["res5"], src_pixel_out[0])
+        assert torch.allclose(src_pixel_out[0], dst_pixel_out[1])
+        # turn off aux_loss loss
+        src.sem_seg_head.predictor.aux_loss = False
+        src_transformer_out = src.sem_seg_head.predictor(src_features["res5"], src_pixel_out[0])
 
-        # dst_queries = dst.transformer_module(dst_pixel_out[0])
-        # dst_transformer_out = dst.segmentation_module(dst_queries, dst_pixel_out[1])
+        dst_queries = dst.transformer_module(dst_pixel_out[0])
+        dst_transformer_out = dst.segmentation_module(dst_queries, dst_pixel_out[1])
 
-        # assert torch.allclose(src_transformer_out["pred_logits"], dst_transformer_out["pred_logits"], atol=1e-4)
+        assert torch.allclose(src_transformer_out["pred_logits"], dst_transformer_out["pred_logits"], atol=1e-4)
 
-        # assert torch.allclose(src_transformer_out["pred_masks"], dst_transformer_out["pred_masks"], atol=1e-4)
+        assert torch.allclose(src_transformer_out["pred_masks"], dst_transformer_out["pred_masks"], atol=1e-4)
 
-        # src_out = src([{"image": x.squeeze(0)}])
+        src_out = src([{"image": x.squeeze(0)}])
 
-        # dst_for_seg = MaskFormerForSemanticSegmentation(config=dst.config).eval()
-        # dst_for_seg.model.load_state_dict(dst.state_dict())
+        dst_for_seg = MaskFormerForSemanticSegmentation(config=dst.config).eval()
+        dst_for_seg.model.load_state_dict(dst.state_dict())
 
-        # dst_out: MaskFormerForSemanticSegmentationOutput = dst_for_seg(x)
+        dst_out: MaskFormerForSemanticSegmentationOutput = dst_for_seg(x)
 
-        # assert torch.allclose(src_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
+        assert torch.allclose(src_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
 
         im = prepare_img()
 
@@ -453,197 +479,77 @@ def test(src, dst):
 
         x = tr(im)
 
-        # src_out = src([{"image": x}])
-        # dst_out = dst_for_seg(x.unsqueeze(0))
-
-        # assert torch.allclose(src_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
-
-
-        dst_for_pan_seg = MaskFormerForPanopticSegmentation(config=dst.config, overlap_mask_area_threshold=src.overlap_threshold, object_mask_threshold=src.object_mask_threshold).eval()
-        dst_for_pan_seg.model.load_state_dict(dst.state_dict())
-
-        src.panoptic_on = True
-
         src_out = src([{"image": x}])
-        dst_out: MaskFormerForPanopticSegmentationOutput = dst_for_pan_seg(x.unsqueeze(0))
-        # NOTE not all ds supports panoptic seg
-        src_seg = src_out[0]["panoptic_seg"]
-        print(src_seg[0].sum())
-        print(dst_out.segmentation.sum())
-        assert torch.allclose(src_out[0]["panoptic_seg"][0], dst_out.segmentation, atol=1e-4)
+        dst_out = dst_for_seg(x.unsqueeze(0))
 
-        for src_segment, dst_segment in zip(src_seg[1], dst_out.segments):
-            assert src_segment['id'] == dst_segment['id']
-            assert src_segment['category_id'] == dst_segment['category_id']
-            assert src_segment['isthing'] == dst_segment['is_thing']
+        assert torch.allclose(src_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
+
+        dst_for_pan_seg = MaskFormerForPanopticSegmentation(
+            config=dst.config,
+            overlap_mask_area_threshold=src.overlap_threshold,
+            object_mask_threshold=src.object_mask_threshold,
+        ).eval()
+        dst_for_pan_seg.model.load_state_dict(dst.state_dict())
+        # not all the models will work on pan seg (due to their dataset)
+        metadata = src.metadata
+        if metadata.get("thing_dataset_id_to_contiguous_id") is not None:
+            src.panoptic_on = True
+
+            src_out = src([{"image": x}])
+            dst_out: MaskFormerForPanopticSegmentationOutput = dst_for_pan_seg(x.unsqueeze(0))
+            src_seg = src_out[0]["panoptic_seg"]
+
+            assert torch.allclose(src_out[0]["panoptic_seg"][0], dst_out.segmentation, atol=1e-4)
+
+            for src_segment, dst_segment in zip(src_seg[1], dst_out.segments):
+                assert src_segment["id"] == dst_segment["id"]
+                assert src_segment["category_id"] == dst_segment["category_id"]
+                assert src_segment["isthing"] == dst_segment["is_thing"]
 
         logging.info("✅ Test passed!")
 
 
-for converter in MaskFormerCheckpointConverter.using_dirs(checkpoints_dir, config_dir):
-    converted = converter()
-    test(converter.original_model, converted)
+if __name__ == "__main__":
 
-
-def test_with_img():
-    im = prepare_img()
-
-    tr = T.Compose(
-        [
-            T.Resize((640, 640)),
-            T.ToTensor(),
-            T.Normalize(
-                mean=torch.tensor([123.675, 116.280, 103.530]) / 255.0,
-                std=torch.tensor([58.395, 57.120, 57.375]) / 255.0,
-            ),
-        ],
+    parser = ArgumentParser(
+        description="Command line to convert the original maskformers (with swin backbone) to our implementations."
     )
 
-    x = tr(im)
-
-    cfg = setup_cfg(Args())
-
-    with torch.no_grad():
-
-        from detectron2.checkpoint import DetectionCheckpointer
-
-        mask_former_kwargs = OriginalMaskFormer.from_config(cfg)
-        original_mask_former = OriginalMaskFormer(**mask_former_kwargs).eval()
-
-        DetectionCheckpointer(original_mask_former).load(
-            "/home/zuppif/Documents/Work/hugging_face/maskformer_swin_base_IN21k_384_bs16_160k_res640.pkl"
-        )
-
-        original_mask_former.sem_seg_head.predictor.aux_loss = False
-        original_mask_former.eval()
-        config = MaskFormerConfig()
-        mask_former = MaskFormerModel(config=config).eval()
-        # copy weights
-        replace_maskformer(mask_former, original_mask_former)
-
-        mask_former_for_seg = MaskFormerForSemanticSegmentation(config=config).eval()
-
-        mask_former_for_seg.model.load_state_dict(mask_former.state_dict())
-
-        original_outs = original_mask_former([{"image": x}])
-        outs: MaskFormerForSemanticSegmentationOutput = mask_former_for_seg(x.unsqueeze(0))
-
-        assert torch.allclose(original_outs[0]["sem_seg"], outs.segmentation, atol=1e-4)
-
-        from torchvision.utils import draw_segmentation_masks
-        from torchvision.transforms.functional import to_tensor
-
-        img_with_mask = (to_tensor(im.resize((640, 640))) * 255).type(torch.uint8).permute(1, 2, 0).numpy()
-
-        from detectron2.data import MetadataCatalog
-        from detectron2.engine.defaults import DefaultPredictor
-        from detectron2.utils.video_visualizer import VideoVisualizer
-        from detectron2.utils.visualizer import ColorMode, Visualizer
-
-        metadata = MetadataCatalog.get("ade20k_sem_seg_val")
-        visualizer = Visualizer(img_with_mask, metadata)
-
-        mask = original_outs[0]["sem_seg"].argmax(dim=0)
-        mask = outs.segmentation[0].argmax(dim=0)
-        vis_output = visualizer.draw_sem_seg(mask)
-
-        vis_output.save("./test.png")
-
-        # scores, labels = outs.pred_logits[0].softmax(-1).max(0)
-        # print(scores, labels)
-        # for mask in original_outs[0]["sem_seg"] > 0.5:
-        #     img_with_mask = draw_segmentation_masks(img_with_mask, masks=mask, alpha=0.1)
-
-        # import numpy as np
-        # import matplotlib.pyplot as plt
-
-        # import torchvision.transforms.functional as F
-
-        # plt.rcParams["savefig.bbox"] = "tight"
-
-        # def show(imgs):
-        #     if not isinstance(imgs, list):
-        #         imgs = [imgs]
-        #     fix, axs = plt.subplots(ncols=len(imgs), squeeze=False)
-        #     for i, img in enumerate(imgs):
-        #         img = img.detach()
-        #         img = F.to_pil_image(img)
-        #         axs[0, i].imshow(np.asarray(img))
-        #         axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
-
-        # show(img_with_mask)
-        # plt.show()
-
-
-def test_pan_seg():
-    im = prepare_img()
-
-    tr = T.Compose(
-        [
-            T.Resize((800, 1200)),
-            T.ToTensor(),
-            T.Normalize(
-                mean=torch.tensor([123.675, 116.280, 103.530]) / 255.0,
-                std=torch.tensor([58.395, 57.120, 57.375]) / 255.0,
-            ),
-        ],
+    parser.add_argument(
+        "--checkpoints_dir",
+        type=Path,
+        help="A directory containing the model's checkpoints. The directory has to have the following structure: <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.pkl",
     )
-
-    x = tr(im)
-
-    cfg = setup_cfg(
-        Args(
-            config_file="/home/zuppif/Documents/Work/hugging_face/transformers/MaskFormer/configs/coco-panoptic/swin/maskformer_panoptic_swin_base_IN21k_384_bs64_554k.yaml"
-        )
+    parser.add_argument(
+        "--configs_dir",
+        type=Path,
+        help="A directory containing the model's configs, see detectron2 doc. The directory has to have the following structure: <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.yaml",
     )
+    parser.add_argument(
+        "--save_directory",
+        default=Path("/tmp/hf/models"),
+        type=Path,
+        help="Path to the folder to output PyTorch models.",
+    )
+    args = parser.parse_args()
 
-    with torch.no_grad():
+    checkpoints_dir: Path = args.checkpoints_dir
+    config_dir: Path = args.configs_dir
+    save_directory: Path = args.save_directory
 
-        from detectron2.checkpoint import DetectionCheckpointer
+    if not save_directory.exists():
+        save_directory.mkdir(parents=True)
 
-        from detectron2.data import MetadataCatalog
-        from detectron2.engine.defaults import DefaultPredictor
-        from detectron2.utils.video_visualizer import VideoVisualizer
-        from detectron2.utils.visualizer import ColorMode, Visualizer
-        from torchvision.transforms.functional import to_tensor
+    checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
+    config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs")
 
-        mask_former_kwargs = OriginalMaskFormer.from_config(cfg)
-        original_mask_former = OriginalMaskFormer(**mask_former_kwargs).eval()
-
-        DetectionCheckpointer(original_mask_former).load(
-            "/home/zuppif/Documents/Work/hugging_face/maskformer_panoptic_swin_base_IN21k_384_bs64_554k.pkl"
+    for converter, config_file, checkpoint_file in MaskFormerCheckpointConverter.using_dirs(
+        checkpoints_dir, config_dir
+    ):
+        feature_extractor = OriginalMaskFormerConfigToFeatureExtractorConverter()(
+            setup_cfg(Args(config_file=config_file))
         )
-        original_mask_former.panoptic_on = True
-        original_mask_former.sem_seg_head.predictor.aux_loss = False
-        original_mask_former.eval()
-        config = MaskFormerConfig(num_classes=133)
-        mask_former = MaskFormerModel(config=config).eval()
-        # copy weights
-        replace_maskformer(mask_former, original_mask_former)
 
-        mask_former_for_seg = MaskFormerForPanopticSegmentation(config=config).eval()
-        mask_former_for_seg.model.load_state_dict(mask_former.state_dict())
-
-        original_outs = original_mask_former([{"image": x}])
-        # outs: MaskFormerForPanopticSegmentationOutput = mask_former_for_seg(x.unsqueeze(0))
-
-        img_with_mask = (to_tensor(im.resize((1200, 800))) * 255).type(torch.uint8).permute(1, 2, 0).numpy()
-
-        metadata = MetadataCatalog.get("coco_2017_val_panoptic")
-        visualizer = Visualizer(img_with_mask, metadata)
-
-        mask = original_outs[0]["panoptic_seg"][0]
-        segments = original_outs[0]["panoptic_seg"][1]
-
-        # mask = outs.segmentation
-        # segments = outs.segments
-
-        vis_output = visualizer.draw_panoptic_seg(mask, segments)
-
-        vis_output.save("./test_pan.png")
-
-
-# very_boring_test()
-# test_with_img()
-
-# test_pan_seg()
+        converted: MaskFormerModel = converter()
+        test(converter.original_model, converted)
+        converted.save_pretrained(save_directory=save_directory)
