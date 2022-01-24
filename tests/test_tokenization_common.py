@@ -3614,6 +3614,22 @@ class TokenizerTesterMixin:
                     trainer.save_model(os.path.join(tmp_dir, "checkpoint"))
                     self.assertIn("tokenizer.json", os.listdir(os.path.join(tmp_dir, "checkpoint")))
 
+    def test_save_slow_from_fast_and_reload_fast(self):
+        if not self.test_slow_tokenizer or not self.test_rust_tokenizer:
+            # we need both slow and fast versions
+            return
+
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, **kwargs, use_fast=True
+                    )
+                    tokenizer_fast.save_pretrained(tmp_dir, legacy_format=False)  # save only slow version
+
+                    # Should not raise an error
+                    tokenizer_slow = self.tokenizer_class.from_pretrained(tmp_dir)
+
 
 class FakeTokenizer(BertTokenizer):
     pass
