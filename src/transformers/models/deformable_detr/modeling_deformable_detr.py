@@ -18,6 +18,7 @@
 import copy
 import math
 import random
+import warnings
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -342,12 +343,13 @@ class DeformableDetrTimmConvEncoder(nn.Module):
 
         requires_backends(self, ["timm"])
 
-        backbone = create_model(name, pretrained=True, features_only=True, out_indices=(1, 2, 3, 4), **kwargs)
+        backbone = create_model(name, pretrained=True, features_only=True, out_indices=(2, 3, 4), **kwargs)
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
         self.intermediate_channel_sizes = self.model.feature_info.channels()
+        self.strides = self.model.feature_info.reduction()
 
         if "resnet" in name:
             for name, parameter in self.model.named_parameters():
@@ -473,7 +475,97 @@ def build_position_encoding(config):
     return position_embedding
 
 
-class DeformableDetrAttention(nn.Module):
+def _is_power_of_2(n):
+    if (not isinstance(n, int)) or (n < 0):
+        raise ValueError("invalid input for _is_power_of_2: {} (type: {})".format(n, type(n)))
+    return (n & (n - 1) == 0) and n != 0
+
+
+class DeformableDetrMultiscaleDeformableAttention(nn.Module):
+    """
+    Multiscale deformable attention as proposed in Deformable DETR.
+    """
+
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        n_levels: int,
+        n_points: int,
+    ):
+        super().__init__()
+        if embed_dim % num_heads != 0:
+            raise ValueError(
+                "embed_dim must be divisible by num_heads, but got {} and {}".format(embed_dim, num_heads)
+            )
+        _d_per_head = embed_dim // num_heads
+        if not _is_power_of_2(_d_per_head):
+            warnings.warn(
+                "You'd better set embed_dim in DeformableDetrMultiscaleDeformableAttention to make the dimension "
+                "of each attention head a power of 2 which is more efficient in the authors' CUDA implementation."
+            )
+
+        self.im2col_step = 64
+
+        self.d_model = embed_dim
+        self.n_levels = n_levels
+        self.n_heads = num_heads
+        self.n_points = n_points
+
+        self.sampling_offsets = nn.Linear(embed_dim, num_heads * n_levels * n_points * 2)
+        self.attention_weights = nn.Linear(embed_dim, num_heads * n_levels * n_points)
+        self.value_proj = nn.Linear(embed_dim, embed_dim)
+        self.output_proj = nn.Linear(embed_dim, embed_dim)
+
+    def forward(
+        self,
+        query,
+        reference_points,
+        input_flatten,
+        input_spatial_shapes,
+        input_level_start_index,
+        input_padding_mask=None,
+    ):
+        N, Len_q, _ = query.shape
+        N, Len_in, _ = input_flatten.shape
+        assert (input_spatial_shapes[:, 0] * input_spatial_shapes[:, 1]).sum() == Len_in
+
+        value = self.value_proj(input_flatten)
+        if input_padding_mask is not None:
+            value = value.masked_fill(input_padding_mask[..., None], float(0))
+        value = value.view(N, Len_in, self.n_heads, self.d_model // self.n_heads)
+        sampling_offsets = self.sampling_offsets(query).view(N, Len_q, self.n_heads, self.n_levels, self.n_points, 2)
+        attention_weights = self.attention_weights(query).view(N, Len_q, self.n_heads, self.n_levels * self.n_points)
+        attention_weights = F.softmax(attention_weights, -1).view(N, Len_q, self.n_heads, self.n_levels, self.n_points)
+        # N, Len_q, n_heads, n_levels, n_points, 2
+        if reference_points.shape[-1] == 2:
+            offset_normalizer = torch.stack([input_spatial_shapes[..., 1], input_spatial_shapes[..., 0]], -1)
+            sampling_locations = (
+                reference_points[:, :, None, :, None, :]
+                + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
+            )
+        elif reference_points.shape[-1] == 4:
+            sampling_locations = (
+                reference_points[:, :, None, :, None, :2]
+                + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
+            )
+        else:
+            raise ValueError(
+                "Last dim of reference_points must be 2 or 4, but get {} instead.".format(reference_points.shape[-1])
+            )
+        output = MSDeformAttnFunction.apply(
+            value,
+            input_spatial_shapes,
+            input_level_start_index,
+            sampling_locations,
+            attention_weights,
+            self.im2col_step,
+        )
+        output = self.output_proj(output)
+        return output
+
+
+class DeformableDetrMultiheadAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
 
@@ -603,7 +695,7 @@ class DeformableDetrEncoderLayer(nn.Module):
     def __init__(self, config: DeformableDetrConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = DeformableDetrAttention(
+        self.self_attn = DeformableDetrMultiheadAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -621,6 +713,9 @@ class DeformableDetrEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_embeddings: torch.Tensor = None,
+        reference_points=None,
+        spatial_shapes=None,
+        level_start_index=None,
         output_attentions: bool = False,
     ):
         """
@@ -638,6 +733,9 @@ class DeformableDetrEncoderLayer(nn.Module):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
 
@@ -673,7 +771,7 @@ class DeformableDetrDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = DeformableDetrAttention(
+        self.self_attn = DeformableDetrMultiheadAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -684,7 +782,7 @@ class DeformableDetrDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = DeformableDetrAttention(
+        self.encoder_attn = DeformableDetrMultiheadAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -881,7 +979,7 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
 
 class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    Transformer encoder consisting of *config.encoder_layers* self-attention layers. Each layer is a
     [`DeformableDetrEncoderLayer`].
 
     The encoder updates the flattened feature map through multiple self-attention layers.
@@ -907,11 +1005,31 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @staticmethod
+    def get_reference_points(spatial_shapes, valid_ratios, device):
+        reference_points_list = []
+        for lvl, (H_, W_) in enumerate(spatial_shapes):
+
+            ref_y, ref_x = torch.meshgrid(
+                torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
+                torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device),
+            )
+            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H_)
+            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W_)
+            ref = torch.stack((ref_x, ref_y), -1)
+            reference_points_list.append(ref)
+        reference_points = torch.cat(reference_points_list, 1)
+        reference_points = reference_points[:, :, None] * valid_ratios[:, None]
+        return reference_points
+
     def forward(
         self,
         inputs_embeds=None,
         attention_mask=None,
         position_embeddings=None,
+        spatial_shapes=None,
+        level_start_index=None,
+        valid_ratios=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -955,6 +1073,8 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
+        reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=inputs_embeds.device)
+
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         for i, encoder_layer in enumerate(self.layers):
@@ -970,6 +1090,9 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
                     hidden_states,
                     attention_mask,
                     position_embeddings=position_embeddings,
+                    reference_points=reference_points,
+                    spatial_shapes=spatial_shapes,
+                    level_start_index=level_start_index,
                     output_attentions=output_attentions,
                 )
 
@@ -1184,12 +1307,11 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         self.backbone = DeformableDetrConvModel(backbone, position_embeddings)
 
         # Create input projection layers
-        # TODO update backbone attributes
         if config.num_feature_levels > 1:
             num_backbone_outs = len(backbone.strides)
             input_proj_list = []
             for _ in range(num_backbone_outs):
-                in_channels = backbone.num_channels[_]
+                in_channels = backbone.intermediate_channel_sizes[_]
                 input_proj_list.append(
                     nn.Sequential(
                         nn.Conv2d(in_channels, config.d_model, kernel_size=1),
@@ -1209,7 +1331,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             self.input_proj = nn.ModuleList(
                 [
                     nn.Sequential(
-                        nn.Conv2d(backbone.num_channels[0], config.d_model, kernel_size=1),
+                        nn.Conv2d(backbone.intermediate_channel_sizes[0], config.d_model, kernel_size=1),
                         nn.GroupNorm(32, config.d_model),
                     )
                 ]
@@ -1250,6 +1372,15 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
     def unfreeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(True)
+
+    def get_valid_ratio(self, mask):
+        _, H, W = mask.shape
+        valid_H = torch.sum(~mask[:, :, 0], 1)
+        valid_W = torch.sum(~mask[:, 0, :], 1)
+        valid_ratio_h = valid_H.float() / H
+        valid_ratio_w = valid_W.float() / W
+        valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
+        return valid_ratio
 
     @add_start_docstrings_to_model_forward(DEFORMABLE_DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DeformableDetrModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1297,33 +1428,66 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             pixel_mask = torch.ones(((batch_size, height, width)), device=device)
 
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
-        # pixel_values should be of shape (batch_size, num_channels, height, width)
-        # pixel_mask should be of shape (batch_size, height, width)
+        # which is a list of tuples
         features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
 
-        # get final feature map and downsampled mask
-        feature_map, mask = features[-1]
+        srcs = []
+        masks = []
+        for l, (src, mask) in enumerate(features):
+            srcs.append(self.input_proj[l](src))
+            masks.append(mask)
+            assert mask is not None
+        if self.config.num_feature_levels > len(srcs):
+            _len_srcs = len(srcs)
+            for l in range(_len_srcs, self.config.num_feature_levels):
+                if l == _len_srcs:
+                    src = self.input_proj[l](features[-1][0])
+                else:
+                    src = self.input_proj[l](srcs[-1])
+                mask = nn.functional.interpolate(pixel_mask[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
+                pos_l = self.backbone.position_embedding(src, mask).to(src.dtype)
+                srcs.append(src)
+                masks.append(mask)
+                position_embeddings_list.append(pos_l)
 
-        assert mask is not None, "Backbone does not return downsampled pixel mask"
+        # Create queries
+        query_embeds = None
+        if not self.config.two_stage:
+            query_embeds = self.query_position_embeddings.weight
 
-        # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        projected_feature_map = self.input_projection(feature_map)
+        # Prepare input for encoder (by flattening)
+        src_flatten = []
+        mask_flatten = []
+        lvl_pos_embed_flatten = []
+        spatial_shapes = []
+        for lvl, (src, mask, pos_embed) in enumerate(zip(srcs, masks, position_embeddings_list)):
+            bs, c, h, w = src.shape
+            spatial_shape = (h, w)
+            spatial_shapes.append(spatial_shape)
+            src = src.flatten(2).transpose(1, 2)
+            mask = mask.flatten(1)
+            pos_embed = pos_embed.flatten(2).transpose(1, 2)
+            lvl_pos_embed = pos_embed + self.level_embed[lvl].view(1, 1, -1)
+            lvl_pos_embed_flatten.append(lvl_pos_embed)
+            src_flatten.append(src)
+            mask_flatten.append(mask)
+        src_flatten = torch.cat(src_flatten, 1)
+        mask_flatten = torch.cat(mask_flatten, 1)
+        lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
+        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=src_flatten.device)
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
-        # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
-        # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
-        flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        position_embeddings = position_embeddings_list[-1].flatten(2).permute(0, 2, 1)
-
-        flattened_mask = mask.flatten(1)
-
-        # Fourth, sent flattened_features + flattened_mask + position embeddings through encoder
-        # flattened_features is a Tensor of shape (batch_size, heigth*width, hidden_size)
-        # flattened_mask is a Tensor of shape (batch_size, heigth*width)
+        # Fourth, sent src_flatten + mask_flatten + lvl_pos_embed_flatten through encoder
+        # Also provide spatial_shapes, level_start_index and valid_ratios
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                inputs_embeds=flattened_features,
-                attention_mask=flattened_mask,
-                position_embeddings=position_embeddings,
+                inputs_embeds=src_flatten,
+                attention_mask=mask_flatten,
+                position_embeddings=lvl_pos_embed_flatten,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                valid_ratios=valid_ratios,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1335,6 +1499,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
+
+        print("Encoder outputs:", encoder_outputs.keys())
 
         # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
         query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
