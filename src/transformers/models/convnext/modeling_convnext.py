@@ -20,7 +20,7 @@ from typing import Optional, Tuple
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -86,7 +86,7 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-class DropPath(nn.Module):
+class ConvNextDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob=None):
@@ -127,9 +127,8 @@ class ConvNextLayerNorm(nn.Module):
 class ConvNextBlock(nn.Module):
     """This corresponds to the ConvNextBlock class in the original implementation.
 
-    There are two equivalent implementations: (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv;
-    all in (N, C, H, W) (2) DwConv -> Permute to (N, H, W, C); LayerNorm (channels_last) -> Linear -> GELU -> Linear;
-    Permute back
+    There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
+    H, W) (2) [DwConv, Permute to (N, H, W, C), LayerNorm (channels_last), Linear, GELU, Linear]; Permute back
 
     The authors used (2) as they find it slightly faster in PyTorch.
 
@@ -151,7 +150,7 @@ class ConvNextBlock(nn.Module):
             if config.layer_scale_init_value > 0
             else None
         )
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = ConvNextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, hidden_states):
         input = hidden_states
@@ -267,12 +266,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ConvNextModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+    def forward(self, pixel_values=None, output_hidden_states=None, return_dict=None):
         r"""
         Returns:
 
@@ -300,8 +294,6 @@ class ConvNextModel(ConvNextPreTrainedModel):
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
-
-        print("Shape of pixel values:", pixel_values.shape)
 
         all_hidden_states = () if output_hidden_states else None
         for i in range(self.config.num_stages):
@@ -347,13 +339,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values=None,
-        labels=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+    def forward(self, pixel_values=None, labels=None, output_hidden_states=None, return_dict=None):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -384,11 +370,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.convnext(
-            pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        outputs = self.convnext(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
@@ -396,14 +378,26 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output

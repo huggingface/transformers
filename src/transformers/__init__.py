@@ -841,7 +841,6 @@ if is_torch_available():
     _import_structure["models.convnext"].extend(
         [
             "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ConvNextBlock",
             "ConvNextForImageClassification",
             "ConvNextModel",
             "ConvNextPreTrainedModel",
@@ -2934,7 +2933,6 @@ if TYPE_CHECKING:
         )
         from .models.convnext import (
             CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ConvNextBlock,
             ConvNextForImageClassification,
             ConvNextModel,
             ConvNextPreTrainedModel,
