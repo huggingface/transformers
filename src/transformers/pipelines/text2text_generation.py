@@ -136,7 +136,11 @@ class Text2TextGenerationPipeline(Pipeline):
         """
 
         result = super().__call__(*args, **kwargs)
-        if isinstance(args[0], list) and all(isinstance(el, str) for el in args[0]):
+        if (
+            isinstance(args[0], list)
+            and all(isinstance(el, str) for el in args[0])
+            and all(len(res) == 1 for res in result)
+        ):
             return [res[0] for res in result]
         return result
 
