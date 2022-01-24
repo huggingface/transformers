@@ -15,11 +15,44 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .configuration_maskformer import MaskFormerConfig, ClassSpec, DatasetMetadata
-from .modeling_maskformer import (
-    MaskFormerForPanopticSegmentation,
-    MaskFormerForPanopticSegmentationOutput,
-    MaskFormerForSemanticSegmentation,
-    MaskFormerForSemanticSegmentationOutput,
-    MaskFormerModel,
-)
+from typing import TYPE_CHECKING
+
+from ...file_utils import _LazyModule, is_torch_available, is_vision_available
+
+_import_structure = {
+    "configuration_maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
+}
+
+
+if is_torch_available():
+    _import_structure["modeling_deit"] = [
+        "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MaskFormerForPanopticSegmentation",
+        "MaskFormerForSemanticSegmentation",
+        "MaskFormerForSemanticSegmentationOutput",
+        "MaskFormerForPanopticSegmentationOutput",
+        "MaskFormerModel",
+    ]
+
+if TYPE_CHECKING:
+    from .configuration_maskformer import  MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, 
+
+    if is_vision_available():
+        # TODO code it!
+        # from .feature_extraction_maskformer import MaskFormerFeatureExtractor
+        pass
+    if is_torch_available():
+        from .modeling_maskformer import (
+        MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MaskFormerForPanopticSegmentation,
+        MaskFormerForSemanticSegmentation,
+        MaskFormerForSemanticSegmentationOutput,
+        MaskFormerForPanopticSegmentationOutput,
+        MaskFormerModel
+        )
+
+
+else:
+    import sys
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)

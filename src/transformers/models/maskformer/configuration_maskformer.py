@@ -30,6 +30,7 @@ logger = logging.get_logger(__name__)
 
 RGB = Tuple[int, int, int]
 
+
 @dataclass
 class ClassSpec:
     is_thing: bool
@@ -46,7 +47,7 @@ class MaskFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormer`]. It is used to instantiate a MaskFormer
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the <TODO!!> "maskformer_swin_base_IN21k_384_bs16_160k_res640" architecture trained on ade20k-150
+    defaults will yield a similar configuration to that of the "maskformer_swin_base_IN21k_384_bs16_160k_res640" architecture trained on ade20k-150
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -146,5 +147,4 @@ class MaskFormerConfig(PretrainedConfig):
 
     @property
     def d_model(self) -> int:
-        # DETR needs `.d_model`
         return self.detr_d_model
