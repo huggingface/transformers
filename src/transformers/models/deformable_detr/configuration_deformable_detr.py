@@ -20,7 +20,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-DEFORMABE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "sensetime/deformable-detr": "https://huggingface.co/sensetime/deformable-detr/resolve/main/config.json",
     # See all Deformable DETR models at https://huggingface.co/models?filter=deformable-detr
 }
