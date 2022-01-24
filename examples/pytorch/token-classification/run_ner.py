@@ -355,7 +355,6 @@ def main():
         )
 
     if model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
-        # Some have all caps in their config, some don't.
         label_name_to_id = {k: v for k, v in model.config.label2id.items()}
         if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
             label_to_id = {k: int(label_name_to_id[k]) for k in label_keys}
