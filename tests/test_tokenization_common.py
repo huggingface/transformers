@@ -3621,14 +3621,28 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
+                with tempfile.TemporaryDirectory() as tmp_dir_1:
+                    # Here we check that even if we have initialized a fast tokenizer with a tokenizer_file we can
+                    # still save only the slow version and use these saved files to rebuild a tokenizer
+                    tokenizer_fast_old_1 = self.rust_tokenizer_class.from_pretrained(
                         pretrained_name, **kwargs, use_fast=True
                     )
-                    tokenizer_fast.save_pretrained(tmp_dir, legacy_format=False)  # save only slow version
+                    tokenizer_file = os.path.join(tmp_dir_1, "tokenizer.json")
+                    tokenizer_fast_old_1.backend_tokenizer.save(tokenizer_file)
+
+                    tokenizer_fast_old_2 = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, **kwargs, use_fast=True, tokenizer_file=tokenizer_file
+                    )
+
+                    tokenizer_fast_old_2.save_pretrained(tmp_dir_1, legacy_format=True)  # save only slow version
 
                     # Should not raise an error
-                    tokenizer_slow = self.tokenizer_class.from_pretrained(tmp_dir)
+                    tokenizer_slow = self.tokenizer_class.from_pretrained(tmp_dir_1)
+                with tempfile.TemporaryDirectory() as tmp_dir_2:
+                    tokenizer_slow.save_pretrained(tmp_dir_2)
+
+                    # Should not raise an error
+                    tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
 
 
 class FakeTokenizer(BertTokenizer):
