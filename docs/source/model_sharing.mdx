@@ -12,9 +12,12 @@ specific language governing permissions and limitations under the License.
 
 # Share a model
 
-If you are reading this, hopefully that means you were able to successfully train or fine-tune a model! At 🤗 Hugging Face, we believe in openly sharing knowledge and resources to democratize artificial intelligence for everyone. We encourage you to consider sharing your model with the community to help others save time and resources.
+The last two tutorials showed how you can fine-tune a model with PyTorch, Keras, and 🤗 Accelerate for distributed setups. The next step is to share your model with the community! At Hugging Face, we believe in openly sharing knowledge and resources to democratize artificial intelligence for everyone. We encourage you to consider sharing your model with the community to help others save time and resources.
 
-In this tutorial, you will learn how to share a trained or fine-tuned model on the [Model Hub](https://huggingface.co/models).
+In this tutorial, you will learn two methods for sharing a trained or fine-tuned model on the [Model Hub](https://huggingface.co/models):
+
+- Programmatically push your files to the Hub during or after training.
+- Drag-and-drop your files to the Hub with the web interface.
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/XvSGPZFEjDY" title="YouTube video player"
 frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
@@ -26,11 +29,13 @@ To share a model with the community, you will need to create an account on [hugg
 
 </Tip>
 
-## Model versioning
+## Repository features
 
-The Model Hub has built-in versioning based on git and [git-lfs](https://git-lfs.github.com/). In other words, you can treat one model as one repository, enabling greater access control and scalability. We built the Hub around *revisions*, which is a way to pin a specific version of a model using a commit hash, tag or branch.
+Each repository on the Model Hub behaves like a typical GitHub repository. Our repositories offer versioning, commit history, and the ability to visualize differences.
 
-This allows you to specify a specific model version with the `revision` parameter:
+The Model Hub's built-in versioning is based on git and [git-lfs](https://git-lfs.github.com/). In other words, you can treat one model as one repository, enabling greater access control and scalability. The Hub is also built around *revisions*, a method for pinning a specific version of a model with a commit hash, tag or branch.
+
+This allows you to load a specific model version with the `revision` parameter:
 
 ```py
 >>> model = AutoModel.from_pretrained(
@@ -38,60 +43,110 @@ This allows you to specify a specific model version with the `revision` paramete
 ... )
 ```
 
+Files are also easily edited in a repository, and you can view the commit history as well as the difference:
+
+![vis_diff](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vis_diff.png)
+
 ## Setup
 
-Before you can share a model to the Hub, you will need your 🤗 Hugging Face credentials. If you have access to a terminal, run the following command in the virtual environment where 🤗 Transformers is installed:
+Before sharing a model to the Hub, you will need your Hugging Face credentials. If you have access to a terminal, run the following command in the virtual environment where 🤗 Transformers is installed. This will store your access token in your Hugging Face cache folder (by default: `~/.cache/`):
 
 ```bash
 huggingface-cli login
 ```
 
-This will store your access token in your 🤗 Hugging Face cache folder (by default `~/.cache/`).
+If you are using a notebook like Jupyter or Colaboratory, make sure you have the [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library) library installed. This library allows you to programmatically interact with the Hub.
 
-If you are using a notebook, run the following command and follow the link [here](https://huggingface.co/settings/token) to generate a token to login:
+```bash
+pip install huggingface_hub
+```
+
+Then use the `notebook_login` function to login to the Hub. Follow the link [here](https://huggingface.co/settings/token) to generate a token to login with:
 
 ```py
-!huggingface-cli login
+>>> from huggingface_hub import notebook_login
+
+>>> notebook_login()
 ```
 
 ## Convert a model for all frameworks
 
-To ensure your model can be used by someone working with a different framework, you should convert and upload your model with both PyTorch and TensorFlow checkpoints. While users are still able to load your model from a different framework, it will be slower because it will have to be converted on-the-fly. 
+To ensure your model can be used by someone working with a different framework, we recommend you convert and upload your model with both PyTorch and TensorFlow checkpoints. While users are still able to load your model from a different framework if you skip this step, it will be slower because 🤗 Transformers will have to convert the checkpoint on-the-fly. 
 
-Converting a checkpoint to another framework is easy. First, make sure you have PyTorch and TensorFlow installed (see [here](installation) for installation instructions). Then find the specific model for your task in the other framework. 
+Converting a checkpoint for another framework is easy. First, make sure you have PyTorch and TensorFlow installed (see [here](installation) for installation instructions) and then find the specific model for your task in the other framework. 
 
-For example, let's say you trained DistilBert for sequence classification in PyTorch and want to convert it to it's TensorFlow equivalent.
-
-Load the TensorFlow equivalent of your model for your task, and specify `from_pt=True` so 🤗 Transformers will know to convert the PyTorch checkpoint to a TensorFlow checkpoint:
+For example, let's say you trained DistilBert for sequence classification in PyTorch and want to convert it to it's TensorFlow equivalent. Load the TensorFlow equivalent of your model for your task, and specify `from_pt=True` so 🤗 Transformers will convert the PyTorch checkpoint to a TensorFlow checkpoint:
 
 ```py
 >>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
 ```
 
-Then you can save your new TensorFlow model with the new TensorFlow checkpoint:
+Then save your new TensorFlow model with it's new checkpoint:
 
 ```py
 >>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
 
-Likewise, specify `from_tf=True` to convert the TensorFlow checkpoint to a PyTorch checkpoint:
+Similarly, specify `from_tf=True` to convert a checkpoint from TensorFlow to PyTorch:
 
 ```py
 >>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
 
-## Share a model to the Hub
+## Push a model to the Hub
 
 <Youtube id="Z1-XMy-GNLQ"/>
 
-Share your fine-tuned model directly to the Hub with the `push_to_hub` function, and create a name for your model:
+Sharing a model to the Hub is as simple as adding an extra parameter or callback. Remember from the [fine-tuning tutorial](training), the [`TrainingArguments`] class is where you specify hyperparameters and additional training options. One of these training options includes the ability to push a model directly to the Hub. Set `push_to_hub=True` in your [`TrainingArguments`]:
+
+```py
+>>> training_args = TrainingArguments(output_dir="my-awesome-model", push_to_hub=True)
+```
+
+Then pass your training arguments as usual to [`Trainer`], and it will push the trained model to the Hub. 🤗 Transformers will even automatically add training hyperparameters, training results and framework versions to your model card when you use the `push_to_hub` parameter!
+
+```py
+>>> trainer = Trainer(
+...     model=model,
+...     args=training_args,
+...     train_dataset=small_train_dataset,
+...     eval_dataset=small_eval_dataset,
+...     compute_metrics=compute_metrics,
+... )
+```
+
+TensorFlow users can enable the same functionality with the `PushToHubCallback`. In the `PushToHubCallback` function, add:
+
+- An output directory to your model.
+- A tokenizer.
+- The `hub_model_id`, which is your Hub username and model name.
+
+```py
+>>> from transformers.keras.callbacks import PushToHubCallback
+
+>>> push_to_hub_callback = PushToHubCallback(
+...     output_dir="./your_model_save_path", tokenizer=tokenizer, hub_model_id="your-username/my-awesome-model"
+... )
+```
+
+Add the callback to the `fit()` method, and 🤗 Transformers will push the trained model to the Hub:
+
+```py
+>>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
+```
+
+### Push to Hub after training
+
+Alternatively, you can share your fine-tuned model directly to the Hub with the `push_to_hub` function after a model has been trained. 
+
+Choose a name for your model:
 
 ```py
 >>> pt_model.push_to_hub("my-awesome-model")
 ```
 
-A repository is created under your username with the model name `my-awesome-model`. Users can now load your model with the `from_pretrained` function:
+A repository will be created under your username with the model name `my-awesome-model`. Users can now load your model with the `from_pretrained` function:
 
 ```py
 >>> from transformers import AutoModel
@@ -105,7 +160,7 @@ If you belong to an organization and want to push your model under the organizat
 >>> pt_model.push_to_hub("my-awesome-model", organization="my-awesome-org")
 ```
 
-The `push_to_hub` function can also be used to add other files to your model repository. For example, add a tokenizer to your model repository with:
+The `push_to_hub` function can also be used to add other files to a model repository. For example, add a tokenizer to a model repository:
 
 ```py
 >>> tokenizer.push_to_hub("my-awesome-model")
@@ -121,11 +176,28 @@ Now when you navigate to the your Hugging Face profile, you should see your newl
 
 For more details on how to create and upload files to a repository, refer to the Hub documentation [here](https://huggingface.co/docs/hub/how-to-upstream).
 
+## Upload with the web interface
+
+Users who prefer a no-code approach are able to upload a model through the Hub's web interface. Visit [huggingface.co/new](https://huggingface.co/new) to create a new repository:
+
+![new_model_repo](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/new_model_repo.png)
+
+From here, add some information about your model:
+
+- Select the **owner** of the repository. This can be yourself or any of the organizations you belong to.
+- Pick a name for your model, which will also be the repository name.
+- Choose whether your model is public or private.
+- Specify the license usage for your model.
+
+Now click on the **Files** tab and click on the **Add file** button to upload a new file to your repository. Then drag-and-drop a file to upload, and even add a commit message.
+
+![upload_file](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/upload_file.png)
+
 ## Add a model card
 
-To make sure everyone understands your model's capabilities, limitations, potential biases and ethical considerations, please add a model card to your repository. You can add a model card by:
+To make sure everyone understands your model's capabilities, limitations, potential biases and ethical considerations, please add a model card to your repository. Add a model card by:
 
 * Manually creating a `README.md` file.
-* Clicking on the **Create Model Card** button in your model repository.
+* Clicking on the **Edit model carad** button in your model repository.
 
 Take a look at the DistilBert [model card](https://huggingface.co/distilbert-base-uncased) for a good example of what type of information the card should contain. For more information about other options you can control in the `README.md` file such as your model's carbon footprint or widget examples, refer to the documentation [here](https://huggingface.co/docs/hub/model-repos).

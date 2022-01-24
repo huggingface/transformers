@@ -20,7 +20,7 @@
   - local: training
     title: Fine-tuning a pretrained model
   - local: model_sharing
-    title: Model sharing and uploading
+    title: Share a model
   - local: tokenizer_summary
     title: Summary of the tokenizers
   - local: multilingual
