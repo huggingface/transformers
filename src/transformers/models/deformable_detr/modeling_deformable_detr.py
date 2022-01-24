@@ -25,8 +25,6 @@ from typing import Dict, List, Optional, Tuple
 import torch
 from torch import Tensor, nn
 
-import MultiScaleDeformableAttention as MSDA
-
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
@@ -42,6 +40,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttenti
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_deformable_detr import DeformableDetrConfig
+from .load_custom import load_cuda_kernels
 
 
 if is_scipy_available():
@@ -62,6 +61,9 @@ DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sensetime/deformable-detr",
     # See all Deformable DETR models at https://huggingface.co/models?filter=deformable-detr
 ]
+
+# Move this to not compile only when importing, this needs to happen later, like in __init__.
+MSDA = load_cuda_kernels()
 
 
 @dataclass
