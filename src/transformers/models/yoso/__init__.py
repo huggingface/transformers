@@ -28,7 +28,6 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_yoso"] = [
         "YOSO_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "YosoForCausalLM",
         "YosoForMaskedLM",
         "YosoForMultipleChoice",
         "YosoForQuestionAnswering",
@@ -46,7 +45,6 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_yoso import (
             YOSO_PRETRAINED_MODEL_ARCHIVE_LIST,
-            YosoForCausalLM,
             YosoForMaskedLM,
             YosoForMultipleChoice,
             YosoForQuestionAnswering,

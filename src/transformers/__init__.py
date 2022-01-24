@@ -1514,7 +1514,6 @@ if is_torch_available():
     _import_structure["models.yoso"].extend(
         [
             "YOSO_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "YosoForCausalLM",
             "YosoForMaskedLM",
             "YosoForMultipleChoice",
             "YosoForQuestionAnswering",
@@ -3449,7 +3448,6 @@ if TYPE_CHECKING:
         )
         from .models.yoso import (
             YOSO_PRETRAINED_MODEL_ARCHIVE_LIST,
-            YosoForCausalLM,
             YosoForMaskedLM,
             YosoForMultipleChoice,
             YosoForQuestionAnswering,

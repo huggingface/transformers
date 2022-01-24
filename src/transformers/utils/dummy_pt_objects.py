@@ -4063,13 +4063,6 @@ def load_tf_weights_in_xlnet(*args, **kwargs):
 YOSO_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class YosoForCausalLM(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class YosoForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
