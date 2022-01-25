@@ -603,6 +603,5 @@ class ViltModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, 2])
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        print("Logits:", outputs.logits[0, :3])
         expected_slice = torch.tensor([-2.4013, 2.9342]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
