@@ -157,12 +157,18 @@ class BartphoTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(str(vocab_file))
 
         # Load the reduced vocab
-        self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
+
+        # Keep order of special tokens for backward compatibility
+        self.fairseq_tokens_to_ids = {
+            token: token_id
+            for token_id, token in enumerate(dict.fromkeys([bos_token, pad_token, eos_token, unk_token]).keys())
+        }
         with open(monolingual_vocab_file, "r", encoding="utf-8") as f:
             for line in f.readlines():
                 token = line.strip().split()[0]
                 self.fairseq_tokens_to_ids[token] = len(self.fairseq_tokens_to_ids)
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.fairseq_tokens_to_ids)
+        if mask_token not in self.fairseq_tokens_to_ids:
+            self.fairseq_tokens_to_ids[mask_token] = len(self.fairseq_tokens_to_ids)
 
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
