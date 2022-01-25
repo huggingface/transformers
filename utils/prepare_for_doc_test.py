@@ -131,6 +131,7 @@ def style_docstring(docstring):
     ):
         param_indent = find_indent(lines[idx])
 
+    import ipdb; ipdb.set_trace()
     for idx, line in enumerate(lines):
         # Doing all re searches once for the one we need to repeat.
         list_search = _re_list.search(line)
@@ -190,7 +191,7 @@ def style_docstring(docstring):
             # Add a new line before if not present
             if not is_empty_line(new_lines[-1]):
                 new_lines.append("")
-            new_lines.append(line)
+            new_lines.kppend(line)
             # Add a new line after if not present
             if idx < len(lines) - 1 and not is_empty_line(lines[idx + 1]):
                 new_lines.append("")
@@ -202,18 +203,8 @@ def style_docstring(docstring):
                 if _re_returns.search(line) is not None:
                     param_indent = -1
                     new_lines.append(line)
-                elif len(line) < 119:
-                    new_lines.append(line)
                 else:
-                    intro, description = split_line_on_first_colon(line)
-                    new_lines.append(intro + ":")
-                    if len(description) != 0:
-                        if find_indent(lines[idx + 1]) > indent:
-                            current_indent = find_indent(lines[idx + 1])
-                        else:
-                            current_indent = indent + 4
-                        current_paragraph = [description.strip()]
-                        prefix = ""
+                    new_lines.append(line)
             else:
                 # Check if we have exited the parameter block
                 if indent < param_indent:
@@ -238,7 +229,6 @@ def style_docstrings_in_code(code):
 
     Args:
         code (`str`): The code in which we want to style the docstrings.
-        max_len (`int`): The maximum number of characters per line.
 
     Returns:
         `Tuple[str, str]`: A tuple with the clean code and the black errors (if any)
@@ -262,9 +252,6 @@ def style_file_docstrings(code_file):
 
     Args:
         code_file (`str` or `os.PathLike`): The file in which we want to style the docstring.
-        max_len (`int`): The maximum number of characters per line.
-        check_only (`bool`, *optional*, defaults to `False`):
-            Whether to restyle file or just check if they should be restyled.
 
     Returns:
         `bool`: Whether or not the file was or should be restyled.
