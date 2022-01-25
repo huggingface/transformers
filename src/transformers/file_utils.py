@@ -1144,7 +1144,6 @@ PT_SPEECH_BASE_MODEL_SAMPLE = r"""
     >>> last_hidden_states = outputs.last_hidden_state
     >>> list(last_hidden_states.shape)
     {expected_output}
-
     ```
 """
 
@@ -1172,7 +1171,6 @@ PT_SPEECH_CTC_SAMPLE = r"""
     >>> transcription = processor.batch_decode(predicted_ids)
     >>> transcription[0]
     {expected_output}
-
     ```
 
     ```python
@@ -1222,7 +1220,6 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> predicted_label = model.config.id2label[predicted_class_ids]
     >>> predicted_label
     {expected_output}
-
     ```
 
     ```python
@@ -1267,7 +1264,6 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
     >>> labels = (probabilities > 0.5).long()
     >>> labels[0].tolist()
     {expected_output}
-
     ```
 """
 
@@ -1303,7 +1299,6 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     ...     print("Speakers are not the same!")
     >>> round(similarity.item(), 2)
     {expected_output}
-
     ```
 """
 
