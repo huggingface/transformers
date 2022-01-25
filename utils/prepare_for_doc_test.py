@@ -56,7 +56,6 @@ def parse_code_example(code_lines):
 
     Args:
         code_lines (`List[str]`): The code lines to parse.
-        max_len (`int`): The maximum lengh per line.
 
     Returns:
         (List[`str`], List[`str`]): The list of code samples and the list of outputs.
@@ -96,18 +95,12 @@ def parse_code_example(code_lines):
     return code_samples, outputs
 
 
-def split_line_on_first_colon(line):
-    splits = line.split(":")
-    return splits[0], ":".join(splits[1:])
-
-
-def style_docstring(docstring, max_len):
+def style_docstring(docstring):
     """
     Style a docstring by making sure there is no useless whitespace and the maximum horizontal space is used.
 
     Args:
         docstring (`str`): The docstring to style.
-        max_len (`int`): The maximum length of each line.
 
     Returns:
         `str`: The styled docstring
@@ -204,18 +197,8 @@ def style_docstring(docstring, max_len):
                 if _re_returns.search(line) is not None:
                     param_indent = -1
                     new_lines.append(line)
-                elif len(line) < max_len:
-                    new_lines.append(line)
                 else:
-                    intro, description = split_line_on_first_colon(line)
-                    new_lines.append(intro + ":")
-                    if len(description) != 0:
-                        if find_indent(lines[idx + 1]) > indent:
-                            current_indent = find_indent(lines[idx + 1])
-                        else:
-                            current_indent = indent + 4
-                        current_paragraph = [description.strip()]
-                        prefix = ""
+                    new_lines.append(line)
             else:
                 # Check if we have exited the parameter block
                 if indent < param_indent:
@@ -234,7 +217,7 @@ def style_docstring(docstring, max_len):
     return "\n".join(new_lines)
 
 
-def style_docstrings_in_code(code, max_len=119):
+def style_docstrings_in_code(code):
     """
     Style all docstrings in some code.
 
@@ -289,9 +272,6 @@ def process_doc_files(*files):
 
     Args:
         files (several `str` or `os.PathLike`): The files to treat.
-        max_len (`int`): The maximum number of characters per line.
-        check_only (`bool`, *optional*, defaults to `False`):
-            Whether to restyle file or just check if they should be restyled.
 
     Returns:
         List[`str`]: The list of files changed or that should be restyled.
