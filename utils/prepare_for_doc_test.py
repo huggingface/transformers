@@ -36,214 +36,13 @@ _re_tip = re.compile("^\s*</?Tip(>|\s+warning={true}>)\s*$")
 DOCTEST_PROMPTS = [">>>", "..."]
 
 
-def is_empty_line(line):
-    return len(line) == 0 or line.isspace()
-
-
-def find_indent(line):
-    """
-    Returns the number of spaces that start a line indent.
-    """
-    search = re.search("^(\s*)(?:\S|$)", line)
-    if search is None:
-        return 0
-    return len(search.groups()[0])
-
-
-def parse_code_example(code_lines):
-    """
-    Parses a code example
-
-    Args:
-        code_lines (`List[str]`): The code lines to parse.
-
-    Returns:
-        (List[`str`], List[`str`]): The list of code samples and the list of outputs.
-    """
-    has_doctest = code_lines[0][:3] in DOCTEST_PROMPTS
-
-    code_samples = []
-    outputs = []
-    in_code = True
-    current_bit = []
-
-    for line in code_lines:
-        if in_code and has_doctest and not is_empty_line(line) and line[:3] not in DOCTEST_PROMPTS:
-            code_sample = "\n".join(current_bit)
-            code_samples.append(code_sample.strip())
-            in_code = False
-            current_bit = []
-        elif not in_code and line[:3] in DOCTEST_PROMPTS:
-            output = "\n".join(current_bit)
-            outputs.append(output.strip())
-            in_code = True
-            current_bit = []
-
-        # Add the line without doctest prompt
-        if line[:3] in DOCTEST_PROMPTS:
-            line = line[4:]
-        current_bit.append(line)
-
-    # Add last sample
-    if in_code:
-        code_sample = "\n".join(current_bit)
-        code_samples.append(code_sample.strip())
-    else:
-        output = "\n".join(current_bit)
-        outputs.append(output.strip())
-
-    return code_samples, outputs
-
-
-def split_line_on_first_colon(line):
-    splits = line.split(":")
-    return splits[0], ":".join(splits[1:])
-
-
-def style_docstring(docstring):
-    """
-    Style a docstring by making sure there is no useless whitespace and the maximum horizontal space is used.
-
-    Args:
-        docstring (`str`): The docstring to style.
-
-    Returns:
-        `str`: The styled docstring
-    """
+def maybe_append_new_line(docstring):
     lines = docstring.split("\n")
-    new_lines = []
 
-    # Initialization
-    current_paragraph = None
-    current_indent = -1
-    in_code = False
-    param_indent = -1
-    prefix = ""
+    if lines[0] in ["py", "python"]:
+        lines.append("\n")
 
-    # Special case for docstrings that begin with continuation of Args with no Args block.
-    idx = 0
-    while idx < len(lines) and is_empty_line(lines[idx]):
-        idx += 1
-    if (
-        len(lines[idx]) > 1
-        and lines[idx].rstrip().endswith(":")
-        and find_indent(lines[idx + 1]) > find_indent(lines[idx])
-    ):
-        param_indent = find_indent(lines[idx])
-
-    import ipdb; ipdb.set_trace()
-    for idx, line in enumerate(lines):
-        # Doing all re searches once for the one we need to repeat.
-        list_search = _re_list.search(line)
-        code_search = _re_code.search(line)
-
-        # Are we starting a new paragraph?
-        # New indentation or new line:
-        new_paragraph = find_indent(line) != current_indent or is_empty_line(line)
-        # List item
-        new_paragraph = new_paragraph or list_search is not None
-        # Code block beginning
-        new_paragraph = new_paragraph or code_search is not None
-        # Beginning/end of tip
-        new_paragraph = new_paragraph or _re_tip.search(line)
-
-        if not in_code and new_paragraph and current_paragraph is not None and len(current_paragraph) > 0:
-            paragraph = " ".join(current_paragraph)
-            new_lines.append(paragraph)
-            current_paragraph = None
-
-        if code_search is not None:
-            if not in_code:
-                current_paragraph = []
-                current_indent = len(code_search.groups()[0])
-                current_code = code_search.groups()[1]
-                prefix = ""
-                if current_indent < param_indent:
-                    param_indent = -1
-            else:
-                current_indent = -1
-                code = "\n".join(current_paragraph)
-                if current_code in ["py", "python"]:
-                    # add empty space in the end
-                    formatted_code = code + "\n"
-                    new_lines.append(formatted_code)
-                else:
-                    new_lines.append(code)
-                current_paragraph = None
-            new_lines.append(line)
-            in_code = not in_code
-
-        elif in_code:
-            current_paragraph.append(line)
-        elif is_empty_line(line):
-            current_paragraph = None
-            current_indent = -1
-            prefix = ""
-            new_lines.append(line)
-        elif list_search is not None:
-            prefix = list_search.groups()[0]
-            current_indent = len(prefix)
-            current_paragraph = [line[current_indent:]]
-        elif _re_args.search(line):
-            new_lines.append(line)
-            param_indent = find_indent(lines[idx + 1])
-        elif _re_tip.search(line):
-            # Add a new line before if not present
-            if not is_empty_line(new_lines[-1]):
-                new_lines.append("")
-            new_lines.kppend(line)
-            # Add a new line after if not present
-            if idx < len(lines) - 1 and not is_empty_line(lines[idx + 1]):
-                new_lines.append("")
-        elif current_paragraph is None or find_indent(line) != current_indent:
-            indent = find_indent(line)
-            # Special behavior for parameters intros.
-            if indent == param_indent:
-                # Special rules for some docstring where the Returns blocks has the same indent as the parameters.
-                if _re_returns.search(line) is not None:
-                    param_indent = -1
-                    new_lines.append(line)
-                else:
-                    new_lines.append(line)
-            else:
-                # Check if we have exited the parameter block
-                if indent < param_indent:
-                    param_indent = -1
-
-                current_paragraph = [line.strip()]
-                current_indent = find_indent(line)
-                prefix = ""
-        elif current_paragraph is not None:
-            current_paragraph.append(line.lstrip())
-
-    if current_paragraph is not None and len(current_paragraph) > 0:
-        paragraph = " ".join(current_paragraph)
-        new_lines.append(paragraph)
-
-    return "\n".join(new_lines)
-
-
-def style_docstrings_in_code(code):
-    """
-    Style all docstrings in some code.
-
-    Args:
-        code (`str`): The code in which we want to style the docstrings.
-
-    Returns:
-        `Tuple[str, str]`: A tuple with the clean code and the black errors (if any)
-    """
-    # fmt: off
-    splits = code.split('\"\"\"')
-    splits = [
-        s if i % 2 == 0 or _re_doc_ignore.search(splits[i - 1]) is not None else style_docstring(s)
-        for i, s in enumerate(splits)
-    ]
-    splits = [s[0] if isinstance(s, tuple) else s for s in splits]
-    clean_code = '\"\"\"'.join(splits)
-    # fmt: on
-
-    return clean_code
+    return "\n".join(lines)
 
 
 def style_file_docstrings(code_file):
@@ -259,7 +58,11 @@ def style_file_docstrings(code_file):
     with open(code_file, "r", encoding="utf-8", newline="\n") as f:
         code = f.read()
 
-    clean_code = style_docstrings_in_code(code)
+    # fmt: off
+    splits = code.split('\'\'\'')
+    splits = [s if i % 2 == 0 else maybe_append_new_line(s) for i, s in enumerate(splits)]
+    clean_code = '\'\'\''.join(splits)
+    # fmt: on
 
     diff = clean_code != code
     if diff:
