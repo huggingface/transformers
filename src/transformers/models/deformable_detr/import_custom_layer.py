@@ -1,8 +1,3 @@
-from __future__ import absolute_import, division, print_function
+from transformers.models.deformable_detr.load_custom import load_cuda_kernels
 
-import torch
-import torch.nn.functional as F
-from torch.autograd import Function
-from torch.autograd.function import once_differentiable
-
-import MultiScaleDeformableAttention as MSDA
+MSDA = load_cuda_kernels()
