@@ -26,9 +26,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "merges_file": {
         "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/merges.txt",
     },
-    "tokenizer_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/tokenizer.json",
-    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
