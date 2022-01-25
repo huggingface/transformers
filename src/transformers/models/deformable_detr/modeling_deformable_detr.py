@@ -625,7 +625,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
             self.im2col_step,
         )
         output = self.output_proj(output)
-        return output
+        return output, attention_weights
 
 
 class DeformableDetrMultiheadAttention(nn.Module):
