@@ -40,7 +40,8 @@ def maybe_append_new_line(docstring):
     lines = docstring.split("\n")
 
     if lines[0] in ["py", "python"]:
-        lines.append("\n")
+        last_line = lines[-1]
+        lines.append("\n" + last_line)
 
     return "\n".join(lines)
 
@@ -59,9 +60,9 @@ def style_file_docstrings(code_file):
         code = f.read()
 
     # fmt: off
-    splits = code.split('\'\'\'')
+    splits = code.split("```")
     splits = [s if i % 2 == 0 else maybe_append_new_line(s) for i, s in enumerate(splits)]
-    clean_code = '\'\'\''.join(splits)
+    clean_code = "```".join(splits)
     # fmt: on
 
     diff = clean_code != code
