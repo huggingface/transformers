@@ -23,8 +23,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import torch
-from torch import Tensor, nn
 import torch.nn.functional as F
+from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 
@@ -45,24 +45,42 @@ from ...utils import logging
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
 
+
 MSDA = load_cuda_kernels()
+
 
 class MSDeformAttnFunction(Function):
     @staticmethod
-    def forward(ctx, value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights, im2col_step):
+    def forward(
+        ctx, value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights, im2col_step
+    ):
         ctx.im2col_step = im2col_step
         output = MSDA.ms_deform_attn_forward(
-            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights, ctx.im2col_step)
-        ctx.save_for_backward(value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights)
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+            ctx.im2col_step,
+        )
+        ctx.save_for_backward(
+            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
+        )
         return output
 
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_output):
         value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights = ctx.saved_tensors
-        grad_value, grad_sampling_loc, grad_attn_weight = \
-            MSDA.ms_deform_attn_backward(
-                value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights, grad_output, ctx.im2col_step)
+        grad_value, grad_sampling_loc, grad_attn_weight = MSDA.ms_deform_attn_backward(
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+            grad_output,
+            ctx.im2col_step,
+        )
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
 
@@ -545,29 +563,46 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         self.value_proj = nn.Linear(embed_dim, embed_dim)
         self.output_proj = nn.Linear(embed_dim, embed_dim)
 
+    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+        return tensor if position_embeddings is None else tensor + position_embeddings
+
     def forward(
         self,
-        query,
-        reference_points,
-        input_flatten,
-        input_spatial_shapes,
-        input_level_start_index,
-        input_padding_mask=None,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
+        reference_points=None,
+        spatial_shapes=None,
+        level_start_index=None,
+        output_attentions: bool = False,
     ):
-        N, Len_q, _ = query.shape
-        N, Len_in, _ = input_flatten.shape
-        assert (input_spatial_shapes[:, 0] * input_spatial_shapes[:, 1]).sum() == Len_in
+        print("Shape of hidden states:", hidden_states.shape)
+        # add position embeddings to the hidden states before projecting to queries and keys
+        if position_embeddings is not None:
+            hidden_states_original = hidden_states
+            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
 
-        value = self.value_proj(input_flatten)
-        if input_padding_mask is not None:
-            value = value.masked_fill(input_padding_mask[..., None], float(0))
+        N, Len_q, _ = hidden_states.shape
+        N, Len_in, _ = hidden_states_original.shape
+        assert (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == Len_in
+
+        value = self.value_proj(hidden_states_original)
+        print("Shape of values:", value.shape)
+        print("Shape of attention_mask:", attention_mask.shape)
+        if attention_mask is not None:
+            value = value.masked_fill(attention_mask[..., None], float(0))
+        print("Shape of values:", value.shape)
         value = value.view(N, Len_in, self.n_heads, self.d_model // self.n_heads)
-        sampling_offsets = self.sampling_offsets(query).view(N, Len_q, self.n_heads, self.n_levels, self.n_points, 2)
-        attention_weights = self.attention_weights(query).view(N, Len_q, self.n_heads, self.n_levels * self.n_points)
+        sampling_offsets = self.sampling_offsets(hidden_states).view(
+            N, Len_q, self.n_heads, self.n_levels, self.n_points, 2
+        )
+        attention_weights = self.attention_weights(hidden_states).view(
+            N, Len_q, self.n_heads, self.n_levels * self.n_points
+        )
         attention_weights = F.softmax(attention_weights, -1).view(N, Len_q, self.n_heads, self.n_levels, self.n_points)
         # N, Len_q, n_heads, n_levels, n_points, 2
         if reference_points.shape[-1] == 2:
-            offset_normalizer = torch.stack([input_spatial_shapes[..., 1], input_spatial_shapes[..., 0]], -1)
+            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
@@ -583,8 +618,8 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
             )
         output = MSDeformAttnFunction.apply(
             value,
-            input_spatial_shapes,
-            input_level_start_index,
+            spatial_shapes,
+            level_start_index,
             sampling_locations,
             attention_weights,
             self.im2col_step,
@@ -681,6 +716,11 @@ class DeformableDetrMultiheadAttention(nn.Module):
                 f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
             )
 
+        # expand attention_mask
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
+
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, tgt_len, src_len):
                 raise ValueError(
@@ -723,10 +763,11 @@ class DeformableDetrEncoderLayer(nn.Module):
     def __init__(self, config: DeformableDetrConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = DeformableDetrMultiheadAttention(
+        self.self_attn = DeformableDetrMultiscaleDeformableAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
+            n_levels=config.num_feature_levels,
+            n_points=config.encoder_n_points,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -1095,11 +1136,6 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
 
         hidden_states = inputs_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
         reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=inputs_embeds.device)
 
@@ -1483,7 +1519,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         if not self.config.two_stage:
             query_embeds = self.query_position_embeddings.weight
 
-        # Prepare input for encoder (by flattening)
+        # Prepare encoder inputs (by flattening)
         src_flatten = []
         mask_flatten = []
         lvl_pos_embed_flatten = []
@@ -1505,6 +1541,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=src_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
+
+        print("Shape of mask_flatten:", mask_flatten.shape)
 
         # Fourth, sent src_flatten + mask_flatten + lvl_pos_embed_flatten through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
@@ -1530,18 +1568,26 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
 
         print("Encoder outputs:", encoder_outputs.keys())
 
-        # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
-        query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
-        queries = torch.zeros_like(query_position_embeddings)
+        # Fifth, prepare decoder inputs
+        if self.config.two_stage:
+            raise NotImplementedError("To do")
+        else:
+            query_embed, tgt = torch.split(query_embeds, c, dim=1)
+            query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
+            tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
+            reference_points = self.reference_points(query_embed).sigmoid()
+            init_reference_out = reference_points
+            # query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
+            # queries = torch.zeros_like(query_position_embeddings)
 
         # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
-            inputs_embeds=queries,
+            inputs_embeds=tgt,
             attention_mask=None,
-            position_embeddings=position_embeddings,
-            query_position_embeddings=query_position_embeddings,
+            position_embeddings=lvl_pos_embed_flatten,
+            query_position_embeddings=query_embed,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=flattened_mask,
+            encoder_attention_mask=mask_flatten,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
