@@ -1738,7 +1738,10 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
     def to(self, *args, **kwargs):
         """Override `torch.nn.Module.to` in order to prevent `self.block_emb`, which would largely consume gpu resources, from
-        sending to cuda."""
+        sending to cuda.
+            Original TF implementation:
+            https://github.com/google-research/language/blob/61fa7260ac7d690d11ef72ca863e45a37c0bdc80/language/orqa/utils/scann_utils.py#L39-L64
+        """
         import warnings
 
         device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(*args, **kwargs)
