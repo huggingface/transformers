@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 from transformers import AutoFeatureExtractor, Wav2Vec2Config, Wav2Vec2FeatureExtractor
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
 
 
 SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
@@ -62,3 +63,22 @@ class AutoFeatureExtractorTest(unittest.TestCase):
     def test_feature_extractor_from_local_file(self):
         config = AutoFeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG)
         self.assertIsInstance(config, Wav2Vec2FeatureExtractor)
+
+    def test_repo_not_found(self):
+        with self.assertRaisesRegex(
+            EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"
+        ):
+            _ = AutoFeatureExtractor.from_pretrained("bert-base")
+
+    def test_revision_not_found(self):
+        with self.assertRaisesRegex(
+            EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
+        ):
+            _ = AutoFeatureExtractor.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
+
+    def test_feature_extractor_not_found(self):
+        with self.assertRaisesRegex(
+            EnvironmentError,
+            "hf-internal-testing/config-no-model does not appear to have a file named preprocessor_config.json.",
+        ):
+            _ = AutoFeatureExtractor.from_pretrained("hf-internal-testing/config-no-model")

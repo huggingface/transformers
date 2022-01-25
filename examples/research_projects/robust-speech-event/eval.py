@@ -68,7 +68,7 @@ def main(args):
     dataset = load_dataset(args.dataset, args.config, split=args.split, use_auth_token=True)
 
     # for testing: only process the first two examples as a test
-    dataset = dataset.select(range(10))
+    # dataset = dataset.select(range(10))
 
     # load processor
     feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_id)

@@ -17,17 +17,22 @@ import importlib
 import io
 import unittest
 
-import requests
 import transformers
 
 # Try to import everything from transformers to ensure every object can be loaded.
 from transformers import *  # noqa F406
 from transformers.file_utils import (
     CONFIG_NAME,
+    FLAX_WEIGHTS_NAME,
+    TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
     ContextManagers,
+    EntryNotFoundError,
+    RepositoryNotFoundError,
+    RevisionNotFoundError,
     filename_to_url,
     get_from_cache,
+    has_file,
     hf_bucket_url,
 )
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
@@ -83,13 +88,19 @@ class GetFromCacheTests(unittest.TestCase):
     def test_file_not_found(self):
         # Valid revision (None) but missing file.
         url = hf_bucket_url(MODEL_ID, filename="missing.bin")
-        with self.assertRaisesRegex(requests.exceptions.HTTPError, "404 Client Error"):
+        with self.assertRaisesRegex(EntryNotFoundError, "404 Client Error"):
+            _ = get_from_cache(url)
+
+    def test_model_not_found(self):
+        # Invalid model file.
+        url = hf_bucket_url("bert-base", filename="pytorch_model.bin")
+        with self.assertRaisesRegex(RepositoryNotFoundError, "404 Client Error"):
             _ = get_from_cache(url)
 
     def test_revision_not_found(self):
         # Valid file but missing revision
         url = hf_bucket_url(MODEL_ID, filename=CONFIG_NAME, revision=REVISION_ID_INVALID)
-        with self.assertRaisesRegex(requests.exceptions.HTTPError, "404 Client Error"):
+        with self.assertRaisesRegex(RevisionNotFoundError, "404 Client Error"):
             _ = get_from_cache(url)
 
     def test_standard_object(self):
@@ -111,6 +122,11 @@ class GetFromCacheTests(unittest.TestCase):
         filepath = get_from_cache(url, force_download=True)
         metadata = filename_to_url(filepath)
         self.assertEqual(metadata, (url, f'"{PINNED_SHA256}"'))
+
+    def test_has_file(self):
+        self.assertTrue(has_file("hf-internal-testing/tiny-bert-pt-only", WEIGHTS_NAME))
+        self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", TF2_WEIGHTS_NAME))
+        self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", FLAX_WEIGHTS_NAME))
 
 
 class ContextManagerTests(unittest.TestCase):

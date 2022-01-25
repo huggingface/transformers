@@ -1900,6 +1900,37 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     return ua
 
 
+class RepositoryNotFoundError(HTTPError):
+    """
+    Raised when trying to access a hf.co URL with an invalid repository name, or with a private repo name the user does
+    not have access to.
+    """
+
+
+class EntryNotFoundError(HTTPError):
+    """Raised when trying to access a hf.co URL with a valid repository and revision but an invalid filename."""
+
+
+class RevisionNotFoundError(HTTPError):
+    """Raised when trying to access a hf.co URL with a valid repository but an invalid revision."""
+
+
+def _raise_for_status(request):
+    """
+    Internal version of `request.raise_for_status()` that will refine a potential HTTPError.
+    """
+    if "X-Error-Code" in request.headers:
+        error_code = request.headers["X-Error-Code"]
+        if error_code == "RepoNotFound":
+            raise RepositoryNotFoundError(f"404 Client Error: Repository Not Found for url: {request.url}")
+        elif error_code == "EntryNotFound":
+            raise EntryNotFoundError(f"404 Client Error: Entry Not Found for url: {request.url}")
+        elif error_code == "RevisionNotFound":
+            raise RevisionNotFoundError((f"404 Client Error: Revision Not Found for url: {request.url}"))
+
+    request.raise_for_status()
+
+
 def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers: Optional[Dict[str, str]] = None):
     """
     Download remote file. Do not gobble up errors.
@@ -1908,7 +1939,7 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
     if resume_size > 0:
         headers["Range"] = f"bytes={resume_size}-"
     r = requests.get(url, stream=True, proxies=proxies, headers=headers)
-    r.raise_for_status()
+    _raise_for_status(r)
     content_length = r.headers.get("Content-Length")
     total = resume_size + int(content_length) if content_length is not None else None
     # `tqdm` behavior is determined by `utils.logging.is_progress_bar_enabled()`
@@ -1970,7 +2001,7 @@ def get_from_cache(
     if not local_files_only:
         try:
             r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=etag_timeout)
-            r.raise_for_status()
+            _raise_for_status(r)
             etag = r.headers.get("X-Linked-Etag") or r.headers.get("ETag")
             # We favor a custom header indicating the etag of the linked resource, and
             # we fallback to the regular etag header.
@@ -2079,6 +2110,56 @@ def get_from_cache(
             json.dump(meta, meta_file)
 
     return cache_path
+
+
+def has_file(
+    path_or_repo: Union[str, os.PathLike],
+    filename: str,
+    revision: Optional[str] = None,
+    mirror: Optional[str] = None,
+    proxies: Optional[Dict[str, str]] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+):
+    """
+    Checks if a repo contains a given file wihtout downloading it. Works for remote repos and local folders.
+
+    <Tip warning={false}>
+
+    This function will raise an error if the repository `path_or_repo` is not valid or if `revision` does not exist for
+    this repo, but will return False for regular connection errors.
+
+    </Tip>
+    """
+    if os.path.isdir(path_or_repo):
+        return os.path.isfile(os.path.join(path_or_repo, filename))
+
+    url = hf_bucket_url(path_or_repo, filename=filename, revision=revision, mirror=mirror)
+
+    headers = {"user-agent": http_user_agent()}
+    if isinstance(use_auth_token, str):
+        headers["authorization"] = f"Bearer {use_auth_token}"
+    elif use_auth_token:
+        token = HfFolder.get_token()
+        if token is None:
+            raise EnvironmentError("You specified use_auth_token=True, but a huggingface token was not found.")
+        headers["authorization"] = f"Bearer {token}"
+
+    r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=10)
+    try:
+        _raise_for_status(r)
+        return True
+    except RepositoryNotFoundError as e:
+        logger.error(e)
+        raise EnvironmentError(f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'.")
+    except RevisionNotFoundError as e:
+        logger.error(e)
+        raise EnvironmentError(
+            f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
+            "model name. Check the model page at 'https://huggingface.co/{path_or_repo}' for available revisions."
+        )
+    except requests.HTTPError:
+        # We return false for EntryNotFoundError (logical) as well as any connection error.
+        return False
 
 
 def get_list_of_files(
