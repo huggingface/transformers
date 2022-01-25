@@ -43,16 +43,33 @@ from .configuration_unispeech_sat import UniSpeechSatConfig
 logger = logging.get_logger(__name__)
 
 
+_HIDDEN_STATES_START_POSITION = 2
+
+# General docstring
 _CONFIG_FOR_DOC = "UniSpeechSatConfig"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+# Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/unispeech-sat-base-plus"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
+
+# CTC docstring
+_CTC_EXPECTED_OUTPUT = "'mister quilter is the aposle of the middle classes and we are glad to welcome his gospel'"
+_CTC_EXPECTED_LOSS = 12.51
+
+# Audio class docstring
 _FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-
 _SEQ_CLASS_CHECKPOINT = "microsoft/unispeech-sat-base-plus"
-_FRAME_CLASS_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sd"
-_XVECTOR_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sv"
+_SEQ_CLASS_EXPECTED_OUTPUT = "label"
+_SEQ_CLASS_EXPECTED_LOSS = 0.69
 
-_HIDDEN_STATES_START_POSITION = 2
+# Frame class docstring
+_FRAME_CLASS_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sd"
+_FRAME_EXPECTED_OUTPUT = [0, 0]
+
+# Speaker Verification docstring
+_XVECTOR_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sv"
+_XVECTOR_EXPECTED_OUTPUT = 0.97
 
 UNISPEECH_SAT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all UniSpeechSat models at https://huggingface.co/models?filter=unispeech_sat
@@ -1431,6 +1448,8 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1561,6 +1580,8 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1677,6 +1698,7 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_FRAME_EXPECTED_OUTPUT,
     )
     def forward(
         self,
@@ -1853,6 +1875,7 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_XVECTOR_EXPECTED_OUTPUT,
     )
     def forward(
         self,
