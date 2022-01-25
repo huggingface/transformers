@@ -95,6 +95,11 @@ def parse_code_example(code_lines):
     return code_samples, outputs
 
 
+def split_line_on_first_colon(line):
+    splits = line.split(":")
+    return splits[0], ":".join(splits[1:])
+
+
 def style_docstring(docstring):
     """
     Style a docstring by making sure there is no useless whitespace and the maximum horizontal space is used.
@@ -197,8 +202,18 @@ def style_docstring(docstring):
                 if _re_returns.search(line) is not None:
                     param_indent = -1
                     new_lines.append(line)
-                else:
+                elif len(line) < 119:
                     new_lines.append(line)
+                else:
+                    intro, description = split_line_on_first_colon(line)
+                    new_lines.append(intro + ":")
+                    if len(description) != 0:
+                        if find_indent(lines[idx + 1]) > indent:
+                            current_indent = find_indent(lines[idx + 1])
+                        else:
+                            current_indent = indent + 4
+                        current_paragraph = [description.strip()]
+                        prefix = ""
             else:
                 # Check if we have exited the parameter block
                 if indent < param_indent:
@@ -272,6 +287,7 @@ def process_doc_files(*files):
 
     Args:
         files (several `str` or `os.PathLike`): The files to treat.
+            Whether to restyle file or just check if they should be restyled.
 
     Returns:
         List[`str`]: The list of files changed or that should be restyled.
