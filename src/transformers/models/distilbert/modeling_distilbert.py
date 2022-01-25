@@ -187,8 +187,6 @@ class MultiHeadSelfAttention(nn.Module):
 
         dim_per_head = self.dim // self.n_heads
 
-        mask_reshp = (bs, 1, 1, k_length)
-
         def shape(x):
             """separate heads"""
             return x.view(bs, -1, self.n_heads, dim_per_head).transpose(1, 2)
