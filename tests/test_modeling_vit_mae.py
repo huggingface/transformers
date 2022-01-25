@@ -327,9 +327,6 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-
-            print("Model class:", model_class)
-
             model = model_class(config)
             model.to(torch_device)
             model.eval()

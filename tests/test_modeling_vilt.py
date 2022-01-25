@@ -595,8 +595,8 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         outputs = model(
-            input_ids=encoding_1.input_ids,
-            pixel_values=pixel_values,
+            input_ids=encoding_1.input_ids.to(torch_device),
+            pixel_values=pixel_values.to(torch_device),
         )
 
         # verify the logits
