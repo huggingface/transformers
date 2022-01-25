@@ -104,7 +104,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
             from spacy.lang.en import English
 
             _nlp = English()
-            self.nlp = _nlp.Defaults.create_tokenizer(_nlp)
+            self.nlp = _nlp.tokenizer
             self.fix_text = ftfy.fix_text
         except ImportError:
             logger.warning("ftfy or spacy is not installed using BERT BasicTokenizer instead of SpaCy & ftfy.")

@@ -55,9 +55,9 @@ Tips:
 TrOCR's [`VisionEncoderDecoder`] model accepts images as input and makes use of
 [`~generation_utils.GenerationMixin.generate`] to autoregressively generate text given the input image.
 
-The [`ViTFeatureExtractor`] class is responsible for preprocessing the input image and
-[`RobertaTokenizer`] decodes the generated target tokens to the target string. The
-[`TrOCRProcessor`] wraps [`ViTFeatureExtractor`] and [`RobertaTokenizer`]
+The [`ViTFeatureExtractor`/`DeiTFeatureExtractor`] class is responsible for preprocessing the input image and
+[`RobertaTokenizer`/`XLMRobertaTokenizer`] decodes the generated target tokens to the target string. The
+[`TrOCRProcessor`] wraps [`ViTFeatureExtractor`/`DeiTFeatureExtractor`] and [`RobertaTokenizer`/`XLMRobertaTokenizer`]
 into a single instance to both extract the input features and decode the predicted token ids.
 
 - Step-by-step Optical Character Recognition (OCR)
@@ -70,7 +70,8 @@ into a single instance to both extract the input features and decode the predict
 >>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten") 
 >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
 
->>> # load image from the IAM dataset url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg" 
+>>> # load image from the IAM dataset 
+>>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg" 
 >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
 >>> pixel_values = processor(image, return_tensors="pt").pixel_values 

@@ -19,6 +19,7 @@ import os
 import re
 
 import black
+from style_doc import style_docstrings_in_code
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -130,6 +131,7 @@ def blackify(code):
     if has_indent:
         code = f"class Bla:\n{code}"
     result = black.format_str(code, mode=black.FileMode([black.TargetVersion.PY35], line_length=119))
+    result, _ = style_docstrings_in_code(result)
     return result[len("class Bla:\n") :] if has_indent else result
 
 

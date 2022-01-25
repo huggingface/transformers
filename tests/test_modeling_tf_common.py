@@ -36,8 +36,8 @@ from transformers.testing_utils import (
     _tf_gpu_memory_limit,
     is_pt_tf_cross_test,
     is_staging_test,
-    require_keras2onnx,
     require_tf,
+    require_tf2onnx,
     slow,
 )
 from transformers.utils import logging
@@ -254,14 +254,14 @@ class TFModelTesterMixin:
 
             self.assertEqual(len(incompatible_ops), 0, incompatible_ops)
 
-    @require_keras2onnx
+    @require_tf2onnx
     @slow
     def test_onnx_runtime_optimize(self):
         if not self.test_onnx:
             return
 
-        import keras2onnx
         import onnxruntime
+        import tf2onnx
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -269,9 +269,9 @@ class TFModelTesterMixin:
             model = model_class(config)
             model(model.dummy_inputs)
 
-            onnx_model = keras2onnx.convert_keras(model, model.name, target_opset=self.onnx_min_opset)
+            onnx_model_proto, _ = tf2onnx.convert.from_keras(model, opset=self.onnx_min_opset)
 
-            onnxruntime.InferenceSession(onnx_model.SerializeToString())
+            onnxruntime.InferenceSession(onnx_model_proto.SerializeToString())
 
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -846,7 +846,9 @@ class TFModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class)
             inputs_np = prepare_numpy_arrays(inputs)
 
-            model(inputs_np)
+            output_for_dict_input = model(inputs_np)
+            output_for_kw_input = model(**inputs_np)
+            self.assert_outputs_same(output_for_dict_input, output_for_kw_input)
 
     def test_resize_token_embeddings(self):
         if not self.test_resize_embeddings:
@@ -1062,7 +1064,7 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
-            if getattr(model, "compute_loss", None):
+            if getattr(model, "hf_compute_loss", None):
                 # The number of elements in the loss should be the same as the number of elements in the label
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 added_label = prepared_for_class[

@@ -27,6 +27,7 @@ _import_structure = {
         "PatchingSpec",
     ],
     "convert": ["export", "validate_model_outputs"],
+    "features": ["FeaturesManager"],
     "utils": ["ParameterFormat", "compute_serialized_parameters_size"],
 }
 
@@ -40,9 +41,10 @@ if TYPE_CHECKING:
         PatchingSpec,
     )
     from .convert import export, validate_model_outputs
+    from .features import FeaturesManager
     from .utils import ParameterFormat, compute_serialized_parameters_size
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

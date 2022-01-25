@@ -112,19 +112,34 @@ def export(
 
         config.patch_ops()
 
-        # export can works with named args but the dict containing named args as to be last element of the args tuple
-        export(
-            model,
-            (model_inputs,),
-            f=output.as_posix(),
-            input_names=list(config.inputs.keys()),
-            output_names=onnx_outputs,
-            dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
-            do_constant_folding=True,
-            use_external_data_format=config.use_external_data_format(model.num_parameters()),
-            enable_onnx_checker=True,
-            opset_version=opset,
-        )
+        # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
+        # so we check the torch version for backwards compatibility
+        if parse(torch.__version__) <= parse("1.10.99"):
+            # export can work with named args but the dict containing named args
+            # has to be the last element of the args tuple.
+            export(
+                model,
+                (model_inputs,),
+                f=output.as_posix(),
+                input_names=list(config.inputs.keys()),
+                output_names=onnx_outputs,
+                dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
+                do_constant_folding=True,
+                use_external_data_format=config.use_external_data_format(model.num_parameters()),
+                enable_onnx_checker=True,
+                opset_version=opset,
+            )
+        else:
+            export(
+                model,
+                (model_inputs,),
+                f=output.as_posix(),
+                input_names=list(config.inputs.keys()),
+                output_names=onnx_outputs,
+                dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
+                do_constant_folding=True,
+                opset_version=opset,
+            )
 
         config.restore_ops()
 
@@ -149,7 +164,7 @@ def validate_model_outputs(
 
     # Create ONNX Runtime session
     options = SessionOptions()
-    session = InferenceSession(onnx_model.as_posix(), options)
+    session = InferenceSession(onnx_model.as_posix(), options, providers=["CPUExecutionProvider"])
 
     # Compute outputs from the reference model
     ref_outputs = reference_model(**reference_model_inputs)
@@ -183,7 +198,7 @@ def validate_model_outputs(
     ref_outputs_set, onnx_outputs_set = set(ref_outputs_dict.keys()), set(onnx_named_outputs)
     if not onnx_outputs_set.issubset(ref_outputs_set):
         logger.info(
-            f"\t-[x] ONNX model outputs' name {onnx_outputs_set} doesn't match reference model {ref_outputs_set}"
+            f"\t-[x] ONNX model output names {onnx_outputs_set} do not match reference model {ref_outputs_set}"
         )
 
         raise ValueError(
@@ -191,7 +206,7 @@ def validate_model_outputs(
             f"{onnx_outputs_set.difference(ref_outputs_set)}"
         )
     else:
-        logger.info(f"\t-[✓] ONNX model outputs' name match reference model ({onnx_outputs_set})")
+        logger.info(f"\t-[✓] ONNX model output names match reference model ({onnx_outputs_set})")
 
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):

@@ -1051,6 +1051,7 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
         >>> tokenizer = MarianTokenizer.from_pretrained("facebook/marian-large-cnn")
@@ -1319,6 +1320,7 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
         >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")

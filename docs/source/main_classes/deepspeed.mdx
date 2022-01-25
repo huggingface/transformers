@@ -1707,13 +1707,13 @@ Work is being done to enable estimating how much memory is needed for a specific
 
 ## Non-Trainer Deepspeed Integration
 
-The [`~integrations.HfDeepSpeedConfig`] is used to integrate Deepspeed into the 🤗 Transformers core
+The [`~deepspeed.HfDeepSpeedConfig`] is used to integrate Deepspeed into the 🤗 Transformers core
 functionality, when [`Trainer`] is not used.
 
 When using [`Trainer`] everything is automatically taken care of.
 
 When not using [`Trainer`], to efficiently deploy DeepSpeed stage 3, you must instantiate the
-[`~integrations.HfDeepSpeedConfig`] object before instantiating the model.
+[`~deepspeed.HfDeepSpeedConfig`] object before instantiating the model.
 
 For example for a pretrained model:
 
