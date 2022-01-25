@@ -188,7 +188,13 @@ def format_code_example(code: str, max_len: int, in_docstring: bool = False):
             formatted_lines.append("")
 
     result = "\n".join(formatted_lines)
-    return result.rstrip(), error
+
+    # TODO(Patrick,Sylvain) - ugly hack that makes sure style_docstring does
+    # not kill the emtpy line needed for doctests to work correctly
+    if not (len(code_lines) > 1 and code_lines[-2] in ["{expected_output}", "{expected_loss}"]):
+        result = result.rstrip()
+
+    return result, error
 
 
 def format_text(text, max_len, prefix="", min_indent=None):
