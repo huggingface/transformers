@@ -397,8 +397,8 @@ class TFModelTesterMixin:
             tf_hidden_states = tfo[0].numpy()
             pt_hidden_states = pto[0].numpy()
 
-            tf_nans = np.copy(np.isnan(tf_hidden_states))
-            pt_nans = np.copy(np.isnan(pt_hidden_states))
+            tf_nans = np.isnan(tf_hidden_states)
+            pt_nans = np.isnan(pt_hidden_states)
 
             pt_hidden_states[tf_nans] = 0
             tf_hidden_states[tf_nans] = 0
@@ -429,8 +429,8 @@ class TFModelTesterMixin:
                     tf_loss = tf.math.reduce_mean(tf_loss).numpy()
                     pt_loss = pt_loss.numpy()
 
-                    tf_nans = np.copy(np.isnan(tf_loss))
-                    pt_nans = np.copy(np.isnan(pt_loss))
+                    tf_nans = np.isnan(tf_loss)
+                    pt_nans = np.isnan(pt_loss)
                     # the 2 losses need to be both nan or both not nan
                     # (`TapasForQuestionAnswering` gives nan loss here)
                     self.assertEqual(tf_nans, pt_nans)
@@ -443,21 +443,21 @@ class TFModelTesterMixin:
                         # Before these issues are fixed & merged, set a higher threshold here to pass the test.
                         self.assertLessEqual(max_diff, 2e-1)
 
-                    tf_hidden_states = tfo[1].numpy()
-                    pt_hidden_states = pto[1].numpy()
+                    tf_logits = tfo[1].numpy()
+                    pt_logits = pto[1].numpy()
 
                     # check on the shape
-                    self.assertEqual(tf_hidden_states.shape, pt_hidden_states.shape)
+                    self.assertEqual(tf_logits.shape, pt_logits.shape)
 
-                    tf_nans = np.copy(np.isnan(tf_hidden_states))
-                    pt_nans = np.copy(np.isnan(pt_hidden_states))
+                    tf_nans = np.isnan(tf_logits)
+                    pt_nans = np.isnan(pt_logits)
 
-                    pt_hidden_states[tf_nans] = 0
-                    tf_hidden_states[tf_nans] = 0
-                    pt_hidden_states[pt_nans] = 0
-                    tf_hidden_states[pt_nans] = 0
+                    pt_logits[tf_nans] = 0
+                    tf_logits[tf_nans] = 0
+                    pt_logits[pt_nans] = 0
+                    tf_logits[pt_nans] = 0
 
-                    max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
+                    max_diff = np.amax(np.abs(tf_logits - pt_logits))
                     self.assertLessEqual(max_diff, 4e-2)
 
             # Check we can load pt model in tf and vice-versa with checkpoint => model functions
@@ -492,8 +492,8 @@ class TFModelTesterMixin:
             tfo = tf_model(tf_inputs_dict)
             tfo = tfo[0].numpy()
             pto = pto[0].numpy()
-            tf_nans = np.copy(np.isnan(tfo))
-            pt_nans = np.copy(np.isnan(pto))
+            tf_nans = np.isnan(tfo)
+            pt_nans = np.isnan(pto)
 
             pto[tf_nans] = 0
             tfo[tf_nans] = 0
