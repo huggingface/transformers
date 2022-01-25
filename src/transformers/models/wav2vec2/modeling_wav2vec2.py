@@ -48,16 +48,34 @@ from .configuration_wav2vec2 import Wav2Vec2Config
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "Wav2Vec2Config"
-_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-
-_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
-_FRAME_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-sd"
-_XVECTOR_CHECKPOINT = "superb/wav2vec2-base-superb-sv"
 
 _HIDDEN_STATES_START_POSITION = 2
+
+# General docstring
+_CONFIG_FOR_DOC = "Wav2Vec2Config"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
+
+# CTC docstring
+_CTC_EXPECTED_OUTPUT = "'mister quilter is the aposle of the middle classes and we are glad to welcome his gospel'"
+_CTC_EXPECTED_LOSS = 12.51
+
+# Audio class docstring
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
+_SEQ_CLASS_EXPECTED_OUTPUT = "label"  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
+_SEQ_CLASS_EXPECTED_LOSS = 0.69  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
+
+# Frame class docstring
+_FRAME_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-sd"
+_FRAME_EXPECTED_OUTPUT = [0, 0]
+
+# Speaker Verification docstring
+_XVECTOR_CHECKPOINT = "superb/wav2vec2-base-superb-sv"
+_XVECTOR_EXPECTED_OUTPUT = 0.97
 
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1294,6 +1312,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1697,6 +1716,8 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1826,6 +1847,8 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1941,6 +1964,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_FRAME_EXPECTED_OUTPUT,
     )
     def forward(
         self,
@@ -2114,6 +2138,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_XVECTOR_EXPECTED_OUTPUT,
     )
     def forward(
         self,
