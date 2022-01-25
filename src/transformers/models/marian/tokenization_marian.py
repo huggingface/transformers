@@ -285,7 +285,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             return
         saved_files = []
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab"]
         )
 
         save_json(self.encoder, out_vocab_file)
