@@ -2050,7 +2050,7 @@ class Trainer:
 
         elif self.args.should_save:
             self._save(output_dir)
-        
+
         # Push to the Hub when `save_model` is called by the user.
         if self.args.push_to_hub and not _internal_call:
             self.push_to_hub(commit_message="Model save")
@@ -2772,7 +2772,7 @@ class Trainer:
                 model_name = Path(self.args.output_dir).name
             else:
                 model_name = self.args.hub_model_id.split("/")[-1]
-        
+
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
         self.save_model(_internal_call=True)

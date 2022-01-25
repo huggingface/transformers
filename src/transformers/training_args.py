@@ -365,7 +365,7 @@ class TrainingArguments:
             Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
             down the training and evaluation speed.
         push_to_hub (`bool`, *optional*, defaults to `False`):
-            Whether or not to push the model to the Hub every time the model is saved. If this is activated, 
+            Whether or not to push the model to the Hub every time the model is saved. If this is activated,
             `output_dir` will begin a git directory synced with the the repo (determined by `hub_model_id`) and the
             content will be pushed each time a save is triggered (depneding on your `save_strategy`). Calling
             [`~Trainer.save_model`] will also trigger a push
@@ -376,6 +376,7 @@ class TrainingArguments:
             pushed.
 
             </Tip>
+
         resume_from_checkpoint (`str`, *optional*):
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
             [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See the [example
