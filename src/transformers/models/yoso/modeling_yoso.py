@@ -247,6 +247,7 @@ class YosoLSHCumulation(torch.autograd.Function):
         return None, None, grad_query, grad_key, grad_value, None
 
 
+# Copied from transformers.models.nystromformer.modeling_nystromformer.NystromformerEmbeddings
 class YosoEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
