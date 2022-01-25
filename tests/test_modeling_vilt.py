@@ -595,13 +595,14 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         outputs = model(
-            input_ids=encoding_1.input_ids,
-            pixel_values=pixel_values,
+            input_ids=encoding_1.input_ids.to(torch_device),
+            pixel_values=pixel_values.to(torch_device),
         )
 
         # verify the logits
         expected_shape = torch.Size([1, 2])
         self.assertEqual(outputs.logits.shape, expected_shape)
 
+        print("Logits:", outputs.logits[0, :3])
         expected_slice = torch.tensor([-2.4013, 2.9342]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
