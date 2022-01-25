@@ -39,7 +39,7 @@ for config, model_type, input_size, not_supported_dtypes in benchmarks:
             continue
         for attr in dir(config):
             if 'drop' in attr:
-                setattr(config, attr, 1e-30) # So we can check for correct gradients without eliminating the dropout computation
+                setattr(config, attr, 1e-60) # So we can check for correct gradients without eliminating the dropout computation
         model = model_type.from_config(config).to(device, dtype=dtype)
         input_ids = torch.randint(0, config.vocab_size, input_size).to(device)
         decoder_ids = torch.randint(0, config.vocab_size, input_size).to(device)
@@ -106,8 +106,17 @@ for config, model_type, input_size, not_supported_dtypes in benchmarks:
         out2 = aot_model(**train_inputs).loss
         out2.sum().backward()
         grad2 = [i.grad for i in aot_model.parameters()]
-        print("Maximum output error: ", (out1 - out2).abs().max().item())
-        print("Maximum gradient error: ", max([(a-b).abs().max() for a, b in zip(grad1, grad2) if a is not None]).item())
+        if model_name == 'LongformerForMaskedLM': # Longformer seems to have worse precision
+            atol = 5e-3
+            rtol = 1e-3
+        elif dtype == torch.float:
+            atol = 5e-5
+            rtol = 5e-3
+        else:
+            atol = 1e-2
+            rtol = 1e-1
+        torch.testing.assert_close(out2, out1, atol=atol, rtol=rtol)
+        torch.testing.assert_close(grad2, grad1, atol=atol, rtol=rtol)
         print()
 
 
