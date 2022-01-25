@@ -1,2 +1,2 @@
-docs/source/quicktour.rst
-docs/source/task_summary.rst
+docs/source/quicktour.mdx
+docs/source/task_summary.mdx
