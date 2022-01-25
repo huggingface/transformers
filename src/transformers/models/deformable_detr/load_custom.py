@@ -21,6 +21,7 @@ def load_cuda_kernels():
         with_cuda=True,
         extra_include_paths=[root],
         # build_directory=os.path.dirname(os.path.realpath(__file__)),
+        extra_cflags=["-DWITH_CUDA=1"],
         extra_cuda_cflags=[
             "-DCUDA_HAS_FP16=1",
             "-D__CUDA_NO_HALF_OPERATORS__",
