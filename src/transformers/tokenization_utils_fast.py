@@ -46,6 +46,7 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
+VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 TOKENIZER_FILE = "tokenizer.json"
@@ -86,6 +87,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
 
+    vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class: PreTrainedTokenizer = None
     can_save_slow_tokenizer: bool = True
 
