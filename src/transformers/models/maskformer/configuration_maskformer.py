@@ -28,14 +28,12 @@ MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 logger = logging.get_logger(__name__)
 
-RGB = Tuple[int, int, int]
-
 
 @dataclass
 class ClassSpec:
     is_thing: bool
     label: str
-    colour: RGB
+    color: Tuple[int, int, int]
 
 
 @dataclass
@@ -61,7 +59,6 @@ class MaskFormerConfig(PretrainedConfig):
         dataset_metadata: DatasetMetadata = None,
         fpn_feature_size: Optional[int] = 256,
         mask_feature_size: Optional[int] = 256,
-        num_classes: Optional[int] = 150,
         no_object_weight: Optional[float] = 0.1,
         num_queries: Optional[int] = 100,
         swin_pretrain_img_size: Optional[int] = 384,
@@ -76,31 +73,30 @@ class MaskFormerConfig(PretrainedConfig):
         ce_weight: Optional[float] = 1.0,
         mask_weight: Optional[float] = 20.0,
         mask_classification: Optional[bool] = True,
-        max_position_embeddings: Optional[int] = 1024,
-        encoder_layers: Optional[int] = 6,
-        encoder_ffn_dim: Optional[int] = 2048,
-        encoder_attention_heads: Optional[int] = 8,
-        decoder_layers: Optional[int] = 6,
-        decoder_ffn_dim: Optional[int] = 2048,
-        decoder_attention_heads: Optional[int] = 8,
-        encoder_layerdrop: Optional[int] = 0.0,
-        decoder_layerdrop: Optional[int] = 0.0,
-        d_model: Optional[int] = 256,
-        dropout: Optional[int] = 0.1,
-        attention_dropout: Optional[int] = 0.0,
-        activation_dropout: Optional[int] = 0.0,
-        init_std: Optional[int] = 0.02,
-        init_xavier_std: Optional[int] = 1.0,
-        scale_embedding: Optional[int] = False,
-        auxiliary_loss: Optional[int] = False,
-        dilation: Optional[int] = False,
+        detr_max_position_embeddings: Optional[int] = 1024,
+        detr_encoder_layers: Optional[int] = 6,
+        detr_encoder_ffn_dim: Optional[int] = 2048,
+        detr_encoder_attention_heads: Optional[int] = 8,
+        detr_decoder_layers: Optional[int] = 6,
+        detr_decoder_ffn_dim: Optional[int] = 2048,
+        detr_decoder_attention_heads: Optional[int] = 8,
+        detr_encoder_layerdrop: Optional[int] = 0.0,
+        detr_decoder_layerdrop: Optional[int] = 0.0,
+        detr_d_model: Optional[int] = 256,
+        detr_dropout: Optional[int] = 0.1,
+        detr_attention_dropout: Optional[int] = 0.0,
+        detr_activation_dropout: Optional[int] = 0.0,
+        detr_init_std: Optional[int] = 0.02,
+        detr_init_xavier_std: Optional[int] = 1.0,
+        detr_scale_embedding: Optional[int] = False,
+        detr_auxiliary_loss: Optional[int] = False,
+        detr_dilation: Optional[int] = False,
         **kwargs,
     ):
         self.dataset_metadata = dataset_metadata
 
         self.fpn_feature_size = fpn_feature_size
         self.mask_feature_size = mask_feature_size
-        self.num_classes = num_classes
         self.num_queries = num_queries
         self.no_object_weight = no_object_weight
         # swin backbone parameters
@@ -119,25 +115,25 @@ class MaskFormerConfig(PretrainedConfig):
 
         self.mask_classification = mask_classification
         # DETR parameters
-        self.detr_max_position_embeddings = max_position_embeddings
-        self.detr_d_model = d_model
-        self.detr_encoder_ffn_dim = encoder_ffn_dim
-        self.detr_encoder_layers = encoder_layers
-        self.detr_encoder_attention_heads = encoder_attention_heads
-        self.detr_decoder_ffn_dim = decoder_ffn_dim
-        self.detr_decoder_layers = decoder_layers
-        self.detr_decoder_attention_heads = decoder_attention_heads
-        self.detr_dropout = dropout
-        self.detr_attention_dropout = attention_dropout
-        self.detr_activation_dropout = activation_dropout
-        self.detr_init_std = init_std
-        self.detr_init_xavier_std = init_xavier_std
-        self.detr_encoder_layerdrop = encoder_layerdrop
-        self.detr_decoder_layerdrop = decoder_layerdrop
-        self.detr_num_hidden_layers = encoder_layers
-        self.detr_scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.detr_auxiliary_loss = auxiliary_loss
-        self.detr_dilation = dilation
+        self.detr_max_position_embeddings = detr_max_position_embeddings
+        self.detr_d_model = detr_d_model
+        self.detr_encoder_ffn_dim = detr_encoder_ffn_dim
+        self.detr_encoder_layers = detr_encoder_layers
+        self.detr_encoder_attention_heads = edetr_ncoder_attention_heads
+        self.detr_decoder_ffn_dim = detr_decoder_ffn_dim
+        self.detr_decoder_layers = detr_decoder_layers
+        self.detr_decoder_attention_heads = detr_decoder_attention_heads
+        self.detr_dropout = detr_dropout
+        self.detr_attention_dropout = detr_attention_dropout
+        self.detr_activation_dropout = detr_activation_dropout
+        self.detr_init_std = detr_init_std
+        self.detr_init_xavier_std = detr_init_xavier_std
+        self.detr_encoder_layerdrop = detr_encoder_layerdrop
+        self.detr_decoder_layerdrop = detr_decoder_layerdrop
+        self.detr_num_hidden_layers = detr_encoder_layers
+        self.detr_scale_embedding = detr_scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.detr_auxiliary_loss = detr_auxiliary_loss
+        self.detr_dilation = detr_dilation
 
         super().__init__(is_encoder_decoder=True, **kwargs)
 

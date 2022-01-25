@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, field
+from multiprocessing.sharedctypes import Value
 from numbers import Number
 from pprint import pprint
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
@@ -56,89 +57,41 @@ import torch.distributed as dist
 
 _CONFIG_FOR_DOC = "MaskFormerConfig"
 
+PREDICTIONS_MASKS_KEY = "preds_pixel_masks"
+PREDICTIONS_LOGITS_KEY = "preds_logits"
+TARGETS_MASKS_KEY = "pixel_masks"
+TARGETS_LABELS_KEY = "labels"
+
 # TODO this has to go away!
 from detectron2.utils.comm import get_world_size
 from scipy.optimize import linear_sum_assignment
 
 
-# copied from original implementation
-# TODO this has to go away!
-class NestedTensor(object):
-    def __init__(self, tensors, mask: Optional[Tensor]):
-        self.tensors = tensors
-        self.mask = mask
-
-    def to(self, device):
-        cast_tensor = self.tensors.to(device)
-        mask = self.mask
-        if mask is not None:
-            assert mask is not None
-            cast_mask = mask.to(device)
-        else:
-            cast_mask = None
-        return NestedTensor(cast_tensor, cast_mask)
-
-    def decompose(self):
-        return self.tensors, self.mask
-
-    def __repr__(self):
-        return str(self.tensors)
+@dataclass
+class MaskFormerOutput(ModelOutput):
+    pred_logits: torch.FloatTensor
+    pred_masks: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[Dict] = None
 
 
-# copied from original implementation
-# TODO this has to go away!
-# _onnx_nested_tensor_from_tensor_list() is an implementation of
-# nested_tensor_from_tensor_list() that is supported by ONNX tracing.
-@torch.jit.unused
-def _onnx_nested_tensor_from_tensor_list(tensor_list: List[Tensor]) -> NestedTensor:
-    max_size = []
-    for i in range(tensor_list[0].dim()):
-        max_size_i = torch.max(torch.stack([img.shape[i] for img in tensor_list]).to(torch.float32)).to(torch.int64)
-        max_size.append(max_size_i)
-    max_size = tuple(max_size)
+@dataclass
+class MaskFormerForSemanticSegmentationOutput(ModelOutput):
+    segmentation: torch.FloatTensor = None
+    pred_logits: torch.FloatTensor = None
+    pred_masks: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[Dict] = None
 
 
-# copied from original implementation
-# TODO this has to go away!
-def _max_by_axis(the_list):
-    # type: (List[List[int]]) -> List[int]
-    maxes = the_list[0]
-    for sublist in the_list[1:]:
-        for index, item in enumerate(sublist):
-            maxes[index] = max(maxes[index], item)
-    return maxes
-
-
-# copied from original implementation
-# TODO this has to go away!
-# This function pads images to match the max one in the list (similar to padding sequences)
-# however it is not clear to me why this is needed in the first place. The only case in which we need this
-# is when a batch of targets has a different masks-size. This case should be handled in the `collate_fn`
-# not inside the model. In the implementation I've assumed targets in a batch shares the same spatial size
-# for both images and masks
-def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
-    # TODO (authors) make this more general
-    if tensor_list[0].ndim == 3:
-        if torchvision._is_tracing():
-            # nested_tensor_from_tensor_list() does not export well to ONNX
-            # call _onnx_nested_tensor_from_tensor_list() instead
-            return _onnx_nested_tensor_from_tensor_list(tensor_list)
-
-        # TODO (authors) make it support different-sized images
-        max_size = _max_by_axis([list(img.shape) for img in tensor_list])
-        # min_size = tuple(min(s) for s in zip(*[img.shape for img in tensor_list]))
-        batch_shape = [len(tensor_list)] + max_size
-        b, c, h, w = batch_shape
-        dtype = tensor_list[0].dtype
-        device = tensor_list[0].device
-        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
-        mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
-        for img, pad_img, m in zip(tensor_list, tensor, mask):
-            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-            m[: img.shape[1], : img.shape[2]] = False
-    else:
-        raise ValueError("not supported")
-    return NestedTensor(tensor, mask)
+@dataclass
+class MaskFormerForPanopticSegmentationOutput(ModelOutput):
+    segmentation: torch.FloatTensor = None
+    pred_logits: torch.FloatTensor = None
+    pred_masks: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[Dict] = None
+    segments: List[PanopticSegmentationSegment] = None
 
 
 # copied from original implementation
@@ -155,13 +108,15 @@ def dice_loss(inputs: Tensor, targets: Tensor, num_masks: float) -> Tensor:
     r"""
     Compute the DICE loss, similar to generalized IOU for masks as follow
 
-    .. math::
+    $$
         \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x \cap y }{x \cup y + 1}}
 
+    $$
     In practice, since `targets` is a binary mask, (only 0s and 1s), dice can be computed as follow
 
-    .. math::
+    $$
         \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x * y }{x + y + 1}}
+    $$
 
     Args:
         inputs (Tensor): A tensor representing a mask
@@ -184,13 +139,13 @@ def sigmoid_focal_loss(
     inputs: Tensor, targets: Tensor, num_masks: int, alpha: float = 0.25, gamma: float = 2
 ) -> Tensor:
     r"""
-       Focal loss proposed in `Focal Loss for Dense Object Detection
-    <https://arxiv.org/abs/1708.02002>`_ originally used in RetinaNet. The loss is computed as follows
+       Focal loss proposed in [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002) originally used in RetinaNet. The loss is computed as follows
 
-    .. math::
+    $$
          \mathcal{L}_{\text{focal loss} = -(1 - p_t)^{\gamma}\log{(p_t)}
+    $$
 
-    where :math:`CE(p_t) = -\log{(p_t)}}`, CE is the standard Cross Entropy Loss
+    where $CE(p_t) = -\log{(p_t)}}$, CE is the standard Cross Entropy Loss
 
     Please refer to equation (1,2,3) of the paper for a better understanding.
 
@@ -207,9 +162,9 @@ def sigmoid_focal_loss(
         Tensor: The computed loss
     """
     probs: Tensor = inputs.sigmoid()
-    ce_loss: Tensor = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    cross_entropy_loss: Tensor = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
     p_t: Tensor = probs * targets + (1 - probs) * (1 - targets)
-    loss: Tensor = ce_loss * ((1 - p_t) ** gamma)
+    loss: Tensor = cross_entropy_loss * ((1 - p_t) ** gamma)
 
     if alpha >= 0:
         alpha_t: Tensor = alpha * targets + (1 - alpha) * (1 - targets)
@@ -260,14 +215,13 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, targets: Tensor, alpha: float =
     hw: int = inputs.shape[1]
 
     prob: Tensor = inputs.sigmoid()
-    focal_pos: Tensor = ((1 - prob) ** gamma) * F.binary_cross_entropy_with_logits(
-        inputs, torch.ones_like(inputs), reduction="none"
-    )
-    focal_neg: Tensor = (prob ** gamma) * F.binary_cross_entropy_with_logits(
-        inputs, torch.zeros_like(inputs), reduction="none"
-    )
-
+    cross_entropy_loss_pos = F.binary_cross_entropy_with_logits(inputs, torch.ones_like(inputs), reduction="none")
+    focal_pos: Tensor = ((1 - prob) ** gamma) * cross_entropy_loss_pos
     focal_pos *= alpha
+
+    cross_entropy_loss_neg = F.binary_cross_entropy_with_logits(inputs, torch.zeros_like(inputs), reduction="none")
+
+    focal_neg: Tensor = (prob ** gamma) * cross_entropy_loss_neg
     focal_neg *= 1 - alpha
 
     loss: Tensor = torch.einsum("nc,mc->nm", focal_pos, targets) + torch.einsum("nc,mc->nm", focal_neg, (1 - targets))
@@ -293,7 +247,8 @@ class MaskFormerHungarianMatcher(nn.Module):
             cost_dice: This is the relative weight of the dice loss of the binary mask in the matching cost
         """
         super().__init__()
-        assert cost_class != 0 or cost_mask != 0 or cost_dice != 0, "all costs cant be 0"
+        if cost_class != 0 and cost_mask != 0 and cost_dice != 0:
+            raise ValueError("All costs cant be 0")
         self.cost_class = cost_class
         self.cost_mask = cost_mask
         self.cost_dice = cost_dice
@@ -322,14 +277,14 @@ class MaskFormerHungarianMatcher(nn.Module):
 
         indices: List[Tuple[np.array]] = []
 
-        preds_masks: Tensor = outputs["pred_masks"]
-        targets_masks: Tensor = targets["masks"]
-        preds_probs: Tensor = outputs["pred_logits"].softmax(dim=-1)
+        preds_masks: Tensor = outputs[PREDICTIONS_MASKS_KEY]
+        targets_masks: Tensor = targets[TARGETS_MASKS_KEY]
+        preds_probs: Tensor = outputs[PREDICTIONS_LOGITS_KEY].softmax(dim=-1)
         # downsample all masks in one go -> save memory
         targets_masks: Tensor = F.interpolate(targets_masks, size=preds_masks.shape[-2:], mode="nearest")
         # iterate through batch size
         for pred_probs, pred_mask, target_mask, labels in zip(
-            preds_probs, preds_masks, targets_masks, targets["labels"]
+            preds_probs, preds_masks, targets_masks, targets[TARGETS_LABELS_KEY]
         ):
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
@@ -359,9 +314,9 @@ class MaskFormerHungarianMatcher(nn.Module):
     def __repr__(self):
         head = "Matcher " + self.__class__.__name__
         body = [
-            "cost_class: {}".format(self.cost_class),
-            "cost_mask: {}".format(self.cost_mask),
-            "cost_dice: {}".format(self.cost_dice),
+            f"cost_class: {self.cost_class}",
+            f"cost_mask: {self.cost_mask}",
+            f"cost_dice: {self.cost_dice}",
         ]
         _repr_indent = 4
         lines = [head] + [" " * _repr_indent + line for line in body]
@@ -408,13 +363,15 @@ class MaskFormerLoss(nn.Module):
         # TODO this doc was copied by the authors
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_masks]
         """
-        assert "pred_logits" in outputs
-        pred_logits: Tensor = outputs["pred_logits"]
+
+        pred_logits: Tensor = outputs[PREDICTIONS_LOGITS_KEY]
         b, q, _ = pred_logits.shape
 
         idx = self._get_src_permutation_idx(indices)
         # shape = [BATCH, N_QUERIES]
-        target_classes_o: Tensor = torch.cat([target[j] for target, (_, j) in zip(targets["labels"], indices)])
+        target_classes_o: Tensor = torch.cat(
+            [target[j] for target, (_, j) in zip(targets[TARGETS_LABELS_KEY], indices)]
+        )
         # shape = [BATCH, N_QUERIES]
         target_classes: Tensor = torch.full(
             (b, q), fill_value=self.num_classes, dtype=torch.int64, device=pred_logits.device
@@ -430,13 +387,11 @@ class MaskFormerLoss(nn.Module):
         """Compute the losses related to the masks: the focal loss and the dice loss.
         targets dicts must contain the key "masks" containing a tensor of dim [nb_target_masks, h, w]
         """
-        assert "pred_masks" in outputs
-
         src_idx = self._get_src_permutation_idx(indices)
         tgt_idx = self._get_tgt_permutation_idx(indices)
-        pred_masks = outputs["pred_masks"]
+        pred_masks = outputs[PREDICTIONS_MASKS_KEY]
         pred_masks = pred_masks[src_idx]
-        target_masks = targets["masks"]
+        target_masks = targets[TARGETS_MASKS_KEY]
         # upsample predictions to the target size
         pred_masks = F.interpolate(pred_masks, size=target_masks.shape[-2:], mode="bilinear", align_corners=False)
         pred_masks = pred_masks.flatten(1)
@@ -463,7 +418,8 @@ class MaskFormerLoss(nn.Module):
 
     def get_loss(self, loss, outputs, targets, indices, num_masks):
         loss_map = {"labels": self.loss_labels, "masks": self.loss_masks}
-        assert loss in loss_map, f"{loss} not in loss_map"
+        if loss not in loss_map:
+            raise KeyError(f"{loss} not in loss_map")
         return loss_map[loss](outputs, targets, indices, num_masks)
 
     def forward(self, outputs: Dict[str, Tensor], targets: Dict[str, Tensor]) -> Dict[str, Tensor]:
@@ -499,7 +455,7 @@ class MaskFormerLoss(nn.Module):
 
     def get_num_masks(self, targets: Dict[str, Tensor], device: torch.device) -> Number:
         # Compute the average number of target masks accross all nodes, for normalization purposes
-        num_masks: int = targets["labels"].shape[0]
+        num_masks: int = targets[TARGETS_LABELS_KEY].shape[0]
         num_masks_pt: Tensor = torch.as_tensor([num_masks], dtype=torch.float, device=device)
         if is_dist_avail_and_initialized():
             torch.distributed.all_reduce(num_masks_pt)
@@ -1242,7 +1198,7 @@ class FPNModel(nn.Module):
 
 class MaskFormerPixelDecoder(nn.Module):
     def __init__(self, *args, feature_size: int = 256, mask_feature_size: int = 256, **kwargs):
-        """Pixel Decoder Module proposed in `Per-Pixel Classification is Not All You Need for Semantic Segmentation <https://arxiv.org/abs/2107.06278>`_. It first run the backbone's feature into a Feature Pyramid Network creating a list of features map. Then, it projects the last one to the correct `mask_size`
+        """Pixel Decoder Module proposed in [Per-Pixel Classification is Not All You Need for Semantic Segmentation](https://arxiv.org/abs/2107.06278). It first run the backbone's feature into a Feature Pyramid Network creating a list of features map. Then, it projects the last one to the correct `mask_size`
 
         Args:
             feature_size (int, optional): The features (channels) of FPN feature maps. Defaults to 256.
@@ -1301,7 +1257,7 @@ class PositionEmbeddingSine(nn.Module):
         return pos
 
 
-class MLP(nn.Sequential):
+class MaskformerMLPPredictionHead(nn.Sequential):
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int = 3):
         """A classic Multi Layer Perceptron (MLP)
 
@@ -1327,7 +1283,7 @@ class MLP(nn.Sequential):
 
 class MaskFormerPixelLevelModule(nn.Module):
     def __init__(self, config: MaskFormerConfig):
-        """Pixel Level Module proposed in `Per-Pixel Classification is Not All You Need for Semantic Segmentation <https://arxiv.org/abs/2107.06278>`_. It runs the input image trough a backbone and a pixel decoder, generating a image features and pixel embeddings."""
+        """Pixel Level Module proposed in [Per-Pixel Classification is Not All You Need for Semantic Segmentation](https://arxiv.org/abs/2107.06278). It runs the input image trough a backbone and a pixel decoder, generating a image features and pixel embeddings."""
         super().__init__()
         self.backbone = SwinTransformerBackbone(
             pretrain_img_size=config.swin_pretrain_img_size,
@@ -1359,7 +1315,7 @@ class MaskFormerTransformerModule(nn.Module):
         self.position_embedder = PositionEmbeddingSine(num_pos_feats=config.hidden_size // 2, normalize=True)
         self.queries_embedder = nn.Embedding(config.num_queries, config.hidden_size)
         should_project = in_features != config.hidden_size
-        self.input_proj = (
+        self.input_projection = (
             nn.Conv2d(in_features, config.hidden_size, kernel_size=1) if should_project else nn.Identity()
         )
         # TODO hugly, ask!
@@ -1368,7 +1324,7 @@ class MaskFormerTransformerModule(nn.Module):
         )
 
     def forward(self, image_features: Tensor) -> Tuple[Tensor]:
-        image_features = self.input_proj(image_features)
+        image_features = self.input_projection(image_features)
         position_embeddings: Tensor = self.position_embedder(image_features)
         queries_embeddings: Tensor = repeat(self.queries_embedder.weight, "q c -> b q c", b=image_features.shape[0])
         inputs_embeds = torch.zeros_like(queries_embeddings)
@@ -1395,10 +1351,12 @@ class MaskFormerSegmentationModule(nn.Module):
         super().__init__()
         # + 1 because we add the "null" class
         self.mask_classification = config.mask_classification
-        self.class_predictor = nn.Linear(config.hidden_size, config.num_classes + 1)
-        self.mask_embedder = MLP(config.hidden_size, config.hidden_size, config.mask_feature_size)
+        self.class_predictor = nn.Linear(config.hidden_size, config.num_labels + 1)
+        self.mask_embedder = MaskformerMLPPredictionHead(
+            config.hidden_size, config.hidden_size, config.mask_feature_size
+        )
 
-    def forward(self, decoder_outputs: Tuple[Tensor], pixel_embbeddings: Tensor) -> Dict[str, Tensor]:
+    def forward(self, decoder_outputs: Tuple[Tensor], pixel_embeddings: Tensor) -> Dict[str, Tensor]:
         last_decoder_output: Tensor = decoder_outputs[-1]
         mask_embeddings: Tensor = self.mask_embedder(last_decoder_output)
         out: Dict[str, Tensor] = {}
@@ -1407,17 +1365,9 @@ class MaskFormerSegmentationModule(nn.Module):
             classes: Tensor = self.class_predictor(last_decoder_output)
             out.update({"pred_logits": classes})
         # sum up over the channels
-        binary_masks: Tensor = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embbeddings)
+        binary_masks: Tensor = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
         out.update({"pred_masks": binary_masks})
         return out
-
-
-@dataclass
-class MaskFormerOutput(ModelOutput):
-    pred_logits: torch.FloatTensor
-    pred_masks: torch.FloatTensor = None
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
 
 
 def upsample_like(x: Tensor, like: Tensor, mode: str = "bilinear") -> Tensor:
@@ -1468,7 +1418,7 @@ class MaskFormerModel(PreTrainedModel):
         }
 
         self.criterion = MaskFormerLoss(
-            config.num_classes,
+            config.num_labels,
             matcher=self.matcher,
             weight_dict=self.weight_dict,
             eos_coef=config.no_object_weight,
@@ -1487,7 +1437,7 @@ class MaskFormerModel(PreTrainedModel):
             loss = self.get_loss(loss_dict)
         else:
             # upsample the masks to match the inputs' spatial dimension
-            outputs["pred_masks"] = upsample_like(outputs["pred_masks"], pixel_values)
+            outputs[PREDICTIONS_MASKS_KEY] = upsample_like(outputs[PREDICTIONS_MASKS_KEY], pixel_values)
 
         return MaskFormerOutput(**outputs, loss_dict=loss_dict, loss=loss)
 
@@ -1502,21 +1452,13 @@ class MaskFormerModel(PreTrainedModel):
         return torch.tensor(list(loss_dict.values()), dtype=torch.float).sum()
 
 
-@dataclass
-class MaskFormerForSemanticSegmentationOutput(MaskFormerOutput):
-    segmentation: torch.FloatTensor = None
-
-
 class MaskFormerForSemanticSegmentation(nn.Module):
     def __init__(self, config: MaskFormerConfig):
         super().__init__()
         self.model = MaskFormerModel(config)
 
-    def forward(
-        self,
-        pixel_values: Tensor,
-    ):
-        outputs: MaskFormerOutput = self.model(pixel_values)
+    def forward(self, *args, **kwargs):
+        outputs: MaskFormerOutput = self.model(*args, **kwargs)
         # mask classes has shape [BATCH, QUERIES, CLASSES + 1]
         # remove the null class `[..., :-1]`
         mask_classes: Tensor = outputs.pred_logits.softmax(dim=-1)[..., :-1]
@@ -1539,11 +1481,6 @@ class PanopticSegmentationSegment(TypedDict):
     label: str
 
 
-@dataclass
-class MaskFormerForPanopticSegmentationOutput(MaskFormerForSemanticSegmentationOutput):
-    segments: List[PanopticSegmentationSegment] = None
-
-
 class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
     def __init__(
         self,
@@ -1558,10 +1495,10 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
     def remove_low_and_no_objects(
         self, masks: Tensor, scores: Tensor, labels: Tensor
     ) -> Tuple[Tensor, Tensor, Tensor]:
-        assert (
-            masks.shape[0] == scores.shape[0] == labels.shape[0]
-        ), "mask, scores and labels must have the same shape!"
-        to_keep: Tensor = labels.ne(self.model.config.num_classes) & (scores > self.object_mask_threshold)
+        if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
+            raise ValueError("mask, scores and labels must have the same shape!")
+
+        to_keep: Tensor = labels.ne(self.model.config.num_labels) & (scores > self.object_mask_threshold)
 
         return masks[to_keep], scores[to_keep], labels[to_keep]
 

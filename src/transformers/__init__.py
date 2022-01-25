@@ -422,11 +422,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-<<<<<<< HEAD
-    _import_structure["models.mask_former"].append("MaskFormerTokenizerFast")
-=======
     _import_structure["models.realm"].append("RealmTokenizerFast")
->>>>>>> e239fc3b0baf1171079a5e0177a69254350a063b
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
@@ -2696,6 +2692,7 @@ if TYPE_CHECKING:
             MaskFormerPreTrainedModel,
             load_tf_weights_in_mask_former,
         )
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
