@@ -394,10 +394,11 @@ class TokenizerTesterMixin:
         self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
         self.check_subword_sampling(tokenizer_new)
 
-    def test_save_slow_sentencepice_tokenizer(self) -> None:
+    def test_save_sentencepiece_tokenizer(self) -> None:
         if not self.test_sentencepiece or not self.test_slow_tokenizer:
             return
-
+        # We want to verify that we will be able to save the tokenizer even if the original files that were used to
+        # build the tokenizer have been deleted in the meantime.
         text = "This is text to test the tokenizer."
 
         tokenizer_slow_1 = self.get_tokenizer()
