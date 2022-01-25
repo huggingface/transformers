@@ -160,9 +160,11 @@ class BartphoTokenizer(PreTrainedTokenizer):
 
         # Keep order of special tokens for backward compatibility
         self.fairseq_tokens_to_ids = {
-            str(token): token_id
+            token: token_id
             for token_id, token in enumerate(
-                dict.fromkeys([bos_token, pad_token, eos_token, unk_token, sep_token, cls_token]).keys()
+                dict.fromkeys(
+                    [str(bos_token), str(pad_token), str(eos_token), str(unk_token), str(sep_token), str(cls_token)]
+                ).keys()
             )
         }
         with open(monolingual_vocab_file, "r", encoding="utf-8") as f:
