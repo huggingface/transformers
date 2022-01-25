@@ -1195,7 +1195,6 @@ PT_SPEECH_CTC_SAMPLE = r"""
     >>> loss = model(**inputs).loss
     >>> round(loss.item(), 2)
     {expected_loss}
-
     ```
 """
 
@@ -1240,7 +1239,6 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> loss = model(**inputs).loss
     >>> round(loss.item(), 2)
     {expected_loss}
-
     ```
 """
 
