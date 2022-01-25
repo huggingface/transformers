@@ -161,7 +161,11 @@ class BartphoTokenizer(PreTrainedTokenizer):
         # Keep order of special tokens for backward compatibility
         self.fairseq_tokens_to_ids = {
             token: token_id
-            for token_id, token in enumerate(dict.fromkeys([str(bos_token), str(pad_token), str(eos_token), str(unk_token)]).keys())
+            for token_id, token in enumerate(
+                dict.fromkeys(
+                    [str(bos_token), str(pad_token), str(eos_token), str(unk_token), str(sep_token), str(cls_token)]
+                ).keys()
+            )
         }
         with open(monolingual_vocab_file, "r", encoding="utf-8") as f:
             for line in f.readlines():
@@ -284,7 +288,7 @@ class BartphoTokenizer(PreTrainedTokenizer):
         if token in self.fairseq_tokens_to_ids:
             return self.fairseq_tokens_to_ids[token]
         else:
-            return self.fairseq_tokens_to_ids["<unk>"]
+            return self.unk_token_id
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
@@ -314,7 +318,9 @@ class BartphoTokenizer(PreTrainedTokenizer):
                 content_spiece_model = self.sp_model.serialized_model_proto()
                 fi.write(content_spiece_model)
 
-        if os.path.abspath(self.monolingual_vocab_file) != os.path.abspath(out_monolingual_vocab_file) and os.path.isfile(self.monolingual_vocab_file):
+        if os.path.abspath(self.monolingual_vocab_file) != os.path.abspath(
+            out_monolingual_vocab_file
+        ) and os.path.isfile(self.monolingual_vocab_file):
             copyfile(self.monolingual_vocab_file, out_monolingual_vocab_file)
         elif not os.path.isfile(self.monolingual_vocab_file):
             with open(out_monolingual_vocab_file, "w", encoding="utf-8") as fp:
@@ -326,7 +332,7 @@ class BartphoTokenizer(PreTrainedTokenizer):
                         str(self.cls_token),
                         str(self.unk_token),
                         str(self.pad_token),
-                        str(self.mask_token)
+                        str(self.mask_token),
                     ]:
                         fp.write(f"{token} \n")
 
