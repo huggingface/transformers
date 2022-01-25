@@ -108,6 +108,8 @@ class TokenizerVersioningTest(unittest.TestCase):
         json_tokenizer["model"]["vocab"]["huggingface"] = len(tokenizer)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
+            # Hack to save this in the tokenizer_config.json
+            tokenizer.init_kwargs["fast_tokenizer_files"] = ["tokenizer.4.0.0.json"]
             tokenizer.save_pretrained(tmp_dir)
             json.dump(json_tokenizer, open(os.path.join(tmp_dir, "tokenizer.4.0.0.json"), "w"))
 
@@ -120,6 +122,8 @@ class TokenizerVersioningTest(unittest.TestCase):
             # Will need to be adjusted if we reach v42 and this test is still here.
             # Should pick the old tokenizer file as the version of Transformers is < 4.0.0
             shutil.move(os.path.join(tmp_dir, "tokenizer.4.0.0.json"), os.path.join(tmp_dir, "tokenizer.42.0.0.json"))
+            tokenizer.init_kwargs["fast_tokenizer_files"] = ["tokenizer.42.0.0.json"]
+            tokenizer.save_pretrained(tmp_dir)
             new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
             self.assertEqual(len(new_tokenizer), len(tokenizer))
             json_tokenizer = json.loads(new_tokenizer._tokenizer.to_str())
@@ -127,7 +131,7 @@ class TokenizerVersioningTest(unittest.TestCase):
 
     def test_repo_versioning(self):
         # This repo has two tokenizer files, one for v4.0.0 and above with an added token, one for versions lower.
-        repo = "sgugger/finetuned-bert-mrpc"
+        repo = "hf-internal-testing/test-two-tokenizers"
 
         # This should pick the new tokenizer file as the version of Transformers is > 4.0.0
         tokenizer = AutoTokenizer.from_pretrained(repo)
