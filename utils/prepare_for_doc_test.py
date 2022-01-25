@@ -41,7 +41,7 @@ def maybe_append_new_line(docstring):
 
     if lines[0] in ["py", "python"]:
         last_line = lines[-1]
-        lines.append("\n" + last_line)
+        lines.append(last_line)
 
     return "\n".join(lines)
 
