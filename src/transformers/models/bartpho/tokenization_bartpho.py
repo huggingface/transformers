@@ -323,17 +323,18 @@ class BartphoTokenizer(PreTrainedTokenizer):
         ) and os.path.isfile(self.monolingual_vocab_file):
             copyfile(self.monolingual_vocab_file, out_monolingual_vocab_file)
         elif not os.path.isfile(self.monolingual_vocab_file):
+            special_tokens = [
+                self.bos_token,
+                self.eos_token,
+                self.sep_token,
+                self.cls_token,
+                self.unk_token,
+                self.pad_token,
+                self.mask_token,
+            ]
             with open(out_monolingual_vocab_file, "w", encoding="utf-8") as fp:
                 for token in self.fairseq_tokens_to_ids:
-                    if token not in [
-                        str(self.bos_token),
-                        str(self.eos_token),
-                        str(self.sep_token),
-                        str(self.cls_token),
-                        str(self.unk_token),
-                        str(self.pad_token),
-                        str(self.mask_token),
-                    ]:
-                        fp.write(f"{token} \n")
+                    if token not in special_tokens:
+                        fp.write(f"{str(token)} \n")
 
         return out_vocab_file, out_monolingual_vocab_file
