@@ -203,8 +203,9 @@ class MultiHeadSelfAttention(nn.Module):
 
         q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
         scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, q_length, k_length)
-        mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
-        scores = scores.masked_fill(mask, -float("inf"))  # (bs, n_heads, q_length, k_length)
+        if mask is not None:
+            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            scores = scores + mask
 
         weights = nn.functional.softmax(scores, dim=-1)  # (bs, n_heads, q_length, k_length)
         weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
@@ -541,6 +542,10 @@ class DistilBertModel(DistilBertPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
 
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
@@ -548,7 +553,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
             inputs_embeds = self.embeddings(input_ids)  # (bs, seq_length, dim)
         return self.transformer(
             x=inputs_embeds,
-            attn_mask=attention_mask,
+            attn_mask=extended_attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
