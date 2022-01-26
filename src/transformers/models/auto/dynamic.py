@@ -124,17 +124,10 @@ def get_cached_module_file(
     use_auth_token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
-    **kwargs,
 ):
     """
-    Extracts a class from a module file, present in the local folder or repository of a model.
-
-    <Tip warning={true}>
-
-    Calling this function will execute the code in the module file found locally or downloaded from the Hub. It should
-    therefore only be called on trusted repos.
-
-    </Tip>
+    Prepares Downloads a module from a local folder or a distant repo and returns its path inside the cached
+    Transformers module.
 
     Args:
         pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -148,8 +141,6 @@ def get_cached_module_file(
 
         module_file (`str`):
             The name of the module file containing the class to look for.
-        class_name (`str`):
-            The name of the class to import in the module.
         cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
             cache should not be used.
@@ -178,15 +169,7 @@ def get_cached_module_file(
     </Tip>
 
     Returns:
-        `type`: The class, dynamically imported from the module.
-
-    Examples:
-
-    ```python
-    # Download module *modeling.py* from huggingface.co and cache then extract the class *MyBertModel* from this
-    # module.
-    cls = get_class_from_dynamic_module("sgugger/my-bert-model", "modeling.py", "MyBertModel")
-    ```"""
+        `str`: The path to the module inside the cache."""
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
@@ -249,9 +232,11 @@ def get_cached_module_file(
         # benefit of versioning.
         submodule_path = submodule_path / commit_hash
         full_submodule = full_submodule + os.path.sep + commit_hash
-        os.makedirs(submodule_path, exist_ok=True)
+        create_dynamic_module(full_submodule)
+
         if not (submodule_path / module_file).exists():
             shutil.copy(resolved_module_file, submodule_path / module_file)
+        # Make sure we also have every file with relative
         for module_needed in modules_needed:
             if not (submodule_path / module_needed).exists():
                 get_cached_module_file(
