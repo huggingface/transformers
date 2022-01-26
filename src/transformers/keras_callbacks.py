@@ -115,7 +115,7 @@ class KerasMetricCallback(Callback):
             self.use_keras_label = False
             logging.warning("No label_cols specified for KerasMetricCallback, assuming you want the 'labels' key.")
         elif "start_positions" in input_spec and "end_positions" in input_spec:
-            self.label_Cols = ["start_positions", "end_positions"]
+            self.label_cols = ["start_positions", "end_positions"]
             self.use_keras_label = False
             logging.warning(
                 "No label_cols specified for KerasMetricCallback, assuming you want the "
