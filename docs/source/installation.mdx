@@ -1,5 +1,5 @@
 <!---
-Copyright 2020 The HuggingFace Team. All rights reserved.
+Copyright 2022 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -152,7 +152,7 @@ Pretrained models are downloaded and locally cached at: `~/.cache/huggingface/tr
 
 <Tip>
 
-Add 🤗 [Datasets](https://huggingface.co/docs/datasets/) to your offline training workflow by setting the environment variable `HF_DATASETS_OFFLINE=1`.
+Add [🤗 Datasets](https://huggingface.co/docs/datasets/) to your offline training workflow by setting the environment variable `HF_DATASETS_OFFLINE=1`.
 
 </Tip>
 
@@ -200,11 +200,11 @@ Another option for using 🤗 Transformers offline is to download the files ahea
     3. Now when you're offline, reload your files with [`PreTrainedModel.from_pretrained`] from the specified directory:
 
     ```py
-    >>> tokenizer =  AutoTokenizer.from_pretrained("./your/path/bigscience_t0")
+    >>> tokenizer = AutoTokenizer.from_pretrained("./your/path/bigscience_t0")
     >>> model = AutoModel.from_pretrained("./your/path/bigscience_t0")
     ```
 
-* Programmatically download files with the [`huggingface_hub`](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) library:
+* Programmatically download files with the [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) library:
 
     1. Install the `huggingface_hub` library in your virtual environment:
 
@@ -212,7 +212,7 @@ Another option for using 🤗 Transformers offline is to download the files ahea
     python -m pip install huggingface_hub
     ```
 
-    2. Use the [`hf_hub_download`](https://huggingface.co/docs/hub/adding-a-library#download-files-from-the-hub) function to download a file to a specific path. For example, the following command downloads the `config.json` file from the [T0](https://huggingface.co/bigscience/T0_3B) model to your desired path:
+    2. Use the [hf_hub_download](https://huggingface.co/docs/hub/adding-a-library#download-files-from-the-hub) function to download a file to a specific path. For example, the following command downloads the `config.json` file from the [T0](https://huggingface.co/bigscience/T0_3B) model to your desired path:
 
     ```py
     >>> from huggingface_hub import hf_hub_download
