@@ -172,6 +172,15 @@ class KerasMetricCallback(Callback):
             ignore_keys = getattr(self.model.config, "keys_to_ignore_at_inference", [])
         else:
             ignore_keys = []
+
+        if self.predict_with_generate:
+            if hasattr(self.model, "encoder") and self.model.encoder.main_input_name != self.model.main_input_name:
+                main_input_name = self.model.encoder.main_input_name
+            else:
+                main_input_name = getattr(self.model, "main_input_name", "input_ids")
+        else:
+            main_input_name = None
+
         prediction_list = []
         label_list = []
 
@@ -183,7 +192,7 @@ class KerasMetricCallback(Callback):
                 labels = None
             if self.predict_with_generate:
                 if isinstance(batch, dict):
-                    generation_inputs = batch["input_ids"]
+                    generation_inputs = batch[main_input_name]
                     attention_mask = batch.get("attention_mask", None)
                 else:
                     generation_inputs = batch
