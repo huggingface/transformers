@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 SenseTime and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 SenseTime and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch DETR model."""
+""" PyTorch Deformable DETR model."""
 
 
 import copy
@@ -577,6 +577,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         output_attentions: bool = False,
     ):
         print("Shape of hidden states:", hidden_states.shape)
+        print("Spatial shapes:", spatial_shapes.shape)
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
             hidden_states_original = hidden_states
@@ -640,7 +641,6 @@ class DeformableDetrMultiheadAttention(nn.Module):
         embed_dim: int,
         num_heads: int,
         dropout: float = 0.0,
-        is_decoder: bool = False,
         bias: bool = True,
     ):
         super().__init__()
@@ -648,9 +648,10 @@ class DeformableDetrMultiheadAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+        if self.head_dim * num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim ** -0.5
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -669,38 +670,22 @@ class DeformableDetrMultiheadAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
-        key_value_states: Optional[torch.Tensor] = None,
-        key_value_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.size()
+        print("Shape of hidden states:", hidden_states.shape)
 
+        bsz, tgt_len, embed_dim = hidden_states.size()
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
             hidden_states_original = hidden_states
             hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
 
-        # add key-value position embeddings to the key value states
-        if key_value_position_embeddings is not None:
-            key_value_states_original = key_value_states
-            key_value_states = self.with_pos_embed(key_value_states, key_value_position_embeddings)
-
-        # get query proj
+        # get queries, keys and values
         query_states = self.q_proj(hidden_states) * self.scaling
-        # get key, value proj
-        if is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states_original), -1, bsz)
-        else:
-            # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states_original), -1, bsz)
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states_original), -1, bsz)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
@@ -840,22 +825,23 @@ class DeformableDetrDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
+        # self-attention
         self.self_attn = DeformableDetrMultiheadAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
-            is_decoder=True,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = DeformableDetrMultiheadAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
+        # cross-attention
+        self.encoder_attn = DeformableDetrMultiscaleDeformableAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.decoder_attention_heads,
+            n_levels=config.num_feature_levels,
+            n_points=config.decoder_n_points,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
@@ -866,8 +852,11 @@ class DeformableDetrDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        # position_embeddings: Optional[torch.Tensor] = None,
         query_position_embeddings: Optional[torch.Tensor] = None,
+        reference_points=None,
+        spatial_shapes=None,
+        level_start_index=None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -877,9 +866,6 @@ class DeformableDetrDecoderLayer(nn.Module):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                position embeddings that are added to the queries and keys
-            in the cross-attention layer.
             query_position_embeddings (`torch.FloatTensor`, *optional*):
                 position embeddings that are added to the queries and keys
             in the self-attention layer.
@@ -905,23 +891,21 @@ class DeformableDetrDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        # Cross-Attention Block
+        # Cross-Attention
         cross_attn_weights = None
-        if encoder_hidden_states is not None:
-            residual = hidden_states
+        hidden_states, cross_attn_weights = self.encoder_attn(
+            hidden_states=hidden_states,
+            attention_mask=encoder_attention_mask,
+            position_embeddings=query_position_embeddings,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            output_attentions=output_attentions,
+        )
 
-            hidden_states, cross_attn_weights = self.encoder_attn(
-                hidden_states=hidden_states,
-                position_embeddings=query_position_embeddings,
-                key_value_states=encoder_hidden_states,
-                attention_mask=encoder_attention_mask,
-                key_value_position_embeddings=position_embeddings,
-                output_attentions=output_attentions,
-            )
-
-            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-            hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
@@ -1209,8 +1193,11 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        position_embeddings=None,
         query_position_embeddings=None,
+        reference_points=None,
+        spatial_shapes=None,
+        level_start_index=None,
+        valid_ratios=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1237,8 +1224,6 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Position embeddings that are added to the queries and keys in each cross-attention layer.
             query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
                 , *optional*): Position embeddings that are added to the queries and keys in each self-attention layer.
             output_attentions (`bool`, *optional*):
@@ -1262,19 +1247,20 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
 
         combined_attention_mask = None
 
-        if attention_mask is not None and combined_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            combined_attention_mask = combined_attention_mask + _expand_mask(
-                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-            )
+        # if attention_mask is not None and combined_attention_mask is not None:
+        #     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        #     combined_attention_mask = combined_attention_mask + _expand_mask(
+        #         attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+        #     )
 
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+        # # expand encoder attention mask
+        # if encoder_hidden_states is not None and encoder_attention_mask is not None:
+        #     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        #     encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # optional intermediate hidden states
         intermediate = () if self.config.auxiliary_loss else None
+        intermediate_reference_points = () if self.config.auxiliary_loss else None
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1282,6 +1268,14 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
         for idx, decoder_layer in enumerate(self.layers):
+            if reference_points.shape[-1] == 4:
+                reference_points_input = (
+                    reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
+                )
+            else:
+                assert reference_points.shape[-1] == 2
+                reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
+
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -1300,7 +1294,8 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(decoder_layer),
                     hidden_states,
-                    combined_attention_mask,
+                    # combined_attention_mask,
+                    attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     None,
@@ -1308,10 +1303,13 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=combined_attention_mask,
-                    position_embeddings=position_embeddings,
+                    # attention_mask=combined_attention_mask,
+                    attention_mask=attention_mask,
                     query_position_embeddings=query_position_embeddings,
                     encoder_hidden_states=encoder_hidden_states,
+                    reference_points=reference_points,
+                    spatial_shapes=spatial_shapes,
+                    level_start_index=level_start_index,
                     encoder_attention_mask=encoder_attention_mask,
                     output_attentions=output_attentions,
                 )
@@ -1321,6 +1319,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
             if self.config.auxiliary_loss:
                 hidden_states = self.layernorm(hidden_states)
                 intermediate += (hidden_states,)
+                intermediate_reference_points += (reference_points,)
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -1527,6 +1526,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         for lvl, (src, mask, pos_embed) in enumerate(zip(srcs, masks, position_embeddings_list)):
             bs, c, h, w = src.shape
             spatial_shape = (h, w)
+            print("Spatial shape:", spatial_shape)
             spatial_shapes.append(spatial_shape)
             src = src.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
@@ -1569,6 +1569,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         print("Encoder outputs:", encoder_outputs.keys())
 
         # Fifth, prepare decoder inputs
+        bs, _, c = encoder_outputs[0].shape
         if self.config.two_stage:
             raise NotImplementedError("To do")
         else:
@@ -1584,10 +1585,13 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         decoder_outputs = self.decoder(
             inputs_embeds=tgt,
             attention_mask=None,
-            position_embeddings=lvl_pos_embed_flatten,
             query_position_embeddings=query_embed,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=mask_flatten,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            valid_ratios=valid_ratios,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
