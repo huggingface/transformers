@@ -1180,6 +1180,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         self.dropout = config.dropout
         self.layers = nn.ModuleList([DeformableDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.gradient_checkpointing = False
+        self.return_intermediate = config.return_intermediate
         
         # Initialize weights and apply final processing
         self.post_init()
@@ -1235,8 +1236,8 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
             input_shape = inputs_embeds.size()[:-1]
 
         # optional intermediate hidden states
-        intermediate = () if self.config.auxiliary_loss else None
-        intermediate_reference_points = () if self.config.auxiliary_loss else None
+        intermediate = () if self.return_intermediate else None
+        intermediate_reference_points = () if self.return_intermediate else None
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1284,8 +1285,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
 
             hidden_states = layer_outputs[0]
 
-            if self.config.auxiliary_loss:
-                hidden_states = self.layernorm(hidden_states)
+            if self.return_intermediate:
                 intermediate += (hidden_states,)
                 intermediate_reference_points += (reference_points,)
 
@@ -1298,10 +1298,6 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-
-        # stack intermediate decoder activations
-        if self.config.auxiliary_loss:
-            intermediate = torch.stack(intermediate)
 
         if not return_dict:
             return tuple(

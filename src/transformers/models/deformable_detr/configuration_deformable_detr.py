@@ -74,6 +74,8 @@ class DeformableDetrConfig(PretrainedConfig):
         decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
+        return_intermediate (`bool`, *optional*, defaults to `True`):
+            Whether to make the decoder return intermediate hidden states and reference points.
         auxiliary_loss (`bool`, *optional*, defaults to `False`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
@@ -153,8 +155,7 @@ class DeformableDetrConfig(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         init_xavier_std=1.0,
-        classifier_dropout=0.0,
-        scale_embedding=False,
+        return_intermediate=True,
         auxiliary_loss=False,
         position_embedding_type="sine",
         backbone="resnet50",
@@ -193,7 +194,7 @@ class DeformableDetrConfig(PretrainedConfig):
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
         self.num_hidden_layers = encoder_layers
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.return_intermediate = return_intermediate
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
