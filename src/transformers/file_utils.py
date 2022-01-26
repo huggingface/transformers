@@ -1220,7 +1220,7 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> with torch.no_grad():
     ...     logits = model(**inputs).logits
 
-    >>> predicted_class_ids = torch.argmax(logits, dim=-1)
+    >>> predicted_class_ids = torch.argmax(logits, dim=-1).item()
     >>> predicted_label = model.config.id2label[predicted_class_ids]
     >>> predicted_label
     {expected_output}

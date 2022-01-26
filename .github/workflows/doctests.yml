@@ -42,7 +42,7 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[dev]
+          pip install .[testing,torch-speech]
 
       - name: Prepare files for doctests
         run: |

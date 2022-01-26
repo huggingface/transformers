@@ -60,22 +60,22 @@ _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
 
 # CTC docstring
-_CTC_EXPECTED_OUTPUT = "'mister quilter is the aposle of the middle classes and we are glad to welcome his gospel'"
-_CTC_EXPECTED_LOSS = 12.51
+_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
+_CTC_EXPECTED_LOSS = 53.48
 
 # Audio class docstring
 _FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 _SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
-_SEQ_CLASS_EXPECTED_OUTPUT = "label"
-_SEQ_CLASS_EXPECTED_LOSS = 0.69
+_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
+_SEQ_CLASS_EXPECTED_LOSS = 6.54
 
 # Frame class docstring
-_FRAME_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-sd"
+_FRAME_CLASS_CHECKPOINT = "anton-l/wav2vec2-base-superb-sd"
 _FRAME_EXPECTED_OUTPUT = [0, 0]
 
 # Speaker Verification docstring
-_XVECTOR_CHECKPOINT = "superb/wav2vec2-base-superb-sv"
-_XVECTOR_EXPECTED_OUTPUT = 0.97
+_XVECTOR_CHECKPOINT = "anton-l/wav2vec2-base-superb-sv"
+_XVECTOR_EXPECTED_OUTPUT = 0.98
 
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1488,10 +1488,11 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         >>> cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
 
         >>> # show that cosine similarity is much higher than random
-        >>> assert cosine_sim[mask_time_indices].mean() > 0.5
+        >>> cosine_sim[mask_time_indices.to(torch.bool)].mean() > 0.5
+        tensor(True)
 
         >>> # for contrastive loss training model should be put into train mode
-        >>> model.train()
+        >>> model = model.train()
         >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
         ```"""
 

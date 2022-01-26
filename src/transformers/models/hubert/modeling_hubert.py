@@ -54,14 +54,14 @@ _CHECKPOINT_FOR_DOC = "facebook/hubert-large-ls960-ft"
 _EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
 
 # CTC docstring
-_CTC_EXPECTED_OUTPUT = "'mister quilter is the aposle of the middle classes and we are glad to welcome his gospel'"
-_CTC_EXPECTED_LOSS = 12.51
+_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
+_CTC_EXPECTED_LOSS = 22.68
 
 # Audio class docstring
 _FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 _SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"
-_SEQ_CLASS_EXPECTED_OUTPUT = "label"
-_SEQ_CLASS_EXPECTED_LOSS = 0.69
+_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
+_SEQ_CLASS_EXPECTED_LOSS = 8.53
 
 
 HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
