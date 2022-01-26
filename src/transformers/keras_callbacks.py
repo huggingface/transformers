@@ -193,7 +193,8 @@ class KerasMetricCallback(Callback):
             else:
                 predictions = self.model.predict(batch)
             if isinstance(predictions, dict):
-                # BatchEncoding is a subclass of dict
+                # This converts any dict-subclass to a regular dict
+                # Keras REALLY doesn't like it when we pass around a BatchEncoding or other derived class
                 predictions = dict(predictions)
             if self.output_cols is not None:
                 predictions = {key: predictions[key] for key in self.output_cols}
