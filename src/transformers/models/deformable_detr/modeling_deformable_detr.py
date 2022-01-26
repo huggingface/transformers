@@ -839,7 +839,6 @@ class DeformableDetrDecoderLayer(nn.Module):
             n_levels=config.num_feature_levels,
             n_points=config.decoder_n_points,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -899,7 +898,6 @@ class DeformableDetrDecoderLayer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
@@ -1174,8 +1172,6 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
 
         self.layers = nn.ModuleList([DeformableDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
-        # in Deformable DETR, the decoder uses layernorm after the last decoder layer output
-        self.layernorm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1291,9 +1287,6 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
 
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
-
-        # finally, apply layernorm
-        hidden_states = self.layernorm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1711,6 +1704,8 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         )
 
         sequence_output = outputs[0]
+
+        print("Sequence output:", sequence_output[0, :3, :3])
 
         # class logits + predicted bounding boxes
         logits = self.class_embed(sequence_output)
