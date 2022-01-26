@@ -429,7 +429,8 @@ class MaskFormerLoss(nn.Module):
              targets: list of dicts, such that len(targets) == batch_size.
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
-        outputs_without_aux = {k: v for k, v in outputs.items() if k != "aux_outputs"}
+        # TODO in theory here we can just take the `pred_masks` key
+        outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxilary_masks"}
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
@@ -443,8 +444,8 @@ class MaskFormerLoss(nn.Module):
             losses.update(self.get_loss(loss, outputs, targets, indices, num_masks))
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
-        if "aux_outputs" in outputs:
-            for i, aux_outputs in enumerate(outputs["aux_outputs"]):
+        if "auxilary_masks" in outputs:
+            for i, aux_outputs in enumerate(outputs["auxilary_masks"]):
                 indices = self.matcher(aux_outputs, targets)
                 for loss in self.losses:
                     l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_masks)
@@ -1356,16 +1357,29 @@ class MaskFormerSegmentationModule(nn.Module):
             config.hidden_size, config.hidden_size, config.mask_feature_size
         )
 
-    def forward(self, decoder_outputs: Tuple[Tensor], pixel_embeddings: Tensor) -> Dict[str, Tensor]:
+    def forward(
+        self, decoder_outputs: Tuple[Tensor], pixel_embeddings: Tensor, auxilary_loss: bool = False
+    ) -> Dict[str, Tensor]:
+
         last_decoder_output: Tensor = decoder_outputs[-1]
-        mask_embeddings: Tensor = self.mask_embedder(last_decoder_output)
+
         out: Dict[str, Tensor] = {}
 
         if self.mask_classification:
-            classes: Tensor = self.class_predictor(last_decoder_output)
-            out.update({"pred_logits": classes})
-        # sum up over the channels
-        binary_masks: Tensor = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
+            classes: Tensor = self.class_predictor(decoder_outputs)
+            out.update({"pred_logits": classes[-1]})
+        if auxilary_loss:
+            mask_embeddings: Tensor = self.mask_embedder(decoder_outputs)
+            # sum up over the channels for each embedding
+            binaries_masks: Tensor = torch.einsum("lbqc,   bchw -> lbqhw", mask_embeddings, pixel_embeddings)
+            binary_masks: Tensor = binaries_masks[-1]
+            # TODO place classes here
+            out.update({"auxilary_masks": binaries_masks})
+        else:
+            last_decoder_output: Tensor = decoder_outputs[-1]
+            mask_embeddings: Tensor = self.mask_embedder(last_decoder_output)
+            # sum up over the channels
+            binary_masks: Tensor = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
         out.update({"pred_masks": binary_masks})
         return out
 
@@ -1571,3 +1585,4 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                                 stuff_memory_list[pred_class] = current_segment_id
 
             return MaskFormerForPanopticSegmentationOutput(segmentation=segmentation, segments=segments, **outputs)
+
