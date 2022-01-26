@@ -755,6 +755,11 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             query_vectors, key_vectors, self.one_sided_attn_window_size
         )
 
+        # values to pad for attention probs
+        remove_from_windowed_attention_mask = attention_mask != 0
+        # cast to fp32/fp16 then replace 1's with -inf
+        float_mask = tf.cast(remove_from_windowed_attention_mask, dtype=query_vectors.dtype) * LARGE_NEGATIVE
+
         # diagonal mask with zeros everywhere and -inf inplace of padding
         diagonal_mask = self._sliding_chunks_query_key_matmul(
             tf.ones(shape_list(attention_mask)),
