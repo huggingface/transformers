@@ -807,8 +807,6 @@ class DeformableDetrEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        print("Hidden states after FFN:", hidden_states[0,:3,:3])
-
         if self.training:
             if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
@@ -845,6 +843,8 @@ class DeformableDetrDecoderLayer(nn.Module):
             n_levels=config.num_feature_levels,
             n_points=config.decoder_n_points,
         )
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        # feedforward neural networks
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -852,7 +852,7 @@ class DeformableDetrDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        query_position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
         spatial_shapes=None,
         level_start_index=None,
@@ -863,7 +863,7 @@ class DeformableDetrDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            query_position_embeddings (`torch.FloatTensor`, *optional*):
+            position_embeddings (`torch.FloatTensor`, *optional*):
                 position embeddings that are added to the queries and keys in the self-attention layer.
             encoder_hidden_states (`torch.FloatTensor`):
                 cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -875,16 +875,25 @@ class DeformableDetrDecoderLayer(nn.Module):
         """
         residual = hidden_states
 
+        print("Hidden states before self-attention:", hidden_states[0,:3,:3])
+        
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=query_position_embeddings,
+            position_embeddings=position_embeddings,
             output_attentions=output_attentions,
         )
 
+        print("Hidden states after self-attention:", hidden_states[0,:3,:3])
+
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
+        print("Hidden states after residual:", hidden_states[0,:3,:3])
         hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        second_residual = hidden_states
+        
+        print("Hidden states before cross-attention:", hidden_states[0,:3,:3])
 
         # Cross-Attention
         cross_attn_weights = None
@@ -893,15 +902,22 @@ class DeformableDetrDecoderLayer(nn.Module):
             attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            position_embeddings=query_position_embeddings,
+            position_embeddings=position_embeddings,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
-
+        print("Hidden states after cross-attention:", hidden_states[0,:3,:3])
+        
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
+        hidden_states = second_residual + hidden_states
+
+        print("Hidden states after residual:", hidden_states[0,:3,:3])
+        
+        hidden_states = self.encoder_attn_layer_norm(hidden_states)
+
+        print("Hidden states after layernorm:", hidden_states[0,:3,:3])
 
         # Fully Connected
         residual = hidden_states
@@ -911,6 +927,8 @@ class DeformableDetrDecoderLayer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
+
+        print("Hidden states after ffn:", hidden_states[0,:3,:3])
 
         outputs = (hidden_states,)
 
@@ -1028,14 +1046,10 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
 
 class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
     """
-    Transformer encoder consisting of *config.encoder_layers* self-attention layers. Each layer is a
+    Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer is a
     [`DeformableDetrEncoderLayer`].
 
-    The encoder updates the flattened feature map through multiple self-attention layers.
-
-    Small tweak for Deformable DETR:
-
-    - position_embeddings are added to the forward pass.
+    The encoder updates the flattened feature map through multiple deformable attention layers.
 
     Args:
         config: DeformableDetrConfig
@@ -1045,11 +1059,7 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layerdrop = config.encoder_layerdrop
-
         self.layers = nn.ModuleList([DeformableDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
-
-        # in the original Deformable DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1157,7 +1167,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
 
     Some small tweaks for Deformable DETR:
 
-    - position_embeddings and query_position_embeddings are added to the forward pass.
+    - position_embeddings are added to the forward pass.
     - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
 
     Args:
@@ -1166,12 +1176,11 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
 
     def __init__(self, config: DeformableDetrConfig):
         super().__init__(config)
+        
         self.dropout = config.dropout
-        self.layerdrop = config.decoder_layerdrop
-
         self.layers = nn.ModuleList([DeformableDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
-
         self.gradient_checkpointing = False
+        
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1180,7 +1189,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        query_position_embeddings=None,
+        position_embeddings=None,
         reference_points=None,
         spatial_shapes=None,
         level_start_index=None,
@@ -1204,7 +1213,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
                 , *optional*): Position embeddings that are added to the queries and keys in each self-attention layer.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -1264,7 +1273,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    query_position_embeddings=query_position_embeddings,
+                    position_embeddings=position_embeddings,
                     encoder_hidden_states=encoder_hidden_states,
                     reference_points=reference_points_input,
                     spatial_shapes=spatial_shapes,
@@ -1559,19 +1568,17 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             # queries = torch.zeros_like(query_position_embeddings)
 
         print("----DECODER INPUTS-----")
-        print("Shape of tgt:", tgt.shape)
-        print("Shape of reference_points:", reference_points.shape)
-        print("Shape of encoder_hidden_states:", encoder_outputs[0].shape)
-        print("Shape of spatial_shapes:", spatial_shapes.shape)
-        print("Shape of level_start_index:", level_start_index.shape)
-        print("Shape of valid_ratios:", valid_ratios.shape)
-        print("Shape of query_embed:", query_embed.shape)
-        print("Shape of mask_flatten:", mask_flatten.shape)
+        print("First values of tgt:", tgt[0,:3,:3])
+        print("First values of query_embed:", query_embed[0,:3,:3])
+        print("First values of mask_flatten:", mask_flatten[0,:3])
+        print("First values of reference_points:", reference_points[0,:3,:3])
+        print("Spatial shapes:", spatial_shapes)
+        print("Level_start_index:", level_start_index)
+        print("Valid_ratios:", valid_ratios)
 
-        # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             inputs_embeds=tgt,
-            query_position_embeddings=query_embed,
+            position_embeddings=query_embed,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=mask_flatten,
             reference_points=reference_points,
@@ -1582,6 +1589,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        print("Last hidden states of decoder:", decoder_outputs[0][0,:3,:3])
 
         if not return_dict:
             return decoder_outputs + encoder_outputs
@@ -1909,12 +1918,10 @@ class DeformableDetrForSegmentation(DeformableDetrPreTrainedModel):
         )
         queries = torch.zeros_like(query_position_embeddings)
 
-        # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.deformable_detr.model.decoder(
             inputs_embeds=queries,
             attention_mask=None,
             position_embeddings=position_embeddings,
-            query_position_embeddings=query_position_embeddings,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=flattened_mask,
             output_attentions=output_attentions,
@@ -1932,7 +1939,7 @@ class DeformableDetrForSegmentation(DeformableDetrPreTrainedModel):
         mask = flattened_mask.view(batch_size, height, width)
 
         # FIXME h_boxes takes the last one computed, keep this in mind
-        # important: we need to reverse the mask, since in the original implementation the mask works reversed
+        # important: we need to invert the mask, since in the original implementation the mask works inverted
         # bbox_mask is of shape (batch_size, num_queries, number_of_attention_heads in bbox_attention, height/32, width/32)
         bbox_mask = self.bbox_attention(sequence_output, memory, mask=~mask)
 

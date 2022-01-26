@@ -38,9 +38,15 @@ def rename_key(orig_key):
     if "transformer" in orig_key:
         orig_key = orig_key.replace("transformer.", "")
     if "norm1" in orig_key:
-        orig_key = orig_key.replace("norm1", "self_attn_layer_norm")
+        if "encoder" in orig_key:
+            orig_key = orig_key.replace("norm1", "self_attn_layer_norm")
+        else:
+            orig_key = orig_key.replace("norm1", "encoder_attn_layer_norm")
     if "norm2" in orig_key:
-        orig_key = orig_key.replace("norm2", "final_layer_norm")
+        if "encoder" in orig_key:
+            orig_key = orig_key.replace("norm2", "final_layer_norm")
+        else:
+            orig_key = orig_key.replace("norm2", "self_attn_layer_norm")
     if "norm3" in orig_key:
         orig_key = orig_key.replace("norm3", "final_layer_norm")
     if "linear1" in orig_key:
