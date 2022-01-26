@@ -38,9 +38,9 @@ class DeformableDetrConfig(PretrainedConfig):
 
 
     Args:
-        num_queries (`int`, *optional*, defaults to 100):
+        num_queries (`int`, *optional*, defaults to 300):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`DeformableDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
+            [`DeformableDetrModel`] can detect in a single image.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers.
         encoder_layers (`int`, *optional*, defaults to 6):
@@ -51,9 +51,9 @@ class DeformableDetrConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         decoder_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 2048):
+        decoder_ffn_dim (`int`, *optional*, defaults to 1024):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 2048):
+        encoder_ffn_dim (`int`, *optional*, defaults to 1024):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -135,13 +135,13 @@ class DeformableDetrConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_queries=100,
+        num_queries=300,
         max_position_embeddings=1024,
         encoder_layers=6,
-        encoder_ffn_dim=2048,
+        encoder_ffn_dim=1024,
         encoder_attention_heads=8,
         decoder_layers=6,
-        decoder_ffn_dim=2048,
+        decoder_ffn_dim=1024,
         decoder_attention_heads=8,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
@@ -164,6 +164,7 @@ class DeformableDetrConfig(PretrainedConfig):
         decoder_n_points=4,
         two_stage=False,
         two_stage_num_proposals=300,
+        with_box_refine=False,
         class_cost=1,
         bbox_cost=5,
         giou_cost=2,
@@ -203,6 +204,7 @@ class DeformableDetrConfig(PretrainedConfig):
         self.decoder_n_points = decoder_n_points
         self.two_stage = two_stage
         self.two_stage_num_proposals = two_stage_num_proposals
+        self.with_box_refine = with_box_refine
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
