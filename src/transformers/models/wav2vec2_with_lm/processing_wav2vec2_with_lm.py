@@ -45,6 +45,8 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
     """
 
     text: Union[List[str], str]
+    logit_score: Union[List[float], float] = None
+    lm_score: Union[List[float], float] = None
 
 
 class Wav2Vec2ProcessorWithLM:
@@ -299,7 +301,8 @@ class Wav2Vec2ProcessorWithLM:
         hotword_weight = hotword_weight if hotword_weight is not None else DEFAULT_HOTWORD_WEIGHT
 
         # create multiprocessing pool and list numpy arrays
-        logits_list = [array for array in logits]
+        # filter out logits padding
+        logits_list = [array[(array != -100.).all(axis=-1)] for array in logits]
         pool = get_context("fork").Pool(num_processes)
 
         # pyctcdecode
@@ -316,11 +319,14 @@ class Wav2Vec2ProcessorWithLM:
         # clone multi-processing pool
         pool.close()
 
-        # extract text
-        batch_texts = [d[0][0] for d in decoded_beams]
-
+        # extract text and scores
+        batch_texts, logit_scores, lm_scores = [], [], []
+        for d in decoded_beams:
+            batch_texts.append(d[0][0])
+            logit_scores.append(d[0][-2])
+            lm_scores.append(d[0][-1])
         # more output features will be added in the future
-        return Wav2Vec2DecoderWithLMOutput(text=batch_texts)
+        return Wav2Vec2DecoderWithLMOutput(text=batch_texts, logit_score=logit_scores, lm_score=lm_scores)
 
     def decode(
         self,
@@ -378,7 +384,11 @@ class Wav2Vec2ProcessorWithLM:
         )
 
         # more output features will be added in the future
-        return Wav2Vec2DecoderWithLMOutput(text=decoded_beams[0][0])
+        return Wav2Vec2DecoderWithLMOutput(
+            text=decoded_beams[0][0], 
+            logit_score=decoded_beams[0][-2], 
+            lm_score=decoded_beams[0][-1]
+        )
 
     @contextmanager
     def as_target_processor(self):
