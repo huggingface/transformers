@@ -26,7 +26,7 @@ env:
 
 jobs:
   run_doctests:
-    runs-on: [self-hosted, docker-gpu, single-gpu]
+    runs-on: [self-hosted, docker-gpu-test, single-gpu]
     container:
       image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
