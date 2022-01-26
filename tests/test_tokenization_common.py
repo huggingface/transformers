@@ -3567,15 +3567,24 @@ class TokenizerTesterMixin:
                             AlbertTokenizer.from_pretrained(pretrained_name)
                         else:
                             BertTokenizer.from_pretrained(pretrained_name)
+                    except EnvironmentError as e:
+                        # Some tokenizer will raised an error before reaching the logged warning because there are no
+                        # corresponding files to load
+                        error_message = str(e)
                     except (TypeError, AttributeError):
                         # Some tokenizers cannot be loaded into the target tokenizer at all and errors are returned,
                         # here we just check that the warning has been logged before the error is raised
                         pass
                     finally:
+                        logged_msg_target = (
+                            "The tokenizer class you load from this checkpoint is not the same type as the class "
+                            "this function is called from."
+                        )
+                        raised_error_msg_target = "Can't load tokenizer for"
                         self.assertTrue(
-                            cm.records[0].message.startswith(
-                                "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from."
-                            )
+                            cm.records[0].message.startswith(logged_msg_target)
+                            if len(cm.records) > 0
+                            else False or raised_error_msg_target in error_message
                         )
                     try:
                         if self.rust_tokenizer_class == BertTokenizerFast:

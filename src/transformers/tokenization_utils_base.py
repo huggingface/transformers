@@ -1760,7 +1760,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
                 "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
                 f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                f"containing all relevant tokenizer files."
+                f"containing all relevant files for a {cls.__name__} tokenizer."
             )
 
         for file_id, file_path in vocab_files.items():
