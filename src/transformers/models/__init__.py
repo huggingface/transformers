@@ -17,7 +17,7 @@
 # limitations under the License.
 
 from . import (
-    mask_former,
+    maskformer,
     albert,
     auto,
     bart,

@@ -378,7 +378,7 @@ class MaskFormerLoss(nn.Module):
         )
         target_classes[idx] = target_classes_o
         loss_ce: Tensor = F.cross_entropy(rearrange(pred_logits, "b q c -> b c q"), target_classes, self.empty_weight)
-        losses: Tensor = {"loss_ce": loss_ce}
+        losses: Tensor = {"loss_cross_entropy": loss_ce}
         return losses
 
     def loss_masks(
@@ -1408,11 +1408,9 @@ class MaskFormerModel(PreTrainedModel):
         )
 
         losses = ["labels", "masks"]
-        # TODO I don't like too aggressive abbreviations in the naming
-        # what is 'ce'? It's cross entropy but it's not clear
-        # ask if we should follow a more exhaustive naming convention
+
         self.weight_dict: Dict[str, float] = {
-            "loss_ce": config.ce_weight,
+            "loss_cross_entropy": config.ce_weight,
             "loss_mask": config.mask_weight,
             "loss_dice": config.dice_weight,
         }

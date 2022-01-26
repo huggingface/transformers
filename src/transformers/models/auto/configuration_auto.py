@@ -30,7 +30,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("mask_former", "MaskFormerConfig"),
+        ("maskformer", "MaskFormerConfig"),
         ("swin", "SwinConfig"),
         ("vilt", "ViltConfig"),
         ("vit_mae", "ViTMAEConfig"),

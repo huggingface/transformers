@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        ("mask_former", "MaskFormerModel"),
+        ("maskformer", "MaskFormerModel"),
         ("swin", "SwinModel"),
         ("vilt", "ViltModel"),
         ("vit_mae", "ViTMAEModel"),
@@ -274,6 +274,7 @@ MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image Segmentation mapping
         ("detr", "DetrForSegmentation"),
+        ("maskformer", ("MaskFormerForSemanticSegmentation", "MaskFormerForPanopticSegmentation")),
     ]
 )
 
