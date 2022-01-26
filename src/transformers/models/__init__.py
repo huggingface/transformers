@@ -119,4 +119,5 @@ from . import (
     xlm_prophetnet,
     xlm_roberta,
     xlnet,
+    yoso,
 )
