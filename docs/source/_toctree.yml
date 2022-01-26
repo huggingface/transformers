@@ -19,6 +19,8 @@
     title: Preprocessing data
   - local: training
     title: Fine-tuning a pretrained model
+  - local: accelerate
+    title: Distributed training with 🤗 Accelerate
   - local: model_sharing
     title: Model sharing and uploading
   - local: tokenizer_summary

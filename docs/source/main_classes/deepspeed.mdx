@@ -31,7 +31,7 @@ won't be possible on a single GPU.
 
 🤗 Transformers integrates [DeepSpeed](https://github.com/microsoft/DeepSpeed) via 2 options:
 
-1. Integration of the core DeepSpeed features via [`Trainer`]. This is everything done for you type
+1. Integration of the core DeepSpeed features via [`Trainer`]. This is everything done for your type
    of integration - just supply your custom config file or use our template and you have nothing else to do. Most of
    this document is focused on this feature.
 2. If you don't use [`Trainer`] and want to use your own Trainer where you integrated DeepSpeed
@@ -97,7 +97,7 @@ TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 pip install . \
 --disable-pip-version-check 2>&1 | tee build.log
 ```
 
-If you intend to use NVMe offload you will need to also include `DS_BUILD_AIO=1` in the instructions above (and also
+If you intend to use NVMe offload you will also need to include `DS_BUILD_AIO=1` in the instructions above (and also
 install *libaio-dev* system-wide).
 
 Edit `TORCH_CUDA_ARCH_LIST` to insert the code for the architectures of the GPU cards you intend to use. Assuming all
@@ -134,7 +134,7 @@ You can check the archs pytorch was built with using:
 python -c "import torch; print(torch.cuda.get_arch_list())"
 ```
 
-Here is how to find out the arch for one of the installed GPU. For example, for GPU 0:
+Here is how to find out the arch for one of the installed GPUs. For example, for GPU 0:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python -c "import torch; \
@@ -169,7 +169,7 @@ following:
 2. add a new argument `--deepspeed ds_config.json`, where `ds_config.json` is the DeepSpeed configuration file as
    documented [here](https://www.deepspeed.ai/docs/config-json/). The file naming is up to you.
 
-Therefore, if your original command line looked as following:
+Therefore, if your original command line looked as follows:
 
 ```bash
 python -m torch.distributed.launch --nproc_per_node=2 your_program.py <normal cl args>
@@ -214,7 +214,7 @@ For some practical usage examples, please, see this [post](https://github.com/hu
 
 ### Deployment with one GPU
 
-To deploy DeepSpeed with one GPU adjust the [`Trainer`] command line arguments as following:
+To deploy DeepSpeed with one GPU adjust the [`Trainer`] command line arguments as follows:
 
 ```bash
 deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
@@ -560,7 +560,7 @@ Do note that some values, such as `scheduler.params.total_num_steps` are calcula
 ### ZeRO
 
 [Zero Redundancy Optimizer (ZeRO)](https://www.deepspeed.ai/tutorials/zero/) is the workhorse of DeepSpeed. It
-support 3 different levels (stages) of optimization. The first one is not quite interesting for scalability purposes,
+supports 3 different levels (stages) of optimization. The first one is not quite interesting for scalability purposes,
 therefore this document focuses on stages 2 and 3. Stage 3 is further improved by the latest addition of ZeRO-Infinity.
 You will find more indepth information in the DeepSpeed documentation.
 
@@ -581,7 +581,7 @@ going to use.
 
 #### ZeRO-2 Config
 
-The following is an example configuration for ZeRO stage 2:
+The following is an example of configuration for ZeRO stage 2:
 
 ```json
 {
@@ -604,13 +604,13 @@ The following is an example configuration for ZeRO stage 2:
 **Performance tuning:**
 
 - enabling `offload_optimizer` should reduce GPU RAM usage (it requires `"stage": 2`)
-- `"overlap_comm": true` trades off increased GPU RAM usage to lower all-reduce latency. `overlap_comm` uses 4.5x
+- `"overlap_comm": true` trade offs increased GPU RAM usage to lower all-reduce latency. `overlap_comm` uses 4.5x
   the `allgather_bucket_size` and `reduce_bucket_size` values. So if they are set to 5e8, this requires a 9GB
   footprint (`5e8 x 2Bytes x 2 x 4.5`). Therefore, if you have a GPU with 8GB or less RAM, to avoid getting
   OOM-errors you will need to reduce those parameters to about `2e8`, which would require 3.6GB. You will want to do
   the same on larger capacity GPU as well, if you're starting to hit OOM.
-- when reducing these buffers you're trading communication speed to avail more GPU RAM. The smaller the buffer size,
-  the slower the communication, and the more GPU RAM will be available to other tasks. So if a bigger batch size is
+- when reducing these buffers you're trading communication speed to avail more GPU RAM. The smaller the buffer size is,
+  the slower the communication gets, and the more GPU RAM will be available to other tasks. So if a bigger batch size is
   important, getting a slightly slower training time could be a good trade.
 
 
@@ -619,7 +619,7 @@ The following is an example configuration for ZeRO stage 2:
 
 #### ZeRO-3 Config
 
-The following is an example configuration for ZeRO stage 3:
+The following is an example of configuration for ZeRO stage 3:
 
 ```json
 {
@@ -662,7 +662,7 @@ and its typically accessed much faster than normal CPU memory.
 
 If hitting OOM reduce `stage3_max_live_parameters` and `stage3_max_reuse_distance`. They should have minimal impact
 on performance unless you are doing activation checkpointing. `1e9` would consume ~2GB. The memory is shared by
-`stage3_max_live_parameters` and `stage3_max_reuse_distance`, so its not additive, its just 2GB total.
+`stage3_max_live_parameters` and `stage3_max_reuse_distance`, so it's not additive, it's just 2GB total.
 
 `stage3_max_live_parameters` is the upper limit on how many full parameters you want to keep on the GPU at any given
 time. "reuse distance" is a metric we are using to figure out when will a parameter be used again in the future, and we

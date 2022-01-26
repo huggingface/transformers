@@ -437,6 +437,9 @@ class SwinBlock(nn.Module):
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
 
+        if self.attn_mask is not None:
+            self.attn_mask = self.attn_mask.to(hidden_states_windows.device)
+
         self_attention_outputs = self.attention(
             hidden_states_windows,
             self.attn_mask,

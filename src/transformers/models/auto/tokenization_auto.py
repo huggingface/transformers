@@ -21,15 +21,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import (
-    RepositoryNotFoundError,
-    RevisionNotFoundError,
-    cached_path,
-    hf_bucket_url,
-    is_offline_mode,
-    is_sentencepiece_available,
-    is_tokenizers_available,
-)
+from ...file_utils import get_file_from_repo, is_sentencepiece_available, is_tokenizers_available
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -329,46 +321,18 @@ def get_tokenizer_config(
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
-    if is_offline_mode() and not local_files_only:
-        logger.info("Offline mode: forcing local_files_only=True")
-        local_files_only = True
-
-    pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-    if os.path.isdir(pretrained_model_name_or_path):
-        config_file = os.path.join(pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE)
-    else:
-        config_file = hf_bucket_url(
-            pretrained_model_name_or_path, filename=TOKENIZER_CONFIG_FILE, revision=revision, mirror=None
-        )
-
-    try:
-        # Load from URL or cache if already cached
-        resolved_config_file = cached_path(
-            config_file,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            proxies=proxies,
-            resume_download=resume_download,
-            local_files_only=local_files_only,
-            use_auth_token=use_auth_token,
-        )
-
-    except RepositoryNotFoundError as err:
-        logger.error(err)
-        raise EnvironmentError(
-            f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
-            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
-            "pass a token having permission to this repo with `use_auth_token` or log in with "
-            "`huggingface-cli login` and pass `use_auth_token=True`."
-        )
-    except RevisionNotFoundError as err:
-        logger.error(err)
-        raise EnvironmentError(
-            f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
-            "for this model name. Check the model page at "
-            f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
-        )
-    except EnvironmentError:
+    resolved_config_file = get_file_from_repo(
+        pretrained_model_name_or_path,
+        TOKENIZER_CONFIG_FILE,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        resume_download=resume_download,
+        proxies=proxies,
+        use_auth_token=use_auth_token,
+        revision=revision,
+        local_files_only=local_files_only,
+    )
+    if resolved_config_file is None:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
 
