@@ -471,8 +471,9 @@ class DeformableDetrSinePositionEmbedding(nn.Module):
         y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
         x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
-            y_embed = y_embed / (y_embed[:, -1:, :] + 1e-6) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
+            eps = 1e-6
+            y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * self.scale
+            x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
 
         dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
         dim_t = self.temperature ** (2 * (dim_t // 2) / self.embedding_dim)
@@ -588,7 +589,8 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
-            value = value.masked_fill(attention_mask[..., None], float(0))
+            # we invert the attention_mask
+            value = value.masked_fill(~attention_mask[..., None], float(0))
         value = value.view(N, Len_in, self.n_heads, self.d_model // self.n_heads)
         sampling_offsets = self.sampling_offsets(hidden_states).view(
             N, Len_q, self.n_heads, self.n_levels, self.n_points, 2
@@ -769,14 +771,14 @@ class DeformableDetrEncoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            attention_mask (`torch.FloatTensor`): attention mask.
             position_embeddings (`torch.FloatTensor`, *optional*): position embeddings, to be added to hidden_states.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
         residual = hidden_states
+
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -788,6 +790,8 @@ class DeformableDetrEncoderLayer(nn.Module):
             level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
+
+        print("Hidden states after self-attention:", hidden_states[0,:3,:3])
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -802,6 +806,8 @@ class DeformableDetrEncoderLayer(nn.Module):
 
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
+
+        print("Hidden states after FFN:", hidden_states[0,:3,:3])
 
         if self.training:
             if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
@@ -879,8 +885,6 @@ class DeformableDetrDecoderLayer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        print("Output of self-attention:", hidden_states.shape)
 
         # Cross-Attention
         cross_attn_weights = None
@@ -1120,23 +1124,17 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         for i, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
-                layer_outputs = (None, None)
-            else:
-                # we add position_embeddings as extra input to the encoder_layer
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    position_embeddings=position_embeddings,
-                    reference_points=reference_points,
-                    spatial_shapes=spatial_shapes,
-                    level_start_index=level_start_index,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                position_embeddings=position_embeddings,
+                reference_points=reference_points,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                output_attentions=output_attentions,
+            )
 
-                hidden_states = layer_outputs[0]
+            hidden_states = layer_outputs[0]
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
@@ -1446,12 +1444,12 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         device = pixel_values.device
 
         if pixel_mask is None:
-            pixel_mask = torch.ones(((batch_size, height, width)), device=device)
+            pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
 
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # which is a list of tuples
         features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
-
+        
         srcs = []
         masks = []
         for l, (src, mask) in enumerate(features):
@@ -1476,6 +1474,13 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         if not self.config.two_stage:
             query_embeds = self.query_position_embeddings.weight
 
+        print("Src means:")
+        for src in srcs:
+            print(src.mean())
+        print("Position embeddings means:")
+        for pos in position_embeddings_list:
+            print(pos.mean())
+        
         # Prepare encoder inputs (by flattening)
         src_flatten = []
         mask_flatten = []
@@ -1499,14 +1504,22 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
+        # revert valid_ratios
+        valid_ratios = ~valid_ratios.bool()
+        valid_ratios = valid_ratios.float()
+        
         print("----ENCODER INPUTS-----")
         print("Shape of src_flatten:", src_flatten.shape)
+        print("First values of src_flatten:", src_flatten[0,:3,:3])
         print("Shape of spatial_shapes:", spatial_shapes.shape)
+        print("Spatial shapes:", spatial_shapes)
         print("Shape of level_start_index:", level_start_index.shape)
+        print("Level_start_index:", level_start_index)
         print("Shape of valid_ratios:", valid_ratios.shape)
-        print("Shape of lvl_pos_embed_flatten:", lvl_pos_embed_flatten.shape)
-        print("Shape of mask_flatten:", mask_flatten.shape)
-
+        print("Valid ratios:", valid_ratios)
+        print("First values of lvl_pos_embed_flatten:", lvl_pos_embed_flatten[0,:3,:3])
+        print("First values of mask_flatten:", mask_flatten[0,:3])
+        
         # Fourth, sent src_flatten + mask_flatten + lvl_pos_embed_flatten through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
         if encoder_outputs is None:
@@ -1530,6 +1543,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             )
 
         print("Shape of encoder outputs:", encoder_outputs[0].shape)
+        print("First values of encoder outputs:", encoder_outputs[0][0,:3,:3])
 
         # Fifth, prepare decoder inputs
         bs, _, c = encoder_outputs[0].shape
@@ -1568,8 +1582,6 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        print("Shape of decoder outputs:", decoder_outputs.last_hidden_state.shape)
 
         if not return_dict:
             return decoder_outputs + encoder_outputs
