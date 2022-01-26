@@ -314,9 +314,15 @@ def get_class_from_dynamic_module(
     <Tip>
 
     Passing `use_auth_token=True` is required when you want to use a private model.
+<<<<<<< HEAD
 
     </Tip>
 
+=======
+
+    </Tip>
+
+>>>>>>> 9669aa13c8 (Allow dynamic modules to use relative imports)
     Returns:
         `type`: The class, dynamically imported from the module.
 
