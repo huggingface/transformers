@@ -182,7 +182,7 @@ class TestDeepSpeedWav2Vec2(TestCasePlus):
         # currently ds_config_wav2vec2_zero.json requires "zero_optimization.find_unused_parameters": true,
         # hence the separate config files
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_wav2vec2_{stage}.json".split()
-        script = [f"{self.examples_dir_str}/research_projects/wav2vec2/run_asr.py"]
+        script = [f"{self.examples_dir_str}/pytorch/speech-recognition/run_speech_recognition_ctc.py"]
         launcher = self.get_launcher(distributed)
 
         cmd = launcher + script + args + ds_args
