@@ -211,12 +211,6 @@ def parse_args():
         help="The name of the task.",
     )
     parser.add_argument(
-        "--filter_out_labels",
-        type=str,
-        default=None,
-        help="The name of the task.",
-    )
-    parser.add_argument(
         "--debug",
         action="store_true",
         help="Activate debug mode and run training only with a subset of data.",
@@ -426,7 +420,7 @@ def main():
         all_original_entity_spans = []
 
         for labels, tokens, sentence_boundaries in zip(
-            examples["ner_tags"], examples[text_column_name], examples["sentence_boundaries"]
+            examples[label_column_name], examples[text_column_name], examples["sentence_boundaries"]
         ):
             subword_lengths = [len(tokenizer.tokenize(token)) for token in tokens]
             total_subword_length = sum(subword_lengths)
@@ -516,44 +510,19 @@ def main():
             tokenized_inputs["original_entity_spans"] = padding_tensor(
                 examples["original_entity_spans"], (-1, -1), tokenizer.padding_side, tokenizer.max_entity_length
             )
-            tokenized_inputs["ner_tags"] = padding_tensor(
-                examples["ner_tags"], -1, tokenizer.padding_side, tokenizer.max_entity_length
+            tokenized_inputs[label_column_name] = padding_tensor(
+                examples[label_column_name], -1, tokenizer.padding_side, tokenizer.max_entity_length
             )
         else:
             tokenized_inputs["labels"] = [ex[: tokenizer.max_entity_length] for ex in examples["labels_entity_spans"]]
             tokenized_inputs["original_entity_spans"] = [
                 ex[: tokenizer.max_entity_length] for ex in examples["original_entity_spans"]
             ]
-            tokenized_inputs["ner_tags"] = [ex[: tokenizer.max_entity_length] for ex in examples["ner_tags"]]
+            tokenized_inputs[label_column_name] = [ex[: tokenizer.max_entity_length] for ex in examples[label_column_name]]
 
         return tokenized_inputs
 
-    def filtering_out_labels(examples):
-        filtered_out_labels = []
-
-        for val in args.filter_out_labels.split(","):
-            if "B-" + val in label_to_id:
-                filtered_out_labels.append(label_to_id["B-" + val])
-            if "I-" + val in label_to_id:
-                filtered_out_labels.append(label_to_id["I-" + val])
-            if val in label_to_id:
-                filtered_out_labels.append(label_to_id[val])
-
-        for ex_id in range(len(examples["ner_tags"])):
-            for tag_id in range(len(examples["ner_tags"][ex_id])):
-                if examples["ner_tags"][ex_id][tag_id] in filtered_out_labels:
-                    examples["ner_tags"][ex_id][tag_id] = label_to_id["O"]
-
-        return examples
-
     with accelerator.main_process_first():
-        if args.filter_out_labels:
-            raw_datasets = raw_datasets.map(
-                filtering_out_labels,
-                batched=True,
-                desc="Filtering out unwanted labels",
-            )
-
         raw_datasets = raw_datasets.map(
             compute_sentence_boundaries_for_luke,
             batched=True,
@@ -725,7 +694,7 @@ def main():
             with torch.no_grad():
                 outputs = model(**batch)
 
-            preds, refs = get_luke_labels(outputs, batch["ner_tags"], batch["original_entity_spans"])
+            preds, refs = get_luke_labels(outputs, batch[label_column_name], batch["original_entity_spans"])
 
             metric.add_batch(
                 predictions=preds,
