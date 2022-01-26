@@ -110,7 +110,11 @@ def main(*files, add_new_line=True):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("files", nargs="+", help="The file(s) or folder(s) to restyle.")
-    parser.add_argument("--remove_new_line", action="store_true", help="Whether to remove new line after each python code block instead of adding one.")
+    parser.add_argument(
+        "--remove_new_line",
+        action="store_true",
+        help="Whether to remove new line after each python code block instead of adding one.",
+    )
     args = parser.parse_args()
 
     main(*args.files, add_new_line=not args.remove_new_line)

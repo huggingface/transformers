@@ -1131,6 +1131,7 @@ PT_SPEECH_BASE_MODEL_SAMPLE = r"""
     >>> from datasets import load_dataset
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
     >>> processor = {processor_class}.from_pretrained("{checkpoint}")
@@ -1156,6 +1157,7 @@ PT_SPEECH_CTC_SAMPLE = r"""
     >>> import torch
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
     >>> processor = {processor_class}.from_pretrained("{checkpoint}")
@@ -1179,6 +1181,7 @@ PT_SPEECH_CTC_SAMPLE = r"""
     >>> import torch
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
     >>> processor = {processor_class}.from_pretrained("{checkpoint}")
@@ -1205,6 +1208,7 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> import torch
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
     >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
@@ -1249,6 +1253,7 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
     >>> import torch
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
     >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
@@ -1277,6 +1282,7 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     >>> import torch
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
     >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
