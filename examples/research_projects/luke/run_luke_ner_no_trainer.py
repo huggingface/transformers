@@ -26,7 +26,7 @@ import random
 from pathlib import Path
 
 import torch
-from datasets import ClassLabel, DatasetDict, concatenate_datasets, load_dataset, load_metric
+from datasets import ClassLabel, load_dataset, load_metric
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
@@ -344,11 +344,8 @@ def main():
     if isinstance(features[label_column_name].feature, ClassLabel):
         label_list = features[label_column_name].feature.names
         # No need to convert the labels since they are already ints.
-        label_to_id = {label_list[i]: i for i in range(len(label_list))}
-
     else:
         label_list = get_label_list(raw_datasets["train"][label_column_name])
-        label_to_id = {l: i for i, l in enumerate(label_list)}
     num_labels = len(label_list)
 
     # Map that sends B-Xxx label to its I-Xxx counterpart
@@ -518,7 +515,9 @@ def main():
             tokenized_inputs["original_entity_spans"] = [
                 ex[: tokenizer.max_entity_length] for ex in examples["original_entity_spans"]
             ]
-            tokenized_inputs[label_column_name] = [ex[: tokenizer.max_entity_length] for ex in examples[label_column_name]]
+            tokenized_inputs[label_column_name] = [
+                ex[: tokenizer.max_entity_length] for ex in examples[label_column_name]
+            ]
 
         return tokenized_inputs
 
