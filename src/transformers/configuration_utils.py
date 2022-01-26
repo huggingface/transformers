@@ -21,7 +21,7 @@ import json
 import os
 import re
 import warnings
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 from packaging import version
 
@@ -36,7 +36,6 @@ from .file_utils import (
     RevisionNotFoundError,
     cached_path,
     copy_func,
-    get_list_of_files,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
@@ -46,7 +45,7 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
-FULL_CONFIGURATION_FILE = "config.json"
+
 _re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
@@ -533,6 +532,23 @@ class PretrainedConfig(PushToHubMixin):
             `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
+        original_kwargs = copy.deepcopy(kwargs)
+        # Get config dict associated with the base config file
+        config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        # That config file may point us toward another config file to use.
+        if "configuration_files" in config_dict:
+            configuration_file = get_configuration_file(config_dict["configuration_files"])
+            config_dict, kwargs = cls._get_config_dict(
+                pretrained_model_name_or_path, _configuration_file=configuration_file, **original_kwargs
+            )
+
+        return config_dict, kwargs
+
+    @classmethod
+    def _get_config_dict(
+        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
@@ -555,12 +571,7 @@ class PretrainedConfig(PushToHubMixin):
         if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
-            configuration_file = get_configuration_file(
-                pretrained_model_name_or_path,
-                revision=revision,
-                use_auth_token=use_auth_token,
-                local_files_only=local_files_only,
-            )
+            configuration_file = kwargs.get("_configuration_file", CONFIG_NAME)
 
             if os.path.isdir(pretrained_model_name_or_path):
                 config_file = os.path.join(pretrained_model_name_or_path, configuration_file)
@@ -840,41 +851,18 @@ class PretrainedConfig(PushToHubMixin):
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
 
 
-def get_configuration_file(
-    path_or_repo: Union[str, os.PathLike],
-    revision: Optional[str] = None,
-    use_auth_token: Optional[Union[bool, str]] = None,
-    local_files_only: bool = False,
-) -> str:
+def get_configuration_file(configuration_files: List[str]) -> str:
     """
     Get the configuration file to use for this version of transformers.
 
     Args:
-        path_or_repo (`str` or `os.PathLike`):
-            Can be either the id of a repo on huggingface.co or a path to a *directory*.
-        revision(`str`, *optional*, defaults to `"main"`):
-            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
-            identifier allowed by git.
-        use_auth_token (`str` or *bool*, *optional*):
-            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
-        local_files_only (`bool`, *optional*, defaults to `False`):
-            Whether or not to only rely on local files and not to attempt to download any files.
+        configuration_files (`List[str]`): The list of available configuration files.
 
     Returns:
         `str`: The configuration file to use.
     """
-    # Inspect all files from the repo/folder.
-    try:
-        all_files = get_list_of_files(
-            path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
-        )
-    except Exception:
-        return FULL_CONFIGURATION_FILE
-
     configuration_files_map = {}
-    for file_name in all_files:
+    for file_name in configuration_files:
         search = _re_configuration_file.search(file_name)
         if search is not None:
             v = search.groups()[0]
@@ -882,7 +870,7 @@ def get_configuration_file(
     available_versions = sorted(configuration_files_map.keys())
 
     # Defaults to FULL_CONFIGURATION_FILE and then try to look at some newer versions.
-    configuration_file = FULL_CONFIGURATION_FILE
+    configuration_file = CONFIG_NAME
     transformers_version = version.parse(__version__)
     for v in available_versions:
         if version.parse(v) <= transformers_version:

@@ -2112,6 +2112,112 @@ def get_from_cache(
     return cache_path
 
 
+def get_file_from_repo(
+    path_or_repo: Union[str, os.PathLike],
+    filename: str,
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    force_download: bool = False,
+    resume_download: bool = False,
+    proxies: Optional[Dict[str, str]] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+    revision: Optional[str] = None,
+    local_files_only: bool = False,
+):
+    """
+    Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
+
+    Args:
+        path_or_repo (`str` or `os.PathLike`):
+            This can be either:
+
+            - a string, the *model id* of a model repo on huggingface.co.
+            - a path to a *directory* potentially containing the file.
+        filename (`str`):
+            The name of the file to locate in `path_or_repo`.
+        cache_dir (`str` or `os.PathLike`, *optional*):
+            Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
+            cache should not be used.
+        force_download (`bool`, *optional*, defaults to `False`):
+            Whether or not to force to (re-)download the configuration files and override the cached versions if they
+            exist.
+        resume_download (`bool`, *optional*, defaults to `False`):
+            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
+        proxies (`Dict[str, str]`, *optional*):
+            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+        use_auth_token (`str` or *bool*, *optional*):
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+            when running `transformers-cli login` (stored in `~/.huggingface`).
+        revision(`str`, *optional*, defaults to `"main"`):
+            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+            identifier allowed by git.
+        local_files_only (`bool`, *optional*, defaults to `False`):
+            If `True`, will only try to load the tokenizer configuration from local files.
+
+    <Tip>
+
+    Passing `use_auth_token=True` is required when you want to use a private model.
+
+    </Tip>
+
+    Returns:
+        `Optional[str]`: Returns the resolved file (to the cache folder if downloaded from a repo) or `None` if the
+        file does not exist.
+
+    Examples:
+
+    ```python
+    # Download a tokenizer configuration from huggingface.co and cache.
+    tokenizer_config = get_file_from_repo("bert-base-uncased", "tokenizer_config.json")
+    # This model does not have a tokenizer config so the result will be None.
+    tokenizer_config = get_file_from_repo("xlm-roberta-base", "tokenizer_config.json")
+    ```"""
+    if is_offline_mode() and not local_files_only:
+        logger.info("Offline mode: forcing local_files_only=True")
+        local_files_only = True
+
+    path_or_repo = str(path_or_repo)
+    if os.path.isdir(path_or_repo):
+        resolved_file = os.path.join(path_or_repo, filename)
+        return resolved_file if os.path.isfile(resolved_file) else None
+    else:
+        resolved_file = hf_bucket_url(path_or_repo, filename=filename, revision=revision, mirror=None)
+
+    try:
+        # Load from URL or cache if already cached
+        resolved_file = cached_path(
+            resolved_file,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            proxies=proxies,
+            resume_download=resume_download,
+            local_files_only=local_files_only,
+            use_auth_token=use_auth_token,
+        )
+
+    except RepositoryNotFoundError as err:
+        logger.error(err)
+        raise EnvironmentError(
+            f"{path_or_repo} is not a local folder and is not a valid model identifier "
+            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
+            "pass a token having permission to this repo with `use_auth_token` or log in with "
+            "`huggingface-cli login` and pass `use_auth_token=True`."
+        )
+    except RevisionNotFoundError as err:
+        logger.error(err)
+        raise EnvironmentError(
+            f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
+            "for this model name. Check the model page at "
+            f"'https://huggingface.co/{path_or_repo}' for available revisions."
+        )
+    except EnvironmentError:
+        # The repo and revision exist, but the file does not or there was a connection error fetching it.
+        return None
+
+    return resolved_file
+
+
 def has_file(
     path_or_repo: Union[str, os.PathLike],
     filename: str,
@@ -2183,6 +2289,12 @@ def get_list_of_files(
             when running `transformers-cli login` (stored in `~/.huggingface`).
         local_files_only (`bool`, *optional*, defaults to `False`):
             Whether or not to only rely on local files and not to attempt to download any files.
+
+    <Tip warning={true}>
+
+    This API is not optimized, so calling it a lot may result in connection errors.
+
+    </Tip>
 
     Returns:
         `List[str]`: The list of files available in `path_or_repo`.
