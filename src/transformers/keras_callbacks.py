@@ -19,7 +19,7 @@ from .modelcard import TrainingSummary
 logger = logging.getLogger(__name__)
 
 
-class KerasMetricCallback(tf.keras.callbacks.Callback):
+class KerasMetricCallback(Callback):
     """
     Callback to compute metrics at the end of every epoch. Unlike normal Keras metrics, these do not need to be
     compilable by TF. It is particularly useful for common NLP metrics like BLEU and ROUGE that require string
