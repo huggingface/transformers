@@ -509,10 +509,15 @@ class RealmModelIntegrationTest(unittest.TestCase):
 
         concat_input_ids = torch.arange(10).view((2, 5))
         concat_token_type_ids = torch.tensor([[0, 0, 1, 1, 1], [0, 0, 1, 1, 1]], dtype=torch.int64)
+        concat_block_mask = torch.tensor([[0, 0, 0, 1, 1], [0, 0, 0, 1, 1]], dtype=torch.int64)
         relevance_score = torch.tensor([0.3, 0.7], dtype=torch.float32)
 
         output = model(
-            concat_input_ids, token_type_ids=concat_token_type_ids, relevance_score=relevance_score, return_dict=True
+            concat_input_ids,
+            token_type_ids=concat_token_type_ids,
+            relevance_score=relevance_score,
+            block_mask=concat_block_mask,
+            return_dict=True,
         )
 
         block_idx_expected_shape = torch.Size(())
@@ -523,8 +528,8 @@ class RealmModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.end_pos.shape, end_pos_expected_shape)
 
         expected_block_idx = torch.tensor(1)
-        expected_start_pos = torch.tensor(3)
-        expected_end_pos = torch.tensor(3)
+        expected_start_pos = torch.tensor(4)
+        expected_end_pos = torch.tensor(4)
 
         self.assertTrue(torch.allclose(output.block_idx, expected_block_idx, atol=1e-4))
         self.assertTrue(torch.allclose(output.start_pos, expected_start_pos, atol=1e-4))

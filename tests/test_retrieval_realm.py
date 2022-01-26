@@ -98,6 +98,7 @@ class RealmRetrieverTest(TestCase):
                 b"This is the third record",
                 b"This is the fourth record",
                 b"This is the fifth record",
+                b"This is a longer longer longer record",
             ],
             dtype=np.object,
         )
@@ -125,13 +126,14 @@ class RealmRetrieverTest(TestCase):
         ).input_ids
         max_length = config.reader_seq_len
 
-        has_answers, start_pos, end_pos, concat_inputs = retriever(
+        has_answers, start_pos, end_pos, block_mask, concat_inputs = retriever(
             retrieved_block_ids, question_input_ids, answer_ids=answer_ids, max_length=max_length, return_tensors="np"
         )
 
         self.assertEqual(len(has_answers), 2)
         self.assertEqual(len(start_pos), 2)
         self.assertEqual(len(end_pos), 2)
+        self.assertEqual(len(block_mask), 2)
         self.assertEqual(concat_inputs.input_ids.shape, (2, 10))
         self.assertEqual(concat_inputs.attention_mask.shape, (2, 10))
         self.assertEqual(concat_inputs.token_type_ids.shape, (2, 10))
@@ -149,7 +151,7 @@ class RealmRetrieverTest(TestCase):
         retriever = self.get_dummy_retriever()
         tokenizer = retriever.tokenizer
 
-        retrieved_block_ids = np.array([0, 3], dtype=np.long)
+        retrieved_block_ids = np.array([0, 3, 5], dtype=np.long)
         question_input_ids = tokenizer(["Test question"]).input_ids
         answer_ids = tokenizer(
             ["the fourth"],
@@ -159,13 +161,21 @@ class RealmRetrieverTest(TestCase):
         ).input_ids
         max_length = config.reader_seq_len
 
-        has_answers, start_pos, end_pos, _ = retriever(
+        has_answers, start_pos, end_pos, block_mask, _ = retriever(
             retrieved_block_ids, question_input_ids, answer_ids=answer_ids, max_length=max_length, return_tensors="np"
         )
 
-        self.assertEqual([False, True], has_answers)
-        self.assertEqual([[-1], [6]], start_pos)
-        self.assertEqual([[-1], [7]], end_pos)
+        self.assertEqual([False, True, False], has_answers)
+        self.assertEqual([[-1], [6], [-1]], start_pos)
+        self.assertEqual([[-1], [7], [-1]], end_pos)
+        self.assertEqual(
+            [
+                [0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0],
+                [0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0],
+                [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0],
+            ],
+            block_mask,
+        )
 
     def test_save_load_pretrained(self):
         retriever = self.get_dummy_retriever()

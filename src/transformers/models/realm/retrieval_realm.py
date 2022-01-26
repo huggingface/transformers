@@ -100,10 +100,7 @@ class RealmRetriever:
         concat_inputs = self.tokenizer(text, text_pair, padding=True, truncation=True, max_length=max_length)
         concat_inputs_tensors = concat_inputs.convert_to_tensors(return_tensors)
 
-        if answer_ids is not None:
-            return self.block_has_answer(concat_inputs, answer_ids) + (concat_inputs_tensors,)
-        else:
-            return (None, None, None, concat_inputs_tensors)
+        return self.block_has_answer(concat_inputs, answer_ids) + (concat_inputs_tensors,)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *init_inputs, **kwargs):
@@ -130,33 +127,41 @@ class RealmRetriever:
         has_answers = []
         start_pos = []
         end_pos = []
+        block_mask = []
         max_answers = 0
 
         for input_id in concat_inputs.input_ids:
-            start_pos.append([])
-            end_pos.append([])
             input_id_list = input_id.tolist()
             # Checking answers after the [SEP] token
-            sep_idx = input_id_list.index(self.tokenizer.sep_token_id)
-            for answer in answer_ids:
-                for idx in range(sep_idx, len(input_id)):
-                    if answer[0] == input_id_list[idx]:
-                        if input_id_list[idx : idx + len(answer)] == answer:
-                            start_pos[-1].append(idx)
-                            end_pos[-1].append(idx + len(answer) - 1)
+            first_sep_idx = input_id_list.index(self.tokenizer.sep_token_id)
+            second_sep_idx = first_sep_idx + 1 + input_id_list[first_sep_idx + 1:].index(self.tokenizer.sep_token_id)            
+            
+            start_pos.append([])
+            end_pos.append([])
+            block_mask.append([0] * (first_sep_idx + 1)  + [1] * (second_sep_idx - first_sep_idx - 1) + [0] * (len(input_id_list) - second_sep_idx))
 
-            if len(start_pos[-1]) == 0:
-                has_answers.append(False)
-            else:
-                has_answers.append(True)
-                if len(start_pos[-1]) > max_answers:
-                    max_answers = len(start_pos[-1])
+            if answer_ids is not None:    
+                for answer in answer_ids:
+                    for idx in range(first_sep_idx + 1, second_sep_idx):
+                        if answer[0] == input_id_list[idx]:
+                            if input_id_list[idx : idx + len(answer)] == answer:
+                                start_pos[-1].append(idx)
+                                end_pos[-1].append(idx + len(answer) - 1)
 
-        # Pad -1 to max_answers
-        for start_pos_, end_pos_ in zip(start_pos, end_pos):
-            if len(start_pos_) < max_answers:
-                padded = [-1] * (max_answers - len(start_pos_))
-                start_pos_ += padded
-                end_pos_ += padded
+                if len(start_pos[-1]) == 0:
+                    has_answers.append(False)
+                else:
+                    has_answers.append(True)
+                    if len(start_pos[-1]) > max_answers:
+                        max_answers = len(start_pos[-1])
 
-        return has_answers, start_pos, end_pos
+        if answer_ids is not None:
+            # Pad -1 to max_answers
+            for start_pos_, end_pos_ in zip(start_pos, end_pos):
+                if len(start_pos_) < max_answers:
+                    padded = [-1] * (max_answers - len(start_pos_))
+                    start_pos_ += padded
+                    end_pos_ += padded
+            return has_answers, start_pos, end_pos, block_mask
+        else:
+            return None, None, None, block_mask
