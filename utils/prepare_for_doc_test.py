@@ -18,15 +18,22 @@ import argparse
 import os
 
 
-def maybe_append_new_line(docstring):
+def process_code_block(code, add_new_line=True):
+    if add_new_line:
+        return maybe_append_new_line(code)
+    else:
+        return maybe_remove_new_line(code)
+
+
+def maybe_append_new_line(code):
     """
     Append new line if code snippet is a
     Python code snippet
     """
-    lines = docstring.split("\n")
+    lines = code.split("\n")
 
     if lines[0] in ["py", "python"]:
-        # add a "\n" before last line
+        # add new line before last line being ```
         last_line = lines[-1]
         lines.pop()
         lines.append("\n" + last_line)
@@ -34,7 +41,21 @@ def maybe_append_new_line(docstring):
     return "\n".join(lines)
 
 
-def process_doc_file(code_file):
+def maybe_remove_new_line(code):
+    """
+    Remove new line if code snippet is a
+    Python code snippet
+    """
+    lines = code.split("\n")
+
+    if lines[0] in ["py", "python"]:
+        # add new line before last line being ```
+        lines = lines[:-2] + lines[-1:]
+
+    return "\n".join(lines)
+
+
+def process_doc_file(code_file, add_new_line=True):
     """
     Process given file.
 
@@ -46,7 +67,7 @@ def process_doc_file(code_file):
 
     # fmt: off
     splits = code.split("```")
-    splits = [s if i % 2 == 0 else maybe_append_new_line(s) for i, s in enumerate(splits)]
+    splits = [s if i % 2 == 0 else process_code_block(s, add_new_line=add_new_line) for i, s in enumerate(splits)]
     clean_code = "```".join(splits)
     # fmt: on
 
@@ -57,7 +78,7 @@ def process_doc_file(code_file):
             f.write(clean_code)
 
 
-def process_doc_files(*files):
+def process_doc_files(*files, add_new_line=True):
     """
     Applies doc styling or checks everything is correct in a list of files.
 
@@ -76,19 +97,20 @@ def process_doc_files(*files):
             process_doc_files(*files)
         else:
             try:
-                process_doc_file(file)
+                process_doc_file(file, add_new_line=add_new_line)
             except Exception:
                 print(f"There is a problem in {file}.")
                 raise
 
 
-def main(*files):
-    process_doc_files(*files)
+def main(*files, add_new_line=True):
+    process_doc_files(*files, add_new_line=add_new_line)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("files", nargs="+", help="The file(s) or folder(s) to restyle.")
+    parser.add_argument("--remove_newline", action="store_true", help="Whether to remove new line after each python code block instead of adding one.")
     args = parser.parse_args()
 
-    main(*args.files)
+    main(*args.files, add_new_line=not args.remove_newline)
