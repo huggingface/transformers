@@ -300,23 +300,7 @@ def main():
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        dataset_configs = args.dataset_config_name.split(",")
-
-        if len(dataset_configs) > 1:
-            datasets = {}
-
-            for dataset_config_name in args.dataset_config_name.split(","):
-                tmp_dataset = load_dataset(args.dataset_name, dataset_config_name)
-
-                for split in tmp_dataset.keys():
-                    datasets.setdefault(split, []).append(tmp_dataset[split])
-
-            raw_datasets = DatasetDict()
-            for split, value in datasets.items():
-                raw_datasets[split] = concatenate_datasets(value)
-        else:
-            raw_datasets = load_dataset(args.dataset_name, dataset_configs[0])
-
+        raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
     else:
         data_files = {}
         if args.train_file is not None:
