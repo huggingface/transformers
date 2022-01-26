@@ -117,6 +117,14 @@ class PretrainedConfig(PushToHubMixin):
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
             sequence_length embeddings at a time. For more information on feed forward chunking, see [How does Feed
             Forward Chunking work?](../glossary.html#feed-forward-chunking).
+        chunk_size_query (`int`, *optional*, defaults to `0`):
+            The chunk size for attention queries. A chunk size of `0` means that attention queries are not chunked.
+            Setting this bounds memory usage during evaluation and training. A value of 1024 is recommended
+            for performance on TPUv2s. This requires the model to support attention chunking.
+        chunk_size_key (`int`, *optional*, defaults to `0`):
+            The chunk size for attention keys. A chunk size of `0` means that attention keys are not chunked.
+            Setting this bounds memory usage during evaluation and training. A value of 4096 is recommended
+            for performance on TPUv2s. This requies the model to support attention chunking.
 
         > Parameters for sequence generation
 
@@ -287,6 +295,8 @@ class PretrainedConfig(PushToHubMixin):
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
         self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
+        self.chunk_size_query = kwargs.pop("chunk_size_query", 0)
+        self.chunk_size_key = kwargs.pop("chunk_size_key", 0)
         self.output_scores = kwargs.pop("output_scores", False)
         self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)

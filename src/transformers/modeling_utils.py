@@ -27,6 +27,8 @@ from packaging import version
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
+import memory_efficient_attention
+
 from requests import HTTPError
 
 from .activations import get_activation
