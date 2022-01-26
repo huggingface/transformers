@@ -1625,13 +1625,16 @@ def add_code_sample_docstrings(
         else:
             sample_docstrings = PT_SAMPLE_DOCSTRINGS
 
+        # putting all kwargs for docstrings in a dict to be used
+        # with the `.format(**doc_kwargs)`. Note that string might
+        # be formatted with non-existing keys, which is fine.
         doc_kwargs = dict(
             model_class=model_class,
             processor_class=processor_class,
             checkpoint=checkpoint,
+            mask=mask,
             expected_output=expected_output,
             expected_loss=expected_loss,
-            mask=mask,
         )
 
         if "SequenceClassification" in model_class and modality == "audio":
