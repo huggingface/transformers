@@ -38,6 +38,7 @@ from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
+    attention,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
@@ -265,21 +266,24 @@ class PerceiverSelfAttention(nn.Module):
         keys = self.transpose_for_scores(keys, self.qk_channels_per_head)
         values = self.transpose_for_scores(values, self.v_channels_per_head)
 
-        # Take the dot product between the queries and keys to get the raw attention scores.
-        attention_scores = torch.matmul(queries, keys.transpose(-1, -2))
+        if config.chunk_size_query > 0 or config.chunk_size_key > 0:
+            attention_probs = attention(config, queries, keys, values, attention_mask, None)
+        else:
+            # Take the dot product between the queries and keys to get the raw attention scores.
+            attention_scores = torch.matmul(queries, keys.transpose(-1, -2))
 
-        batch_size, num_heads, seq_len, q_head_dim = queries.shape
-        _, _, _, v_head_dim = values.shape
-        hiddens = self.num_heads * v_head_dim
+            batch_size, num_heads, seq_len, q_head_dim = queries.shape
+            _, _, _, v_head_dim = values.shape
+            hiddens = self.num_heads * v_head_dim
 
-        attention_scores = attention_scores / math.sqrt(q_head_dim)
+            attention_scores = attention_scores / math.sqrt(q_head_dim)
 
-        if attention_mask is not None:
-            # Apply the attention mask (precomputed for all layers in PerceiverModel forward() function)
-            attention_scores = attention_scores + attention_mask
+            if attention_mask is not None:
+                # Apply the attention mask (precomputed for all layers in PerceiverModel forward() function)
+                attention_scores = attention_scores + attention_mask
 
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+            # Normalize the attention scores to probabilities.
+            attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.

@@ -2439,6 +2439,16 @@ def apply_chunking_to_forward(
 
     return forward_fn(*input_tensors)
 
+def attention(config, queries, keys, values, mask=None, bias=None, config):
+    #if config.chunk_size_query != 0 or config.chunk_size_key != 0:
+        return memory_efficient_attention.efficient_dot_product_attention_pt(
+                queries, keys, values, mask, bias, config.chunk_size_query, config.chunk_size_key)
+    #else:
+    #    # Take the dot product between the queries and keys to get the raw attention scores.
+    #    scores = torch.matmul(queries, keys.transpose(-1, -2))
+    #    
+    #    scores = scores / math.sqrt(
+
 
 def torch_int_div(tensor1, tensor2):
     """
