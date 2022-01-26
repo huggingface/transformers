@@ -15,7 +15,7 @@
 
 from math import ceil
 
-from transformers import BertPreTrainedModel, GPT2PreTrainedModel, TransfoXLPreTrainedModel
+from .. import BertPreTrainedModel, GPT2PreTrainedModel, TransfoXLPreTrainedModel
 
 
 # ie. nn.Linear(3 * dim, dim)
