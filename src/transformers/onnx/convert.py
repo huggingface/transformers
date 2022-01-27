@@ -22,7 +22,7 @@ from packaging.version import Version, parse
 
 
 from transformers import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
-from transformers.file_utils import is_torch_onnx_dict_inputs_support_available
+from transformers.file_utils import is_torch_onnx_dict_inputs_support_available, is_tf_available
 from transformers.onnx.config import OnnxConfig
 from transformers.utils import logging
 
