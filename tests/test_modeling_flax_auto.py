@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import AutoConfig, AutoTokenizer, BertConfig, TensorType, is_flax_available
-from transformers.testing_utils import require_flax, slow
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, slow
 
 
 if is_flax_available():
@@ -76,3 +76,26 @@ class FlaxAutoModelTest(unittest.TestCase):
                 return model(**kwargs)
 
             eval(**tokens).block_until_ready()
+
+    def test_repo_not_found(self):
+        with self.assertRaisesRegex(
+            EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"
+        ):
+            _ = FlaxAutoModel.from_pretrained("bert-base")
+
+    def test_revision_not_found(self):
+        with self.assertRaisesRegex(
+            EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
+        ):
+            _ = FlaxAutoModel.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
+
+    def test_model_file_not_found(self):
+        with self.assertRaisesRegex(
+            EnvironmentError,
+            "hf-internal-testing/config-no-model does not appear to have a file named flax_model.msgpack",
+        ):
+            _ = FlaxAutoModel.from_pretrained("hf-internal-testing/config-no-model")
+
+    def test_model_from_pt_suggestion(self):
+        with self.assertRaisesRegex(EnvironmentError, "Use `from_pt=True` to load this model"):
+            _ = FlaxAutoModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")

@@ -23,17 +23,17 @@ from .features import FeaturesManager
 
 
 def main():
-    parser = ArgumentParser("Hugging Face ONNX Exporter tool")
-    parser.add_argument("-m", "--model", type=str, required=True, help="Model's name of path on disk to load.")
+    parser = ArgumentParser("Hugging Face Transformers ONNX exporter")
+    parser.add_argument(
+        "-m", "--model", type=str, required=True, help="Model ID on huggingface.co or path on disk to load model from."
+    )
     parser.add_argument(
         "--feature",
         choices=list(FeaturesManager.AVAILABLE_FEATURES),
         default="default",
-        help="Export the model with some additional feature.",
+        help="The type of features to export the model with.",
     )
-    parser.add_argument(
-        "--opset", type=int, default=None, help="ONNX opset version to export the model with (default 12)."
-    )
+    parser.add_argument("--opset", type=int, default=None, help="ONNX opset version to export the model with.")
     parser.add_argument(
         "--atol", type=float, default=None, help="Absolute difference tolerence when validating the model."
     )
