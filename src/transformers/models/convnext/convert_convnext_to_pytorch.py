@@ -89,9 +89,13 @@ def create_rename_keys():
     return rename_keys
 
 
-def rename_key(dct, old, new):
-    val = dct.pop(old)
-    dct[new] = val
+def rename_key(name):
+    if "gamma" in name:
+        name = name.replace("gamma", "gamma_parameter")
+    elif "head" in name:
+        name = name.replace("head", "classifier")
+
+    return name
 
 
 # We will verify our results on an image of cute cats
@@ -111,9 +115,9 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     config, expected_shape = get_convnext_config(checkpoint_url)
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
-    rename_keys = create_rename_keys()
-    for src, dest in rename_keys:
-        rename_key(state_dict, src, dest)
+    for key in state_dict.copy().keys():
+        val = state_dict.pop(key)
+        state_dict[rename_key(key)] = val
     # add prefix
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)

@@ -164,7 +164,7 @@ class ConvNextLayer(nn.Module):
         self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = ACT2FN[config.hidden_act]
         self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.gamma = (
+        self.gamma_parameter = (
             nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
             if config.layer_scale_init_value > 0
             else None
@@ -179,8 +179,8 @@ class ConvNextLayer(nn.Module):
         x = self.pwconv1(x)
         x = self.act(x)
         x = self.pwconv2(x)
-        if self.gamma is not None:
-            x = self.gamma * x
+        if self.gamma_parameter is not None:
+            x = self.gamma_parameter * x
         x = x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
 
         x = input + self.drop_path(x)
@@ -278,7 +278,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
             cur += config.depths[i]
 
         # final norm layer
-        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
+        self.norm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -324,7 +324,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         # global average pooling, (N, C, H, W) -> (N, C)
-        pooled_output = self.layernorm(hidden_states.mean([-2, -1]))
+        pooled_output = self.norm(hidden_states.mean([-2, -1]))
 
         if not return_dict:
             output = (hidden_states, pooled_output)
