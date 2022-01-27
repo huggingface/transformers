@@ -1,4 +1,4 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Pipelines for inference
 
-The [`pipeline`] makes it simple to use any model from the [Model Hub](https://huggingface.co/models) for inference. You can use the [`pipeline`] for a variety of tasks such as text generation, image segmentation and audio classification. Even if you don't have experience with a specific modality or understand the code powering the models, you can still use them with the [`pipeline`]! This tutorial will teach you to:
+The [`pipeline`] makes it simple to use any model from the [Model Hub](https://huggingface.co/models) for inference on a variety of tasks such as text generation, image segmentation and audio classification. Even if you don't have experience with a specific modality or understand the code powering the models, you can still use them with the [`pipeline`]! This tutorial will teach you to:
 
 * Use a [`pipeline`] for inference.
 * Use a specific tokenizer or model.
@@ -20,15 +20,15 @@ The [`pipeline`] makes it simple to use any model from the [Model Hub](https://h
 
 <Tip>
 
-See [here](main_classes/pipelines) for a complete list of tasks supported by [`pipeline`].
+Take a look at the [`pipeline`] documentation for a complete list of supported taska.
 
 </Tip>
 
 ## Pipeline usage
 
-While each task has an associated [`pipeline`], it is simpler to use the general [`pipeline`] abstraction which contains all the specific task pipelines. The [`pipeline`] automatically loads a default model and tokenizer capable of completing your task. 
+While each task has an associated [`pipeline`], it is simpler to use the general [`pipeline`] abstraction which contains all the specific task pipelines. The [`pipeline`] automatically loads a default model and tokenizer capable of inference for your task. 
 
-1. Start by creating a [`pipeline`] with your desired inference task:
+1. Start by creating a [`pipeline`] and specify an inference task:
 
 ```py
 >>> from transformers import pipeline
@@ -46,24 +46,26 @@ While each task has an associated [`pipeline`], it is simpler to use the general
 If you have more than one input, pass your input as a list:
 
 ```py
->>> generator([
-    "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
-    "Nine for Mortal Men, doomed to die, One for the Dark Lord on his dark throne"
-])
+>>> generator(
+...     [
+...         "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
+...         "Nine for Mortal Men, doomed to die, One for the Dark Lord on his dark throne",
+...     ]
+... )
 ```
 
-Any additional parameters to your task can also be included in the [`pipeline`]. For example, `text-generation` has a [`generation_utils.GenerationMixin.generate`] method with several parameters for controlling the output. Here, you can set the `num_return_sequences` parameter to return more than one output:
+Any additional parameters for your task can also be included in the [`pipeline`]. The `text-generation` task has a [`~generation_utils.GenerationMixin.generate`] method with several parameters for controlling the output. For example, if you want to generate more than one output, set the `num_return_sequences` parameter:
 
 ```py
 >>> generator(
-    "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
-    num_return_sequences=2,
-)
+...     "Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone",
+...     num_return_sequences=2,
+... )
 ```
 
 ### Choose a model and tokenizer
 
-The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/models). You can use with the tags on the Model Hub to filter for a model you'd like to use for your task. Then you can load a model and tokenizer with the appropriate `AutoModelFor` and [`AutoTokenizer'] class:
+The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/models). There are tags on the Model Hub that allow you to filter for a model you'd like to use for your task. Once you've picked an appropriate model, load it with the corresponding `AutoModelFor` and [`AutoTokenizer'] class. For example, load the [`AutoModelForCausalLM`] class for a causal language modeling task:
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -72,7 +74,7 @@ The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/m
 >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
 ```
 
-1. Create a [`pipeline`] for your task, and specify the model and tokenizer you've loaded:
+Create a [`pipeline`] for your task, and specify the model and tokenizer you've loaded:
 
 ```py
 >>> from transformers import pipeline
@@ -80,7 +82,7 @@ The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/m
 >>> generator = pipeline(task="text-generation", model=model, tokenizer=tokenizer)
 ```
 
-2. Pass your input text to the [`pipeline`]:
+Pass your input text to the [`pipeline`] to generate some text:
 
 ```py
 >>> generator("Three Rings for the Elven-kings under the sky, Seven for the Dwarf-lords in their halls of stone")
@@ -89,41 +91,44 @@ The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/m
 
 ## Audio pipeline
 
-The flexibility of the [`pipeline`] API means it can also be extended to audio tasks.
+The flexibility of the [`pipeline`] means it can also be extended to audio tasks.
 
 For example, let's classify the emotion from a short clip of John F. Kennedy's famous ["We choose to go to the Moon"](https://en.wikipedia.org/wiki/We_choose_to_go_to_the_Moon) speech. Find an [audio classification](https://huggingface.co/models?pipeline_tag=audio-classification) model on the Model Hub for emotion recognition and load it in the [`pipeline`]:
 
 ```py
 >>> from transformers import pipeline
 
->>> audio_classifier = pipeline(task="audio-classification", model="superb/wav2vec2-base-superb-er")
+>>> audio_classifier = pipeline(
+...     task="audio-classification", model="ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
+... )
 ```
 
 Pass the audio file to the [`pipeline`]:
 
 ```py
 >>> audio_classifier("jfk_moon_speech.wav")
-[{'label': 'hap', 'score': 0.47071996331214905},
- {'label': 'ang', 'score': 0.3070950210094452},
- {'label': 'neu', 'score': 0.15184970200061798},
- {'label': 'sad', 'score': 0.07033531367778778}]
+[{'label': 'calm', 'score': 0.13856211304664612},
+ {'label': 'disgust', 'score': 0.13148026168346405},
+ {'label': 'happy', 'score': 0.12635163962841034},
+ {'label': 'angry', 'score': 0.12439591437578201},
+ {'label': 'fearful', 'score': 0.12404385954141617}]
 ```
 
 ## Vision pipeline
 
-Finally, using a [`pipeline`] for vision tasks is nearly identical.
+Finally, using a [`pipeline`] for vision tasks is practically identical.
 
-Specify your vision task and pass your image to the classifier. For example, if you're interested in classifying the species of cat shown below:
+Specify your vision task and pass your image to the classifier. The imaage can be a link or a local path to the image. For example, what species of cat is shown below?
 
 ![pipeline-cat-chonk](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg)
-
-Pass your input as a link or a local path to the image:
 
 ```py
 >>> from transformers import pipeline
 
 >>> vision_classifier = pipeline(task="image-classification")
->>> vision_classifier(images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+>>> vision_classifier(
+...     images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+... )
 [{'label': 'lynx, catamount', 'score': 0.4403027892112732},
  {'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor',
   'score': 0.03433405980467796},

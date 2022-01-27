@@ -14,7 +14,7 @@
   - local: pipeline_tutorial
     title: Pipelines for inference
   - local: autoclass_tutorial
-    title: Load a pretrained instance with an AutoClass
+    title: Load pretrained instances with an AutoClass
   - local: preprocessing
     title: Preprocess
   - local: task_summary
