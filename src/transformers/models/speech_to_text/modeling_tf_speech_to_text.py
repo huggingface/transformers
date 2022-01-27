@@ -131,14 +131,26 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
                 filters=self.mid_channels if i < self.num_layers - 1 else self.out_channels * 2,
                 kernel_size=k,
                 strides=2,
-                padding="same" # equivalent to adding k//2 to each side
+                name=f"conv_layers.{i}"
             )
             for i, k in enumerate(self.kernel_sizes)
         ]
 
     def call(self, input_features: tf.Tensor) -> tf.Tensor:
         hidden_states = tf.identity(input_features) # TF Conv1D assumes Batch x Time x Channels, same as the input
-        for conv in self.conv_layers:
+        for i, conv in enumerate(self.conv_layers):
+            # equivalent to `padding=k // 2` on PT's `nn.Conv1d`
+            pad_len = self.kernel_sizes[i] // 2
+            hidden_shapes = shape_list(hidden_states)
+            hidden_states = tf.concat(
+                (
+                    tf.zeros((hidden_shapes[0], pad_len, hidden_shapes[2])),
+                    hidden_states,
+                    tf.zeros((hidden_shapes[0], pad_len, hidden_shapes[2])),
+                ),
+                axis=1
+            )
+
             hidden_states = conv(hidden_states)
             hidden_states = glu(hidden_states, axis=2) # GLU over the Channel dimension
         return hidden_states
@@ -698,7 +710,7 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
         self.max_source_positions = config.max_source_positions
         self.embed_scale = tf.math.sqrt(float(embed_dim)) if config.scale_embedding else 1.0
 
-        self.conv = TFConv1dSubsampler(config)
+        self.conv = TFConv1dSubsampler(config, name="conv")
 
         self.embed_positions = TFSpeech2TextSinusoidalPositionalEmbedding(
             num_positions=config.max_source_positions,
@@ -737,6 +749,7 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
                 -1
             )
         )
+        mask_cols = tf.cast(tf.cast(mask_cols, tf.bool), tf.int32)
         attention_mask = tf.matmul(tf.ones((bsz, 1), dtype=attention_mask.dtype), mask_cols)
         attention_mask = tf.cast(tf.reverse(tf.math.cumsum(tf.reverse(attention_mask, [-1]), -1), [-1]), tf.int64)
         return attention_mask
@@ -881,7 +894,7 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
         self.max_target_positions = config.max_target_positions
         self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
 
-        self.embed_tokens = TFSharedEmbeddings(config.vocab_size, config.d_model)
+        self.embed_tokens = TFSharedEmbeddings(config.vocab_size, config.d_model, name="embed_tokens")
 
         self.embed_positions = TFSpeech2TextSinusoidalPositionalEmbedding(
             num_positions=config.max_target_positions,
@@ -1038,6 +1051,7 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
             inputs["attention_mask"], input_shape, inputs_embeds, past_key_values_length
         )
 
+        import pdb; pdb.set_trace()
         # expand encoder attention mask
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1358,14 +1372,14 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
 
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
-        self.model = TFSpeech2TextModel(config)
-        self.lm_head = tf.keras.layers.Dense(self.config.vocab_size, use_bias=False)
+        self.model = TFSpeech2TextMainLayer(config, name="model")
+        self.lm_head = tf.keras.layers.Dense(self.config.vocab_size, use_bias=False, name="lm_head")
 
     def get_encoder(self):
-        return self.model.get_encoder()
+        return self.model.encoder
 
     def get_decoder(self):
-        return self.model.get_decoder()
+        return self.model.decoder
 
     def resize_token_embeddings(self, new_num_tokens: int) -> tf.Variable:
         new_embeddings = super().resize_token_embeddings(new_num_tokens)
@@ -1410,11 +1424,14 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         Example:
 
         ```python
+        >>> import tensorflow as tf
         >>> from transformers import Speech2TextProcessor, TFSpeech2TextForConditionalGeneration
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> model = TFSpeech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
+        >>> model = TFSpeech2TextForConditionalGeneration.from_pretrained(
+        ...     "facebook/s2t-small-librispeech-asr", from_pt=True
+        ... )
         >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
 
@@ -1501,6 +1518,25 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+        )
+
+    def serving_output(self, output):
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
+        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
+        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
+        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
+        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
+
+        return TFSeq2SeqModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            past_key_values=pkv,
+            decoder_hidden_states=dec_hs,
+            decoder_attentions=dec_attns,
+            cross_attentions=cross_attns,
+            encoder_last_hidden_state=output.encoder_last_hidden_state,
+            encoder_hidden_states=enc_hs,
+            encoder_attentions=enc_attns,
         )
 
     def prepare_inputs_for_generation(
