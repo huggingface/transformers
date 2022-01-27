@@ -382,7 +382,7 @@ def main():
         # padding if one group shorter than block_size
         if total_length < block_size:
             result = {
-            k: [t + [0] * (block_size - len(t))]
+            k: [t[0] + [0] * (block_size - len(t[0]))]
             for k, t in result.items()
         }
         return result
