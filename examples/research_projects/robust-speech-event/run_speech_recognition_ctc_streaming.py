@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
-""" Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition"""
+""" Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition in streaming mode"""
 
 import logging
 import os
@@ -50,7 +50,7 @@ from transformers.utils.versions import require_version
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.16.0.dev0")
 
-require_version("datasets>=1.13.3", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
+require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
 
 logger = logging.getLogger(__name__)
