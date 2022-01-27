@@ -59,7 +59,7 @@ The last addition is to replace the typical `loss.backward()` in your training l
 
 As you can see in the following code, you only need to add four additional lines of code to your training loop to enable distributed training!
 
-```
+```diff
 + from accelerate import Accelerator
   from transformers import AdamW, AutoModelForSequenceClassification, get_scheduler
 
