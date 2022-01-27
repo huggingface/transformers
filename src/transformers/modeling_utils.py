@@ -33,6 +33,7 @@ from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .file_utils import (
+    CUSTOM_CLASSES_REGISTER,
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
@@ -45,6 +46,7 @@ from .file_utils import (
     RevisionNotFoundError,
     cached_path,
     copy_func,
+    custom_object_save,
     has_file,
     hf_bucket_url,
     is_offline_mode,
@@ -1052,6 +1054,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
+
+        # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self.__class__ in CUSTOM_CLASSES_REGISTER:
+            custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
         if save_config:

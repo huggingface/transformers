@@ -30,12 +30,14 @@ from requests import HTTPError
 from . import __version__
 from .file_utils import (
     CONFIG_NAME,
+    CUSTOM_CLASSES_REGISTER,
     EntryNotFoundError,
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
     cached_path,
     copy_func,
+    custom_object_save,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
@@ -423,6 +425,12 @@ class PretrainedConfig(PushToHubMixin):
             repo = self._create_or_get_repo(save_directory, **kwargs)
 
         os.makedirs(save_directory, exist_ok=True)
+
+        # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self.__class__ in CUSTOM_CLASSES_REGISTER:
+            custom_object_save(self, save_directory, config=self)
+
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 

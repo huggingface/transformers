@@ -17,7 +17,7 @@ import importlib
 from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import copy_func
+from ...file_utils import CUSTOM_CLASSES_REGISTER, copy_func
 from ...utils import logging
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
 from .dynamic import get_class_from_dynamic_module
@@ -468,6 +468,7 @@ class _BaseAutoModelClass:
                 "one of those so they match!"
             )
         cls._model_mapping.register(config_class, model_class)
+        CUSTOM_CLASSES_REGISTER[model_class] = cls.__name__
 
 
 def insert_head_doc(docstring, head_doc=""):

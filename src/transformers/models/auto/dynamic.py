@@ -28,6 +28,7 @@ from ...file_utils import (
     HF_MODULES_CACHE,
     TRANSFORMERS_DYNAMIC_MODULE_NAME,
     cached_path,
+    get_relative_imports,
     hf_bucket_url,
     is_offline_mode,
 )
@@ -81,12 +82,6 @@ def check_imports(filename):
     # Only keep the top-level module
     imports = [imp.split(".")[0] for imp in imports if not imp.startswith(".")]
 
-    # Imports of the form `import .xxx`
-    relative_imports = re.findall("^\s*import\s+\.(\S+)\s*$", content, flags=re.MULTILINE)
-    # Imports of the form `from .xxx import yyy`
-    relative_imports += re.findall("^\s*from\s+\.(\S+)\s+import", content, flags=re.MULTILINE)
-    relative_imports = list(set(relative_imports))
-
     # Unique-ify and test we got them all
     imports = list(set(imports))
     missing_packages = []
@@ -102,7 +97,7 @@ def check_imports(filename):
             f"{', '.join(missing_packages)}. Run `pip install {' '.join(missing_packages)}`"
         )
 
-    return relative_imports
+    return get_relative_imports(filename)
 
 
 def get_class_in_module(class_name, module_path):
@@ -218,7 +213,7 @@ def get_cached_module_file(
             shutil.copy(os.path.join(pretrained_model_name_or_path, module_needed), submodule_path / module_needed)
     else:
         # Get the commit hash
-        # TODO: we will get this info in the etag soon, so retrieve it from there.
+        # TODO: we will get this info in the etag soon, so retrieve it from there and not here.
         if isinstance(use_auth_token, str):
             token = use_auth_token
         elif use_auth_token is True:
