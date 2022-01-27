@@ -105,7 +105,7 @@ class RealmRetriever:
         if answer_ids is not None:
             return self.block_has_answer(concat_inputs, answer_ids) + (concat_inputs_tensors,)
         else:
-            return (None, None, None) + (concat_inputs_tensors,)
+            return (None, None, None, concat_inputs_tensors)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *init_inputs, **kwargs):

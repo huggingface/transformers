@@ -842,7 +842,7 @@ class RealmReaderProjection(nn.Module):
             Generate span candidates.
 
             Args:
-                masks: <int32> [num_retrievals, max_sequence_len]
+                masks: <bool> [num_retrievals, max_sequence_len]
 
             Returns:
                 starts: <int32> [num_spans] ends: <int32> [num_spans] span_masks: <int32> [num_retrievals, num_spans]
