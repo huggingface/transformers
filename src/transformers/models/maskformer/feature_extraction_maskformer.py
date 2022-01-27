@@ -356,5 +356,17 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
         if annotations:
             # BatchFeature doesn't support nested dicts, adding after it
-            encoded_inputs["labels"] = {"pixel": pixel_labels, "classes": class_labels}
+            tensor_type = return_tensors
+            if not isinstance(tensor_type, TensorType):
+                tensor_type = TensorType(tensor_type)
+            if not tensor_type == TensorType.PYTORCH:
+                raise ValueError("Only PyTorch is supported for the moment.")
+            else:
+                if not is_torch_available():
+                    raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
+
+                encoded_inputs["labels"] = {
+                    "pixel": torch.from_numpy(np.stack(pixel_labels)).float(),
+                    "classes": torch.from_numpy(np.stack(class_labels)).long(),
+                }
         return encoded_inputs

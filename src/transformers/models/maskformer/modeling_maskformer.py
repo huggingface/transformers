@@ -1361,15 +1361,12 @@ class MaskFormerSegmentationModule(nn.Module):
         self, decoder_outputs: Tuple[Tensor], pixel_embeddings: Tensor, auxilary_loss: bool = False
     ) -> Dict[str, Tensor]:
 
-        last_decoder_output: Tensor = decoder_outputs[-1]
-
         out: Dict[str, Tensor] = {}
 
         if auxilary_loss:
             stacked_decoder_outputs: Tensor = torch.stack(decoder_outputs)
-            if self.mask_classification:
-                classes: Tensor = self.class_predictor(stacked_decoder_outputs)
-                out.update({PREDICTIONS_LOGITS_KEY: classes})
+            classes: Tensor = self.class_predictor(stacked_decoder_outputs)
+            out.update({PREDICTIONS_LOGITS_KEY: classes})
             mask_embeddings: Tensor = self.mask_embedder(stacked_decoder_outputs)
             # sum up over the channels for each embedding
             binaries_masks: Tensor = torch.einsum("lbqc,   bchw -> lbqhw", mask_embeddings, pixel_embeddings)
@@ -1378,9 +1375,8 @@ class MaskFormerSegmentationModule(nn.Module):
             out.update({"auxilary_masks": binaries_masks})
         else:
             last_decoder_output: Tensor = decoder_outputs[-1]
-            if self.mask_classification:
-                classes: Tensor = self.class_predictor(last_decoder_output)
-                out.update({PREDICTIONS_LOGITS_KEY: classes})
+            classes: Tensor = self.class_predictor(last_decoder_output)
+            out.update({PREDICTIONS_LOGITS_KEY: classes})
             mask_embeddings: Tensor = self.mask_embedder(last_decoder_output)
             # sum up over the channels
             binary_masks: Tensor = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
