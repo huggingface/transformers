@@ -352,10 +352,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         # return as BatchFeature
         data = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
-        if annotations:
-            data["pixel_labels"] = pixel_labels
-            data["class_labels"] = class_labels
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-
+        if annotations:
+            # BatchFeature doesn't support nested dicts, adding after it
+            encoded_inputs["labels"] = {"pixel": pixel_labels, "classes": class_labels}
         return encoded_inputs

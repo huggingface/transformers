@@ -59,8 +59,8 @@ _CONFIG_FOR_DOC = "MaskFormerConfig"
 
 PREDICTIONS_MASKS_KEY = "preds_masks"
 PREDICTIONS_LOGITS_KEY = "preds_logits"
-TARGETS_MASKS_KEY = "pixel_labels"
-TARGETS_LABELS_KEY = "class_labels"
+TARGETS_MASKS_KEY = "pixel"
+TARGETS_LABELS_KEY = "classes"
 
 # TODO this has to go away!
 from detectron2.utils.comm import get_world_size
@@ -104,7 +104,7 @@ def is_dist_avail_and_initialized():
 
 
 # refactored from original implementation
-def dice_loss(inputs: Tensor, targets: Tensor, num_masks: float) -> Tensor:
+def dice_loss(inputs: Tensor, labels: Tensor, num_masks: float) -> Tensor:
     r"""
     Compute the DICE loss, similar to generalized IOU for masks as follow
 
@@ -112,7 +112,7 @@ def dice_loss(inputs: Tensor, targets: Tensor, num_masks: float) -> Tensor:
         \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x \cap y }{x \cup y + 1}}
 
     $$
-    In practice, since `targets` is a binary mask, (only 0s and 1s), dice can be computed as follow
+    In practice, since `labels` is a binary mask, (only 0s and 1s), dice can be computed as follow
 
     $$
         \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x * y }{x + y + 1}}
@@ -120,15 +120,15 @@ def dice_loss(inputs: Tensor, targets: Tensor, num_masks: float) -> Tensor:
 
     Args:
         inputs (Tensor): A tensor representing a mask
-        targets (Tensor): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
+        labels (Tensor): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
 
 
     Returns:
         Tensor: The computed loss
     """
     probs: Tensor = inputs.sigmoid().flatten(1)
-    numerator: Tensor = 2 * (probs * targets).sum(-1)
-    denominator: Tensor = probs.sum(-1) + targets.sum(-1)
+    numerator: Tensor = 2 * (probs * labels).sum(-1)
+    denominator: Tensor = probs.sum(-1) + labels.sum(-1)
     loss: Tensor = 1 - (numerator + 1) / (denominator + 1)
     loss = loss.sum() / num_masks
     return loss
@@ -136,7 +136,7 @@ def dice_loss(inputs: Tensor, targets: Tensor, num_masks: float) -> Tensor:
 
 # copied from original implementation
 def sigmoid_focal_loss(
-    inputs: Tensor, targets: Tensor, num_masks: int, alpha: float = 0.25, gamma: float = 2
+    inputs: Tensor, labels: Tensor, num_masks: int, alpha: float = 0.25, gamma: float = 2
 ) -> Tensor:
     r"""
        Focal loss proposed in [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002) originally used in RetinaNet. The loss is computed as follows
@@ -153,7 +153,7 @@ def sigmoid_focal_loss(
     Args:
         inputs (Tensor): A float tensor of arbitrary shape.
                 The predictions for each example.
-        targets (Tensor,): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
+        labels (Tensor,): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
         alpha (float, optional): Weighting factor in range (0,1) to balance
                 positive vs negative examples. Default = -1 (no weighting).
         gamma (float, optional): Exponent of the modulating factor (1 - p_t) to
@@ -162,25 +162,25 @@ def sigmoid_focal_loss(
         Tensor: The computed loss
     """
     probs: Tensor = inputs.sigmoid()
-    cross_entropy_loss: Tensor = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-    p_t: Tensor = probs * targets + (1 - probs) * (1 - targets)
+    cross_entropy_loss: Tensor = F.binary_cross_entropy_with_logits(inputs, labels, reduction="none")
+    p_t: Tensor = probs * labels + (1 - probs) * (1 - labels)
     loss: Tensor = cross_entropy_loss * ((1 - p_t) ** gamma)
 
     if alpha >= 0:
-        alpha_t: Tensor = alpha * targets + (1 - alpha) * (1 - targets)
+        alpha_t: Tensor = alpha * labels + (1 - alpha) * (1 - labels)
         loss = alpha_t * loss
 
     loss = loss.mean(1).sum() / num_masks
     return loss
 
 
-def pair_wise_dice_loss(inputs: Tensor, targets: Tensor) -> Tensor:
+def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     """
     A pair wise version of the dice loss, see `dice_loss` for usage
 
     Args:
         inputs (Tensor): A tensor representing a mask
-        targets (Tensor): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
+        labels (Tensor): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
 
 
     Returns:
@@ -190,20 +190,20 @@ def pair_wise_dice_loss(inputs: Tensor, targets: Tensor) -> Tensor:
     # TODO this .flatten seems to be unecessary because the shape is 2d
     inputs: Tensor = inputs.flatten(1)
     # TODO why 1 is not added to the number to avoid numerator = 0 in edge cases?
-    numerator: Tensor = 2 * torch.einsum("nc,mc->nm", inputs, targets)
+    numerator: Tensor = 2 * torch.einsum("nc,mc->nm", inputs, labels)
     # using broadcasting to get a [NUM_QUERIES, NUM_CLASSES] matrix
-    denominator: Tensor = inputs.sum(-1)[:, None] + targets.sum(-1)[None, :]
+    denominator: Tensor = inputs.sum(-1)[:, None] + labels.sum(-1)[None, :]
     loss: Tensor = 1 - (numerator + 1) / (denominator + 1)
     return loss
 
 
-def pair_wise_sigmoid_focal_loss(inputs: Tensor, targets: Tensor, alpha: float = 0.25, gamma: float = 2.0) -> Tensor:
+def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 0.25, gamma: float = 2.0) -> Tensor:
     """
     A pair wise version of the focal loss, see `sigmoid_focal_loss` for usage
 
     Args:
         inputs (Tensor): A tensor representing a mask
-        targets (Tensor): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
+        labels (Tensor): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
 
 
     Returns:
@@ -224,17 +224,17 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, targets: Tensor, alpha: float =
     focal_neg: Tensor = (prob ** gamma) * cross_entropy_loss_neg
     focal_neg *= 1 - alpha
 
-    loss: Tensor = torch.einsum("nc,mc->nm", focal_pos, targets) + torch.einsum("nc,mc->nm", focal_neg, (1 - targets))
+    loss: Tensor = torch.einsum("nc,mc->nm", focal_pos, labels) + torch.einsum("nc,mc->nm", focal_neg, (1 - labels))
 
     return loss / hw
 
 
 # refactored from original implementation
 class MaskFormerHungarianMatcher(nn.Module):
-    """This class computes an assignment between the targets and the predictions of the network
+    """This class computes an assignment between the labels and the predictions of the network
 
-    For efficiency reasons, the targets don't include the no_object. Because of this, in general,
-    there are more predictions than targets. In this case, we do a 1-to-1 matching of the best predictions,
+    For efficiency reasons, the labels don't include the no_object. Because of this, in general,
+    there are more predictions than labels. In this case, we do a 1-to-1 matching of the best predictions,
     while the others are un-matched (and thus treated as non-objects).
     """
 
@@ -254,7 +254,7 @@ class MaskFormerHungarianMatcher(nn.Module):
         self.cost_dice = cost_dice
 
     @torch.no_grad()
-    def forward(self, outputs: Dict[str, Tensor], targets: Dict[str, Tensor]) -> List[Tuple[Tensor]]:
+    def forward(self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor]) -> List[Tuple[Tensor]]:
         """Performs the matching
 
         Params:
@@ -262,7 +262,7 @@ class MaskFormerHungarianMatcher(nn.Module):
                  "pred_logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
                  "pred_masks": Tensor of dim [batch_size, num_queries, H_pred, W_pred] with the predicted masks
 
-            targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:
+            labels: This is a list of labels (len(labels) = batch_size), where each target is a dict containing:
                  "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
                            objects in the target) containing the class labels
                  "masks": Tensor of dim [num_target_boxes, H_gt, W_gt] containing the target masks
@@ -270,7 +270,7 @@ class MaskFormerHungarianMatcher(nn.Module):
         Returns:
             A list of size batch_size, containing tuples of (index_i, index_j) where:
                 - index_i is the indices of the selected predictions (in order)
-                - index_j is the indices of the corresponding selected targets (in order)
+                - index_j is the indices of the corresponding selected labels (in order)
             For each batch element, it holds:
                 len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
@@ -278,13 +278,13 @@ class MaskFormerHungarianMatcher(nn.Module):
         indices: List[Tuple[np.array]] = []
 
         preds_masks: Tensor = outputs[PREDICTIONS_MASKS_KEY]
-        targets_masks: Tensor = targets[TARGETS_MASKS_KEY]
+        labels_masks: Tensor = labels[TARGETS_MASKS_KEY]
         preds_probs: Tensor = outputs[PREDICTIONS_LOGITS_KEY].softmax(dim=-1)
         # downsample all masks in one go -> save memory
-        targets_masks: Tensor = F.interpolate(targets_masks, size=preds_masks.shape[-2:], mode="nearest")
+        labels_masks: Tensor = F.interpolate(labels_masks, size=preds_masks.shape[-2:], mode="nearest")
         # iterate through batch size
         for pred_probs, pred_mask, target_mask, labels in zip(
-            preds_probs, preds_masks, targets_masks, targets[TARGETS_LABELS_KEY]
+            preds_probs, preds_masks, labels_masks, labels[TARGETS_LABELS_KEY]
         ):
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
@@ -292,7 +292,7 @@ class MaskFormerHungarianMatcher(nn.Module):
             cost_class: Tensor = -pred_probs[:, labels]
             # flatten spatial dimension
             pred_mask_flat: Tensor = rearrange(pred_mask, "q h w -> q (h w)")  # [num_queries, H*W]
-            target_mask_flat: Tensor = rearrange(target_mask, "c h w -> c (h w)")  # [num_total_targets, H*W]
+            target_mask_flat: Tensor = rearrange(target_mask, "c h w -> c (h w)")  # [num_total_labels, H*W]
             # compute the focal loss between each mask pairs -> shape [NUM_QUERIES, CLASSES]
             cost_mask: Tensor = pair_wise_sigmoid_focal_loss(pred_mask_flat, target_mask_flat)
             # Compute the dice loss betwen each mask pairs -> shape [NUM_QUERIES, CLASSES]
@@ -339,7 +339,7 @@ class MaskFormerLoss(nn.Module):
 
         Args:
             num_classes (int): The number of classes
-            matcher (MaskFormerHungarianMatcher): A torch module that computes the assigments between the predictions and targets
+            matcher (MaskFormerHungarianMatcher): A torch module that computes the assigments between the predictions and labels
             weight_dict (Dict[str, float]): A dictionary of weights to be applied to the different losses
             eos_coef (float): TODO no idea
             losses (List[str]): A list of losses to be used TODO probably remove it
@@ -357,11 +357,11 @@ class MaskFormerLoss(nn.Module):
         self.register_buffer("empty_weight", empty_weight)
 
     def loss_labels(
-        self, outputs: Dict[str, Tensor], targets: Dict[str, Tensor], indices: Tuple[np.array], num_masks: float
+        self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor], indices: Tuple[np.array], num_masks: float
     ) -> Dict[str, Tensor]:
         """Classification loss (NLL)
         # TODO this doc was copied by the authors
-        targets dicts must contain the key "labels" containing a tensor of dim [nb_target_masks]
+        labels dicts must contain the key "labels" containing a tensor of dim [nb_target_masks]
         """
 
         pred_logits: Tensor = outputs[PREDICTIONS_LOGITS_KEY]
@@ -370,7 +370,7 @@ class MaskFormerLoss(nn.Module):
         idx = self._get_src_permutation_idx(indices)
         # shape = [BATCH, N_QUERIES]
         target_classes_o: Tensor = torch.cat(
-            [target[j] for target, (_, j) in zip(targets[TARGETS_LABELS_KEY], indices)]
+            [target[j] for target, (_, j) in zip(labels[TARGETS_LABELS_KEY], indices)]
         )
         # shape = [BATCH, N_QUERIES]
         target_classes: Tensor = torch.full(
@@ -382,16 +382,16 @@ class MaskFormerLoss(nn.Module):
         return losses
 
     def loss_masks(
-        self, outputs: Dict[str, Tensor], targets: Dict[str, Tensor], indices: Tuple[np.array], num_masks: int
+        self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor], indices: Tuple[np.array], num_masks: int
     ) -> Dict[str, Tensor]:
         """Compute the losses related to the masks: the focal loss and the dice loss.
-        targets dicts must contain the key "masks" containing a tensor of dim [nb_target_masks, h, w]
+        labels dicts must contain the key "masks" containing a tensor of dim [nb_target_masks, h, w]
         """
         src_idx = self._get_src_permutation_idx(indices)
         tgt_idx = self._get_tgt_permutation_idx(indices)
         pred_masks = outputs[PREDICTIONS_MASKS_KEY]
         pred_masks = pred_masks[src_idx]
-        target_masks = targets[TARGETS_MASKS_KEY]
+        target_masks = labels[TARGETS_MASKS_KEY]
         # upsample predictions to the target size
         pred_masks = F.interpolate(pred_masks, size=target_masks.shape[-2:], mode="bilinear", align_corners=False)
         pred_masks = pred_masks.flatten(1)
@@ -411,52 +411,52 @@ class MaskFormerLoss(nn.Module):
         return batch_idx, src_idx
 
     def _get_tgt_permutation_idx(self, indices):
-        # permute targets following indices
+        # permute labels following indices
         batch_idx = torch.cat([torch.full_like(tgt, i) for i, (_, tgt) in enumerate(indices)])
         tgt_idx = torch.cat([tgt for (_, tgt) in indices])
         return batch_idx, tgt_idx
 
-    def get_loss(self, loss, outputs, targets, indices, num_masks):
+    def get_loss(self, loss, outputs, labels, indices, num_masks):
         loss_map = {"labels": self.loss_labels, "masks": self.loss_masks}
         if loss not in loss_map:
             raise KeyError(f"{loss} not in loss_map")
-        return loss_map[loss](outputs, targets, indices, num_masks)
+        return loss_map[loss](outputs, labels, indices, num_masks)
 
-    def forward(self, outputs: Dict[str, Tensor], targets: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def forward(self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor]) -> Dict[str, Tensor]:
         """This performs the loss computation.
         Parameters:
              outputs: dict of tensors, see the output specification of the model for the format
-             targets: list of dicts, such that len(targets) == batch_size.
+             labels: list of dicts, such that len(labels) == batch_size.
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
         # TODO in theory here we can just take the `pred_masks` key
         outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxilary_masks"}
 
-        # Retrieve the matching between the outputs of the last layer and the targets
-        indices = self.matcher(outputs_without_aux, targets)
+        # Retrieve the matching between the outputs of the last layer and the labels
+        indices = self.matcher(outputs_without_aux, labels)
 
         # Compute the average number of target masks accross all nodes, for normalization purposes
-        num_masks: Number = self.get_num_masks(targets, device=next(iter(outputs.values())).device)
+        num_masks: Number = self.get_num_masks(labels, device=next(iter(outputs.values())).device)
 
         # Compute all the requested losses
         losses: Dict[str, Tensor] = {}
         for loss in self.losses:
-            losses.update(self.get_loss(loss, outputs, targets, indices, num_masks))
+            losses.update(self.get_loss(loss, outputs, labels, indices, num_masks))
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if "auxilary_masks" in outputs:
             for i, aux_outputs in enumerate(outputs["auxilary_masks"]):
-                indices = self.matcher(aux_outputs, targets)
+                indices = self.matcher(aux_outputs, labels)
                 for loss in self.losses:
-                    l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_masks)
+                    l_dict = self.get_loss(loss, aux_outputs, labels, indices, num_masks)
                     l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
         return losses
 
-    def get_num_masks(self, targets: Dict[str, Tensor], device: torch.device) -> Number:
+    def get_num_masks(self, labels: Dict[str, Tensor], device: torch.device) -> Number:
         # Compute the average number of target masks accross all nodes, for normalization purposes
-        num_masks: int = targets[TARGETS_LABELS_KEY].shape[0]
+        num_masks: int = labels[TARGETS_LABELS_KEY].shape[0]
         num_masks_pt: Tensor = torch.as_tensor([num_masks], dtype=torch.float, device=device)
         if is_dist_avail_and_initialized():
             torch.distributed.all_reduce(num_masks_pt)
@@ -1444,9 +1444,8 @@ class MaskFormerModel(PreTrainedModel):
     def forward(
         self,
         pixel_values: Tensor,
-        pixel_labels: Optional[Tensor] = None,
-        class_labels: Optional[Tensor] = None,
         pixel_mask: Optional[Tensor] = None,
+        labels: Optional[Dict[str, Tensor]] = None,
     ) -> MaskFormerOutput:
         image_features, pixel_embeddings = self.pixel_level_module(pixel_values)
         queries = self.transformer_module(image_features)
@@ -1455,9 +1454,8 @@ class MaskFormerModel(PreTrainedModel):
         loss_dict: Dict[str, Tensor] = {}
         loss: Tensor = None
 
-        if pixel_labels is not None and class_labels is not None:
-            targets: Dict[str, Tensor] = {TARGETS_MASKS_KEY: pixel_labels, TARGETS_LABELS_KEY: class_labels}
-            loss_dict = self.get_loss_dict(outputs, targets)
+        if labels is not None:
+            loss_dict = self.get_loss_dict(outputs, labels)
             loss = self.get_loss(loss_dict)
         else:
             # upsample the masks to match the inputs' spatial dimension
@@ -1465,8 +1463,8 @@ class MaskFormerModel(PreTrainedModel):
 
         return MaskFormerOutput(**outputs, loss_dict=loss_dict, loss=loss)
 
-    def get_loss_dict(self, outputs: Dict[str, Tensor], targets: Dict[str, Tensor]) -> Dict[str, Tensor]:
-        loss_dict: Dict[str, Tensor] = self.criterion(outputs, targets)
+    def get_loss_dict(self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        loss_dict: Dict[str, Tensor] = self.criterion(outputs, labels)
         # weight each loss by `self.weight_dict[<LOSS_NAME>]`
         weighted_loss_dict: Dict[str, Tensor] = {k: v * self.weight_dict[k] for k, v in loss_dict.items()}
         return weighted_loss_dict
