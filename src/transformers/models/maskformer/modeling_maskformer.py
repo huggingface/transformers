@@ -389,12 +389,15 @@ class MaskFormerLoss(nn.Module):
         """
         src_idx = self._get_src_permutation_idx(indices)
         tgt_idx = self._get_tgt_permutation_idx(indices)
-        pred_masks = outputs[PREDICTIONS_MASKS_KEY]
-        pred_masks = pred_masks[src_idx]
-        target_masks = labels[TARGETS_MASKS_KEY]
-        # upsample predictions to the target size
-        pred_masks = F.interpolate(pred_masks, size=target_masks.shape[-2:], mode="bilinear", align_corners=False)
-        pred_masks = pred_masks.flatten(1)
+        pred_masks = outputs[PREDICTIONS_MASKS_KEY]  # shape [BATCH, NUM_QUERIES, H, W]
+        pred_masks = pred_masks[src_idx]  # shape [BATCH * NUM_QUERIES, H, W]
+        target_masks = labels[TARGETS_MASKS_KEY]  # shape [BATCH, NUM_QUERIES, H, W]
+        target_masks = target_masks[tgt_idx]  # shape [BATCH * NUM_QUERIES, H, W]
+        # upsample predictions to the target size, we have to add one dim to use interpolate
+        pred_masks = F.interpolate(
+            pred_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
+        )
+        pred_masks = pred_masks[:, 0].flatten(1)
 
         target_masks = target_masks.flatten(1)
         target_masks = target_masks.view(pred_masks.shape)
