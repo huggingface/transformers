@@ -26,6 +26,7 @@ from typing import Dict, List, Optional, Union
 import datasets
 import numpy as np
 import torch
+from torch.utils.data import IterableDataset
 from datasets import IterableDatasetDict, load_dataset, load_metric
 
 import transformers
@@ -232,6 +233,31 @@ class DataTrainingArguments:
             " input audio to a sequence of phoneme sequences."
         },
     )
+
+
+class StreamingDataset(IterableDataset):
+    """
+    Iterable dataset that returns a constant stream of examples, resetting the source dataset's iterator
+    after it reaches the end
+    Args:
+        dataset (datasets.IterableDataset): The source streaming dataset.
+    """
+
+    def __init__(self, dataset):
+        self.dataset = dataset
+        self.epoch = 0
+
+    def __iter__(self):
+        iterator = iter(self.dataset)
+        more_examples = True
+        while more_examples:
+            try:
+                yield next(iterator)
+            except StopIteration:
+                iterator = iter(self.dataset)
+                self.epoch += 1
+                logger.info(f"Dataset epoch: {self.epoch}")
+
 
 
 @dataclass
@@ -516,11 +542,9 @@ def main():
     with training_args.main_process_first(desc="dataset map preprocessing"):
         for split, dataset in raw_datasets.items():
             vectorized_datasets[split] = (
-                dataset.map(
-                    prepare_dataset,
-                )
+                dataset.map(prepare_dataset)
                 .remove_columns(raw_column_names[split] + ["target_text"])
-                .shuffle(buffer_size=10, seed=training_args.seed)
+                .shuffle(buffer_size=100, seed=training_args.seed)
                 .with_format("torch")
             )
 
@@ -580,7 +604,7 @@ def main():
         data_collator=data_collator,
         args=training_args,
         compute_metrics=compute_metrics,
-        train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
+        train_dataset=StreamingDataset(vectorized_datasets["train"]) if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
         tokenizer=feature_extractor,
         callbacks=[ShuffleCallback()],
