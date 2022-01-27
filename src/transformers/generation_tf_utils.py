@@ -661,7 +661,7 @@ class TFGenerationMixin:
         if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids.numpy()):
             attention_mask = tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
         elif attention_mask is None:
-            attention_mask = tf.ones_like(input_ids)
+            attention_mask = tf.ones(shape_list(input_ids)[:2], dtype=tf.int32)
 
         if pad_token_id is None and eos_token_id is not None:
             logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
@@ -756,6 +756,8 @@ class TFGenerationMixin:
             )
             # expand encoder_outputs
             encoder_outputs = (tf.gather(encoder_outputs[0], expanded_batch_idxs, axis=0),)
+            if 'attention_mask' in locals(): # vision models don't have this
+                attention_mask = tf.gather(attention_mask, expanded_batch_idxs, axis=0)
         else:
             encoder_outputs = None
             cur_len = shape_list(input_ids)[-1]
@@ -1131,6 +1133,10 @@ class TFGenerationMixin:
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
+            # past may have dropped the `encoder_outputs` component
+            if len(past) > 1 and past[0] != encoder_outputs:
+                past = (encoder_outputs, past)
+
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs
             )

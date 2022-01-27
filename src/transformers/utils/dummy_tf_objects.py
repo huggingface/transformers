@@ -279,14 +279,14 @@ class TFAutoModelForSequenceClassification(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-class TFAutoModelForTableQuestionAnswering(metaclass=DummyObject):
+class TFAutoModelForSpeechSeq2Seq(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
 
-class TFAutoModelForSpeechSeq2Seq(metaclass=DummyObject):
+class TFAutoModelForTableQuestionAnswering(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
@@ -1691,39 +1691,24 @@ class TFRoFormerPreTrainedModel(metaclass=DummyObject):
 TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class TFSpeech2TextForConditionalGeneration:
+class TFSpeech2TextForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["tf"]
+
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["tf"])
 
-    def call(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
+class TFSpeech2TextModel(metaclass=DummyObject):
+    _backends = ["tf"]
 
-
-class TFSpeech2TextModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["tf"])
 
-    def call(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
+class TFSpeech2TextPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
 
-
-class TFSpeech2TextPreTrainedModel:
     def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["tf"])
-
-    def call(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
 

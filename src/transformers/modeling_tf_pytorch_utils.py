@@ -35,6 +35,7 @@ class TransposeType(ExplicitEnum):
 
     NO = "no"
     SIMPLE = "simple"
+    CONV1D = "conv1d"
     CONV2D = "conv2d"
 
 
@@ -68,8 +69,9 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="",
 
     # When should we transpose the weights
     if tf_name[-1] == "kernel" and tf_weight_shape is not None and tf_weight_shape.rank == 4:
-        # A simple heuristic to detect conv layer using weight array shape
         transpose = TransposeType.CONV2D
+    elif tf_name[-1] == "kernel" and tf_weight_shape is not None and tf_weight_shape.rank == 3:
+        transpose = TransposeType.CONV1D
     elif bool(
         tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
         or "emb_projs" in tf_name
@@ -204,6 +206,11 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             #    PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
             # -> TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
             array = numpy.transpose(array, axes=(2, 3, 1, 0))
+        elif transpose is TransposeType.CONV1D:
+            # Conv1D weight:
+            #    PT: (num_out_channel, num_in_channel, kernel)
+            # -> TF: (kernel, num_in_channel, num_out_channel)
+            array = numpy.transpose(array, axes=(2, 1, 0))
         elif transpose is TransposeType.SIMPLE:
             array = numpy.transpose(array)
 
@@ -246,7 +253,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     if tf_model._keys_to_ignore_on_load_unexpected is not None:
         for pat in tf_model._keys_to_ignore_on_load_unexpected:
             unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
-
     if len(unexpected_keys) > 0:
         logger.warning(
             f"Some weights of the PyTorch model were not used when "
@@ -377,6 +383,11 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             #    TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
             # -> PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
             array = numpy.transpose(array, axes=(3, 2, 0, 1))
+        elif transpose is TransposeType.CONV1D:
+            # Conv1D weight:
+            #    TF: (kernel, num_in_channel, num_out_channel)
+            # -> PT: (num_out_channel, num_in_channel, kernel)
+            array = numpy.transpose(array, axes=(2, 1, 0))
         elif transpose is TransposeType.SIMPLE:
             array = numpy.transpose(array)
 
