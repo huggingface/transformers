@@ -243,6 +243,18 @@ class PushToHubCallback(Callback):
     """
     Callback that will save and push the model to the Hub regularly.
 
+    ```py
+    from transformers.keras_callbacks import PushToHubCallback
+
+    push_to_hub_callback = PushToHubCallback(
+        output_dir="./model_save",
+        tokenizer=tokenizer,
+        hub_model_id="gpt5-7xlarge",
+    )
+
+    model.fit(train_dataset, callbacks=[push_to_hub_callback])
+    ```
+
     Args:
         output_dir (`str`):
             The output directory where the model predictions and checkpoints will be written and synced with the
