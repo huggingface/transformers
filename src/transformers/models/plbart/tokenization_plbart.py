@@ -13,8 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from contextlib import contextmanager
-from typing import List, Any, Dict, Optional
+from shutil import copyfile
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -65,8 +67,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 FAIRSEQ_LANGUAGE_CODES = {
-    "base":["java","python","en_XX"],
-    "multi":[
+    "base": ["java", "python", "en_XX"],
+    "multi": [
         "java",
         "python",
         "en_XX",
@@ -74,7 +76,7 @@ FAIRSEQ_LANGUAGE_CODES = {
         "php",
         "ruby",
         "go",
-    ]
+    ],
 }
 
 
@@ -111,13 +113,15 @@ class PLBartTokenizer(PreTrainedTokenizer):
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
         mask_token(`str`, *optional*, defaults to `"<mask>"`):
-            The token used for masking values. This is the token used when training this model with masking tasks.
-            This is only used in the `"base"` tokenizer type. For `"multi"` tokenizer, masking is never done for the
+            The token used for masking values. This is the token used when training this model with masking tasks. This
+            is only used in the `"base"` tokenizer type. For `"multi"` tokenizer, masking is never done for the
             downstream tasks.
         language_codes (`str`, *optional*, defaults to `"base"`):
             What language codes to use. Should be one of `"base"` or `"multi"`.
         sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
             - `enable_sampling`: Enable subword regularization.
             - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
               - `nbest_size = {0,1}`: No sampling is performed.
@@ -131,10 +135,11 @@ class PLBartTokenizer(PreTrainedTokenizer):
 
     ```python
     >>> from transformers import PLBartTokenizer
-    >>> tokenizer = PLBartTokenizer.from_pretrained('uclanlp/plbart-python-en_XX', src_lang="python", tgt_lang="en_XX")
+
+    >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-python-en_XX", src_lang="python", tgt_lang="en_XX")
     >>> example_python_phrase = "def maximum(a,b,c):NEW_LINE_INDENTreturn max([a,b,c])"
-    >>> expected_translation_english = "Returns the maximum value of a b c." 
-    >>> inputs = tokenizer(example_python_phrase, return_tensors="pt) 
+    >>> expected_translation_english = "Returns the maximum value of a b c."
+    >>> inputs = tokenizer(example_python_phrase, return_tensors="pt")
     >>> with tokenizer.as_target_tokenizer():
     ...     labels = tokenizer(expected_translation_english, return_tensors="pt")
     >>> inputs["labels"] = labels["input_ids"]
@@ -209,8 +214,8 @@ class PLBartTokenizer(PreTrainedTokenizer):
             code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
         }
         self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
-        
-        if self.language_codes=="base":
+
+        if self.language_codes == "base":
             self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
 
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
@@ -223,13 +228,15 @@ class PLBartTokenizer(PreTrainedTokenizer):
                 [t for t in additional_special_tokens if t not in self._additional_special_tokens]
             )
 
-        if self.language_codes=="base":
+        if self.language_codes == "base":
             self._src_lang = src_lang
-            self.cur_lang_code_id = self.lang_code_to_id[self._src_lang] if self._src_lang is not None else self._src_lang
+            self.cur_lang_code_id = (
+                self.lang_code_to_id[self._src_lang] if self._src_lang is not None else self._src_lang
+            )
         else:
             self._src_lang = src_lang if src_lang is not None else "en_XX"
             self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
-        
+
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
@@ -251,8 +258,10 @@ class PLBartTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        if self.language_codes=="base":
-            return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
+        if self.language_codes == "base":
+            return (
+                len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1
+            )  # Plus 1 for the mask token
         else:
             return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
 
@@ -326,9 +335,9 @@ class PLBartTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
+        Args:
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. PLBart does not
         make use of token type ids, therefore a list of zeros is returned. TODO: Check if this is correct.
-        Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
             token_ids_1 (`List[int]`, *optional*):
@@ -343,7 +352,6 @@ class PLBartTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-
 
     def _build_translation_inputs(
         self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
