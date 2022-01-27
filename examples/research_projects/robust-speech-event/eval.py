@@ -127,7 +127,7 @@ if __name__ == "__main__":
         "--log_outputs", action="store_true", help="If defined, write outputs to log file for analysis."
     )
     parser.add_argument(
-        "--device", type=int, default=-1,
+        "--device", type=int, default=None,
         help="The device to run the pipeline on. -1 for CPU (default), 0 for the first GPU and so on."
     )
     args = parser.parse_args()
