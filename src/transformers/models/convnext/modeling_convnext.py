@@ -327,7 +327,8 @@ class ConvNextModel(ConvNextPreTrainedModel):
         pooled_output = self.layernorm(hidden_states.mean([-2, -1]))
 
         if not return_dict:
-            return (hidden_states, pooled_output) + all_hidden_states
+            output = (hidden_states, pooled_output)
+            return output + (all_hidden_states,) if all_hidden_states is not None else output
 
         return ConvNextModelOutput(
             last_hidden_state=hidden_states,
