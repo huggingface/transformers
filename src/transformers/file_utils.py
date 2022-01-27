@@ -1174,18 +1174,6 @@ PT_SPEECH_CTC_SAMPLE = r"""
     ```
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
-    >>> from datasets import load_dataset
-    >>> import torch
-
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
-    >>> sampling_rate = dataset.features["audio"].sampling_rate
-
-    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> # audio file is decoded on the fly
-    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
     >>> with processor.as_target_processor():
     ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="pt").input_ids
 
@@ -1223,13 +1211,6 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     ```
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
-    >>> from datasets import load_dataset
-    >>> import torch
-
-    >>> # audio file is decoded on the fly
-    >>> inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
-
     >>> # compute loss - target_label is e.g. "down"
     >>> target_label = model.config.id2label[0]
     >>> inputs["labels"] = torch.tensor([model.config.label2id[target_label]])
@@ -1255,7 +1236,7 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
     >>> # audio file is decoded on the fly
-    >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt")
+    >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt", sampling_rate=sampling_rate)
     >>> with torch.no_grad():
     ...     logits = model(**inputs).logits
 

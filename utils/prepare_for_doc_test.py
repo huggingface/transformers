@@ -12,7 +12,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Style utils to preprocess files for doc tests."""
+""" Style utils to preprocess files for doc tests.
+
+    The doc precossing function can be run on a list of files and/org
+    directories of files. It will recursively check if the files have
+    a python code snippet by looking for a ```python or ```py syntax.
+    In the default mode - `remove_new_line==False` the script will
+    add a new line before every python code ending ``` line to make
+    the docstrings ready for pytest doctests.
+    However, we don't want to have empty lines displayed in the
+    official documentation which is why the new line command can be
+    reversed by adding the flag `--remove_new_line` which sets
+    `remove_new_line==True`.
+
+    When debugging the doc tests locally, please make sure to
+    always run:
+
+    ```python utils/prepare_for_doc_test.py src doc```
+
+    before running the doc tests:
+
+    ```pytest --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.mdx"```
+
+    Afterwards you should revert the changes by running
+
+    ```python utils/prepare_for_doc_test.py src doc --remove_new_line```
+"""
 
 import argparse
 import os
@@ -110,7 +135,11 @@ def main(*files, add_new_line=True):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("files", nargs="+", help="The file(s) or folder(s) to restyle.")
-    parser.add_argument("--remove_new_line", action="store_true", help="Whether to remove new line after each python code block instead of adding one.")
+    parser.add_argument(
+        "--remove_new_line",
+        action="store_true",
+        help="Whether to remove new line after each python code block instead of adding one.",
+    )
     args = parser.parse_args()
 
     main(*args.files, add_new_line=not args.remove_new_line)
