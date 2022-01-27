@@ -48,16 +48,34 @@ from .configuration_wav2vec2 import Wav2Vec2Config
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "Wav2Vec2Config"
-_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-
-_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
-_FRAME_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-sd"
-_XVECTOR_CHECKPOINT = "superb/wav2vec2-base-superb-sv"
 
 _HIDDEN_STATES_START_POSITION = 2
+
+# General docstring
+_CONFIG_FOR_DOC = "Wav2Vec2Config"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
+
+# CTC docstring
+_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
+_CTC_EXPECTED_LOSS = 53.48
+
+# Audio class docstring
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
+_SEQ_CLASS_EXPECTED_LOSS = 6.54
+
+# Frame class docstring
+_FRAME_CLASS_CHECKPOINT = "anton-l/wav2vec2-base-superb-sd"
+_FRAME_EXPECTED_OUTPUT = [0, 0]
+
+# Speaker Verification docstring
+_XVECTOR_CHECKPOINT = "anton-l/wav2vec2-base-superb-sv"
+_XVECTOR_EXPECTED_OUTPUT = 0.98
 
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1294,6 +1312,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1469,10 +1488,11 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         >>> cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
 
         >>> # show that cosine similarity is much higher than random
-        >>> assert cosine_sim[mask_time_indices].mean() > 0.5
+        >>> cosine_sim[mask_time_indices.to(torch.bool)].mean() > 0.5
+        tensor(True)
 
         >>> # for contrastive loss training model should be put into train mode
-        >>> model.train()
+        >>> model = model.train()
         >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
         ```"""
 
@@ -1697,6 +1717,8 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1826,6 +1848,8 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1941,6 +1965,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_FRAME_EXPECTED_OUTPUT,
     )
     def forward(
         self,
@@ -2114,6 +2139,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_XVECTOR_EXPECTED_OUTPUT,
     )
     def forward(
         self,
