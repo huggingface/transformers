@@ -70,7 +70,7 @@ def export(
     output: Path,
 ) -> Tuple[List[str], List[str]]:
     """
-    Export a PyTorch/Tensorflow backed pipeline to ONNX Intermediate Representation (IR)
+    Export a PyTorch or TensorFlow model to ONNX Intermediate Representation (IR)
 
     Args:
         tokenizer:
