@@ -32,6 +32,7 @@ benchmarks = [
 
 device = 'cuda'
 
+numerical_diffs = []
 results = []
 for config, model_type, input_size, not_supported_dtypes in benchmarks:
     for dtype in [torch.float, torch.half, torch.bfloat16]:
@@ -110,14 +111,22 @@ for config, model_type, input_size, not_supported_dtypes in benchmarks:
             atol = 5e-3
             rtol = 1e-3
         elif dtype == torch.float:
-            atol = 5e-5
+            atol = 1e-4
             rtol = 5e-3
         else:
             atol = 1e-2
             rtol = 1e-1
-        torch.testing.assert_close(out2, out1, atol=atol, rtol=rtol)
-        torch.testing.assert_close(grad2, grad1, atol=atol, rtol=rtol)
+        try:
+            torch.testing.assert_close(out2, out1, atol=atol, rtol=rtol)
+            torch.testing.assert_close(grad2, grad1, atol=atol, rtol=rtol)
+        except AssertionError as e:
+            print(e)
+            numerical_diffs.append((model_name, str(dtype), e))
         print()
 
+for model_name, dtype, err in numerical_diffs:
+    print(f"Numerical differences in {model_name} - {dtype} found")
+    print(err)
+    print()
 
 print(pd.DataFrame(results).to_markdown(index=False, floatfmt=".3f"))
