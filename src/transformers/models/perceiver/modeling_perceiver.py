@@ -269,7 +269,8 @@ class PerceiverSelfAttention(nn.Module):
 
         import pdb; pdb.set_trace()
         if self.config.chunk_size_query > 0 or self.config.chunk_size_key > 0:
-            attention_probs = attention(self.config, queries.permute(0,2,1,3), keys.permute(0,2,1,3), values.permute(0,2,1,3))
+            attention_probs = attention(self.config, queries.permute(0,2,1,3), keys.permute(0,2,1,3), values.permute(0,2,1,3),
+                    bias = attention_mask.expand((*attention_mask.shape[:-3], *queries.shape[-3:-1], keys.shape[-2]))) 
             attention_probs = attention_probs.permute(0,2,1,3)
         else:
             # Take the dot product between the queries and keys to get the raw attention scores.
