@@ -173,13 +173,15 @@ class KerasMetricCallback(Callback):
         else:
             ignore_keys = []
 
+        main_input_name = None
         if self.predict_with_generate:
-            if hasattr(self.model, "encoder") and self.model.encoder.main_input_name != self.model.main_input_name:
-                main_input_name = self.model.encoder.main_input_name
+            # This dense conditional recognizes the case where we have an encoder-decoder model, but
+            # avoids getting tangled up when we just have a model with a layer called 'encoder'
+            if hasattr(self.model, "encoder") and hasattr(self.model.encoder, "main_input_name"):
+                if self.model.encoder.main_input_name != self.model.main_input_name:
+                    main_input_name = self.model.encoder.main_input_name
             else:
                 main_input_name = getattr(self.model, "main_input_name", "input_ids")
-        else:
-            main_input_name = None
 
         prediction_list = []
         label_list = []
@@ -201,14 +203,14 @@ class KerasMetricCallback(Callback):
                 predictions = self.model.generate(generation_inputs, attention_mask=attention_mask)
             else:
                 predictions = self.model.predict(batch)
-            if isinstance(predictions, dict):
-                # This converts any dict-subclass to a regular dict
-                # Keras REALLY doesn't like it when we pass around a BatchEncoding or other derived class
-                predictions = dict(predictions)
-            if self.output_cols is not None:
-                predictions = {key: predictions[key] for key in self.output_cols}
-            else:
-                predictions = {key: val for key, val in predictions.items() if key not in ignore_keys + ["loss"]}
+                if isinstance(predictions, dict):
+                    # This converts any dict-subclass to a regular dict
+                    # Keras REALLY doesn't like it when we pass around a BatchEncoding or other derived class
+                    predictions = dict(predictions)
+                if self.output_cols is not None:
+                    predictions = {key: predictions[key] for key in self.output_cols}
+                else:
+                    predictions = {key: val for key, val in predictions.items() if key not in ignore_keys + ["loss"]}
             prediction_list.append(predictions)
             if not self.use_keras_label:
                 labels = {key: batch[key].numpy() for key in self.label_cols}
