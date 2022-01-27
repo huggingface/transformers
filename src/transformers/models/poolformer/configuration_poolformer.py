@@ -102,18 +102,14 @@ class PoolFormerConfig(PretrainedConfig):
         num_encoder_blocks=4,
         drop_path_rate=0.0,
         num_hidden_layers=12,
-        intermediate_size=256,
         hidden_act="gelu",
         use_layer_scale=True,
         layer_scale_init_value=1e-5,
-        hidden_dropout_prob=0.0,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
         use_cache=True,
         **kwargs
     ):
         self.num_channels = num_channels
-        self.num_labels = num_labels
         self.patch_size = patch_size
         self.stride = stride
         self.padding = padding
@@ -126,13 +122,10 @@ class PoolFormerConfig(PretrainedConfig):
         self.num_encoder_blocks = num_encoder_blocks
         self.drop_path_rate = drop_path_rate
         self.num_hidden_layers = num_hidden_layers
-        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.use_layer_scale = use_layer_scale
         self.layer_scale_init_value = layer_scale_init_value
-        self.hidden_dropout_prob = hidden_dropout_prob
         self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         super().__init__(
             **kwargs

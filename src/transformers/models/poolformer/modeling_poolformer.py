@@ -28,7 +28,6 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_poolformer import PoolFormerConfig
@@ -43,7 +42,6 @@ POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "seaailabs/poolformer_s12",
     # See all PoolFormer models at https://huggingface.co/models?filter=poolformer
 ]
-
 
 # Copied from transformers.models.vit.modeling_vit.to_2tuple
 def to_2tuple(x):
@@ -298,8 +296,6 @@ class PoolFormerEncoder(nn.Module):
                 layer_outputs = blk(hidden_states)
                 hidden_states = layer_outputs[0]
             
-            # TODO Do we need to apply layer norm after every block as well?
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
         
@@ -414,20 +410,16 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # embedding_output = self.embeddings(pixel_values)
-
         encoder_outputs = self.encoder(
             pixel_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        # sequence_output = self.layernorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
-            # return sequence_output + encoder_outputs[1:]
 
         return PoolFormerModelOutput(
             last_hidden_state=sequence_output,
@@ -466,7 +458,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(POOLFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=PoolFormerClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -510,17 +502,8 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-
-        batch_size = sequence_output.shape[0]
-
-        # reshape last hidden states to (batch_size, height*width, hidden_size)
-        batch_size = sequence_output.shape[0]
-        sequence_output = sequence_output.reshape(batch_size, -1, self.config.hidden_sizes[-1])
-
-        # global average pooling
-        sequence_output = sequence_output.mean(dim=1)
         
-        logits = self.norm(sequence_output)
+        logits = self.classifier(self.norm(sequence_output).mean([-2, -1]))
 
         loss = None
         if labels is not None:
