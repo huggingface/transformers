@@ -119,7 +119,7 @@ class MaskFormerConfig(PretrainedConfig):
         self.detr_d_model = detr_d_model
         self.detr_encoder_ffn_dim = detr_encoder_ffn_dim
         self.detr_encoder_layers = detr_encoder_layers
-        self.detr_encoder_attention_heads = edetr_ncoder_attention_heads
+        self.detr_encoder_attention_heads = detr_encoder_attention_heads
         self.detr_decoder_ffn_dim = detr_decoder_ffn_dim
         self.detr_decoder_layers = detr_decoder_layers
         self.detr_decoder_attention_heads = detr_decoder_attention_heads

@@ -150,7 +150,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.mask_former": ["MASK_FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerTokenizer"],
+    "models.maskformer": ["MASK_FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -635,19 +635,15 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.mask_former"].extend(
+    _import_structure["models.maskformer"].extend(
         [
             "MASK_FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MaskFormerForMaskedLM",
-            "MaskFormerForCausalLM",
-            "MaskFormerForMultipleChoice",
-            "MaskFormerForQuestionAnswering",
-            "MaskFormerForSequenceClassification",
-            "MaskFormerForTokenClassification",
             "MaskFormerLayer",
             "MaskFormerModel",
             "MaskFormerPreTrainedModel",
-            "load_tf_weights_in_mask_former",
+            "MaskFormerForSemanticSegmentation",
+            "MaskFormerForPanopticSegmentation",
+            "load_tf_weights_in_maskformer",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -2319,7 +2315,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.mask_former import MASK_FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerTokenizer
+    from .models.maskformer import MASK_FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2555,7 +2551,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.mask_former import MaskFormerTokenizerFast
+        from .models.maskformer import MaskFormerTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2679,18 +2675,14 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
-        from .models.mask_former import (
+        from .models.maskformer import (
             MASK_FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MaskFormerForMaskedLM,
-            MaskFormerForCausalLM,
-            MaskFormerForMultipleChoice,
-            MaskFormerForQuestionAnswering,
-            MaskFormerForSequenceClassification,
-            MaskFormerForTokenClassification,
             MaskFormerLayer,
             MaskFormerModel,
             MaskFormerPreTrainedModel,
-            load_tf_weights_in_mask_former,
+            MaskFormerForSemanticSegmentation,
+            MaskFormerForPanopticSegmentation,
+            load_tf_weights_in_maskformer,
         )
 
         # Benchmarks

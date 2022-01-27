@@ -57,10 +57,10 @@ import torch.distributed as dist
 
 _CONFIG_FOR_DOC = "MaskFormerConfig"
 
-PREDICTIONS_MASKS_KEY = "preds_pixel_masks"
+PREDICTIONS_MASKS_KEY = "preds_masks"
 PREDICTIONS_LOGITS_KEY = "preds_logits"
-TARGETS_MASKS_KEY = "pixel_masks"
-TARGETS_LABELS_KEY = "labels"
+TARGETS_MASKS_KEY = "pixel_labels"
+TARGETS_LABELS_KEY = "class_labels"
 
 # TODO this has to go away!
 from detectron2.utils.comm import get_world_size
@@ -69,8 +69,8 @@ from scipy.optimize import linear_sum_assignment
 
 @dataclass
 class MaskFormerOutput(ModelOutput):
-    pred_logits: torch.FloatTensor
-    pred_masks: torch.FloatTensor = None
+    preds_logits: torch.FloatTensor
+    preds_masks: torch.FloatTensor = None
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
 
@@ -78,8 +78,8 @@ class MaskFormerOutput(ModelOutput):
 @dataclass
 class MaskFormerForSemanticSegmentationOutput(ModelOutput):
     segmentation: torch.FloatTensor = None
-    pred_logits: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
+    preds_logits: torch.FloatTensor = None
+    preds_masks: torch.FloatTensor = None
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
 
@@ -87,8 +87,8 @@ class MaskFormerForSemanticSegmentationOutput(ModelOutput):
 @dataclass
 class MaskFormerForPanopticSegmentationOutput(ModelOutput):
     segmentation: torch.FloatTensor = None
-    pred_logits: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
+    preds_logits: torch.FloatTensor = None
+    preds_masks: torch.FloatTensor = None
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
     segments: List[PanopticSegmentationSegment] = None
@@ -247,7 +247,7 @@ class MaskFormerHungarianMatcher(nn.Module):
             cost_dice: This is the relative weight of the dice loss of the binary mask in the matching cost
         """
         super().__init__()
-        if cost_class != 0 and cost_mask != 0 and cost_dice != 0:
+        if cost_class == 0 and cost_mask == 0 and cost_dice == 0:
             raise ValueError("All costs cant be 0")
         self.cost_class = cost_class
         self.cost_mask = cost_mask
@@ -1365,11 +1365,12 @@ class MaskFormerSegmentationModule(nn.Module):
 
         out: Dict[str, Tensor] = {}
 
-        if self.mask_classification:
-            classes: Tensor = self.class_predictor(decoder_outputs)
-            out.update({"pred_logits": classes[-1]})
         if auxilary_loss:
-            mask_embeddings: Tensor = self.mask_embedder(decoder_outputs)
+            stacked_decoder_outputs: Tensor = torch.stack(decoder_outputs)
+            if self.mask_classification:
+                classes: Tensor = self.class_predictor(stacked_decoder_outputs)
+                out.update({PREDICTIONS_LOGITS_KEY: classes})
+            mask_embeddings: Tensor = self.mask_embedder(stacked_decoder_outputs)
             # sum up over the channels for each embedding
             binaries_masks: Tensor = torch.einsum("lbqc,   bchw -> lbqhw", mask_embeddings, pixel_embeddings)
             binary_masks: Tensor = binaries_masks[-1]
@@ -1377,10 +1378,13 @@ class MaskFormerSegmentationModule(nn.Module):
             out.update({"auxilary_masks": binaries_masks})
         else:
             last_decoder_output: Tensor = decoder_outputs[-1]
+            if self.mask_classification:
+                classes: Tensor = self.class_predictor(last_decoder_output)
+                out.update({PREDICTIONS_LOGITS_KEY: classes})
             mask_embeddings: Tensor = self.mask_embedder(last_decoder_output)
             # sum up over the channels
             binary_masks: Tensor = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
-        out.update({"pred_masks": binary_masks})
+        out.update({PREDICTIONS_MASKS_KEY: binary_masks})
         return out
 
 
@@ -1437,14 +1441,22 @@ class MaskFormerModel(PreTrainedModel):
             losses=losses,
         )
 
-    def forward(self, pixel_values: Tensor, targets: Optional[Dict[str, Tensor]] = None) -> MaskFormerOutput:
+    def forward(
+        self,
+        pixel_values: Tensor,
+        pixel_labels: Optional[Tensor] = None,
+        class_labels: Optional[Tensor] = None,
+        pixel_mask: Optional[Tensor] = None,
+    ) -> MaskFormerOutput:
         image_features, pixel_embeddings = self.pixel_level_module(pixel_values)
         queries = self.transformer_module(image_features)
         outputs: Dict[str, Tensor] = self.segmentation_module(queries, pixel_embeddings)
 
         loss_dict: Dict[str, Tensor] = {}
         loss: Tensor = None
-        if targets:
+
+        if pixel_labels is not None and class_labels is not None:
+            targets: Dict[str, Tensor] = {TARGETS_MASKS_KEY: pixel_labels, TARGETS_LABELS_KEY: class_labels}
             loss_dict = self.get_loss_dict(outputs, targets)
             loss = self.get_loss(loss_dict)
         else:
@@ -1473,15 +1485,15 @@ class MaskFormerForSemanticSegmentation(nn.Module):
         outputs: MaskFormerOutput = self.model(*args, **kwargs)
         # mask classes has shape [BATCH, QUERIES, CLASSES + 1]
         # remove the null class `[..., :-1]`
-        mask_classes: Tensor = outputs.pred_logits.softmax(dim=-1)[..., :-1]
+        masks_classes: Tensor = outputs.preds_logits.softmax(dim=-1)[..., :-1]
         # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        mask_probs: Tensor = outputs.pred_masks.sigmoid()
+        masks_probs: Tensor = outputs.preds_masks.sigmoid()
         # now we want to sum over the queries,
         # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
         # where $ softmax(p) \in R^{q, c} $ is the mask classes
         # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
-        segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", mask_classes, mask_probs)
+        segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
         return MaskFormerForSemanticSegmentationOutput(segmentation=segmentation, **outputs)
 
@@ -1516,8 +1528,8 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
 
     def forward(self, *args, **kwargs):
         outputs: MaskFormerOutput = self.model(*args, **kwargs)
-        preds_logits: Tensor = outputs.pred_logits
-        preds_masks: Tensor = outputs.pred_masks
+        preds_logits: Tensor = outputs.preds_logits
+        preds_masks: Tensor = outputs.preds_masks
 
         _, _, h, w = preds_masks.shape
 
@@ -1585,4 +1597,3 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                                 stuff_memory_list[pred_class] = current_segment_id
 
             return MaskFormerForPanopticSegmentationOutput(segmentation=segmentation, segments=segments, **outputs)
-

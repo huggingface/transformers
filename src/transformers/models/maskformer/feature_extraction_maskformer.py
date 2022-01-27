@@ -178,23 +178,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 number of channels, H and W are image height and width.
 
             annotations (`Dict`, `List[Dict]`, *optional*):
-                The corresponding annotations in COCO format.
+                The corresponding annotations in the following format: { "masks" : the target mask, with shape [C,H,W], "labels" : the target labels, with shape [C]}
 
-                In case [`DetrFeatureExtractor`] was initialized with `format = "coco_detection"`, the annotations for
-                each image should have the following format: {'image_id': int, 'annotations': [annotation]}, with the
-                annotations being a list of COCO object annotations.
-
-                In case [`DetrFeatureExtractor`] was initialized with `format = "coco_panoptic"`, the annotations for
-                each image should have the following format: {'image_id': int, 'file_name': str, 'segments_info':
-                [segment_info]} with segments_info being a list of COCO panoptic annotations.
-
-            return_segmentation_masks (`Dict`, `List[Dict]`, *optional*, defaults to `False`):
-                Whether to also include instance segmentation masks as part of the labels in case `format =
-                "coco_detection"`.
-
-            masks_path (`pathlib.Path`, *optional*):
-                Path to the directory containing the PNG files that store the class-agnostic image segmentations. Only
-                relevant in case [`DetrFeatureExtractor`] was initialized with `format = "coco_panoptic"`.
+            TODO explain we pad and return a padding mask
 
             pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
@@ -282,7 +268,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 images = [
                     self._normalize(image=image, mean=self.image_mean, std=self.image_std)[0] for image in images
                 ]
-
+        # NOTE I will be always forced to convert them since they have to be stacked in the batch dim
         encoded_inputs = self.maybe_pad_and_create_pixel_mask(
             images, annotations, should_pad=pad_and_return_pixel_mask, return_tensors=return_tensors
         )
@@ -301,8 +287,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         return encoded_inputs
 
-    def _max_by_axis(self, the_list):
-        # type: (List[List[int]]) -> List[int]
+    def _max_by_axis(self, the_list: List[List[int]]) -> List[int]:
         maxes = the_list[0]
         for sublist in the_list[1:]:
             for index, item in enumerate(sublist):
@@ -366,12 +351,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 pixel_mask.append(mask)
 
         # return as BatchFeature
-        data = {
-            "pixel_values": pixel_values,
-            "pixel_mask": pixel_mask,
-            "pixel_labels": pixel_labels,
-            "class_labels": class_labels,
-        }
+        data = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
+        if annotations:
+            data["pixel_labels"] = pixel_labels
+            data["class_labels"] = class_labels
+
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs
