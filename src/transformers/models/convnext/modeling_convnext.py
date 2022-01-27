@@ -29,7 +29,6 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_convnext import ConvNextConfig
@@ -49,20 +48,40 @@ CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class ConvNextModelOutput(ModelOutput):
     """
-    Args:
     Class for [`ConvNextModel`]'s outputs, with potential hidden states.
+
+    Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Output feature map of the last stage of the model.
+            Last hidden states (final feature map) of the last stage of the model.
         pooler_output (`torch.FloatTensor` of shape `(batch_size, config.dim[-1])`):
             Global average pooling of the last feature map followed by a layernorm.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
-        when `config.output_hidden_states=True`):
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, num_channels,
-            height, width)`. Hidden-states of the model at the output of each layer.
+            height, width)`. Hidden-states (also called feature maps) of the model at the output of each stage.
     """
 
     last_hidden_state: torch.FloatTensor = None
     pooler_output: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class ConvNextClassifierOutput(ModelOutput):
+    """
+    Base class for outputs of sentence classification models.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, num_channels,
+            height, width)`. Hidden-states (also called feature maps) of the model at the output of each stage.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -115,17 +134,17 @@ class ConvNextLayerNorm(nn.Module):
 
     def forward(self, x):
         if self.data_format == "channels_last":
-            return torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         elif self.data_format == "channels_first":
             u = x.mean(1, keepdim=True)
             s = (x - u).pow(2).mean(1, keepdim=True)
             x = (x - u) / torch.sqrt(s + self.eps)
             x = self.weight[:, None, None] * x + self.bias[:, None, None]
-            return x
+        return x
 
 
-class ConvNextBlock(nn.Module):
-    """This corresponds to the ConvNextBlock class in the original implementation.
+class ConvNextLayer(nn.Module):
+    """This corresponds to the Block class in the original implementation.
 
     There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
     H, W) (2) [DwConv, Permute to (N, H, W, C), LayerNorm (channels_last), Linear, GELU, Linear]; Permute back
@@ -251,7 +270,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
         for i in range(config.num_stages):
             stage = nn.Sequential(
                 *[
-                    ConvNextBlock(config, dim=config.dims[i], drop_path=dp_rates[cur + j])
+                    ConvNextLayer(config, dim=config.dims[i], drop_path=dp_rates[cur + j])
                     for j in range(config.depths[i])
                 ]
             )
@@ -338,7 +357,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ConvNextClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(self, pixel_values=None, labels=None, output_hidden_states=None, return_dict=None):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -402,9 +421,8 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return ConvNextClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
-            attentions=None,
         )

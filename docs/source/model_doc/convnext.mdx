@@ -15,6 +15,7 @@ specific language governing permissions and limitations under the License.
 ## Overview
 
 The ConvNeXT model was proposed in [A ConvNet for the 2020s](https://arxiv.org/abs/2201.03545) by Zhuang Liu, Hanzi Mao, Chao-Yuan Wu, Christoph Feichtenhofer, Trevor Darrell, Saining Xie.
+ConvNeXT is a pure convolutional model (ConvNet), inspired by the design of Vision Transformers, that claims to outperform them.
 
 The abstract from the paper is the following:
 
@@ -32,6 +33,11 @@ Tips:
 - One can use the [`AutoFeatureExtractor`] API to prepare images for the model.
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/facebookresearch/ConvNeXt).
+
+## ConvNeXT specific outputs
+
+[[autodoc]] models.convnext.modeling_convnext.ConvNextModelOutput
+
 
 ## ConvNextConfig
 

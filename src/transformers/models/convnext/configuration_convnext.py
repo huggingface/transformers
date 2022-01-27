@@ -74,8 +74,8 @@ class ConvNextConfig(PretrainedConfig):
         self,
         num_channels=3,
         num_stages=4,
-        dims=[96, 192, 384, 768],
-        depths=[3, 3, 9, 3],
+        dims=None,
+        depths=None,
         hidden_act="gelu",
         initializer_range=0.02,
         layer_norm_eps=1e-12,
@@ -88,8 +88,8 @@ class ConvNextConfig(PretrainedConfig):
 
         self.num_channels = num_channels
         self.num_stages = num_stages
-        self.dims = dims
-        self.depths = depths
+        self.dims = [96, 192, 384, 768] if dims is None else dims
+        self.depths = [3, 3, 9, 3] if depths is None else depths
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
