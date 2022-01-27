@@ -405,7 +405,25 @@ def custom_object_save(obj, folder, config=None):
         module_name = obj.__class__.__module__
         last_module = module_name.split(".")[-1]
         full_name = f"{last_module}.{obj.__class__.__name__}"
-        if getattr(config, "auto_map", None) is not None:
+        # Special handling for tokenizers
+        if "Tokenizer" in full_name:
+            if isinstance(config, dict):
+                current_value = config.get("auto_map", None)
+            elif getattr(config, "auto_map", None) is not None:
+                current_value = config.auto_map[CUSTOM_CLASSES_REGISTER[obj.__class__.__name__]]
+            else:
+                current_value = None
+
+            if current_value is None:
+                current_value = (None, None)
+            if obj.__class__.__name__.endswith("Fast"):
+                full_name = (current_value[0], full_name)
+            else:
+                full_name = (full_name, current_value[1])
+
+        if isinstance(config, dict):
+            config["auto_map"] = full_name
+        elif getattr(config, "auto_map", None) is not None:
             config.auto_map[CUSTOM_CLASSES_REGISTER[obj.__class__.__name__]] = full_name
         else:
             config.auto_map = {CUSTOM_CLASSES_REGISTER[obj.__class__.__name__]: full_name}

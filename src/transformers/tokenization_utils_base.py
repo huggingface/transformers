@@ -34,6 +34,7 @@ from packaging import version
 from requests import HTTPError
 
 from . import __version__
+from .dynamic_module_utils import CUSTOM_CLASSES_REGISTER, custom_object_save
 from .file_utils import (
     EntryNotFoundError,
     ExplicitEnum,
@@ -2068,6 +2069,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config["auto_map"] = self._auto_map
         if getattr(self, "_processor_class", None) is not None:
             tokenizer_config["processor_class"] = self._processor_class
+
+        # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self.__class__ in CUSTOM_CLASSES_REGISTER:
+            custom_object_save(self, save_directory, config=tokenizer_config)
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
