@@ -826,6 +826,19 @@ class Trainer:
 
             optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args)
 
+            # Try using syncfree optimizers first for better performance when using torch_xla gpu device in amp mode
+            if (
+                self.args.optim in (OptimizerNames.ADAMW_HF, OptimizerNames.ADAMW_TORCH)
+                and is_torch_tpu_available()
+                and self.do_grad_scaling
+            ):
+                try:
+                    from torch_xla.amp.syncfree import AdamW
+
+                    optimizer_cls = AdamW
+                except ImportError:
+                    pass
+
             if self.sharded_ddp == ShardedDDPOption.SIMPLE:
                 self.optimizer = OSS(
                     params=optimizer_grouped_parameters,
