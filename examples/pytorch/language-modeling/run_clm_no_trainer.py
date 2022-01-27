@@ -379,6 +379,12 @@ def main():
             for k, t in concatenated_examples.items()
         }
         result["labels"] = result["input_ids"].copy()
+        # padding if one group shorter than block_size
+        if total_length < block_size:
+            result = {
+            k: [t + [0] * (block_size - len(t))]
+            for k, t in result.items()
+        }
         return result
 
     # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
