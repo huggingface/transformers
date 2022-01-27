@@ -267,18 +267,23 @@ class PerceiverSelfAttention(nn.Module):
         keys = self.transpose_for_scores(keys, self.qk_channels_per_head)
         values = self.transpose_for_scores(values, self.v_channels_per_head)
 
+        batch_size, num_heads, seq_len, q_head_dim = queries.shape
+        _, _, _, v_head_dim = values.shape
+        hiddens = self.num_heads * v_head_dim
+
         import pdb; pdb.set_trace()
         if self.config.chunk_size_query > 0 or self.config.chunk_size_key > 0:
-            attention_probs = attention(self.config, queries.permute(0,2,1,3), keys.permute(0,2,1,3), values.permute(0,2,1,3),
-                    bias = attention_mask.expand((*attention_mask.shape[:-3], *queries.shape[-3:-1], keys.shape[-2]))) 
-            attention_probs = attention_probs.permute(0,2,1,3)
+
+            maskbias_shape = (*attention_mask.shape[:-3], *queries.shape[-3:-1], keys.shape[-2])
+            mask = self.dropout(torch.ones(maskbias_shape)).to(torch.bool)
+            bias = attention_mask.expand(maskbias_shape) + math.log(1 / (1 - self.dropout.p))
+
+            context_layer = attention(self.config, queries.permute(0,2,1,3), keys.permute(0,2,1,3), values.permute(0,2,1,3), mask, bias)
+                    #dropout = self.dropout,
+            #context_layer = attention_probs.permute(0,2,1,3)
         else:
             # Take the dot product between the queries and keys to get the raw attention scores.
             attention_scores = torch.matmul(queries, keys.transpose(-1, -2))
-
-            batch_size, num_heads, seq_len, q_head_dim = queries.shape
-            _, _, _, v_head_dim = values.shape
-            hiddens = self.num_heads * v_head_dim
 
             attention_scores = attention_scores / math.sqrt(q_head_dim)
 
@@ -289,17 +294,17 @@ class PerceiverSelfAttention(nn.Module):
             # Normalize the attention scores to probabilities.
             attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
+            # This is actually dropping out entire tokens to attend to, which might
+            # seem a bit unusual, but is taken from the original Transformer paper.
+            attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
+            # Mask heads if we want to
+            if head_mask is not None:
+                attention_probs = attention_probs * head_mask
 
-        context_layer = torch.matmul(attention_probs, values)
+            context_layer = torch.matmul(attention_probs, values)
 
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+            context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (hiddens,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
