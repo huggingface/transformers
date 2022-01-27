@@ -48,18 +48,20 @@ _CONFIG_FOR_DOC = "SEWConfig"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "asapp/sew-tiny-100k"
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
+_CHECKPOINT_FOR_DOC = "asapp/sew-tiny-100k-ft-ls100h"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 512]
 
 # CTC docstring
-_CTC_EXPECTED_OUTPUT = "'mister quilter is the aposle of the middle classes and we are glad to welcome his gospel'"
-_CTC_EXPECTED_LOSS = 12.51
+_CTC_EXPECTED_OUTPUT = (
+    "'MISTER QUILTER IS THE APPOSTILE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPOLLE'"
+)
+_CTC_EXPECTED_LOSS = 0.42
 
 # Audio class docstring
 _FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-_SEQ_CLASS_CHECKPOINT = "asapp/sew-tiny-100k"
-_SEQ_CLASS_EXPECTED_OUTPUT = "label"
-_SEQ_CLASS_EXPECTED_LOSS = 0.69
+_SEQ_CLASS_CHECKPOINT = "anton-l/sew-mid-100k-ft-keyword-spotting"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
+_SEQ_CLASS_EXPECTED_LOSS = 9.52
 
 SEW_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "asapp/sew-tiny-100k",
@@ -894,6 +896,7 @@ class SEWModel(SEWPreTrainedModel):
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,

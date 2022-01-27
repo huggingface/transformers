@@ -59,9 +59,9 @@ _CTC_EXPECTED_LOSS = 12.51
 
 # Audio class docstring
 _FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-_SEQ_CLASS_CHECKPOINT = "microsoft/wavlm-base-plus"
-_SEQ_CLASS_EXPECTED_OUTPUT = "label"  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
-_SEQ_CLASS_EXPECTED_LOSS = 0.69  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
+_SEQ_CLASS_CHECKPOINT = "hf-internal-testing/tiny-random-wavlm"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'no'"  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
+_SEQ_CLASS_EXPECTED_LOSS = 0.7  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
 
 # Frame class docstring
 _FRAME_CLASS_CHECKPOINT = "microsoft/wavlm-base-plus-sd"

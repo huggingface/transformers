@@ -1131,6 +1131,7 @@ PT_SPEECH_BASE_MODEL_SAMPLE = r"""
     >>> from datasets import load_dataset
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
     >>> processor = {processor_class}.from_pretrained("{checkpoint}")
@@ -1156,6 +1157,7 @@ PT_SPEECH_CTC_SAMPLE = r"""
     >>> import torch
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
     >>> processor = {processor_class}.from_pretrained("{checkpoint}")
@@ -1193,6 +1195,7 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> import torch
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
     >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
@@ -1204,7 +1207,7 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> with torch.no_grad():
     ...     logits = model(**inputs).logits
 
-    >>> predicted_class_ids = torch.argmax(logits, dim=-1)
+    >>> predicted_class_ids = torch.argmax(logits, dim=-1).item()
     >>> predicted_label = model.config.id2label[predicted_class_ids]
     >>> predicted_label
     {expected_output}
@@ -1230,6 +1233,7 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
     >>> import torch
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
     >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
@@ -1258,6 +1262,7 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     >>> import torch
 
     >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
     >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
@@ -1600,13 +1605,16 @@ def add_code_sample_docstrings(
         else:
             sample_docstrings = PT_SAMPLE_DOCSTRINGS
 
+        # putting all kwargs for docstrings in a dict to be used
+        # with the `.format(**doc_kwargs)`. Note that string might
+        # be formatted with non-existing keys, which is fine.
         doc_kwargs = dict(
             model_class=model_class,
             processor_class=processor_class,
             checkpoint=checkpoint,
+            mask=mask,
             expected_output=expected_output,
             expected_loss=expected_loss,
-            mask=mask,
         )
 
         if "SequenceClassification" in model_class and modality == "audio":
