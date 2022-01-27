@@ -1553,8 +1553,9 @@ class RealmReader(RealmPreTrainedModel):
         r"""
         relevance_score (`torch.FloatTensor` of shape `(searcher_beam_size,)`, *optional*):
             Relevance score, which must be specified if you want to compute the logits and marginal log loss.
-        block_mask (`torch.LongTensor` of shape `(searcher_beam_size, sequence_length)`, *optional*):
-            The mask of evidence block, which must be specified if you want to compute the logits and marginal log loss.
+        block_mask (`torch.BoolTensor` of shape `(searcher_beam_size, sequence_length)`, *optional*):
+            The mask of the evidence block, which must be specified if you want to compute the logits and marginal log
+            loss.
         start_positions (`torch.LongTensor` of shape `(searcher_beam_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
@@ -1592,7 +1593,9 @@ class RealmReader(RealmPreTrainedModel):
         sequence_output = outputs[0]
 
         # [reader_beam_size, num_candidates], [num_candidates], [num_candidates]
-        reader_logits, candidate_starts, candidate_ends = self.qa_outputs(sequence_output, block_mask)
+        reader_logits, candidate_starts, candidate_ends = self.qa_outputs(
+            sequence_output, block_mask[0 : self.config.reader_beam_size]
+        )
         # [searcher_beam_size, 1]
         retriever_logits = torch.unsqueeze(relevance_score[0 : self.config.reader_beam_size], -1)
         # [reader_beam_size, num_candidates]
@@ -1777,7 +1780,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
         return self._apply(convert)
 
     @property
-    def beam_size(self):
+    def searcher_beam_size(self):
         if self.training:
             return self.config.searcher_beam_size
         return self.config.reader_beam_size
@@ -1834,7 +1837,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
         # [1, block_emb_size]
         batch_scores = torch.einsum("BD,QD->QB", self.block_emb, question_projection.to(self.block_emb.device))
         # [1, searcher_beam_size]
-        _, retrieved_block_ids = torch.topk(batch_scores, k=self.beam_size, dim=-1)
+        _, retrieved_block_ids = torch.topk(batch_scores, k=self.searcher_beam_size, dim=-1)
         # [searcher_beam_size]
         retrieved_block_ids = retrieved_block_ids.squeeze()
         # [searcher_beam_size, projection_size]
@@ -1842,17 +1845,18 @@ class RealmForOpenQA(RealmPreTrainedModel):
         # CPU computation ends.
 
         # Retrieve possible answers
-        has_answers, start_pos, end_pos, block_mask, concat_inputs = self.retriever(
+        has_answers, start_pos, end_pos, concat_inputs = self.retriever(
             retrieved_block_ids, input_ids, answer_ids, max_length=self.config.reader_seq_len
         )
 
-        block_mask = torch.tensor(block_mask, dtype=torch.long, device=self.reader.device)
+        concat_inputs = concat_inputs.to(self.reader.device)
+        block_mask = concat_inputs.special_tokens_mask.type(torch.bool).to(device=self.reader.device)
+        block_mask.logical_not_().logical_and_(concat_inputs.token_type_ids.type(torch.bool))
+
         if has_answers is not None:
             has_answers = torch.tensor(has_answers, dtype=torch.bool, device=self.reader.device)
             start_pos = torch.tensor(start_pos, dtype=torch.long, device=self.reader.device)
             end_pos = torch.tensor(end_pos, dtype=torch.long, device=self.reader.device)
-
-        concat_inputs = concat_inputs.to(self.reader.device)
 
         # [searcher_beam_size]
         retrieved_logits = torch.einsum(
