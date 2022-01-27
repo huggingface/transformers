@@ -271,12 +271,20 @@ class PerceiverSelfAttention(nn.Module):
         _, _, _, v_head_dim = values.shape
         hiddens = self.num_heads * v_head_dim
 
-        import pdb; pdb.set_trace()
+        #import pdb; pdb.set_trace()
         if self.config.chunk_size_query > 0 or self.config.chunk_size_key > 0:
 
-            maskbias_shape = (*attention_mask.shape[:-3], *queries.shape[-3:-1], keys.shape[-2])
+            maskbias_shape = (*queries.shape[:-1], keys.shape[-2])
             mask = self.dropout(torch.ones(maskbias_shape)).to(torch.bool)
-            bias = attention_mask.expand(maskbias_shape) + math.log(1 / (1 - self.dropout.p))
+            if attention_mask is None:
+                attention_mask = torch.zeros(maskbias_shape)
+            else:
+                attention_mask = attention_mask.expand(maskbias_shape)
+            bias = attention_mask + math.log(1 / (1 - self.dropout.p))
+
+            # Mask heads if we want to
+            if head_mask is not None:
+                bias += math.log(head_mask)
 
             context_layer = attention(self.config, queries.permute(0,2,1,3), keys.permute(0,2,1,3), values.permute(0,2,1,3), mask, bias)
                     #dropout = self.dropout,
