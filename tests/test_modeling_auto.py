@@ -324,7 +324,7 @@ class AutoModelTest(unittest.TestCase):
                     for child, parent in [(a, b) for a in child_model for b in parent_model]:
                         assert not issubclass(child, parent), f"{child.__name__} is child of {parent.__name__}"
 
-    def test_from_pretrained_dynamic_model(self):
+    def test_from_pretrained_dynamic_model_local(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
@@ -339,6 +339,14 @@ class AutoModelTest(unittest.TestCase):
             new_model = AutoModel.from_pretrained(tmp_dir, trust_remote_code=True)
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
                 self.assertTrue(torch.equal(p1, p2))
+
+    def test_from_pretrained_dynamic_model_distant(self):
+        model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+        self.assertEqual(model.__class__.__name__, "NewModel")
+
+        # This one uses a relative import to a util file, this checks it is downloaded and used properly.
+        model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model_with_util", trust_remote_code=True)
+        self.assertEqual(model.__class__.__name__, "NewModel")
 
     def test_new_model_registration(self):
         AutoConfig.register("new-model", NewModelConfig)
