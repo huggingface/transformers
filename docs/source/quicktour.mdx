@@ -227,8 +227,7 @@ Read the [preprocessing](./preprocessing) tutorial for more details about tokeni
 >>> from transformers import TFAutoModelForSequenceClassification
 
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> # This model only exists in PyTorch, so you use the _from_pt_ flag to import that model in TensorFlow.
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True)
+>>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
 ```
 
 <Tip>
