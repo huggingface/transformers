@@ -4,16 +4,9 @@ on:
   push:
     branches:
       - doctest*
-  pull_request:
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-      - "templates/**"
-    types: [assigned, opened, synchronize, reopened]
-#  repository_dispatch:
-#  schedule:
-#    - cron: "0 0 * * *"
+  repository_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
 
 
 env:
