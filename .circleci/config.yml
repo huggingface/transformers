@@ -549,7 +549,7 @@ jobs:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[ja,testing,sentencepiece,jieba]
+            - run: pip install .[ja,testing,sentencepiece,jieba,ftfy]
             - run: python -m unidic download
             - save_cache:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
@@ -558,6 +558,10 @@ jobs:
             - run: |
                   if [ -f test_list.txt ]; then
                     python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
+                  fi
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 1 tests/test_tokenization_clip.py --dist=loadfile -s --make-reports=tests_tokenization_clip --durations=100 | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -911,31 +915,6 @@ jobs:
                   if [ -f test_list.txt ]; then
                     python -m pytest -n 1 tests/*layoutlmv2* --dist=loadfile -s --make-reports=tests_layoutlmv2 --durations=100
                   fi
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_tests_tokenization_clip:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:3.7
-        environment:
-            OMP_NUM_THREADS: 1
-            TRANSFORMERS_IS_CI: yes
-        resource_class: large
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.4-torch-{{ checksum "setup.py" }}
-                      - v0.4-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
-            - run: pip install .[all,testing]
-            - run: pip install ftfy
-            - run: |
-                  python -m pytest -n 1 tests/test_tokenization_clip.py --dist=loadfile -s --make-reports=tests_tokenization_clip --durations=100 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
