@@ -133,8 +133,8 @@ class BeitConfig(PretrainedConfig):
         layer_scale_init_value=0.1,
         drop_path_rate=0.1,
         use_mean_pooling=True,
-        out_indices=[3, 5, 7, 11],
-        pool_scales=[1, 2, 3, 6],
+        out_indices=None,
+        pool_scales=None,
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
         auxiliary_channels=256,
@@ -167,8 +167,8 @@ class BeitConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.use_mean_pooling = use_mean_pooling
         # decode head attributes (semantic segmentation)
-        self.out_indices = out_indices
-        self.pool_scales = pool_scales
+        self.out_indices = [3, 5, 7, 11] if out_indices is None else out_indices
+        self.pool_scales = [1, 2, 3, 6] if pool_scales is None else pool_scales
         # auxiliary head attributes (semantic segmentation)
         self.use_auxiliary_head = use_auxiliary_head
         self.auxiliary_loss_weight = auxiliary_loss_weight

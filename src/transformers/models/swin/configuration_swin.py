@@ -96,8 +96,8 @@ class SwinConfig(PretrainedConfig):
         patch_size=4,
         num_channels=3,
         embed_dim=96,
-        depths=[2, 2, 6, 2],
-        num_heads=[3, 6, 12, 24],
+        depths=None,
+        num_heads=None,
         window_size=7,
         mlp_ratio=4.0,
         qkv_bias=True,
@@ -117,8 +117,8 @@ class SwinConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.embed_dim = embed_dim
-        self.depths = depths
-        self.num_heads = num_heads
+        self.depths = [2, 2, 6, 2] if depths is None else depths
+        self.num_heads = [3, 6, 12, 24] if num_heads is None else num_heads
         self.window_size = window_size
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
