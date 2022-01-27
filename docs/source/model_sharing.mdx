@@ -55,7 +55,7 @@ Before sharing a model to the Hub, you will need your Hugging Face credentials. 
 huggingface-cli login
 ```
 
-If you are using a notebook like Jupyter or Colaboratory, make sure you have the [huggingface_hub](https://huggingface.co/docs/hub/adding-a-library) library installed. This library allows you to programmatically interact with the Hub.
+If you are using a notebook like Jupyter or Colaboratory, make sure you have the [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library) library installed. This library allows you to programmatically interact with the Hub.
 
 ```bash
 pip install huggingface_hub
@@ -138,7 +138,7 @@ TensorFlow users can enable the same functionality with `PushToHubCallback`. In 
 ... )
 ```
 
-Add the callback to [fit](https://keras.io/api/models/model_training_apis/), and 🤗 Transformers will push the trained model to the Hub:
+Add the callback to [`fit`](https://keras.io/api/models/model_training_apis/), and 🤗 Transformers will push the trained model to the Hub:
 
 ```py
 >>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
