@@ -4,8 +4,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from parameterized import parameterized
-
-from transformers import AutoConfig, AutoTokenizer, is_torch_available, is_tf_available
+from transformers import AutoConfig, AutoTokenizer, is_tf_available, is_torch_available
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -13,13 +12,14 @@ from transformers.onnx import (
     export,
     validate_model_outputs,
 )
-from transformers.onnx.config import DEFAULT_ONNX_OPSET, OnnxConfigWithPast
+from transformers.onnx.config import OnnxConfigWithPast
+
 
 if is_torch_available() or is_tf_available():
     from transformers.onnx.features import FeaturesManager
 
 from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
-from transformers.testing_utils import require_onnx, require_torch, require_tf, slow
+from transformers.testing_utils import require_onnx, require_tf, require_torch, slow
 
 
 @require_onnx
@@ -167,6 +167,7 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
                     onnx_config_default.values_override["use_cache"], "use_cache should be False if not using past"
                 )
 
+
 if is_torch_available():
     PYTORCH_EXPORT_MODELS = {
         ("albert", "hf-internal-testing/tiny-albert"),
@@ -201,24 +202,21 @@ if is_tf_available():
         ("gpt2", "gpt2"),
         # ("GPT-Neo", "EleutherAI/gpt-neo-125M"),
         # ("LongFormer", "longformer-base-4096",
-        #("xlmroberta", "roberta-base"),
+        # ("xlmroberta", "roberta-base"),
         # ("LayoutLM", "microsoft/layoutlm-base-uncased"),
         ("mbart", "sshleifer/tiny-mbart"),
         # ("T5", "t5-small"),
     }
 
-    TENSORFLOW_EXPORT_WITH_PAST_MODELS = {
-        ("bart", "facebook/bart-base"),
-        ("gpt2", "gpt2"),
-        ("t5", "t5-small")
-    }
+    TENSORFLOW_EXPORT_WITH_PAST_MODELS = {("bart", "facebook/bart-base"), ("gpt2", "gpt2"), ("t5", "t5-small")}
+
 
 def _get_models_to_test(export_models_list):
     models_to_test = []
     if is_torch_available() or is_tf_available():
         for (name, model) in export_models_list:
             for feature, onnx_config_class_constructor in FeaturesManager.get_supported_features_for_model_type(
-                    name
+                name
             ).items():
                 models_to_test.append((f"{name}_{feature}", name, model, feature, onnx_config_class_constructor))
         return sorted(models_to_test)
@@ -280,7 +278,7 @@ class OnnxExportTestCaseV2(TestCase):
     @slow
     @require_torch
     def test_pytorch_export_seq2seq_with_past(
-            self, test_name, name, model_name, feature, onnx_config_class_constructor
+        self, test_name, name, model_name, feature, onnx_config_class_constructor
     ):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
