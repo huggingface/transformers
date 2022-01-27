@@ -995,7 +995,6 @@ workflows:
             - run_tests_pipelines_tf_all
             - run_tests_onnxruntime_all
             - run_tests_hub_all
-            - run_tests_tokenization_clip
 
 #    tpu_testing_jobs:
 #        triggers:
