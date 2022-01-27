@@ -241,7 +241,21 @@ class KerasMetricCallback(Callback):
 
 class PushToHubCallback(Callback):
     """
-    Callback that will save and push the model to the Hub regularly.
+    Callback that will save and push the model to the Hub regularly. By default, it pushes once per epoch, but this can
+    be changed with the `save_strategy` argument. Pushed models can be accessed like any other model on the hub, such
+    as with the `from_pretrained` method.
+
+    ```py
+    from transformers.keras_callbacks import PushToHubCallback
+
+    push_to_hub_callback = PushToHubCallback(
+        output_dir="./model_save",
+        tokenizer=tokenizer,
+        hub_model_id="gpt5-7xlarge",
+    )
+
+    model.fit(train_dataset, callbacks=[push_to_hub_callback])
+    ```
 
     Args:
         output_dir (`str`):
