@@ -365,9 +365,18 @@ class TrainingArguments:
             Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
             down the training and evaluation speed.
         push_to_hub (`bool`, *optional*, defaults to `False`):
-            Whether or not to upload the trained model to the hub after training. If this is activated, and
-            `output_dir` exists, it needs to be a local clone of the repository to which the [`Trainer`] will be
+            Whether or not to push the model to the Hub every time the model is saved. If this is activated,
+            `output_dir` will begin a git directory synced with the the repo (determined by `hub_model_id`) and the
+            content will be pushed each time a save is triggered (depneding on your `save_strategy`). Calling
+            [`~Trainer.save_model`] will also trigger a push
+
+            <Tip warning={true}>
+
+            If `output_dir` exists, it needs to be a local clone of the repository to which the [`Trainer`] will be
             pushed.
+
+            </Tip>
+
         resume_from_checkpoint (`str`, *optional*):
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
             [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See the [example
@@ -384,7 +393,7 @@ class TrainingArguments:
             Defines the scope of what is pushed to the Hub and when. Possible values are:
 
             - `"end"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and a
-              draft of a model card at the end of training.
+              draft of a model card when the [`~Trainer.save_model`] method is called.
             - `"every_save"`: push the model, its configuration, the tokenizer (if passed along to the [`Trainer`]) and
               a draft of a model card each time there is a model save. The pushes are asynchronous to not block
               training, and in case the save are very frequent, a new push is only attempted if the previous one is
