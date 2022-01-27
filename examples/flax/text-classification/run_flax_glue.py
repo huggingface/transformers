@@ -54,7 +54,7 @@ from transformers.utils import check_min_version
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.16.0")
+check_min_version("4.17.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
