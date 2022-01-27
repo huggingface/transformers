@@ -3645,13 +3645,12 @@ class TokenizerTesterMixin:
 
                     tokenizer_fast_old_2.save_pretrained(tmp_dir_1, legacy_format=True)  # save only slow version
 
-                    # Should not raise an error
                     tokenizer_slow = self.tokenizer_class.from_pretrained(tmp_dir_1)
                 with tempfile.TemporaryDirectory() as tmp_dir_2:
                     tokenizer_slow.save_pretrained(tmp_dir_2)
 
                     # Should not raise an error
-                    tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
+                    self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
 
 
 class FakeTokenizer(BertTokenizer):
