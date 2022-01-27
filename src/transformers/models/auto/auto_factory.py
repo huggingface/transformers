@@ -468,7 +468,7 @@ class _BaseAutoModelClass:
                 "one of those so they match!"
             )
         cls._model_mapping.register(config_class, model_class)
-        CUSTOM_CLASSES_REGISTER[model_class] = cls.__name__
+        CUSTOM_CLASSES_REGISTER[model_class.__name__] = cls.__name__
 
 
 def insert_head_doc(docstring, head_doc=""):

@@ -593,5 +593,5 @@ class AutoTokenizer:
                 fast_tokenizer_class = existing_fast
 
         TOKENIZER_MAPPING.register(config_class, (slow_tokenizer_class, fast_tokenizer_class))
-        CUSTOM_CLASSES_REGISTER[slow_tokenizer_class] = "AutoTokenizer"
-        CUSTOM_CLASSES_REGISTER[fast_tokenizer_class] = "AutoTokenizer"
+        CUSTOM_CLASSES_REGISTER[slow_tokenizer_class.__name__] = "AutoTokenizer"
+        CUSTOM_CLASSES_REGISTER[fast_tokenizer_class.__name__] = "AutoTokenizer"

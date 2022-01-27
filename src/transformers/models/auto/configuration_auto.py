@@ -664,4 +664,4 @@ class AutoConfig:
                 "match!"
             )
         CONFIG_MAPPING.register(model_type, config)
-        CUSTOM_CLASSES_REGISTER[config] = "AutoConfig"
+        CUSTOM_CLASSES_REGISTER[config.__name__] = "AutoConfig"

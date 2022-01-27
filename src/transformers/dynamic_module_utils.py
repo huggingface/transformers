@@ -406,9 +406,9 @@ def custom_object_save(obj, folder, config=None):
         last_module = module_name.split(".")[-1]
         full_name = f"{last_module}.{obj.__class__.__name__}"
         if getattr(config, "auto_map", None) is not None:
-            config.auto_map[CUSTOM_CLASSES_REGISTER[obj.__class__]] = full_name
+            config.auto_map[CUSTOM_CLASSES_REGISTER[obj.__class__.__name__]] = full_name
         else:
-            config.auto_map = {CUSTOM_CLASSES_REGISTER[obj.__class__]: full_name}
+            config.auto_map = {CUSTOM_CLASSES_REGISTER[obj.__class__.__name__]: full_name}
 
     # Copy module file to the output folder.
     object_file = sys.modules[obj.__module__].__file__
