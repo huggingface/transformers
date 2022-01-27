@@ -324,6 +324,7 @@ class PushToHubCallback(Callback):
             )
 
     def on_epoch_end(self, epoch, logs=None):
+        logs = logs.copy()  # Don't accidentally write things that Keras will read later
         if "epoch" not in logs:
             logs["epoch"] = epoch
         self.training_history.append(logs)
