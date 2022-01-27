@@ -197,7 +197,10 @@ def get_test_dependencies(test_fname):
     # Tests only have relative imports for other test files
     relative_imports = re.findall(r"from\s+\.(\S+)\s+import\s+([^\n]+)\n", content)
     relative_imports = [test for test, imp in relative_imports if "# tests_ignore" not in imp]
-    return [os.path.join("tests", f"{test}.py") for test in relative_imports]
+    dependencies = [os.path.join("tests", f"{test}.py") for test in relative_imports]
+    # Some tests use docstrings with relative imports in them and this could catch them, so we check the files
+    # actually exist
+    return [f for f in dependencies if os.path.isfile(f)]
 
 
 def create_reverse_dependency_map():
