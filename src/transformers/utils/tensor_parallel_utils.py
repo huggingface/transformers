@@ -1,32 +1,52 @@
-from .. import BertPreTrainedModel, GPT2PreTrainedModel, TransfoXLPreTrainedModel
+from .. import BertPreTrainedModel, GPT2PreTrainedModel, T5PreTrainedModel, TransfoXLPreTrainedModel
 
 
-# ie. nn.Linear(3 * dim, dim)
-# only defined the models that have fused attention layer.
+"""
+All the mapping for tensor parallelism.
+This mapping is following the follow format.
+
+TENSOR_PARALLEL_MAPPING = {
+    PreTrainedModel class: {
+        "col": list of column parallel parameters,
+        "row": list of row parallel parameters,
+        "update": list of attributes to be updated,
+        "col_no_replacement": list of column parallel parameters without module replacement (Optional)
+        "row_no_replacement": list of row parallel parameters without module replacement (Optional),
+        ...
+        could be added more to avoid exceptions.
+    }
+}
+
+"""
+TENSOR_PARALLEL_MAPPING = {
+    BertPreTrainedModel: {
+        "col": ["query", "key", "value", "intermediate.dense"],
+        "row": ["output.dense"],
+        "update": ["num_attention_heads", "all_head_size"],
+    },
+    GPT2PreTrainedModel: {
+        "col": ["c_attn", "q_attn", "c_fc"],
+        "row": ["c_proj"],
+        "update": ["embed_dim", "split_size", "num_heads"],
+    },
+    T5PreTrainedModel: {
+        "col": ["Attention.q", "Attention.k", "Attention.v", "DenseReluDense.wi"],
+        "row": ["Attention.o", "DenseReluDense.wo"],
+        "row_no_replacement": ["relative_attention_bias"],
+        "update": ["d_model", "n_heads", "inner_dim"],
+    },
+}
+
+# Optional: fused attention layers like nn.Linear(3 * dim, dim).
 FUSED_ATTENTION_MAPPING = {
     GPT2PreTrainedModel: {"attn.c_attn": 3, "crossattention.c_attn": 2},
     TransfoXLPreTrainedModel: {"qkv_net": 3},
 }
 
-# ie. nn.Linear(out_dim, in_dim) or Conv1D()
-# only defined the models that have reversed parameters.
+# Optional: reversed parameters like nn.Linear(out_dim, in_dim) or Conv1D().
 REVERSED_PARAM_MAPPING = {
     GPT2PreTrainedModel: ["attn", "crossattention", "mlp"],
     TransfoXLPreTrainedModel: ["qkv_net"],
-}
-
-# All the mapping for tensor parallelism
-TENSOR_PARALLEL_MAPPING = {
-    BertPreTrainedModel: {
-        "column_parallel": ["query", "key", "value", "intermediate.dense"],
-        "row_parallel": ["output.dense"],
-        "update_attrs": ["num_attention_heads", "all_head_size"],
-    },
-    GPT2PreTrainedModel: {
-        "column_parallel": ["c_attn", "q_attn", "c_fc"],
-        "row_parallel": ["c_proj"],
-        "update_attrs": ["embed_dim", "split_size", "num_heads"],
-    },
 }
 
 
