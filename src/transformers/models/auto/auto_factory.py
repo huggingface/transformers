@@ -17,10 +17,10 @@ import importlib
 from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import CUSTOM_CLASSES_REGISTER, copy_func
+from ...dynamic_module_utils import CUSTOM_CLASSES_REGISTER, get_class_from_dynamic_module
+from ...file_utils import copy_func
 from ...utils import logging
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
-from .dynamic import get_class_from_dynamic_module
 
 
 logger = logging.get_logger(__name__)

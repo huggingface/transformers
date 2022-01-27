@@ -29,6 +29,7 @@ from jax.random import PRNGKey
 from requests import HTTPError
 
 from .configuration_utils import PretrainedConfig
+from .dynamic_module_utils import CUSTOM_CLASSES_REGISTER, custom_object_save
 from .file_utils import (
     FLAX_WEIGHTS_NAME,
     WEIGHTS_NAME,
@@ -696,6 +697,12 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         save_directory = os.path.abspath(save_directory)
         # save config as well
         self.config.architectures = [self.__class__.__name__[4:]]
+
+        # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self.__class__ in CUSTOM_CLASSES_REGISTER:
+            custom_object_save(self, save_directory, config=self.config)
+
         self.config.save_pretrained(save_directory)
 
         # save model

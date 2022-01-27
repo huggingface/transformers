@@ -28,16 +28,15 @@ from packaging import version
 from requests import HTTPError
 
 from . import __version__
+from .dynamic_module_utils import CUSTOM_CLASSES_REGISTER, custom_object_save
 from .file_utils import (
     CONFIG_NAME,
-    CUSTOM_CLASSES_REGISTER,
     EntryNotFoundError,
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
     cached_path,
     copy_func,
-    custom_object_save,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,

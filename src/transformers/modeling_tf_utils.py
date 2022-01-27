@@ -35,6 +35,7 @@ from huggingface_hub import Repository, list_repo_files
 from requests import HTTPError
 
 from .configuration_utils import PretrainedConfig
+from .dynamic_module_utils import CUSTOM_CLASSES_REGISTER, custom_object_save
 from .file_utils import (
     DUMMY_INPUTS,
     TF2_WEIGHTS_NAME,
@@ -1359,6 +1360,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         # Save configuration file
         self.config.architectures = [self.__class__.__name__[2:]]
+
+        # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self.__class__ in CUSTOM_CLASSES_REGISTER:
+            custom_object_save(self, save_directory, config=self.config)
+
         self.config.save_pretrained(save_directory)
 
         # If we save using the predefined names, we can load using `from_pretrained`

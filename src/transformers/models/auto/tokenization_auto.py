@@ -21,7 +21,8 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import CUSTOM_CLASSES_REGISTER, get_file_from_repo, is_sentencepiece_available, is_tokenizers_available
+from ...dynamic_module_utils import CUSTOM_CLASSES_REGISTER, get_class_from_dynamic_module
+from ...file_utils import get_file_from_repo, is_sentencepiece_available, is_tokenizers_available
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -35,7 +36,6 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
-from .dynamic import get_class_from_dynamic_module
 
 
 logger = logging.get_logger(__name__)

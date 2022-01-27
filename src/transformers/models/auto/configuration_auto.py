@@ -20,9 +20,9 @@ from collections import OrderedDict
 from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import CONFIG_NAME, CUSTOM_CLASSES_REGISTER
+from ...dynamic_module_utils import CUSTOM_CLASSES_REGISTER, get_class_from_dynamic_module
+from ...file_utils import CONFIG_NAME
 from ...utils import logging
-from .dynamic import get_class_from_dynamic_module
 
 
 logger = logging.get_logger(__name__)

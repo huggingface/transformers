@@ -32,8 +32,8 @@ from requests import HTTPError
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
+from .dynamic_module_utils import CUSTOM_CLASSES_REGISTER, custom_object_save
 from .file_utils import (
-    CUSTOM_CLASSES_REGISTER,
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
@@ -46,7 +46,6 @@ from .file_utils import (
     RevisionNotFoundError,
     cached_path,
     copy_func,
-    custom_object_save,
     has_file,
     hf_bucket_url,
     is_offline_mode,

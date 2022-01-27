@@ -321,9 +321,6 @@ _default_endpoint = "https://moon-staging.huggingface.co" if _staging_mode else 
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", _default_endpoint)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
-# The register for all custom classes the user adds to the auto API.
-CUSTOM_CLASSES_REGISTER = OrderedDict([])
-
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.9")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
@@ -2955,82 +2952,3 @@ class ContextManagers:
 
     def __exit__(self, *args, **kwargs):
         self.stack.__exit__(*args, **kwargs)
-
-
-def get_relative_imports(module_file):
-    """
-    Get the list of modules that are relatively imported in a module file.
-
-    Args:
-        module_file (`str` or `os.PathLike`): The module file to inspect.
-    """
-    with open(module_file, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    # Imports of the form `import .xxx`
-    relative_imports = re.findall("^\s*import\s+\.(\S+)\s*$", content, flags=re.MULTILINE)
-    # Imports of the form `from .xxx import yyy`
-    relative_imports += re.findall("^\s*from\s+\.(\S+)\s+import", content, flags=re.MULTILINE)
-    # Unique-ify
-    return list(set(relative_imports))
-
-
-def get_relative_import_files(module_file):
-    """
-    Get the list of all files that are needed for a given module. Note that this function recurses through the
-    relative imports (if a imports b and b imports c, it will return module files for b and c).
-
-    Args:
-        module_file (`str` or `os.PathLike`): The module file to inspect.
-    """
-    no_change = False
-    files_to_check = [module_file]
-    all_relative_imports = []
-
-    # Let's recurse through all relative imports
-    while not no_change:
-        new_imports = []
-        for f in files_to_check:
-            new_imports.extend(get_relative_imports(f))
-        
-        module_path = Path(module_file).parent
-        new_import_files = [str(module_path / m) for m in new_imports]
-        new_import_files = [f for f in new_import_files if f not in all_relative_imports]
-        files_to_check = [f"{f}.py" for f in new_import_files]
-        
-        no_change = len(new_import_files) == 0
-        all_relative_imports.extend(files_to_check)
-
-    return all_relative_imports
-
-
-def custom_object_save(obj, folder, config=None):
-    """
-    Save the modeling files corresponding to a custom model/configuration/tokenizer etc. in a given folder.
-    Optionally adds the proper fields in a config.
-
-    Args:
-        obj (`Any`): The object for which to save the module files.
-        folder (`str` or `os.PathLike`): The folder where to save.
-        config (`PretrainedConfig` or dictionary, `optional`):
-            A config in which to register the auto_map corresponding to this custom object.
-    """
-    # Add object class to the config auto_map
-    if config is not None:
-        module_name = obj.__class__.__module__
-        last_module = module_name.split(".")[-1]
-        full_name = f"{last_module}.{obj.__class__.__name__}"
-        if getattr(config, "auto_map", None) is not None:
-            config.auto_map[CUSTOM_CLASSES_REGISTER[obj.__class__]] = full_name
-        else:
-            config.auto_map = {CUSTOM_CLASSES_REGISTER[obj.__class__]: full_name}
-    
-    # Copy module file to the output folder.
-    object_file = sys.modules[obj.__module__].__file__
-    dest_file = Path(folder) / (Path(object_file).name)
-    shutil.copy(object_file, dest_file)
-    
-    # Gather all relative imports recursively and make sure they are copied as well.
-    for needed_file in get_relative_import_files(object_file):
-        dest_file = Path(folder) / (Path(needed_file).name)
-        shutil.copy(needed_file, dest_file)
