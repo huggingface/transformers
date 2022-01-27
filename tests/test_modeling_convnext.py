@@ -47,7 +47,7 @@ class ConvNextModelTester:
         image_size=32,
         num_channels=3,
         num_stages=4,
-        dims=[10, 20, 30, 40],
+        hidden_sizes=[10, 20, 30, 40],
         depths=[2, 2, 3, 2],
         is_training=True,
         use_labels=True,
@@ -63,7 +63,7 @@ class ConvNextModelTester:
         self.image_size = image_size
         self.num_channels = num_channels
         self.num_stages = num_stages
-        self.dims = dims
+        self.hidden_sizes = hidden_sizes
         self.depths = depths
         self.is_training = is_training
         self.use_labels = use_labels
@@ -87,7 +87,7 @@ class ConvNextModelTester:
     def get_config(self):
         return ConvNextConfig(
             num_channels=self.num_channels,
-            dims=self.dims,
+            hidden_sizes=self.hidden_sizes,
             depths=self.depths,
             num_stages=self.num_stages,
             hidden_act=self.hidden_act,
@@ -103,7 +103,7 @@ class ConvNextModelTester:
         # expected last hidden states: B, C, H // 32, W // 32
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.dims[-1], self.image_size // 32, self.image_size // 32),
+            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):

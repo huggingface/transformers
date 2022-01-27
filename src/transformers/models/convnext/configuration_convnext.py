@@ -41,8 +41,8 @@ class ConvNextConfig(PretrainedConfig):
             The number of input channels.
         num_stages (`int`, optional, defaults to 4):
             The number of stages in the model.
-        dims (`List[int]`, *optional*, defaults to [96, 192, 384, 768]):
-            Dimensionality of each stage.
+        hidden_sizes (`List[int]`, *optional*, defaults to [96, 192, 384, 768]):
+            Dimensionality (hidden size) at each stage.
         depths (`List[int]`, *optional*, defaults to [3, 3, 9, 3]):
             Depth (number of blocks) for each stage.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -74,7 +74,7 @@ class ConvNextConfig(PretrainedConfig):
         self,
         num_channels=3,
         num_stages=4,
-        dims=None,
+        hidden_sizes=None,
         depths=None,
         hidden_act="gelu",
         initializer_range=0.02,
@@ -88,7 +88,7 @@ class ConvNextConfig(PretrainedConfig):
 
         self.num_channels = num_channels
         self.num_stages = num_stages
-        self.dims = [96, 192, 384, 768] if dims is None else dims
+        self.hidden_sizes = [96, 192, 384, 768] if hidden_sizes is None else hidden_sizes
         self.depths = [3, 3, 9, 3] if depths is None else depths
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range

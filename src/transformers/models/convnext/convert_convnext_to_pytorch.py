@@ -37,19 +37,19 @@ def get_convnext_config(checkpoint_url):
 
     if "tiny" in checkpoint_url:
         depths = [3, 3, 9, 3]
-        dims = [96, 192, 384, 768]
+        hidden_sizes = [96, 192, 384, 768]
     elif "small" in checkpoint_url:
         depths = [3, 3, 27, 3]
-        dims = [96, 192, 384, 768]
+        hidden_sizes = [96, 192, 384, 768]
     elif "base" in checkpoint_url:
         depths = [3, 3, 27, 3]
-        dims = [128, 256, 512, 1024]
+        hidden_sizes = [128, 256, 512, 1024]
     elif "large" in checkpoint_url:
         depths = [3, 3, 27, 3]
-        dims = [192, 384, 768, 1536]
+        hidden_sizes = [192, 384, 768, 1536]
     elif "xlarge" in checkpoint_url:
         depths = [3, 3, 27, 3]
-        dims = [256, 512, 1024, 2048]
+        hidden_sizes = [256, 512, 1024, 2048]
 
     if "22k" in checkpoint_url:
         num_labels = 21841
@@ -71,7 +71,7 @@ def get_convnext_config(checkpoint_url):
         del id2label[15027]
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
-    config.dims = dims
+    config.hidden_sizes = hidden_sizes
     config.depths = depths
 
     return config, expected_shape

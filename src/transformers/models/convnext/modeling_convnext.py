@@ -252,14 +252,14 @@ class ConvNextModel(ConvNextPreTrainedModel):
         # stem and intermediate downsampling conv layers
         self.downsample_layers = nn.ModuleList()
         stem = nn.Sequential(
-            nn.Conv2d(config.num_channels, config.dims[0], kernel_size=4, stride=4),
-            ConvNextLayerNorm(config.dims[0], eps=1e-6, data_format="channels_first"),
+            nn.Conv2d(config.num_channels, config.hidden_sizes[0], kernel_size=4, stride=4),
+            ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first"),
         )
         self.downsample_layers.append(stem)
         for i in range(config.num_stages - 1):
             downsample_layer = nn.Sequential(
-                ConvNextLayerNorm(config.dims[i], eps=1e-6, data_format="channels_first"),
-                nn.Conv2d(config.dims[i], config.dims[i + 1], kernel_size=2, stride=2),
+                ConvNextLayerNorm(config.hidden_sizes[i], eps=1e-6, data_format="channels_first"),
+                nn.Conv2d(config.hidden_sizes[i], config.hidden_sizes[i + 1], kernel_size=2, stride=2),
             )
             self.downsample_layers.append(downsample_layer)
 
@@ -270,7 +270,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
         for i in range(config.num_stages):
             stage = nn.Sequential(
                 *[
-                    ConvNextLayer(config, dim=config.dims[i], drop_path=dp_rates[cur + j])
+                    ConvNextLayer(config, dim=config.hidden_sizes[i], drop_path=dp_rates[cur + j])
                     for j in range(config.depths[i])
                 ]
             )
@@ -278,7 +278,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
             cur += config.depths[i]
 
         # final norm layer
-        self.layernorm = nn.LayerNorm(config.dims[-1], eps=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -351,7 +351,9 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
         self.convnext = ConvNextModel(config)
 
         # Classifier head
-        self.classifier = nn.Linear(config.dims[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.classifier = (
+            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
