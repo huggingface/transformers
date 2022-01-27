@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import re
+import torch
 from typing import Dict
 
 from datasets import Audio, Dataset, load_dataset, load_metric
@@ -78,7 +79,9 @@ def main(args):
     dataset = dataset.cast_column("audio", Audio(sampling_rate=sampling_rate))
 
     # load eval pipeline
-    asr = pipeline("automatic-speech-recognition", model=args.model_id)
+    if args.device is None:
+        args.device = 0 if torch.cuda.is_available() else -1
+    asr = pipeline("automatic-speech-recognition", model=args.model_id, device=args.device)
 
     # map function to decode audio
     def map_to_pred(batch):
@@ -122,6 +125,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--log_outputs", action="store_true", help="If defined, write outputs to log file for analysis."
+    )
+    parser.add_argument(
+        "--device", type=int, default=-1,
+        help="The device to run the pipeline on. -1 for CPU (default), 0 for the first GPU and so on."
     )
     args = parser.parse_args()
 
