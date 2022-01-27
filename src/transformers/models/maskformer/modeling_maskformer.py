@@ -433,7 +433,10 @@ class MaskFormerLoss(nn.Module):
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
         # TODO in theory here we can just take the `pred_masks` key
-        outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxilary_masks"}
+        outputs_without_aux = {
+            PREDICTIONS_MASKS_KEY: outputs[PREDICTIONS_MASKS_KEY],
+            PREDICTIONS_LOGITS_KEY: outputs[PREDICTIONS_LOGITS_KEY],
+        }
 
         # Retrieve the matching between the outputs of the last layer and the labels
         indices = self.matcher(outputs_without_aux, labels)
@@ -447,8 +450,8 @@ class MaskFormerLoss(nn.Module):
             losses.update(self.get_loss(loss, outputs, labels, indices, num_masks))
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
-        if "auxilary_masks" in outputs:
-            for i, aux_outputs in enumerate(outputs["auxilary_masks"]):
+        if "auxilary_predictions" in outputs:
+            for i, aux_outputs in enumerate(outputs["auxilary_predictions"]):
                 indices = self.matcher(aux_outputs, labels)
                 for loss in self.losses:
                     l_dict = self.get_loss(loss, aux_outputs, labels, indices, num_masks)
@@ -1361,25 +1364,35 @@ class MaskFormerSegmentationModule(nn.Module):
         )
 
     def forward(
-        self, decoder_outputs: Tuple[Tensor], pixel_embeddings: Tensor, auxilary_loss: bool = False
+        self, decoder_outputs: Tuple[Tensor], pixel_embeddings: Tensor, auxilary_loss: bool = True
     ) -> Dict[str, Tensor]:
 
         out: Dict[str, Tensor] = {}
 
+        # NOTE this code is a little bit cumbersome, an easy fix is to always return a list of predictions, if we have auxilary loss then we are going to return more than one pred
         if auxilary_loss:
             stacked_decoder_outputs: Tensor = torch.stack(decoder_outputs)
             classes: Tensor = self.class_predictor(stacked_decoder_outputs)
-            out.update({PREDICTIONS_LOGITS_KEY: classes})
+            out.update({PREDICTIONS_LOGITS_KEY: classes[-1]})
+            # get the masks
             mask_embeddings: Tensor = self.mask_embedder(stacked_decoder_outputs)
             # sum up over the channels for each embedding
             binaries_masks: Tensor = torch.einsum("lbqc,   bchw -> lbqhw", mask_embeddings, pixel_embeddings)
             binary_masks: Tensor = binaries_masks[-1]
-            # TODO place classes here
-            out.update({"auxilary_masks": binaries_masks})
+            # get the auxilary predictions (one for each decoder's layer)
+            auxilary_predictions: List[str, Tensor] = []
+            # go til [:-1] because the last one is always used
+            for aux_binary_masks, aux_classes in zip(binaries_masks[:-1], classes[:-1]):
+                auxilary_predictions.append(
+                    {PREDICTIONS_MASKS_KEY: aux_binary_masks, PREDICTIONS_LOGITS_KEY: aux_classes}
+                )
+            out.update({"auxilary_predictions": auxilary_predictions})
+
         else:
             last_decoder_output: Tensor = decoder_outputs[-1]
             classes: Tensor = self.class_predictor(last_decoder_output)
             out.update({PREDICTIONS_LOGITS_KEY: classes})
+            # get the masks
             mask_embeddings: Tensor = self.mask_embedder(last_decoder_output)
             # sum up over the channels
             binary_masks: Tensor = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
@@ -1465,7 +1478,9 @@ class MaskFormerModel(PreTrainedModel):
     def get_loss_dict(self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor]) -> Dict[str, Tensor]:
         loss_dict: Dict[str, Tensor] = self.criterion(outputs, labels)
         # weight each loss by `self.weight_dict[<LOSS_NAME>]`
-        weighted_loss_dict: Dict[str, Tensor] = {k: v * self.weight_dict[k] for k, v in loss_dict.items()}
+        weighted_loss_dict: Dict[str, Tensor] = {
+            k: v * self.weight_dict[k] for k, v in loss_dict.items() if k in self.weight_dict
+        }
         return weighted_loss_dict
 
     def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
