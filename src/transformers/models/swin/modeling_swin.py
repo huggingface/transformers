@@ -478,6 +478,7 @@ class SwinLayer(nn.Module):
         super().__init__()
         self.config = config
         self.dim = dim
+        self.input_resolution = input_resolution
         self.blocks = nn.ModuleList(
             [
                 SwinBlock(
