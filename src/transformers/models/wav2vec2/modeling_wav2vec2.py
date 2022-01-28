@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Wav2Vec2 model. """
+""" PyTorch Wav2Vec2 model."""
 
 import math
 import warnings
@@ -41,23 +41,41 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, torch_int_div
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "Wav2Vec2Config"
-_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-
-_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
-_FRAME_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-sd"
-_XVECTOR_CHECKPOINT = "superb/wav2vec2-base-superb-sv"
 
 _HIDDEN_STATES_START_POSITION = 2
+
+# General docstring
+_CONFIG_FOR_DOC = "Wav2Vec2Config"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
+
+# CTC docstring
+_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
+_CTC_EXPECTED_LOSS = 53.48
+
+# Audio class docstring
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
+_SEQ_CLASS_EXPECTED_LOSS = 6.54
+
+# Frame class docstring
+_FRAME_CLASS_CHECKPOINT = "anton-l/wav2vec2-base-superb-sd"
+_FRAME_EXPECTED_OUTPUT = [0, 0]
+
+# Speaker Verification docstring
+_XVECTOR_CHECKPOINT = "anton-l/wav2vec2-base-superb-sv"
+_XVECTOR_EXPECTED_OUTPUT = 0.98
 
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -80,12 +98,13 @@ class Wav2Vec2BaseModelOutput(ModelOutput):
         extract_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, conv_dim[-1])`):
             Sequence of extracted feature vectors of the last convolutional layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -113,12 +132,13 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
             Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
             target vectors for contrastive loss.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -151,12 +171,13 @@ class XVectorOutput(ModelOutput):
         embeddings (`torch.FloatTensor` of shape `(batch_size, config.xvector_output_dim)`):
             Utterance embeddings used for vector similarity-based retrieval.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -178,8 +199,8 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run
-    on CPU as part of the preprocessing during training.
+    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    CPU as part of the preprocessing during training.
 
     Args:
         shape: The shape for which to compute masks. This should be of a tuple of size 2 where
@@ -428,7 +449,7 @@ class Wav2Vec2SamePadLayer(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2FeatureExtractor(nn.Module):
+class Wav2Vec2FeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
@@ -479,6 +500,17 @@ class Wav2Vec2FeatureExtractor(nn.Module):
                 hidden_states = conv_layer(hidden_states)
 
         return hidden_states
+
+
+class Wav2Vec2FeatureExtractor(Wav2Vec2FeatureEncoder):
+    def __init__(self, config):
+        super().__init__(config)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
 
 
 class Wav2Vec2FeatureProjection(nn.Module):
@@ -1090,7 +1122,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return (input_length - kernel_size) // stride + 1
+            return torch_int_div(input_length - kernel_size, stride) + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
@@ -1122,15 +1154,17 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         return attention_mask
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (Wav2Vec2Encoder, Wav2Vec2EncoderStableLayerNorm, Wav2Vec2FeatureExtractor)):
+        if isinstance(module, (Wav2Vec2Encoder, Wav2Vec2EncoderStableLayerNorm, Wav2Vec2FeatureEncoder)):
             module.gradient_checkpointing = value
 
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
-    Wav2Vec2 was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli.
+    Wav2Vec2 was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
+    Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael
+    Auli.
 
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving etc.).
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving etc.).
 
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -1139,8 +1173,7 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
     Parameters:
         config ([`Wav2Vec2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
@@ -1149,11 +1182,11 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
             into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should
-            be used for padding and conversion into a tensor of type *torch.FloatTensor*. See
-            [`Wav2Vec2Processor.__call__`] for details.
+            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
+            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0, 1]`:
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
+            1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -1162,12 +1195,12 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
 
             <Tip warning={true}>
 
-            `attention_mask` should only be passed if the corresponding processor has
-            `config.return_attention_mask == True`. For all models whose processor has
-            `config.return_attention_mask == False`, such as [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), `attention_mask` should **not** be passed
-            to avoid degraded performance when doing batched inference. For such models `input_values` should
-            simply be padded with 0 and passed without `attention_mask`. Be aware that these models also yield
-            slightly different results depending on whether `input_values` is padded or not.
+            `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
+            True`. For all models whose processor has `config.return_attention_mask == False`, such as
+            [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), `attention_mask` should **not** be
+            passed to avoid degraded performance when doing batched inference. For such models `input_values` should
+            simply be padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly
+            different results depending on whether `input_values` is padded or not.
 
             </Tip>
 
@@ -1190,10 +1223,12 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = Wav2Vec2FeatureExtractor(config)
+        self.feature_extractor = Wav2Vec2FeatureEncoder(config)
         self.feature_projection = Wav2Vec2FeatureProjection(config)
 
-        self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+        # model only needs masking vector if mask prob is > 0.0
+        if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
+            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
             self.encoder = Wav2Vec2EncoderStableLayerNorm(config)
@@ -1204,6 +1239,25 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        self.feature_extractor._freeze_parameters()
 
     def _mask_hidden_states(
         self,
@@ -1258,6 +1312,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1312,7 +1367,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         )
 
 
-@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top. """, WAV_2_VEC_2_START_DOCSTRING)
+@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
 class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
@@ -1336,8 +1391,20 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -1412,20 +1479,20 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         >>> batch_size, raw_sequence_length = input_values.shape
         >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
         >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
+        >>> mask_time_indices = torch.tensor(mask_time_indices, device=input_values.device, dtype=torch.long)
 
         >>> with torch.no_grad():
         ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
 
         >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
-        >>> cosine_sim = torch.cosine_similarity(
-        ...     outputs.projected_states, outputs.projected_quantized_states, dim=-1
-        ... )
+        >>> cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
 
         >>> # show that cosine similarity is much higher than random
-        >>> assert cosine_sim[mask_time_indices].mean() > 0.5
+        >>> cosine_sim[mask_time_indices.to(torch.bool)].mean() > 0.5
+        tensor(True)
 
         >>> # for contrastive loss training model should be put into train mode
-        >>> model.train()
+        >>> model = model.train()
         >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
         ```"""
 
@@ -1521,7 +1588,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         )
 
 
-@add_start_docstrings("""Wav2Vec2 Model with a `language modeling` head on top. """, WAV_2_VEC_2_START_DOCSTRING)
+@add_start_docstrings("""Wav2Vec2 Model with a `language modeling` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
 class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1560,14 +1627,17 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForMaskedLM
         >>> from datasets import load_dataset
         >>> import soundfile as sf
+        >>> import torch
 
         >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
         >>> model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-base-960h")
 
+
         >>> def map_to_array(batch):
-        >>>     speech, _ = sf.read(batch["file"])
-        >>>     batch["speech"] = speech
-        >>>     return batch
+        ...     speech, _ = sf.read(batch["file"])
+        ...     batch["speech"] = speech
+        ...     return batch
+
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
@@ -1600,7 +1670,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
 
 
 @add_start_docstrings(
-    """Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
+    """Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     WAV_2_VEC_2_START_DOCSTRING,
 )
 class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
@@ -1624,8 +1694,20 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -1635,6 +1717,8 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1648,7 +1732,9 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
-            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size - 1]`.
+            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`.
+            All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
+            config.vocab_size - 1]`.
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1730,8 +1816,20 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -1750,6 +1848,8 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1762,8 +1862,9 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1832,8 +1933,20 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -1852,6 +1965,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_FRAME_EXPECTED_OUTPUT,
     )
     def forward(
         self,
@@ -1863,8 +1977,9 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1977,8 +2092,20 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
@@ -2012,6 +2139,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_XVECTOR_EXPECTED_OUTPUT,
     )
     def forward(
         self,
@@ -2024,8 +2152,9 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

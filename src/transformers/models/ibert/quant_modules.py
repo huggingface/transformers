@@ -30,8 +30,7 @@ logger = logging.get_logger(__name__)
 
 class QuantEmbedding(nn.Module):
     """
-    Quantized version of `torch.nn.Embedding`. Adds quantization-specific arguments on top of
-    `torch.nn.Embedding`.
+    Quantized version of `torch.nn.Embedding`. Adds quantization-specific arguments on top of `torch.nn.Embedding`.
 
     Args:
         weight_bit (`int`, *optional*, defaults to `8`):
@@ -358,8 +357,7 @@ class IntGELU(nn.Module):
 
 class IntSoftmax(nn.Module):
     """
-    Quantized version of `torch.nn.Softmax`. Adds quantization-specific arguments on top of
-    `torch.nn.Softmax`.
+    Quantized version of `torch.nn.Softmax`. Adds quantization-specific arguments on top of `torch.nn.Softmax`.
 
     Args:
         output_bit (`int`):
@@ -430,8 +428,7 @@ class IntSoftmax(nn.Module):
 
 class IntLayerNorm(nn.Module):
     """
-    Quantized version of `torch.nn.LayerNorm`. Adds quantization-specific arguments on top of
-    `torch.nn.LayerNorm`.
+    Quantized version of `torch.nn.LayerNorm`. Adds quantization-specific arguments on top of `torch.nn.LayerNorm`.
 
     Args:
         output_bit (`int`, *optional*, defaults to `8`):
@@ -716,7 +713,7 @@ def batch_frexp(inputs, max_bit=31):
             Target scaling factor to decompose.
 
     Returns:
-        :obj:``Tuple(torch.Tensor, torch.Tensor)`: mantisa and exponent
+        ``Tuple(torch.Tensor, torch.Tensor)`: mantisa and exponent
     """
 
     shape_of_input = inputs.size()
@@ -760,8 +757,8 @@ class FixedPointMul(Function):
             Scaling factor of the identity tensor *identity*, if exists.
 
     Returns:
-        `torch.Tensor`: Output tensor(*pre_act* if *identity* is not given, otherwise the addition of *pre_act*
-        and *identity*), whose scale is rescaled to *z_scaling_factor*.
+        `torch.Tensor`: Output tensor(*pre_act* if *identity* is not given, otherwise the addition of *pre_act* and
+        *identity*), whose scale is rescaled to *z_scaling_factor*.
     """
 
     @staticmethod

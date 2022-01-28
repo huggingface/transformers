@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CANINE model. """
+""" PyTorch CANINE model."""
 
 
 import copy
@@ -65,9 +65,8 @@ _PRIMES = [31, 43, 59, 61, 73, 97, 103, 113, 137, 149, 157, 173, 181, 193, 211, 
 @dataclass
 class CanineModelOutputWithPooling(ModelOutput):
     """
-    Output type of [`CanineModel`]. Based on
-    [`~modeling_outputs.BaseModelOutputWithPooling`], but with slightly different
-    `hidden_states` and `attentions`, as these also include the hidden states and attentions of the shallow
+    Output type of [`CanineModel`]. Based on [`~modeling_outputs.BaseModelOutputWithPooling`], but with slightly
+    different `hidden_states` and `attentions`, as these also include the hidden states and attentions of the shallow
     Transformer encoders.
 
     Args:
@@ -79,15 +78,17 @@ class CanineModelOutputWithPooling(ModelOutput):
             Transformer encoder, further processed by a Linear layer and a Tanh activation function. The Linear layer
             weights are trained from the next sentence prediction (classification) objective during pretraining.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the input to each encoder + one for the output of each layer of
-            each encoder) of shape `(batch_size, sequence_length, hidden_size)` and `(batch_size, sequence_length // config.downsampling_rate, hidden_size)`. Hidden-states of the model at the output of
-            each layer plus the initial input to each Transformer encoder. The hidden states of the shallow encoders
-            have length `sequence_length`, but the hidden states of the deep encoder have length
-            `sequence_length` // `config.downsampling_rate`.
+            Tuple of `torch.FloatTensor` (one for the input to each encoder + one for the output of each layer of each
+            encoder) of shape `(batch_size, sequence_length, hidden_size)` and `(batch_size, sequence_length //
+            config.downsampling_rate, hidden_size)`. Hidden-states of the model at the output of each layer plus the
+            initial input to each Transformer encoder. The hidden states of the shallow encoders have length
+            `sequence_length`, but the hidden states of the deep encoder have length `sequence_length` //
+            `config.downsampling_rate`.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of the 3 Transformer encoders of shape
-            `(batch_size, num_heads, sequence_length, sequence_length)` and `(batch_size, num_heads, sequence_length // config.downsampling_rate, sequence_length // config.downsampling_rate)`. Attentions
-            weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Tuple of `torch.FloatTensor` (one for each layer) of the 3 Transformer encoders of shape `(batch_size,
+            num_heads, sequence_length, sequence_length)` and `(batch_size, num_heads, sequence_length //
+            config.downsampling_rate, sequence_length // config.downsampling_rate)`. Attentions weights after the
+            attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -515,16 +516,16 @@ class CanineAttention(nn.Module):
     Additional arguments related to local attention:
 
         - **local** (`bool`, *optional*, defaults to `False`) -- Whether to apply local attention.
-        - **always_attend_to_first_position** (`bool`, *optional*, defaults to `False`) -- Should all blocks
-          be able to attend
-        to the `to_tensor`'s first position (e.g. a [CLS] position)? - **first_position_attends_to_all**
-        (`bool`, *optional*, defaults to `False`) -- Should the *from_tensor*'s first position be able to
-        attend to all positions within the *from_tensor*? - **attend_from_chunk_width** (`int`, *optional*,
-        defaults to 128) -- The width of each block-wise chunk in `from_tensor`. - **attend_from_chunk_stride**
-        (`int`, *optional*, defaults to 128) -- The number of elements to skip when moving to the next block in
-        `from_tensor`. - **attend_to_chunk_width** (`int`, *optional*, defaults to 128) -- The width of each
-        block-wise chunk in *to_tensor*. - **attend_to_chunk_stride** (`int`, *optional*, defaults to 128) -- The
-        number of elements to skip when moving to the next block in `to_tensor`.
+        - **always_attend_to_first_position** (`bool`, *optional*, defaults to `False`) -- Should all blocks be able to
+          attend
+        to the `to_tensor`'s first position (e.g. a [CLS] position)? - **first_position_attends_to_all** (`bool`,
+        *optional*, defaults to `False`) -- Should the *from_tensor*'s first position be able to attend to all
+        positions within the *from_tensor*? - **attend_from_chunk_width** (`int`, *optional*, defaults to 128) -- The
+        width of each block-wise chunk in `from_tensor`. - **attend_from_chunk_stride** (`int`, *optional*, defaults to
+        128) -- The number of elements to skip when moving to the next block in `from_tensor`. -
+        **attend_to_chunk_width** (`int`, *optional*, defaults to 128) -- The width of each block-wise chunk in
+        *to_tensor*. - **attend_to_chunk_stride** (`int`, *optional*, defaults to 128) -- The number of elements to
+        skip when moving to the next block in `to_tensor`.
     """
 
     def __init__(
@@ -926,8 +927,7 @@ CANINE_START_DOCSTRING = r"""
     Parameters:
         config ([`CanineConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 CANINE_INPUTS_DOCSTRING = r"""
@@ -935,9 +935,8 @@ CANINE_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`CanineTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`CanineTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
@@ -948,14 +947,16 @@ CANINE_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -965,9 +966,9 @@ CANINE_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert *input_ids* indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1295,8 +1296,9 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1391,7 +1393,8 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1572,12 +1575,12 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

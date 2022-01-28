@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DPR model configuration """
+""" DPR model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -34,12 +34,10 @@ class DPRConfig(PretrainedConfig):
     r"""
     [`DPRConfig`] is the configuration class to store the configuration of a *DPRModel*.
 
-    This is the configuration class to store the configuration of a [`DPRContextEncoder`],
-    [`DPRQuestionEncoder`], or a [`DPRReader`]. It is used to instantiate the
-    components of the DPR model.
+    This is the configuration class to store the configuration of a [`DPRContextEncoder`], [`DPRQuestionEncoder`], or a
+    [`DPRReader`]. It is used to instantiate the components of the DPR model.
 
-    This class is a subclass of [`BertConfig`]. Please check the superclass for the documentation of
-    all kwargs.
+    This class is a subclass of [`BertConfig`]. Please check the superclass for the documentation of all kwargs.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
@@ -54,8 +52,8 @@ class DPRConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
@@ -70,10 +68,11 @@ class DPRConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`,
-            `"relative_key_query"`. For positional embeddings use `"absolute"`. For more information on
-            `"relative_key"`, please refer to [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155). For more information on `"relative_key_query"`, please refer to
-            *Method 4* in [Improve Transformer Models with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
+            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
+            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         projection_dim (`int`, *optional*, defaults to 0):
             Dimension of the projection for the context and question encoders. If it is set to zero (default), then no
             projection is done.

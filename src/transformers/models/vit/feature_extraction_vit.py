@@ -38,20 +38,20 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a ViT feature extractor.
 
-    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
+    should refer to this superclass for more information regarding those methods.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input to a certain `size`.
         size (`int` or `Tuple(int)`, *optional*, defaults to 224):
             Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize`
-            is set to `True`.
+            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize` is
+            set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`.
-            Only has an effect if `do_resize` is set to `True`.
+            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
+            if `do_resize` is set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
         image_mean (`List[int]`, defaults to `[0.5, 0.5, 0.5]`):

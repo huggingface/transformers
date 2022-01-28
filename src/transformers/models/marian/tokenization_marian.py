@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import json
+import os
 import re
 import warnings
 from contextlib import contextmanager
@@ -23,7 +23,10 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import sentencepiece
 
 from ...tokenization_utils import PreTrainedTokenizer
+from ...utils import logging
 
+
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "source_spm": "source.spm",
@@ -57,8 +60,8 @@ class MarianTokenizer(PreTrainedTokenizer):
     r"""
     Construct a Marian tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         source_spm (`str`):
@@ -83,7 +86,9 @@ class MarianTokenizer(PreTrainedTokenizer):
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<eop>", "<eod>"]`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
 
             - `enable_sampling`: Enable subword regularization.
             - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
@@ -100,15 +105,17 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     ```python
     >>> from transformers import MarianTokenizer
-    >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
-    >>> src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
+
+    >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+    >>> src_texts = ["I am a small frog.", "Tom asked his teacher for advice."]
     >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
     >>> inputs = tokenizer(src_texts, return_tensors="pt", padding=True)
     >>> with tokenizer.as_target_tokenizer():
     ...     labels = tokenizer(tgt_texts, return_tensors="pt", padding=True)
     >>> inputs["labels"] = labels["input_ids"]
     # keys  [input_ids, attention_mask, labels].
-    >>> outputs = model(**inputs) should work
+
+    >>> outputs = model(**inputs)  # should work
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -273,21 +280,35 @@ class MarianTokenizer(PreTrainedTokenizer):
         return len(self.encoder)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        save_dir = Path(save_directory)
-        assert save_dir.is_dir(), f"{save_directory} should be a directory"
-        save_json(
-            self.encoder,
-            save_dir / ((filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab"]),
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return
+        saved_files = []
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab"]
         )
 
-        for orig, f in zip(["source.spm", "target.spm"], self.spm_files):
-            dest_path = save_dir / ((filename_prefix + "-" if filename_prefix else "") + Path(f).name)
-            if not dest_path.exists():
-                copyfile(f, save_dir / orig)
+        save_json(self.encoder, out_vocab_file)
+        saved_files.append(out_vocab_file)
 
-        return tuple(
-            save_dir / ((filename_prefix + "-" if filename_prefix else "") + f) for f in self.vocab_files_names
-        )
+        for spm_save_filename, spm_orig_path, spm_model in zip(
+            [VOCAB_FILES_NAMES["source_spm"], VOCAB_FILES_NAMES["target_spm"]],
+            self.spm_files,
+            [self.spm_source, self.spm_target],
+        ):
+            spm_save_path = os.path.join(
+                save_directory, (filename_prefix + "-" if filename_prefix else "") + spm_save_filename
+            )
+            if os.path.abspath(spm_orig_path) != os.path.abspath(spm_save_path) and os.path.isfile(spm_orig_path):
+                copyfile(spm_orig_path, spm_save_path)
+                saved_files.append(spm_save_path)
+            elif not os.path.isfile(spm_orig_path):
+                with open(spm_save_path, "wb") as fi:
+                    content_spiece_model = spm_model.serialized_model_proto()
+                    fi.write(content_spiece_model)
+                saved_files.append(spm_save_path)
+
+        return tuple(saved_files)
 
     def get_vocab(self) -> Dict:
         vocab = self.encoder.copy()

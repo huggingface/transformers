@@ -17,26 +17,27 @@ Processor class for TrOCR.
 """
 from contextlib import contextmanager
 
+from transformers import AutoFeatureExtractor, AutoTokenizer
 from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.models.roberta.tokenization_roberta import RobertaTokenizer
 from transformers.models.roberta.tokenization_roberta_fast import RobertaTokenizerFast
-
-from ..auto.feature_extraction_auto import AutoFeatureExtractor
+from transformers.models.xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
+from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
 
 
 class TrOCRProcessor:
     r"""
     Constructs a TrOCR processor which wraps a vision feature extractor and a TrOCR tokenizer into a single processor.
 
-    [`TrOCRProcessor`] offers all the functionalities of [`AutoFeatureExtractor`]
-    and [`RobertaTokenizer`]. See the [`~TrOCRProcessor.__call__`] and
-    [`~TrOCRProcessor.decode`] for more information.
+    [`TrOCRProcessor`] offers all the functionalities of [`ViTFeatureExtractor`/`DeiTFeatureExtractor`] and
+    [`RobertaTokenizer`/`XLMRobertaTokenizer`]. See the [`~TrOCRProcessor.__call__`] and [`~TrOCRProcessor.decode`] for
+    more information.
 
     Args:
-        feature_extractor ([`AutoFeatureExtractor`]):
-            An instance of [`AutoFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer ([`RobertaTokenizer`]):
-            An instance of [`RobertaTokenizer`]. The tokenizer is a required input.
+        feature_extractor ([`ViTFeatureExtractor`/`DeiTFeatureExtractor`]):
+            An instance of [`ViTFeatureExtractor`/`DeiTFeatureExtractor`]. The feature extractor is a required input.
+        tokenizer ([`RobertaTokenizer`/`XLMRobertaTokenizer`]):
+            An instance of [`RobertaTokenizer`/`XLMRobertaTokenizer`]. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
@@ -44,9 +45,11 @@ class TrOCRProcessor:
             raise ValueError(
                 f"`feature_extractor` has to be of type {FeatureExtractionMixin.__class__}, but is {type(feature_extractor)}"
             )
-        if not (isinstance(tokenizer, RobertaTokenizer) or (isinstance(tokenizer, RobertaTokenizerFast))):
+        if not isinstance(
+            tokenizer, (RobertaTokenizer, RobertaTokenizerFast, XLMRobertaTokenizer, XLMRobertaTokenizerFast)
+        ):
             raise ValueError(
-                f"`tokenizer` has to be of type {RobertaTokenizer.__class__} or {RobertaTokenizerFast.__class__}, but is {type(tokenizer)}"
+                f"`tokenizer` has to be of type {RobertaTokenizer.__class__} or {RobertaTokenizerFast.__class__} or {XLMRobertaTokenizer.__class__} or {XLMRobertaTokenizerFast.__class__}, but is {type(tokenizer)}"
             )
 
         self.feature_extractor = feature_extractor
@@ -55,14 +58,14 @@ class TrOCRProcessor:
 
     def save_pretrained(self, save_directory):
         """
-        Save a TrOCR feature extractor object and TrOCR tokenizer object to the directory `save_directory`, so that
-        it can be re-loaded using the [`~TrOCRProcessor.from_pretrained`] class method.
+        Save a TrOCR feature extractor object and TrOCR tokenizer object to the directory `save_directory`, so that it
+        can be re-loaded using the [`~TrOCRProcessor.from_pretrained`] class method.
 
         <Tip>
 
         This class method is simply calling [`~PreTrainedFeatureExtractor.save_pretrained`] and
-        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the
-        docstrings of the methods above for more information.
+        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the docstrings of the methods
+        above for more information.
 
         </Tip>
 
@@ -82,9 +85,8 @@ class TrOCRProcessor:
 
         <Tip>
 
-        This class method is simply calling AutoFeatureExtractor's
-        [`~PreTrainedFeatureExtractor.from_pretrained`] and TrOCRTokenizer's
-        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the
+        This class method is simply calling AutoFeatureExtractor's [`~PreTrainedFeatureExtractor.from_pretrained`] and
+        TrOCRTokenizer's [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the
         docstrings of the methods above for more information.
 
         </Tip>
@@ -97,8 +99,7 @@ class TrOCRProcessor:
                   huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a feature extractor file saved using the
-                  [`~PreTrainedFeatureExtractor.save_pretrained`] method, e.g.,
-                  `./my_model_directory/`.
+                  [`~PreTrainedFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             **kwargs
@@ -106,7 +107,7 @@ class TrOCRProcessor:
                 [`PreTrainedTokenizer`]
         """
         feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        tokenizer = RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
@@ -114,24 +115,22 @@ class TrOCRProcessor:
         """
         When used in normal mode, this method forwards all its arguments to AutoFeatureExtractor's
         [`~AutoFeatureExtractor.__call__`] and returns its output. If used in the context
-        [`~TrOCRProcessor.as_target_processor`] this method forwards all its arguments to
-        TrOCRTokenizer's [`~TrOCRTokenizer.__call__`]. Please refer to the doctsring of the above two
-        methods for more information.
+        [`~TrOCRProcessor.as_target_processor`] this method forwards all its arguments to TrOCRTokenizer's
+        [`~TrOCRTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
         """
         return self.current_processor(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to TrOCRTokenizer's
-        [`~PreTrainedTokenizer.batch_decode`]. Please refer to the docstring of this method for more
-        information.
+        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
+        to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.decode`].
-        Please refer to the docstring of this method for more information.
+        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
+        docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 

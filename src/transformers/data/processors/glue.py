@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GLUE processors and helpers """
+""" GLUE processors and helpers"""
 
 import os
 import warnings
@@ -59,9 +59,9 @@ def glue_convert_examples_to_features(
         output_mode: String indicating the output mode. Either `regression` or `classification`
 
     Returns:
-        If the `examples` input is a `tf.data.Dataset`, will return a `tf.data.Dataset` containing the
-        task-specific features. If the input is a list of `InputExamples`, will return a list of task-specific
-        `InputFeatures` which can be fed to the model.
+        If the `examples` input is a `tf.data.Dataset`, will return a `tf.data.Dataset` containing the task-specific
+        features. If the input is a list of `InputExamples`, will return a list of task-specific `InputFeatures` which
+        can be fed to the model.
 
     """
     warnings.warn(DEPRECATION_WARNING.format("function"), FutureWarning)

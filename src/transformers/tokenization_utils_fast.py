@@ -57,11 +57,11 @@ ADDED_TOKENS_FILE = "added_tokens.json"
 
 INIT_TOKENIZER_DOCSTRING += """
         tokenizer_object ([`tokenizers.Tokenizer`]):
-            A [`tokenizers.Tokenizer`] object from 🤗 tokenizers to instantiate from. See [Using tokenizers
-            from 🤗 tokenizers](../fast_tokenizers) for more information.
+            A [`tokenizers.Tokenizer`] object from 🤗 tokenizers to instantiate from. See [Using tokenizers from 🤗
+            tokenizers](../fast_tokenizers) for more information.
         tokenizer_file ([`str`]):
-            A path to a local JSON file representing a previously serialized [`tokenizers.Tokenizer`] object from
-            🤗 tokenizers.
+            A path to a local JSON file representing a previously serialized [`tokenizers.Tokenizer`] object from 🤗
+            tokenizers.
 """
 
 MODEL_TO_TRAINER_MAPPING = {
@@ -272,8 +272,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         <Tip>
 
-        This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not
-        put this inside your training loop.
+        This encodes a dummy input and checks the number of added tokens, and is therefore not efficient. Do not put
+        this inside your training loop.
 
         </Tip>
 
@@ -352,8 +352,23 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             if _truncation is not None:
                 self._tokenizer.no_truncation()
         else:
-            target = {"max_length": max_length, "stride": stride, "strategy": truncation_strategy.value}
-            if _truncation != target:
+            target = {
+                "max_length": max_length,
+                "stride": stride,
+                "strategy": truncation_strategy.value,
+                "direction": self.truncation_side,
+            }
+
+            # _truncation might contain more keys that the target `transformers`
+            # supports. Use only the target keys to trigger `enable_truncation`.
+            # This should enable this code to works on various `tokenizers`
+            # targets.
+            if _truncation is None:
+                current = None
+            else:
+                current = {k: _truncation.get(k, None) for k in target}
+
+            if current != target:
                 self._tokenizer.enable_truncation(**target)
 
         if padding_strategy == PaddingStrategy.DO_NOT_PAD:
@@ -606,8 +621,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 Additional keyword arguments passed along to the trainer from the 🤗 Tokenizers library.
 
         Returns:
-            [`PreTrainedTokenizerFast`]: A new tokenizer of the same type as the original one,
-            trained on `text_iterator`.
+            [`PreTrainedTokenizerFast`]: A new tokenizer of the same type as the original one, trained on
+            `text_iterator`.
 
         """
         tokenizer_json = json.loads(self._tokenizer.to_str())

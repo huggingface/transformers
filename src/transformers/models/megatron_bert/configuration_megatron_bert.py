@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MEGATRON_BERT model configuration """
+""" MEGATRON_BERT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -27,13 +27,13 @@ MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MegatronBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MegatronBertModel`]. It is
-    used to instantiate a MEGATRON_BERT model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the MEGATRON_BERT
+    This is the configuration class to store the configuration of a [`MegatronBertModel`]. It is used to instantiate a
+    MEGATRON_BERT model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the MEGATRON_BERT
     [megatron-bert-uncased-345m](https://huggingface.co/nvidia/megatron-bert-uncased-345m) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -49,8 +49,8 @@ class MegatronBertConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
@@ -59,17 +59,17 @@ class MegatronBertConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling
-            [`MegatronBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`MegatronBertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`,
-            `"relative_key_query"`. For positional embeddings use `"absolute"`. For more information on
-            `"relative_key"`, please refer to [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155). For more information on `"relative_key_query"`, please refer to
-            *Method 4* in [Improve Transformer Models with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
+            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
+            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.

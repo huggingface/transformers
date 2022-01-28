@@ -24,8 +24,13 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 
+from requests import HTTPError
+
 from .file_utils import (
     FEATURE_EXTRACTOR_NAME,
+    EntryNotFoundError,
+    RepositoryNotFoundError,
+    RevisionNotFoundError,
     TensorType,
     _is_jax,
     _is_numpy,
@@ -54,8 +59,7 @@ PreTrainedFeatureExtractor = Union["SequenceFeatureExtractor"]  # noqa: F821
 
 class BatchFeature(UserDict):
     r"""
-    Holds the output of the [`~SequenceFeatureExtractor.pad`] and feature extractor specific
-    `__call__` methods.
+    Holds the output of the [`~SequenceFeatureExtractor.pad`] and feature extractor specific `__call__` methods.
 
     This class is derived from a python dictionary and can be used as a dictionary.
 
@@ -74,8 +78,8 @@ class BatchFeature(UserDict):
 
     def __getitem__(self, item: str) -> Union[Any]:
         """
-        If the key is a string, returns the value of the dict associated to `key` ('input_values',
-        'attention_mask', etc.).
+        If the key is a string, returns the value of the dict associated to `key` ('input_values', 'attention_mask',
+        etc.).
         """
         if isinstance(item, str):
             return self.data[item]
@@ -203,6 +207,8 @@ class FeatureExtractionMixin:
 
     def __init__(self, **kwargs):
         """Set elements of `kwargs` as attributes."""
+        # Pop "processor_class" as it should be saved as private attribute
+        self._processor_class = kwargs.pop("processor_class", None)
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
@@ -211,13 +217,17 @@ class FeatureExtractionMixin:
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
+    def _set_processor_class(self, processor_class: str):
+        """Sets processor class as an attribute."""
+        self._processor_class = processor_class
+
     @classmethod
     def from_pretrained(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
     ) -> PreTrainedFeatureExtractor:
         r"""
-        Instantiate a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a feature
-        extractor, *e.g.* a derived class of [`SequenceFeatureExtractor`].
+        Instantiate a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a feature extractor, *e.g.* a
+        derived class of [`SequenceFeatureExtractor`].
 
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -241,19 +251,20 @@ class FeatureExtractionMixin:
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file
                 exists.
             proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-                generated when running `transformers-cli login` (stored in `~/.huggingface`).
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `transformers-cli login` (stored in `~/.huggingface`).
             revision(`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
-                If `False`, then this function returns just the final feature extractor object. If `True`,
-                then this functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a
-                dictionary consisting of the key/value pairs whose keys are not feature extractor attributes: i.e., the
-                part of `kwargs` which has not been used to update `feature_extractor` and is otherwise ignored.
+                If `False`, then this function returns just the final feature extractor object. If `True`, then this
+                functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a dictionary
+                consisting of the key/value pairs whose keys are not feature extractor attributes: i.e., the part of
+                `kwargs` which has not been used to update `feature_extractor` and is otherwise ignored.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
@@ -273,15 +284,22 @@ class FeatureExtractionMixin:
         ```python
         # We can't instantiate directly the base class *FeatureExtractionMixin* nor *SequenceFeatureExtractor* so let's show the examples on a
         # derived class: *Wav2Vec2FeatureExtractor*
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h')    # Download feature_extraction_config from huggingface.co and cache.
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('./test/saved_model/')  # E.g. feature_extractor (or model) was saved using *save_pretrained('./test/saved_model/')*
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('./test/saved_model/preprocessor_config.json')
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h', return_attention_mask=False, foo=False)
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "facebook/wav2vec2-base-960h"
+        )  # Download feature_extraction_config from huggingface.co and cache.
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "./test/saved_model/"
+        )  # E.g. feature_extractor (or model) was saved using *save_pretrained('./test/saved_model/')*
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("./test/saved_model/preprocessor_config.json")
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            "facebook/wav2vec2-base-960h", return_attention_mask=False, foo=False
+        )
         assert feature_extractor.return_attention_mask is False
-        feature_extractor, unused_kwargs = Wav2Vec2FeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h', return_attention_mask=False,
-                                                           foo=False, return_unused_kwargs=True)
+        feature_extractor, unused_kwargs = Wav2Vec2FeatureExtractor.from_pretrained(
+            "facebook/wav2vec2-base-960h", return_attention_mask=False, foo=False, return_unused_kwargs=True
+        )
         assert feature_extractor.return_attention_mask is False
-        assert unused_kwargs == {'foo': False}
+        assert unused_kwargs == {"foo": False}
         ```"""
         feature_extractor_dict, kwargs = cls.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
 
@@ -311,16 +329,14 @@ class FeatureExtractionMixin:
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
-        feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`] using
-        `from_dict`.
+        feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`] using `from_dict`.
 
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
 
         Returns:
-            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the feature extractor
-            object.
+            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the feature extractor object.
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -363,28 +379,54 @@ class FeatureExtractionMixin:
                 use_auth_token=use_auth_token,
                 user_agent=user_agent,
             )
+
+        except RepositoryNotFoundError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier listed on "
+                "'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token having "
+                "permission to this repo with `use_auth_token` or log in with `huggingface-cli login` and pass "
+                "`use_auth_token=True`."
+            )
+        except RevisionNotFoundError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
+                f"model name. Check the model page at 'https://huggingface.co/{pretrained_model_name_or_path}' for "
+                "available revisions."
+            )
+        except EntryNotFoundError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"{pretrained_model_name_or_path} does not appear to have a file named {FEATURE_EXTRACTOR_NAME}."
+            )
+        except HTTPError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
+                f"{pretrained_model_name_or_path} is not the path to a directory conaining a "
+                f"{FEATURE_EXTRACTOR_NAME} file.\nCheckout your internet connection or see how to run the library in "
+                "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
+            )
+        except EnvironmentError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"Can't load feature extractor for '{pretrained_model_name_or_path}'. If you were trying to load it "
+                "from 'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                f"containing a {FEATURE_EXTRACTOR_NAME} file"
+            )
+
+        try:
             # Load feature_extractor dict
             with open(resolved_feature_extractor_file, "r", encoding="utf-8") as reader:
                 text = reader.read()
             feature_extractor_dict = json.loads(text)
 
-        except EnvironmentError as err:
-            logger.error(err)
-            msg = (
-                f"Can't load feature extractor for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
-                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
-                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {FEATURE_EXTRACTOR_NAME} file\n\n"
-            )
-            raise EnvironmentError(msg)
-
         except json.JSONDecodeError:
-            msg = (
-                f"Couldn't reach server at '{feature_extractor_file}' to download feature extractor configuration file or "
-                "feature extractor configuration file is not a valid JSON file. "
-                f"Please check network or file content here: {resolved_feature_extractor_file}."
+            raise EnvironmentError(
+                f"It looks like the config file at '{resolved_feature_extractor_file}' is not a valid JSON file."
             )
-            raise EnvironmentError(msg)
 
         if resolved_feature_extractor_file == feature_extractor_file:
             logger.info(f"loading feature extractor configuration file {feature_extractor_file}")
@@ -398,8 +440,8 @@ class FeatureExtractionMixin:
     @classmethod
     def from_dict(cls, feature_extractor_dict: Dict[str, Any], **kwargs) -> PreTrainedFeatureExtractor:
         """
-        Instantiates a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a Python
-        dictionary of parameters.
+        Instantiates a type of [`~feature_extraction_utils.FeatureExtractionMixin`] from a Python dictionary of
+        parameters.
 
         Args:
             feature_extractor_dict (`Dict[str, Any]`):
@@ -410,8 +452,8 @@ class FeatureExtractionMixin:
                 Additional parameters from which to initialize the feature extractor object.
 
         Returns:
-            [`~feature_extraction_utils.FeatureExtractionMixin`]: The feature extractor object
-            instantiated from those parameters.
+            [`~feature_extraction_utils.FeatureExtractionMixin`]: The feature extractor object instantiated from those
+            parameters.
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
@@ -447,16 +489,16 @@ class FeatureExtractionMixin:
     @classmethod
     def from_json_file(cls, json_file: Union[str, os.PathLike]) -> PreTrainedFeatureExtractor:
         """
-        Instantiates a feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`]
-        from the path to a JSON file of parameters.
+        Instantiates a feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`] from the path to
+        a JSON file of parameters.
 
         Args:
             json_file (`str` or `os.PathLike`):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            A feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`]: The
-            feature_extractor object instantiated from that JSON file.
+            A feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`]: The feature_extractor
+            object instantiated from that JSON file.
         """
         with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
@@ -468,14 +510,19 @@ class FeatureExtractionMixin:
         Serializes this instance to a JSON string.
 
         Returns:
-            `str`: String containing all the attributes that make up this feature_extractor instance in JSON
-            format.
+            `str`: String containing all the attributes that make up this feature_extractor instance in JSON format.
         """
         dictionary = self.to_dict()
 
         for key, value in dictionary.items():
             if isinstance(value, np.ndarray):
                 dictionary[key] = value.tolist()
+
+        # make sure private name "_processor_class" is correctly
+        # saved as "processor_class"
+        _processor_class = dictionary.pop("_processor_class", None)
+        if _processor_class is not None:
+            dictionary["processor_class"] = _processor_class
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 

@@ -75,9 +75,9 @@ tensors. After setting up the tensor quantizers, one can use the following examp
 ```python
 >>> # Find the TensorQuantizer and enable calibration
 >>> for name, module in model.named_modules():
->>>     if name.endswith('_input_quantizer'):
->>>         module.enable_calib()
->>>         module.disable_quant()  # Use full precision data to calibrate
+...     if name.endswith("_input_quantizer"):
+...         module.enable_calib()
+...         module.disable_quant()  # Use full precision data to calibrate
 
 >>> # Feeding data samples
 >>> model(x)
@@ -85,9 +85,9 @@ tensors. After setting up the tensor quantizers, one can use the following examp
 
 >>> # Finalize calibration
 >>> for name, module in model.named_modules():
->>>     if name.endswith('_input_quantizer'):
->>>         module.load_calib_amax()
->>>         module.enable_quant()
+...     if name.endswith("_input_quantizer"):
+...         module.load_calib_amax()
+...         module.enable_quant()
 
 >>> # If running on GPU, it needs to call .cuda() again because new tensors will be created by calibration process
 >>> model.cuda()
@@ -105,6 +105,7 @@ the instructions in [torch.onnx](https://pytorch.org/docs/stable/onnx.html). Exa
 
 ```python
 >>> from pytorch_quantization.nn import TensorQuantizer
+
 >>> TensorQuantizer.use_fb_fake_quant = True
 
 >>> # Load the calibrated model

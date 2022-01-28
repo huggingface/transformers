@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch CamemBERT model. """
+"""PyTorch CamemBERT model."""
 
 from ...file_utils import add_start_docstrings
 from ...utils import logging
@@ -42,19 +42,18 @@ CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 CAMEMBERT_START_DOCSTRING = r"""
 
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
         config ([`CamembertConfig`]): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
@@ -64,21 +63,21 @@ CAMEMBERT_START_DOCSTRING = r"""
 )
 class CamembertModel(RobertaModel):
     """
-    This class overrides [`RobertaModel`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`RobertaModel`]. Please check the superclass for the appropriate documentation alongside
+    usage examples.
     """
 
     config_class = CamembertConfig
 
 
 @add_start_docstrings(
-    """CamemBERT Model with a `language modeling` head on top. """,
+    """CamemBERT Model with a `language modeling` head on top.""",
     CAMEMBERT_START_DOCSTRING,
 )
 class CamembertForMaskedLM(RobertaForMaskedLM):
     """
-    This class overrides [`RobertaForMaskedLM`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`RobertaForMaskedLM`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = CamembertConfig
@@ -93,8 +92,8 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
 )
 class CamembertForSequenceClassification(RobertaForSequenceClassification):
     """
-    This class overrides [`RobertaForSequenceClassification`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`RobertaForSequenceClassification`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = CamembertConfig
@@ -109,8 +108,8 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
 )
 class CamembertForMultipleChoice(RobertaForMultipleChoice):
     """
-    This class overrides [`RobertaForMultipleChoice`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`RobertaForMultipleChoice`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = CamembertConfig
@@ -125,8 +124,8 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
 )
 class CamembertForTokenClassification(RobertaForTokenClassification):
     """
-    This class overrides [`RobertaForTokenClassification`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`RobertaForTokenClassification`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = CamembertConfig
@@ -141,20 +140,20 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
 )
 class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
     """
-    This class overrides [`RobertaForQuestionAnswering`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`RobertaForQuestionAnswering`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = CamembertConfig
 
 
 @add_start_docstrings(
-    """CamemBERT Model with a `language modeling` head on top for CLM fine-tuning. """, CAMEMBERT_START_DOCSTRING
+    """CamemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", CAMEMBERT_START_DOCSTRING
 )
 class CamembertForCausalLM(RobertaForCausalLM):
     """
-    This class overrides [`RobertaForCausalLM`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`RobertaForCausalLM`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = CamembertConfig

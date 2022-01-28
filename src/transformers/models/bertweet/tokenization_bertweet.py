@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for BERTweet """
+""" Tokenization classes for BERTweet"""
 
 
 import html
@@ -69,8 +69,8 @@ class BertweetTokenizer(PreTrainedTokenizer):
     """
     Constructs a BERTweet tokenizer, using Byte-Pair-Encoding.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -94,8 +94,8 @@ class BertweetTokenizer(PreTrainedTokenizer):
 
             <Tip>
 
-            When building a sequence using special tokens, this is not the token that is used for the end of
-            sequence. The token used is the `sep_token`.
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
 
             </Tip>
 
@@ -632,7 +632,7 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
             List of entity names which should not be replaced. This supports both numeric entities (`&#nnnn;` and
             `&#hhhh;`) and named entities (such as `&nbsp;` or `&gt;`).
         remove_illegal (bool):
-            If *True*, entities that can't be converted are removed. Otherwise, entities that can't be converted are
+            If `True`, entities that can't be converted are removed. Otherwise, entities that can't be converted are
             kept "as is".
 
     Returns: A unicode string with the entities removed.
@@ -685,6 +685,7 @@ class TweetTokenizer:
     ```python
     >>> # Tokenizer for tweets.
     >>> from nltk.tokenize import TweetTokenizer
+
     >>> tknzr = TweetTokenizer()
     >>> s0 = "This is a cooool #dummysmiley: :-) :-P <3 and some arrows < > -> <--"
     >>> tknzr.tokenize(s0)
@@ -692,7 +693,7 @@ class TweetTokenizer:
 
     >>> # Examples using *strip_handles* and *reduce_len parameters*:
     >>> tknzr = TweetTokenizer(strip_handles=True, reduce_len=True)
-    >>> s1 = '@remy: This is waaaaayyyy too much for you!!!!!!'
+    >>> s1 = "@remy: This is waaaaayyyy too much for you!!!!!!"
     >>> tknzr.tokenize(s1)
     [':', 'This', 'is', 'waaayyy', 'too', 'much', 'for', 'you', '!', '!', '!']
     ```"""

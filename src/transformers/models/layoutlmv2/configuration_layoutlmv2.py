@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LayoutLMv2 model configuration """
+""" LayoutLMv2 model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import is_detectron2_available
@@ -34,19 +34,18 @@ if is_detectron2_available():
 
 class LayoutLMv2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LayoutLMv2Model`]. It is used
-    to instantiate an LayoutLMv2 model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the LayoutLMv2
+    This is the configuration class to store the configuration of a [`LayoutLMv2Model`]. It is used to instantiate an
+    LayoutLMv2 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the LayoutLMv2
     [microsoft/layoutlmv2-base-uncased](https://huggingface.co/microsoft/layoutlmv2-base-uncased) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the LayoutLMv2 model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`LayoutLMv2Model`] or
-            [`TFLayoutLMv2Model`].
+            the `inputs_ids` passed when calling [`LayoutLMv2Model`] or [`TFLayoutLMv2Model`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -56,8 +55,8 @@ class LayoutLMv2Config(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
@@ -66,8 +65,8 @@ class LayoutLMv2Config(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`LayoutLMv2Model`]
-            or [`TFLayoutLMv2Model`].
+            The vocabulary size of the `token_type_ids` passed when calling [`LayoutLMv2Model`] or
+            [`TFLayoutLMv2Model`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -98,7 +97,8 @@ class LayoutLMv2Config(PretrainedConfig):
         has_visual_segment_embedding (`bool`, *optional*, defaults to `False`):
             Whether or not to add visual segment embeddings.
         detectron2_config_args (`dict`, *optional*):
-            Dictionary containing the configuration arguments of the Detectron2 visual backbone. Refer to [this file](https://github.com/microsoft/unilm/blob/master/layoutlmft/layoutlmft/models/layoutlmv2/detectron2_config.py)
+            Dictionary containing the configuration arguments of the Detectron2 visual backbone. Refer to [this
+            file](https://github.com/microsoft/unilm/blob/master/layoutlmft/layoutlmft/models/layoutlmv2/detectron2_config.py)
             for details regarding default values.
 
     Example:

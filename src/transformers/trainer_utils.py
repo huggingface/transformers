@@ -49,8 +49,7 @@ if is_tf_available():
 
 def set_seed(seed: int):
     """
-    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if
-    installed).
+    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
 
     Args:
         seed (`int`): The seed to set.
@@ -301,7 +300,7 @@ class TrainerMemoryTracker:
     ```python
     self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
     self._memory_tracker.start()
-    code ...
+    # code ...
     metrics = {"train_runtime": 10.5}
     self._memory_tracker.stop_and_update_metrics(metrics)
     ```

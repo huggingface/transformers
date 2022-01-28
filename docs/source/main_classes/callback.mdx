@@ -79,12 +79,13 @@ class MyCallback(TrainerCallback):
     def on_train_begin(self, args, state, control, **kwargs):
         print("Starting training")
 
+
 trainer = Trainer(
     model,
     args,
     train_dataset=train_dataset,
     eval_dataset=eval_dataset,
-    callbacks=[MyCallback]  # We can either pass the callback class this way or an instance of it (MyCallback())
+    callbacks=[MyCallback],  # We can either pass the callback class this way or an instance of it (MyCallback())
 )
 ```
 

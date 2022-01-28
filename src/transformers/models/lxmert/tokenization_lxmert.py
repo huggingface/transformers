@@ -37,11 +37,10 @@ class LxmertTokenizer(BertTokenizer):
     r"""
     Construct an LXMERT tokenizer.
 
-    [`LxmertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    [`LxmertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting and
+    wordpiece.
 
-    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

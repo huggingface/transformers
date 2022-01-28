@@ -56,10 +56,11 @@ FAIRSEQ_LANGUAGE_CODES = ["ar_AR", "cs_CZ", "de_DE", "en_XX", "es_XX", "et_EE", 
 
 class MBart50TokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" MBART tokenizer for mBART-50 (backed by HuggingFace's *tokenizers* library). Based on [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models).
+    Construct a "fast" MBART tokenizer for mBART-50 (backed by HuggingFace's *tokenizers* library). Based on
+    [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models).
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -90,12 +91,13 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
 
     ```python
     >>> from transformers import MBart50TokenizerFast
+
     >>> tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50", src_lang="en_XX", tgt_lang="ro_RO")
     >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
-    >>> tgt_text =  "Şeful ONU declară că nu există o soluţie militară în Siria"
+    >>> tgt_text = "Şeful ONU declară că nu există o soluţie militară în Siria"
     >>> model_inputs = tokenizer(src_text, return_tensors="pt")
     >>> with tokenizer.as_target_tokenizer():
-    ...    labels = tokenizer(tgt_text, return_tensors="pt").input_ids
+    ...     labels = tokenizer(tgt_text, return_tensors="pt").input_ids
     >>> # model(**model_inputs, labels=labels) should work
     ```"""
 

@@ -74,6 +74,7 @@ However, we can instead apply these preprocessing steps to all the splits of our
 def tokenize_function(examples):
     return tokenizer(examples["text"], padding="max_length", truncation=True)
 
+
 tokenized_datasets = raw_datasets.map(tokenize_function, batched=True)
 ```
 
@@ -82,8 +83,8 @@ You can learn more about the map method or the other ways to preprocess the data
 Next we will generate a small subset of the training and validation set, to enable faster training:
 
 ```python
-small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000)) 
-small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(1000)) 
+small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
+small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(1000))
 full_train_dataset = tokenized_datasets["train"]
 full_eval_dataset = tokenized_datasets["test"]
 ```
@@ -130,9 +131,7 @@ Then we can instantiate a [`Trainer`] like this:
 ```python
 from transformers import Trainer
 
-trainer = Trainer(
-    model=model, args=training_args, train_dataset=small_train_dataset, eval_dataset=small_eval_dataset
-)
+trainer = Trainer(model=model, args=training_args, train_dataset=small_train_dataset, eval_dataset=small_eval_dataset)
 ```
 
 To fine-tune our model, we just need to call
@@ -159,6 +158,7 @@ import numpy as np
 from datasets import load_metric
 
 metric = load_metric("accuracy")
+
 
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
@@ -322,12 +322,7 @@ from transformers import get_scheduler
 
 num_epochs = 3
 num_training_steps = num_epochs * len(train_dataloader)
-lr_scheduler = get_scheduler(
-    "linear",
-    optimizer=optimizer,
-    num_warmup_steps=0,
-    num_training_steps=num_training_steps
-)
+lr_scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps)
 ```
 
 One last thing, we will want to use the GPU if we have access to one (otherwise training might take several hours
@@ -372,7 +367,7 @@ use a metric from the datasets library. Here we accumulate the predictions at ea
 result when the loop is finished.
 
 ```python
-metric= load_metric("accuracy")
+metric = load_metric("accuracy")
 model.eval()
 for batch in eval_dataloader:
     batch = {k: v.to(device) for k, v in batch.items()}

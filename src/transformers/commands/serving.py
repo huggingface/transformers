@@ -214,9 +214,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
     async def forward(self, inputs=Body(None, embed=True)):
         """
-        **inputs**:
-        **attention_mask**:
-        **tokens_type_ids**:
+        **inputs**: **attention_mask**: **tokens_type_ids**:
         """
 
         # Check we don't have empty string

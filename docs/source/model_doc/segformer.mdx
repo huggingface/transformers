@@ -57,16 +57,17 @@ Tips:
   important preprocessing step is that images and segmentation maps are randomly cropped and padded to the same size,
   such as 512x512 or 640x640, after which they are normalized.
 - One additional thing to keep in mind is that one can initialize [`SegformerFeatureExtractor`] with
-  `reduce_labels` set to *True* or *False*. In some datasets (like ADE20k), the 0 index is used in the annotated
+  `reduce_labels` set to `True` or `False`. In some datasets (like ADE20k), the 0 index is used in the annotated
   segmentation maps for background. However, ADE20k doesn't include the "background" class in its 150 labels.
   Therefore, `reduce_labels` is used to reduce all labels by 1, and to make sure no loss is computed for the
   background class (i.e. it replaces 0 in the annotated maps by 255, which is the *ignore_index* of the loss function
   used by [`SegformerForSemanticSegmentation`]). However, other datasets use the 0 index as
   background class and include this class as part of all labels. In that case, `reduce_labels` should be set to
-  *False*, as loss should also be computed for the background class.
+  `False`, as loss should also be computed for the background class.
 - As most models, SegFormer comes in different sizes, the details of which can be found in the table below.
 
 | **Model variant** | **Depths**    | **Hidden sizes**    | **Decoder hidden size** | **Params (M)** | **ImageNet-1k Top 1** |
+| :---------------: | ------------- | ------------------- | :---------------------: | :------------: | :-------------------: |
 | MiT-b0            | [2, 2, 2, 2]  | [32, 64, 160, 256]  | 256                     | 3.7            | 70.5                  |
 | MiT-b1            | [2, 2, 2, 2]  | [64, 128, 320, 512] | 256                     | 14.0           | 78.7                  |
 | MiT-b2            | [3, 4, 6, 3]  | [64, 128, 320, 512] | 768                     | 25.4           | 81.6                  |

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Splinter model. """
+""" PyTorch Splinter model."""
 
 
 import math
@@ -546,8 +546,7 @@ SPLINTER_START_DOCSTRING = r"""
     Parameters:
         config ([`SplinterConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 SPLINTER_INPUTS_DOCSTRING = r"""
@@ -555,9 +554,8 @@ SPLINTER_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SplinterTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`SplinterTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.FloatTensor` of shape `{0}`, *optional*):
@@ -568,14 +566,16 @@ SPLINTER_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `{0}`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `{0}`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -585,9 +585,9 @@ SPLINTER_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert *input_ids* indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -606,8 +606,8 @@ SPLINTER_INPUTS_DOCSTRING = r"""
 class SplinterModel(SplinterPreTrainedModel):
     """
     The model is an encoder (with only self-attention) following the architecture described in [Attention is all you
-    need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion
-    Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,
+    Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
     """
 
     def __init__(self, config):
@@ -669,12 +669,12 @@ class SplinterModel(SplinterPreTrainedModel):
             - 0 for tokens that are **masked**.
         past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -861,17 +861,17 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         question_positions (`torch.LongTensor` of shape `(batch_size, num_questions)`, *optional*):
-            The positions of all question tokens. If given, start_logits and end_logits will be of shape
-            `(batch_size, num_questions, sequence_length)`. If None, the first question token in each sequence in
-            the batch will be the only one for which start_logits and end_logits are calculated and they will be of
-            shape `(batch_size, sequence_length)`.
+            The positions of all question tokens. If given, start_logits and end_logits will be of shape `(batch_size,
+            num_questions, sequence_length)`. If None, the first question token in each sequence in the batch will be
+            the only one for which start_logits and end_logits are calculated and they will be of shape `(batch_size,
+            sequence_length)`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -226,7 +226,7 @@ class UniSpeechModelTester:
         model.train()
 
         # freeze feature encoder
-        model.freeze_feature_extractor()
+        model.freeze_feature_encoder()
 
         input_values = input_values[:3]
 
@@ -517,6 +517,10 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
         ).logits
 
         self.assertEqual(logits.shape, (1, 1498, 32))
+
+    @unittest.skip(reason="Feed forward chunking is not implemented")
+    def test_feed_forward_chunking(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):

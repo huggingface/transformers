@@ -12,24 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Tokenizer class. """
+""" Auto Tokenizer class."""
 
 import importlib
 import json
 import os
 from collections import OrderedDict
-from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import (
-    cached_path,
-    get_list_of_files,
-    hf_bucket_url,
-    is_offline_mode,
-    is_sentencepiece_available,
-    is_tokenizers_available,
-)
+from ...file_utils import get_file_from_repo, is_sentencepiece_available, is_tokenizers_available
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -279,8 +271,8 @@ def get_tokenizer_config(
             This can be either:
 
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
-              huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-              namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+              huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced
+              under a user or organization name, like `dbmdz/bert-base-german-cased`.
             - a path to a *directory* containing a configuration file saved using the
               [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
 
@@ -293,10 +285,11 @@ def get_tokenizer_config(
         resume_download (`bool`, *optional*, defaults to `False`):
             Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
         proxies (`Dict[str, str]`, *optional*):
-            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         use_auth_token (`str` or *bool*, *optional*):
-            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-            generated when running `transformers-cli login` (stored in `~/.huggingface`).
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+            when running `transformers-cli login` (stored in `~/.huggingface`).
         revision(`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -328,41 +321,18 @@ def get_tokenizer_config(
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
-    if is_offline_mode() and not local_files_only:
-        logger.info("Offline mode: forcing local_files_only=True")
-        local_files_only = True
-
-    # Will raise a ValueError if `pretrained_model_name_or_path` is not a valid path or model identifier
-    repo_files = get_list_of_files(
+    resolved_config_file = get_file_from_repo(
         pretrained_model_name_or_path,
-        revision=revision,
+        TOKENIZER_CONFIG_FILE,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        resume_download=resume_download,
+        proxies=proxies,
         use_auth_token=use_auth_token,
+        revision=revision,
         local_files_only=local_files_only,
     )
-    if TOKENIZER_CONFIG_FILE not in [Path(f).name for f in repo_files]:
-        return {}
-
-    pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-    if os.path.isdir(pretrained_model_name_or_path):
-        config_file = os.path.join(pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE)
-    else:
-        config_file = hf_bucket_url(
-            pretrained_model_name_or_path, filename=TOKENIZER_CONFIG_FILE, revision=revision, mirror=None
-        )
-
-    try:
-        # Load from URL or cache if already cached
-        resolved_config_file = cached_path(
-            config_file,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            proxies=proxies,
-            resume_download=resume_download,
-            local_files_only=local_files_only,
-            use_auth_token=use_auth_token,
-        )
-
-    except EnvironmentError:
+    if resolved_config_file is None:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
 
@@ -390,9 +360,9 @@ class AutoTokenizer:
         r"""
         Instantiate one of the tokenizer classes of the library from a pretrained model vocabulary.
 
-        The tokenizer class to instantiate is selected based on the `model_type` property of the config object
-        (either passed as an argument or loaded from `pretrained_model_name_or_path` if possible), or when it's
-        missing, by falling back to using pattern matching on `pretrained_model_name_or_path`:
+        The tokenizer class to instantiate is selected based on the `model_type` property of the config object (either
+        passed as an argument or loaded from `pretrained_model_name_or_path` if possible), or when it's missing, by
+        falling back to using pattern matching on `pretrained_model_name_or_path`:
 
         List options
 
@@ -401,11 +371,10 @@ class AutoTokenizer:
                 Can be either:
 
                     - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under
-                      a user or organization name, like `dbmdz/bert-base-german-cased`.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
-                      using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g.,
-                      `./my_model_directory/`.
+                      using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
                     - A path or url to a single saved vocabulary file if and only if the tokenizer only requires a
                       single vocabulary file (like Bert or XLNet), e.g.: `./my_model_directory/vocab.txt`. (Not
                       applicable to all derived classes)
@@ -423,7 +392,8 @@ class AutoTokenizer:
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
             proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             revision(`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -437,12 +407,12 @@ class AutoTokenizer:
                 Tokenizer type to be loaded.
             trust_remote_code (`bool`, *optional*, defaults to `False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
-                should only be set to `True` for repositories you trust and in which you have read the code, as it
-                will execute code present on the Hub on your local machine.
+                should only be set to `True` for repositories you trust and in which you have read the code, as it will
+                execute code present on the Hub on your local machine.
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the Tokenizer `__init__()` method. Can be used to set special tokens like
-                `bos_token`, `eos_token`, `unk_token`, `sep_token`, `pad_token`, `cls_token`,
-                `mask_token`, `additional_special_tokens`. See parameters in the `__init__()` for more details.
+                `bos_token`, `eos_token`, `unk_token`, `sep_token`, `pad_token`, `cls_token`, `mask_token`,
+                `additional_special_tokens`. See parameters in the `__init__()` for more details.
 
         Examples:
 
@@ -450,13 +420,13 @@ class AutoTokenizer:
         >>> from transformers import AutoTokenizer
 
         >>> # Download vocabulary from huggingface.co and cache.
-        >>> tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
         >>> # Download vocabulary from huggingface.co (user-uploaded) and cache.
-        >>> tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
+        >>> tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-german-cased")
 
         >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using *save_pretrained('./test/saved_model/')*)
-        >>> tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
+        >>> tokenizer = AutoTokenizer.from_pretrained("./test/bert_saved_model/")
         ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True

@@ -67,8 +67,7 @@ class CanineTokenizer(PreTrainedTokenizer):
 
     [`CanineTokenizer`] inherits from [`PreTrainedTokenizer`].
 
-    Refer to superclass [`PreTrainedTokenizer`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`PreTrainedTokenizer`] for usage examples and documentation concerning parameters.
 
     Args:
         model_max_length (`int`, *optional*, defaults to 2048):
@@ -229,8 +228,7 @@ class CanineTokenizer(PreTrainedTokenizer):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

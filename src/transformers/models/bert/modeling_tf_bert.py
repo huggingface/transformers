@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 BERT model. """
+""" TF 2.0 BERT model."""
 
 import math
 import warnings
@@ -101,7 +101,7 @@ class TFBertPreTrainingLoss:
     computation.
     """
 
-    def compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
+    def hf_compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
@@ -938,12 +938,13 @@ class TFBertForPreTrainingOutput(ModelOutput):
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
             before SoftMax).
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -958,13 +959,13 @@ class TFBertForPreTrainingOutput(ModelOutput):
 
 BERT_START_DOCSTRING = r"""
 
-    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
 
     <Tip>
 
@@ -973,11 +974,11 @@ BERT_START_DOCSTRING = r"""
     - having all inputs as keyword arguments (like PyTorch models), or
     - having all inputs as a list, tuple or dict in the first positional arguments.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all
-    the tensors in the first argument of the model call function: `model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    tensors in the first argument of the model call function: `model(inputs)`.
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-    the first positional argument :
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
+    first positional argument :
 
     - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -990,8 +991,7 @@ BERT_START_DOCSTRING = r"""
     Args:
         config ([`BertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the
-            model weights.
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 BERT_INPUTS_DOCSTRING = r"""
@@ -999,9 +999,8 @@ BERT_INPUTS_DOCSTRING = r"""
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See
-            [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for
-            details.
+            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
@@ -1012,14 +1011,16 @@ BERT_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -1029,9 +1030,9 @@ BERT_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         inputs_embeds (`np.ndarray` or `tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
@@ -1041,8 +1042,8 @@ BERT_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
-            argument can be used in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
+            in eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -1097,12 +1098,12 @@ class TFBertModel(TFBertPreTrainedModel):
 
         past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         use_cache (`bool`, *optional*, defaults to `True`):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`). Set to `False` during training, `True` during generation
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`). Set to `False` during training, `True` during generation
         """
         inputs = input_processing(
             func=self.call,
@@ -1212,8 +1213,9 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
     ) -> Union[TFBertForPreTrainingOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         next_sentence_label (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
             (see `input_ids` docstring) Indices should be in `[0, 1]`:
@@ -1231,9 +1233,11 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         >>> import tensorflow as tf
         >>> from transformers import BertTokenizer, TFBertForPreTraining
 
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> model = TFBertForPreTraining.from_pretrained('bert-base-uncased')
-        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        >>> model = TFBertForPreTraining.from_pretrained("bert-base-uncased")
+        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[
+        ...     None, :
+        >>> ]  # Batch size 1
         >>> outputs = model(input_ids)
         >>> prediction_scores, seq_relationship_scores = outputs[:2]
         ```"""
@@ -1274,7 +1278,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         if inputs["labels"] is not None and inputs["next_sentence_label"] is not None:
             d_labels = {"labels": inputs["labels"]}
             d_labels["next_sentence_label"] = inputs["next_sentence_label"]
-            total_loss = self.compute_loss(labels=d_labels, logits=(prediction_scores, seq_relationship_score))
+            total_loss = self.hf_compute_loss(labels=d_labels, logits=(prediction_scores, seq_relationship_score))
 
         if not inputs["return_dict"]:
             output = (prediction_scores, seq_relationship_score) + outputs[2:]
@@ -1300,7 +1304,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         )
 
 
-@add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
+@add_start_docstrings("""Bert Model with a `language modeling` head on top.""", BERT_START_DOCSTRING)
 class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1353,8 +1357,9 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         inputs = input_processing(
             func=self.call,
@@ -1387,7 +1392,9 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output=sequence_output, training=inputs["training"])
         loss = (
-            None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=prediction_scores)
+            None
+            if inputs["labels"] is None
+            else self.hf_compute_loss(labels=inputs["labels"], logits=prediction_scores)
         )
 
         if not inputs["return_dict"]:
@@ -1483,14 +1490,15 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
 
         past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         use_cache (`bool`, *optional*, defaults to `True`):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`). Set to `False` during training, `True` during generation
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`). Set to `False` during training, `True` during generation
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the cross entropy classification loss. Indices should be in `[0, ..., config.vocab_size - 1]`.
+            Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
+            config.vocab_size - 1]`.
         """
         inputs = input_processing(
             func=self.call,
@@ -1536,7 +1544,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             # shift labels to the left and cut last logit token
             logits = logits[:, :-1]
             labels = inputs["labels"][:, 1:]
-            loss = self.compute_loss(labels=labels, logits=logits)
+            loss = self.hf_compute_loss(labels=labels, logits=logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
@@ -1566,7 +1574,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
 
 
 @add_start_docstrings(
-    """Bert Model with a `next sentence prediction (classification)` head on top. """,
+    """Bert Model with a `next sentence prediction (classification)` head on top.""",
     BERT_START_DOCSTRING,
 )
 class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredictionLoss):
@@ -1605,15 +1613,15 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         >>> import tensorflow as tf
         >>> from transformers import BertTokenizer, TFBertForNextSentencePrediction
 
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        >>> model = TFBertForNextSentencePrediction.from_pretrained("bert-base-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="tf")
 
-        >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
-        >>> assert logits[0][0] < logits[0][1] # the next sentence was random
+        >>> logits = model(encoding["input_ids"], token_type_ids=encoding["token_type_ids"])[0]
+        >>> assert logits[0][0] < logits[0][1]  # the next sentence was random
         ```"""
         inputs = input_processing(
             func=self.call,
@@ -1648,7 +1656,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         next_sentence_loss = (
             None
             if inputs["next_sentence_label"] is None
-            else self.compute_loss(labels=inputs["next_sentence_label"], logits=seq_relationship_scores)
+            else self.hf_compute_loss(labels=inputs["next_sentence_label"], logits=seq_relationship_scores)
         )
 
         if not inputs["return_dict"]:
@@ -1721,8 +1729,9 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ..., config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         inputs = input_processing(
             func=self.call,
@@ -1755,7 +1764,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         pooled_output = outputs[1]
         pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
         logits = self.classifier(inputs=pooled_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(labels=inputs["labels"], logits=logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
@@ -1830,8 +1839,8 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
     ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
+            where `num_choices` is the size of the second dimension of the input tensors. (See `input_ids` above)
         """
         inputs = input_processing(
             func=self.call,
@@ -1896,7 +1905,9 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
         logits = self.classifier(inputs=pooled_output)
         reshaped_logits = tf.reshape(tensor=logits, shape=(-1, num_choices))
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=reshaped_logits)
+        loss = (
+            None if inputs["labels"] is None else self.hf_compute_loss(labels=inputs["labels"], logits=reshaped_logits)
+        )
 
         if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[2:]
@@ -2021,7 +2032,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         sequence_output = outputs[0]
         sequence_output = self.dropout(inputs=sequence_output, training=inputs["training"])
         logits = self.classifier(inputs=sequence_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(labels=inputs["labels"], logits=logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
@@ -2096,12 +2107,12 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         r"""
         start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         end_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         """
         inputs = input_processing(
             func=self.call,
@@ -2142,7 +2153,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
             labels = {"start_position": inputs["start_positions"]}
             labels["end_position"] = inputs["end_positions"]
-            loss = self.compute_loss(labels=labels, logits=(start_logits, end_logits))
+            loss = self.hf_compute_loss(labels=labels, logits=(start_logits, end_logits))
 
         if not inputs["return_dict"]:
             output = (start_logits, end_logits) + outputs[2:]

@@ -62,8 +62,8 @@ class RoFormerTokenizer(PreTrainedTokenizer):
     r"""
     Construct a RoFormer tokenizer. Based on [Rust Jieba](https://pypi.org/project/rjieba/).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -93,7 +93,8 @@ class RoFormerTokenizer(PreTrainedTokenizer):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
 
-            This should likely be deactivated for Japanese (see this [issue](https://github.com/huggingface/transformers/issues/328)).
+            This should likely be deactivated for Japanese (see this
+            [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents: (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
@@ -102,7 +103,8 @@ class RoFormerTokenizer(PreTrainedTokenizer):
 
     ```python
     >>> from transformers import RoFormerTokenizer
-    >>> tokenizer = RoFormerTokenizer.from_pretrained('junnyu/roformer_chinese_base')
+
+    >>> tokenizer = RoFormerTokenizer.from_pretrained("junnyu/roformer_chinese_base")
     >>> tokenizer.tokenize("今天天气非常好。")
     # ['今', '天', '天', '气', '非常', '好', '。']
     ```"""
@@ -296,8 +298,7 @@ class RoFormerTokenizer(PreTrainedTokenizer):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

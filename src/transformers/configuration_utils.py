@@ -21,17 +21,21 @@ import json
 import os
 import re
 import warnings
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 from packaging import version
+
+from requests import HTTPError
 
 from . import __version__
 from .file_utils import (
     CONFIG_NAME,
+    EntryNotFoundError,
     PushToHubMixin,
+    RepositoryNotFoundError,
+    RevisionNotFoundError,
     cached_path,
     copy_func,
-    get_list_of_files,
     hf_bucket_url,
     is_offline_mode,
     is_remote_url,
@@ -41,7 +45,7 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
-FULL_CONFIGURATION_FILE = "config.json"
+
 _re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
@@ -178,7 +182,8 @@ class PretrainedConfig(PushToHubMixin):
 
         > Parameters for fine-tuning tasks
 
-        architectures (`List[str]`, *optional*): Model architectures that can be used with the model pretrained weights.
+        architectures (`List[str]`, *optional*):
+            Model architectures that can be used with the model pretrained weights.
         finetuning_task (`str`, *optional*):
             Name of the task used to fine-tune the model. This can be used when converting from an original (TensorFlow
             or PyTorch) checkpoint.
@@ -401,16 +406,14 @@ class PretrainedConfig(PushToHubMixin):
 
                 <Tip warning={true}>
 
-                Using `push_to_hub=True` will synchronize the repository you are pushing to with
-                `save_directory`, which requires `save_directory` to be a local clone of the repo you are
-                pushing to if it's an existing folder. Pass along `temp_dir=True` to use a temporary directory
-                instead.
+                Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
+                which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
+                folder. Pass along `temp_dir=True` to use a temporary directory instead.
 
                 </Tip>
 
             kwargs:
-                Additional key word arguments passed along to the
-                [`~file_utils.PushToHubMixin.push_to_hub`] method.
+                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -433,8 +436,7 @@ class PretrainedConfig(PushToHubMixin):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         r"""
-        Instantiate a [`PretrainedConfig`] (or a derived class) from a pretrained model
-        configuration.
+        Instantiate a [`PretrainedConfig`] (or a derived class) from a pretrained model configuration.
 
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -445,8 +447,7 @@ class PretrainedConfig(PushToHubMixin):
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a configuration file saved using the
                   [`~PretrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
-                - a path or url to a saved configuration JSON *file*, e.g.,
-                  `./my_model_directory/configuration.json`.
+                - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
@@ -457,10 +458,11 @@ class PretrainedConfig(PushToHubMixin):
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file
                 exists.
             proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-                generated when running `transformers-cli login` (stored in `~/.huggingface`).
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `transformers-cli login` (stored in `~/.huggingface`).
             revision(`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -468,9 +470,9 @@ class PretrainedConfig(PushToHubMixin):
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final configuration object.
 
-                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs*
-                is a dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e.,
-                the part of `kwargs` which has not been used to update `config` and is otherwise ignored.
+                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
+                dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
+                part of `kwargs` which has not been used to update `config` and is otherwise ignored.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
@@ -490,15 +492,20 @@ class PretrainedConfig(PushToHubMixin):
         ```python
         # We can't instantiate directly the base class *PretrainedConfig* so let's show the examples on a
         # derived class: BertConfig
-        config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from huggingface.co and cache.
-        config = BertConfig.from_pretrained('./test/saved_model/')  # E.g. config (or model) was saved using *save_pretrained('./test/saved_model/')*
-        config = BertConfig.from_pretrained('./test/saved_model/my_configuration.json')
-        config = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
+        config = BertConfig.from_pretrained(
+            "bert-base-uncased"
+        )  # Download configuration from huggingface.co and cache.
+        config = BertConfig.from_pretrained(
+            "./test/saved_model/"
+        )  # E.g. config (or model) was saved using *save_pretrained('./test/saved_model/')*
+        config = BertConfig.from_pretrained("./test/saved_model/my_configuration.json")
+        config = BertConfig.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
         assert config.output_attentions == True
-        config, unused_kwargs = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True,
-                                                   foo=False, return_unused_kwargs=True)
+        config, unused_kwargs = BertConfig.from_pretrained(
+            "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
+        )
         assert config.output_attentions == True
-        assert unused_kwargs == {'foo': False}
+        assert unused_kwargs == {"foo": False}
         ```"""
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -517,8 +524,6 @@ class PretrainedConfig(PushToHubMixin):
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
         [`PretrainedConfig`] using `from_dict`.
 
-
-
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
@@ -527,6 +532,23 @@ class PretrainedConfig(PushToHubMixin):
             `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
+        original_kwargs = copy.deepcopy(kwargs)
+        # Get config dict associated with the base config file
+        config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        # That config file may point us toward another config file to use.
+        if "configuration_files" in config_dict:
+            configuration_file = get_configuration_file(config_dict["configuration_files"])
+            config_dict, kwargs = cls._get_config_dict(
+                pretrained_model_name_or_path, _configuration_file=configuration_file, **original_kwargs
+            )
+
+        return config_dict, kwargs
+
+    @classmethod
+    def _get_config_dict(
+        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
@@ -549,12 +571,7 @@ class PretrainedConfig(PushToHubMixin):
         if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
-            configuration_file = get_configuration_file(
-                pretrained_model_name_or_path,
-                revision=revision,
-                use_auth_token=use_auth_token,
-                local_files_only=local_files_only,
-            )
+            configuration_file = kwargs.get("_configuration_file", CONFIG_NAME)
 
             if os.path.isdir(pretrained_model_name_or_path):
                 config_file = os.path.join(pretrained_model_name_or_path, configuration_file)
@@ -575,30 +592,51 @@ class PretrainedConfig(PushToHubMixin):
                 use_auth_token=use_auth_token,
                 user_agent=user_agent,
             )
-            # Load config dict
-            config_dict = cls._dict_from_json_file(resolved_config_file)
 
+        except RepositoryNotFoundError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier listed on "
+                "'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token having "
+                "permission to this repo with `use_auth_token` or log in with `huggingface-cli login` and pass "
+                "`use_auth_token=True`."
+            )
+        except RevisionNotFoundError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
+                f"model name. Check the model page at 'https://huggingface.co/{pretrained_model_name_or_path}' for "
+                "available revisions."
+            )
+        except EntryNotFoundError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                f"{pretrained_model_name_or_path} does not appear to have a file named {configuration_file}."
+            )
+        except HTTPError as err:
+            logger.error(err)
+            raise EnvironmentError(
+                "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
+                f"{pretrained_model_name_or_path} is not the path to a directory conaining a {configuration_file} "
+                "file.\nCheckout your internet connection or see how to run the library in offline mode at "
+                "'https://huggingface.co/docs/transformers/installation#offline-mode'."
+            )
         except EnvironmentError as err:
             logger.error(err)
-            msg = (
-                f"Can't load config for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
-                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
-                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {CONFIG_NAME} file\n\n"
+            raise EnvironmentError(
+                f"Can't load config for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                f"containing a {configuration_file} file"
             )
 
-            if revision is not None:
-                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
-
-            raise EnvironmentError(msg)
-
+        try:
+            # Load config dict
+            config_dict = cls._dict_from_json_file(resolved_config_file)
         except (json.JSONDecodeError, UnicodeDecodeError):
-            msg = (
-                f"Couldn't reach server at '{config_file}' to download configuration file or "
-                "configuration file is not a valid JSON file. "
-                f"Please check network or file content here: {resolved_config_file}."
+            raise EnvironmentError(
+                f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file."
             )
-            raise EnvironmentError(msg)
 
         if resolved_config_file == config_file:
             logger.info(f"loading configuration file {config_file}")
@@ -615,8 +653,7 @@ class PretrainedConfig(PushToHubMixin):
         Args:
             config_dict (`Dict[str, Any]`):
                 Dictionary that will be used to instantiate the configuration object. Such a dictionary can be
-                retrieved from a pretrained checkpoint by leveraging the
-                [`~PretrainedConfig.get_config_dict`] method.
+                retrieved from a pretrained checkpoint by leveraging the [`~PretrainedConfig.get_config_dict`] method.
             kwargs (`Dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
 
@@ -730,8 +767,8 @@ class PretrainedConfig(PushToHubMixin):
 
         Args:
             use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default
-                `PretrainedConfig()` is serialized to JSON string.
+                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                is serialized to JSON string.
 
         Returns:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
@@ -750,8 +787,8 @@ class PretrainedConfig(PushToHubMixin):
             json_file_path (`str` or `os.PathLike`):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
             use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default
-                `PretrainedConfig()` is serialized to JSON file.
+                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                is serialized to JSON file.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
@@ -807,44 +844,25 @@ class PretrainedConfig(PushToHubMixin):
     def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
         """
         Checks whether the passed dictionary has a *torch_dtype* key and if it's not None, converts torch.dtype to a
-        string of just the type. For example, `torch.float32` get converted into *"float32"* string, which can
-        then be stored in the json format.
+        string of just the type. For example, `torch.float32` get converted into *"float32"* string, which can then be
+        stored in the json format.
         """
         if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
 
 
-def get_configuration_file(
-    path_or_repo: Union[str, os.PathLike],
-    revision: Optional[str] = None,
-    use_auth_token: Optional[Union[bool, str]] = None,
-    local_files_only: bool = False,
-) -> str:
+def get_configuration_file(configuration_files: List[str]) -> str:
     """
     Get the configuration file to use for this version of transformers.
 
     Args:
-        path_or_repo (`str` or `os.PathLike`):
-            Can be either the id of a repo on huggingface.co or a path to a *directory*.
-        revision(`str`, *optional*, defaults to `"main"`):
-            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
-            identifier allowed by git.
-        use_auth_token (`str` or *bool*, *optional*):
-            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token
-            generated when running `transformers-cli login` (stored in `~/.huggingface`).
-        local_files_only (`bool`, *optional*, defaults to `False`):
-            Whether or not to only rely on local files and not to attempt to download any files.
+        configuration_files (`List[str]`): The list of available configuration files.
 
     Returns:
         `str`: The configuration file to use.
     """
-    # Inspect all files from the repo/folder.
-    all_files = get_list_of_files(
-        path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
-    )
     configuration_files_map = {}
-    for file_name in all_files:
+    for file_name in configuration_files:
         search = _re_configuration_file.search(file_name)
         if search is not None:
             v = search.groups()[0]
@@ -852,7 +870,7 @@ def get_configuration_file(
     available_versions = sorted(configuration_files_map.keys())
 
     # Defaults to FULL_CONFIGURATION_FILE and then try to look at some newer versions.
-    configuration_file = FULL_CONFIGURATION_FILE
+    configuration_file = CONFIG_NAME
     transformers_version = version.parse(__version__)
     for v in available_versions:
         if version.parse(v) <= transformers_version:

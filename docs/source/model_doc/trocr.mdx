@@ -48,16 +48,16 @@ Tips:
   on both printed (e.g. the [SROIE dataset](https://paperswithcode.com/dataset/sroie) and handwritten (e.g. the [IAM
   Handwriting dataset](https://fki.tic.heia-fr.ch/databases/iam-handwriting-database>) text recognition tasks. For more
   information, see the [official models](https://huggingface.co/models?other=trocr>).
-- TrOCR is always used within the [VisionEncoderDecoder](./model_doc/visionencoderdecoder) framework.
+- TrOCR is always used within the [VisionEncoderDecoder](vision-encoder-decoder) framework.
 
 ## Inference
 
 TrOCR's [`VisionEncoderDecoder`] model accepts images as input and makes use of
 [`~generation_utils.GenerationMixin.generate`] to autoregressively generate text given the input image.
 
-The [`ViTFeatureExtractor`] class is responsible for preprocessing the input image and
-[`RobertaTokenizer`] decodes the generated target tokens to the target string. The
-[`TrOCRProcessor`] wraps [`ViTFeatureExtractor`] and [`RobertaTokenizer`]
+The [`ViTFeatureExtractor`/`DeiTFeatureExtractor`] class is responsible for preprocessing the input image and
+[`RobertaTokenizer`/`XLMRobertaTokenizer`] decodes the generated target tokens to the target string. The
+[`TrOCRProcessor`] wraps [`ViTFeatureExtractor`/`DeiTFeatureExtractor`] and [`RobertaTokenizer`/`XLMRobertaTokenizer`]
 into a single instance to both extract the input features and decode the predicted token ids.
 
 - Step-by-step Optical Character Recognition (OCR)
@@ -70,7 +70,8 @@ into a single instance to both extract the input features and decode the predict
 >>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten") 
 >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
 
->>> # load image from the IAM dataset url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg" 
+>>> # load image from the IAM dataset 
+>>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg" 
 >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
 >>> pixel_values = processor(image, return_tensors="pt").pixel_values 

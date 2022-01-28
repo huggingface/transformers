@@ -40,11 +40,10 @@ class LEDTokenizer(BartTokenizer):
     """
     Construct a LED tokenizer.
 
-    [`LEDTokenizer`] is identical to [`BartTokenizer`] and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    [`LEDTokenizer`] is identical to [`BartTokenizer`] and runs end-to-end tokenization: punctuation splitting and
+    wordpiece.
 
-    Refer to superclass [`BartTokenizer`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BartTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BigBird model configuration """
+""" BigBird model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -30,13 +30,13 @@ BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class BigBirdConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BigBirdModel`]. It is used to
-    instantiate an BigBird model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the BigBird
+    This is the configuration class to store the configuration of a [`BigBirdModel`]. It is used to instantiate an
+    BigBird model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the BigBird
     [google/bigbird-roberta-base](https://huggingface.co/google/bigbird-roberta-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -52,8 +52,8 @@ class BigBirdConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_new"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
@@ -80,7 +80,8 @@ class BigBirdConfig(PretrainedConfig):
         block_size (`int`, *optional*, defaults to 64)
             Size of each block. Useful only when `attention_type == "block_sparse"`.
         num_random_blocks (`int`, *optional*, defaults to 3)
-            Each query is going to attend these many number of random blocks. Useful only when `attention_type == "block_sparse"`.
+            Each query is going to attend these many number of random blocks. Useful only when `attention_type ==
+            "block_sparse"`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
 
@@ -92,14 +93,13 @@ class BigBirdConfig(PretrainedConfig):
 
         >>> from transformers import BigBirdModel, BigBirdConfig
 
-        >>> # Initializing a BigBird google/bigbird-roberta-base style configuration
-        >>> configuration = BigBirdConfig()
+        >>> # Initializing a BigBird google/bigbird-roberta-base style configuration >>> configuration =
+        BigBirdConfig()
 
-        >>> # Initializing a model from the google/bigbird-roberta-base style configuration
-        >>> model = BigBirdModel(configuration)
+        >>> # Initializing a model from the google/bigbird-roberta-base style configuration >>> model =
+        BigBirdModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
+        >>> # Accessing the model configuration >>> configuration = model.config
     """
     model_type = "big_bird"
 

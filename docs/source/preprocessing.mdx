@@ -36,7 +36,8 @@ To automatically download the vocab used during pretraining or fine-tuning a giv
 
 ```py
 from transformers import AutoTokenizer
-tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
+
+tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 ```
 
 ## Base use
@@ -75,9 +76,7 @@ If you have several sentences you want to process, you can do this efficiently b
 tokenizer:
 
 ```py
->>> batch_sentences = ["Hello I'm a single sentence",
-...                    "And another sentence",
-...                    "And the very very last one"]
+>>> batch_sentences = ["Hello I'm a single sentence", "And another sentence", "And the very very last one"]
 >>> encoded_inputs = tokenizer(batch_sentences)
 >>> print(encoded_inputs)
 {'input_ids': [[101, 8667, 146, 112, 182, 170, 1423, 5650, 102],
@@ -174,12 +173,12 @@ If you have a list of pairs of sequences you want to process, you should feed th
 list of first sentences and the list of second sentences:
 
 ```py
->>> batch_sentences = ["Hello I'm a single sentence",
-...                    "And another sentence",
-...                    "And the very very last one"]
->>> batch_of_second_sentences = ["I'm a sentence that goes with the first sentence",
-...                              "And I should be encoded with the second sentence",
-...                              "And I go with the very last one"]
+>>> batch_sentences = ["Hello I'm a single sentence", "And another sentence", "And the very very last one"]
+>>> batch_of_second_sentences = [
+...     "I'm a sentence that goes with the first sentence",
+...     "And I should be encoded with the second sentence",
+...     "And I go with the very last one",
+... ]
 >>> encoded_inputs = tokenizer(batch_sentences, batch_of_second_sentences)
 >>> print(encoded_inputs)
 {'input_ids': [[101, 8667, 146, 112, 182, 170, 1423, 5650, 102, 146, 112, 182, 170, 5650, 1115, 2947, 1114, 1103, 1148, 5650, 102], 
@@ -199,7 +198,7 @@ To double-check what is fed to the model, we can decode each list in _input_ids_
 
 ```py
 >>> for ids in encoded_inputs["input_ids"]:
->>>     print(tokenizer.decode(ids))
+...     print(tokenizer.decode(ids))
 [CLS] Hello I'm a single sentence [SEP] I'm a sentence that goes with the first sentence [SEP]
 [CLS] And another sentence [SEP] And I should be encoded with the second sentence [SEP]
 [CLS] And the very very last one [SEP] And I go with the very last one [SEP]
@@ -307,35 +306,43 @@ This works exactly as before for batch of sentences or batch of pairs of sentenc
 like this:
 
 ```py
-batch_sentences = [["Hello", "I'm", "a", "single", "sentence"],
-                   ["And", "another", "sentence"],
-                   ["And", "the", "very", "very", "last", "one"]]
+batch_sentences = [
+    ["Hello", "I'm", "a", "single", "sentence"],
+    ["And", "another", "sentence"],
+    ["And", "the", "very", "very", "last", "one"],
+]
 encoded_inputs = tokenizer(batch_sentences, is_split_into_words=True)
 ```
 
 or a batch of pair sentences like this:
 
 ```py
-batch_of_second_sentences = [["I'm", "a", "sentence", "that", "goes", "with", "the", "first", "sentence"],
-                             ["And", "I", "should", "be", "encoded", "with", "the", "second", "sentence"],
-                             ["And", "I", "go", "with", "the", "very", "last", "one"]]
+batch_of_second_sentences = [
+    ["I'm", "a", "sentence", "that", "goes", "with", "the", "first", "sentence"],
+    ["And", "I", "should", "be", "encoded", "with", "the", "second", "sentence"],
+    ["And", "I", "go", "with", "the", "very", "last", "one"],
+]
 encoded_inputs = tokenizer(batch_sentences, batch_of_second_sentences, is_split_into_words=True)
 ```
 
 And you can add padding, truncation as well as directly return tensors like before:
 
 ```py
-batch = tokenizer(batch_sentences,
-                  batch_of_second_sentences,
-                  is_split_into_words=True,
-                  padding=True,
-                  truncation=True,
-                  return_tensors="pt")
+batch = tokenizer(
+    batch_sentences,
+    batch_of_second_sentences,
+    is_split_into_words=True,
+    padding=True,
+    truncation=True,
+    return_tensors="pt",
+)
 ===PT-TF-SPLIT===
-batch = tokenizer(batch_sentences,
-                  batch_of_second_sentences,
-                  is_split_into_words=True,
-                  padding=True,
-                  truncation=True,
-                  return_tensors="tf")
+batch = tokenizer(
+    batch_sentences,
+    batch_of_second_sentences,
+    is_split_into_words=True,
+    padding=True,
+    truncation=True,
+    return_tensors="tf",
+)
 ```

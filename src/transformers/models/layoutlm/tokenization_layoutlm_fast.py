@@ -52,11 +52,10 @@ class LayoutLMTokenizerFast(BertTokenizerFast):
     r"""
     Constructs a "Fast" LayoutLMTokenizer.
 
-    [`LayoutLMTokenizerFast`] is identical to [`BertTokenizerFast`] and runs
-    end-to-end tokenization: punctuation splitting + wordpiece.
+    [`LayoutLMTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
+    splitting + wordpiece.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

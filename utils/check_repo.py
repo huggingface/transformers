@@ -18,6 +18,7 @@ import inspect
 import os
 import re
 import warnings
+from difflib import get_close_matches
 from pathlib import Path
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
@@ -34,6 +35,7 @@ PATH_TO_DOC = "docs/source"
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
     "DPRSpanPredictor",
+    "RealmBertModel",
     "T5Stack",
     "TFDPRSpanPredictor",
 ]
@@ -72,6 +74,10 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
+    "RealmBertModel",  # Building part of bigger (tested) model.
+    "RealmReader",  # Not regular model.
+    "RealmScorer",  # Not regular model.
+    "RealmForOpenQA",  # Not regular model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "Speech2Text2DecoderWrapper",  # Building part of bigger (tested) model.
     "TFDPREncoder",  # Building part of bigger (tested) model.
@@ -102,6 +108,13 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "ViltForQuestionAnswering",
+    "ViltForImagesAndTextClassification",
+    "ViltForImageAndTextRetrieval",
+    "ViltForMaskedLM",
+    "XGLMEncoder",
+    "XGLMDecoder",
+    "XGLMDecoderWrapper",
     "PerceiverForMultimodalAutoencoding",
     "PerceiverForOpticalFlow",
     "SegformerDecodeHead",
@@ -128,6 +141,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
+    "RealmEmbedder",
+    "RealmForOpenQA",
+    "RealmScorer",
+    "RealmReader",
     "TFDPRReader",
     "TFGPT2DoubleHeadsModel",
     "TFOpenAIGPTDoubleHeadsModel",
@@ -202,6 +219,7 @@ def get_model_modules():
         "modeling_tf_pytorch_utils",
         "modeling_tf_utils",
         "modeling_tf_transfo_xl_utilities",
+        "modeling_tf_vision_encoder_decoder",
         "modeling_vision_encoder_decoder",
     ]
     modules = []
@@ -520,6 +538,7 @@ UNDOCUMENTED_OBJECTS = [
     "BasicTokenizer",  # Internal, should never have been in the main init.
     "CharacterTokenizer",  # Internal, should never have been in the main init.
     "DPRPretrainedReader",  # Like an Encoder.
+    "DummyObject",  # Just picked by mistake sometimes.
     "MecabTokenizer",  # Internal, should never have been in the main init.
     "ModelCard",  # Internal type.
     "SqueezeBertModule",  # Internal building block (should have been called SqueezeBertLayer)
@@ -596,6 +615,33 @@ def check_all_objects_are_documented():
             + "\n - ".join(undocumented_objs)
         )
     check_docstrings_are_in_md()
+    check_model_type_doc_match()
+
+
+def check_model_type_doc_match():
+    """Check all doc pages have a corresponding model type."""
+    model_doc_folder = Path(PATH_TO_DOC) / "model_doc"
+    model_docs = [m.stem for m in model_doc_folder.glob("*.mdx")]
+
+    model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
+
+    errors = []
+    for m in model_docs:
+        if m not in model_types and m != "auto":
+            close_matches = get_close_matches(m, model_types)
+            error_message = f"{m} is not a proper model identifier."
+            if len(close_matches) > 0:
+                close_matches = "/".join(close_matches)
+                error_message += f" Did you mean {close_matches}?"
+            errors.append(error_message)
+
+    if len(errors) > 0:
+        raise ValueError(
+            "Some model doc pages do not match any existing model type:\n"
+            + "\n".join(errors)
+            + "\nYou can add any missing model type to the `MODEL_NAMES_MAPPING` constant in "
+            "models/auto/configuration_auto.py."
+        )
 
 
 # Re pattern to catch :obj:`xx`, :class:`xx`, :func:`xx` or :meth:`xx`.
@@ -637,7 +683,7 @@ def check_docstrings_are_in_md():
         raise ValueError(
             "The following files have docstrings written in rst:\n"
             + "\n".join([f"- {f}" for f in files_with_rst])
-            + "To fix this run `doc-builder convert path_to_py_file` after installing `doc-builder`\n"
+            + "\nTo fix this run `doc-builder convert path_to_py_file` after installing `doc-builder`\n"
             "(`pip install git+https://github.com/huggingface/doc-builder`)"
         )
 

@@ -63,8 +63,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" LayoutLMv2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -340,7 +340,6 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-        """ """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
@@ -685,7 +684,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            encoded_inputs: Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+            encoded_inputs:
+                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
@@ -700,7 +700,8 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 >= 7.5 (Volta).
-            return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            return_attention_mask:
+                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
         # Load from model defaults
         if return_attention_mask is None:
@@ -794,8 +795,7 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

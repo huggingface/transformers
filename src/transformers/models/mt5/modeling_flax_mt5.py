@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax mT5 model. """
+""" Flax mT5 model."""
 
 from ...utils import logging
 from ..t5.modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model
@@ -27,8 +27,8 @@ _TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 class FlaxMT5Model(FlaxT5Model):
     r"""
-    This class overrides [`FlaxT5Model`]. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`FlaxT5Model`]. Please check the superclass for the appropriate documentation alongside usage
+    examples.
 
     Examples:
 
@@ -54,8 +54,8 @@ class FlaxMT5Model(FlaxT5Model):
 
 class FlaxMT5ForConditionalGeneration(FlaxT5ForConditionalGeneration):
     r"""
-    This class overrides [`FlaxT5ForConditionalGeneration`]. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`FlaxT5ForConditionalGeneration`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
     Examples:
 

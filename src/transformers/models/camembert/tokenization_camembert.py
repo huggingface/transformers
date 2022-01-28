@@ -44,11 +44,11 @@ SPIECE_UNDERLINE = "▁"
 
 class CamembertTokenizer(PreTrainedTokenizer):
     """
-    Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Construct a
-    CamemBERT tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
+    Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Construct a CamemBERT tokenizer. Based on
+    [SentencePiece](https://github.com/google/sentencepiece).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -69,8 +69,8 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
             <Tip>
 
-            When building a sequence using special tokens, this is not the token that is used for the end of
-            sequence. The token used is the `sep_token`.
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
 
             </Tip>
 
@@ -92,7 +92,9 @@ class CamembertTokenizer(PreTrainedTokenizer):
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
 
             - `enable_sampling`: Enable subword regularization.
             - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
@@ -286,7 +288,11 @@ class CamembertTokenizer(PreTrainedTokenizer):
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
+        elif not os.path.isfile(self.vocab_file):
+            with open(out_vocab_file, "wb") as fi:
+                content_spiece_model = self.sp_model.serialized_model_proto()
+                fi.write(content_spiece_model)
 
         return (out_vocab_file,)

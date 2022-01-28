@@ -66,24 +66,23 @@ class RetriBertPreTrainedModel(PreTrainedModel):
 
 RETRIBERT_START_DOCSTRING = r"""
 
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
         config ([`RetriBertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
 @add_start_docstrings(
-    """Bert Based model to embed queries or document for document retrieval. """,
+    """Bert Based model to embed queries or document for document retrieval.""",
     RETRIBERT_START_DOCSTRING,
 )
 class RetriBertModel(RetriBertPreTrainedModel):
@@ -182,9 +181,8 @@ class RetriBertModel(RetriBertPreTrainedModel):
             input_ids_query (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary for the queries in a batch.
 
-                Indices can be obtained using [`RetriBertTokenizer`]. See
-                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`]
-                for details.
+                Indices can be obtained using [`RetriBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
             attention_mask_query (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -200,12 +198,12 @@ class RetriBertModel(RetriBertPreTrainedModel):
                 Mask to avoid performing attention on documents padding token indices.
             checkpoint_batch_size (`int`, *optional*, defaults to ```-1`):
                 If greater than 0, uses gradient checkpointing to only compute sequence representation on
-                `checkpoint_batch_size` examples at a time on the GPU. All query representations are still
-                compared to all document representations in the batch.
+                `checkpoint_batch_size` examples at a time on the GPU. All query representations are still compared to
+                all document representations in the batch.
 
         Return:
-            `torch.FloatTensor``: The bidirectional cross-entropy loss obtained while trying to match each query to
-            its corresponding document and each document to its corresponding query in the batch
+            `torch.FloatTensor``: The bidirectional cross-entropy loss obtained while trying to match each query to its
+            corresponding document and each document to its corresponding query in the batch
         """
         device = input_ids_query.device
         q_reps = self.embed_questions(input_ids_query, attention_mask_query, checkpoint_batch_size)

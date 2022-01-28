@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ProphetNet model configuration """
+""" ProphetNet model configuration"""
 
 
 from ...configuration_utils import PretrainedConfig
@@ -28,18 +28,18 @@ PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ProphetNetConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ProphetNetModel`]. It is used
-    to instantiate a ProphetNet model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`ProphetNetModel`]. It is used to instantiate a
+    ProphetNet model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
-    outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         activation_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for activations inside the fully connected layer.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the ProphetNET model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`ProphetNetModel`].

@@ -45,9 +45,10 @@ SPIECE_UNDERLINE = "▁"
 
 class FNetTokenizer(PreTrainedTokenizer):
     """
-    Construct an FNet tokenizer. Adapted from [`AlbertTokenizer`]. Based on [SentencePiece](https://github.com/google/sentencepiece). This tokenizer inherits from
-    [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to this
-    superclass for more information regarding those methods.
+    Construct an FNet tokenizer. Adapted from [`AlbertTokenizer`]. Based on
+    [SentencePiece](https://github.com/google/sentencepiece). This tokenizer inherits from [`PreTrainedTokenizer`]
+    which contains most of the main methods. Users should refer to this superclass for more information regarding those
+    methods.
 
     Args:
         vocab_file (`str`):
@@ -75,7 +76,9 @@ class FNetTokenizer(PreTrainedTokenizer):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
         sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things, to set:
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
 
             - `enable_sampling`: Enable subword regularization.
             - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
@@ -272,7 +275,7 @@ class FNetTokenizer(PreTrainedTokenizer):
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. An FNet sequence
         pair mask has the following format: :
 
-        ```python
+        ```
         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 | first sequence | second sequence |
         ```
 
@@ -285,8 +288,7 @@ class FNetTokenizer(PreTrainedTokenizer):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -303,7 +305,11 @@ class FNetTokenizer(PreTrainedTokenizer):
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
+        elif not os.path.isfile(self.vocab_file):
+            with open(out_vocab_file, "wb") as fi:
+                content_spiece_model = self.sp_model.serialized_model_proto()
+                fi.write(content_spiece_model)
 
         return (out_vocab_file,)

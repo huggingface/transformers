@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Model class. """
+""" Auto Model class."""
 
 import warnings
 from collections import OrderedDict
@@ -28,6 +28,12 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("yoso", "YosoModel"),
+        ("swin", "SwinModel"),
+        ("vilt", "ViltModel"),
+        ("vit_mae", "ViTMAEModel"),
+        ("nystromformer", "NystromformerModel"),
+        ("xglm", "XGLMModel"),
         ("imagegpt", "ImageGPTModel"),
         ("qdqbert", "QDQBertModel"),
         ("fnet", "FNetModel"),
@@ -108,6 +114,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
+        ("vit_mae", "ViTMAEForPreTraining"),
         ("fnet", "FNetForPreTraining"),
         ("visual_bert", "VisualBertForPreTraining"),
         ("layoutlm", "LayoutLMForMaskedLM"),
@@ -150,6 +157,8 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
+        ("yoso", "YosoForMaskedLM"),
+        ("nystromformer", "NystromformerForMaskedLM"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -201,6 +210,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("xglm", "XGLMForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -258,6 +268,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
                 "PerceiverForImageClassificationConvProcessing",
             ),
         ),
+        ("swin", "SwinForImageClassification"),
     ]
 )
 
@@ -277,6 +288,8 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
+        ("yoso", "YosoForMaskedLM"),
+        ("nystromformer", "NystromformerForMaskedLM"),
         ("perceiver", "PerceiverForMaskedLM"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
@@ -349,6 +362,8 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("yoso", "YosoForSequenceClassification"),
+        ("nystromformer", "NystromformerForSequenceClassification"),
         ("perceiver", "PerceiverForSequenceClassification"),
         ("qdqbert", "QDQBertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
@@ -396,6 +411,8 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
+        ("yoso", "YosoForQuestionAnswering"),
+        ("nystromformer", "NystromformerForQuestionAnswering"),
         ("qdqbert", "QDQBertForQuestionAnswering"),
         ("fnet", "FNetForQuestionAnswering"),
         ("gptj", "GPTJForQuestionAnswering"),
@@ -444,6 +461,8 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
+        ("yoso", "YosoForTokenClassification"),
+        ("nystromformer", "NystromformerForTokenClassification"),
         ("qdqbert", "QDQBertForTokenClassification"),
         ("fnet", "FNetForTokenClassification"),
         ("layoutlmv2", "LayoutLMv2ForTokenClassification"),
@@ -479,6 +498,8 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
+        ("yoso", "YosoForMultipleChoice"),
+        ("nystromformer", "NystromformerForMultipleChoice"),
         ("qdqbert", "QDQBertForMultipleChoice"),
         ("fnet", "FNetForMultipleChoice"),
         ("rembert", "RemBertForMultipleChoice"),

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GPT-J model configuration """
+""" GPT-J model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,11 +28,12 @@ GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class GPTJConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GPTJModel`]. It is used to
-    instantiate a GPT-J model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GPT-J [gpt-j-6B](https://huggingface.co/EleutherAI/gpt-j-6B) architecture. Configuration objects inherit from
-    [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
-    [`PretrainedConfig`] for more information.
+    This is the configuration class to store the configuration of a [`GPTJModel`]. It is used to instantiate a GPT-J
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the GPT-J
+    [gpt-j-6B](https://huggingface.co/EleutherAI/gpt-j-6B) architecture. Configuration objects inherit from
+    [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`]
+    for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50400):

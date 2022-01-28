@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow Hubert model. """
+""" TensorFlow Hubert model."""
 import inspect
 import warnings
 from typing import Any, Dict, Optional, Tuple, Union
@@ -56,7 +56,8 @@ LARGE_NEGATIVE = -1e8
 def input_values_processing(func, config, input_values, **kwargs):
     """
     Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
-    has to be named accordingly to the parameters name, i.e. `input_values = tf.keras.Input(shape=(128,), dtype='float32', name="input_values")` otherwise the order of the tensors will not be guaranteed during the
+    has to be named accordingly to the parameters name, i.e. `input_values = tf.keras.Input(shape=(128,),
+    dtype='float32', name="input_values")` otherwise the order of the tensors will not be guaranteed during the
     training.
 
     Args:
@@ -206,7 +207,8 @@ def _compute_mask_indices(
         shape: the the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
         attention_mask: optional padding mask of the same size as shape, which will prevent masking padded elements
-        mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
+        mask_prob:
+            probability for each token to be chosen as start of the span to be masked. this will be multiplied by
             number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
             however due to overlaps, the actual number will be smaller (unless no_overlap is True)
         mask_length: size of the mask
@@ -657,7 +659,7 @@ class TFHubertSamePadLayer(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFHubertFeatureExtractor(tf.keras.layers.Layer):
+class TFHubertFeatureEncoder(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -682,6 +684,17 @@ class TFHubertFeatureExtractor(tf.keras.layers.Layer):
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
         return hidden_states
+
+
+class TFHubertFeatureExtractor(TFHubertFeatureEncoder):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
 
 
 class TFHubertFeatureProjection(tf.keras.layers.Layer):
@@ -1114,7 +1127,7 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.feature_extractor = TFHubertFeatureExtractor(config, name="feature_extractor")
+        self.feature_extractor = TFHubertFeatureEncoder(config, name="feature_extractor")
         self.feature_projection = TFHubertFeatureProjection(config, name="feature_projection")
 
         if config.do_stable_layer_norm:
@@ -1285,13 +1298,13 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
 
 HUBERT_START_DOCSTRING = r"""
 
-    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
 
     <Tip>
 
@@ -1300,11 +1313,11 @@ HUBERT_START_DOCSTRING = r"""
     - having all inputs as keyword arguments (like PyTorch models), or
     - having all inputs as a list, tuple or dict in the first positional arguments.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all
-    the tensors in the first argument of the model call function: `model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    tensors in the first argument of the model call function: `model(inputs)`.
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-    the first positional argument :
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
+    first positional argument :
 
     - a single Tensor with `input_values` only and nothing else: `model(inputs_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -1317,8 +1330,7 @@ HUBERT_START_DOCSTRING = r"""
     Args:
         config ([`HubertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 HUBERT_INPUTS_DOCSTRING = r"""
@@ -1326,9 +1338,8 @@ HUBERT_INPUTS_DOCSTRING = r"""
         input_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See
-            [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for
-            details.
+            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
@@ -1339,14 +1350,16 @@ HUBERT_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -1356,9 +1369,9 @@ HUBERT_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         inputs_embeds (`np.ndarray` or `tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_values` you can choose to directly pass an embedded
-            representation. This is useful if you want more control over how to convert `input_values` indices
-            into associated vectors than the model's internal embedding lookup matrix.
+            Optionally, instead of passing `input_values` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_values` indices into associated vectors
+            than the model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
@@ -1368,8 +1381,8 @@ HUBERT_INPUTS_DOCSTRING = r"""
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This
-            argument can be used in eager mode, in graph mode the value will always be set to True.
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
+            in eager mode, in graph mode the value will always be set to True.
         training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -1415,10 +1428,12 @@ class TFHubertModel(TFHubertPreTrainedModel):
         >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h")
         >>> model = TFHubertModel.from_pretrained("facebook/hubert-base-960h")
 
+
         >>> def map_to_array(batch):
         ...     speech, _ = sf.read(batch["file"])
         ...     batch["speech"] = speech
         ...     return batch
+
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
@@ -1473,7 +1488,7 @@ class TFHubertModel(TFHubertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """TFHubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
+    """TFHubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     HUBERT_START_DOCSTRING,
 )
 class TFHubertForCTC(TFHubertPreTrainedModel):
@@ -1486,8 +1501,20 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.hubert.feature_extractor.trainable = False
 
@@ -1509,8 +1536,9 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
     ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_values` docstring) Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_values` docstring) Tokens with indices set to `-100` are ignored (masked),
+            the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Returns:
 
@@ -1525,16 +1553,19 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h")
         >>> model = TFHubertForCTC.from_pretrained("facebook/hubert-base-960h")
 
+
         >>> def map_to_array(batch):
         ...     speech, _ = sf.read(batch["file"])
         ...     batch["speech"] = speech
         ...     return batch
 
+
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
-        >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values # Batch size 1
-        >>> logits = model(input_values).logits >>> predicted_ids = tf.argmax(logits, axis=-1)
+        >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
+        >>> logits = model(input_values).logits
+        >>> predicted_ids = tf.argmax(logits, axis=-1)
 
         >>> transcription = processor.decode(predicted_ids[0])
 

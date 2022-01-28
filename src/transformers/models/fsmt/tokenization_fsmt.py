@@ -140,12 +140,12 @@ class FSMTTokenizer(PreTrainedTokenizer):
 
     - Moses preprocessing and tokenization.
     - Normalizing all inputs text.
-    - The arguments `special_tokens` and the function `set_special_tokens`, can be used to add additional symbols
-      (like "__classify__") to a vocabulary.
+    - The arguments `special_tokens` and the function `set_special_tokens`, can be used to add additional symbols (like
+      "__classify__") to a vocabulary.
     - The argument `langs` defines a pair of languages.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         langs (`List[str]`):
@@ -469,8 +469,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given
-            sequence(s).
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
 
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task. An
         FAIRSEQ_TRANSFORMER sequence pair mask has the following format:

@@ -40,6 +40,26 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         # These are encoder decoder, they don't just append to incoming string
         self.assertFalse(outputs[0]["generated_text"].startswith("Something there"))
 
+        outputs = generator(["This is great !", "Something else"], num_return_sequences=2, do_sample=True)
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": ANY(str)}, {"generated_text": ANY(str)}],
+                [{"generated_text": ANY(str)}, {"generated_text": ANY(str)}],
+            ],
+        )
+
+        outputs = generator(
+            ["This is great !", "Something else"], num_return_sequences=2, batch_size=2, do_sample=True
+        )
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": ANY(str)}, {"generated_text": ANY(str)}],
+                [{"generated_text": ANY(str)}, {"generated_text": ANY(str)}],
+            ],
+        )
+
         with self.assertRaises(ValueError):
             generator(4)
 
@@ -49,6 +69,19 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         # do_sample=False necessary for reproducibility
         outputs = generator("Something there", do_sample=False)
         self.assertEqual(outputs, [{"generated_text": ""}])
+
+        num_return_sequences = 3
+        outputs = generator(
+            "Something there",
+            num_return_sequences=num_return_sequences,
+            num_beams=num_return_sequences,
+        )
+        target_outputs = [
+            {"generated_text": "Beide Beide Beide Beide Beide Beide Beide Beide Beide"},
+            {"generated_text": "Beide Beide Beide Beide Beide Beide Beide Beide"},
+            {"generated_text": ""},
+        ]
+        self.assertEqual(outputs, target_outputs)
 
     @require_tf
     def test_small_model_tf(self):

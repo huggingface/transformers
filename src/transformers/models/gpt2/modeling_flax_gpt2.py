@@ -42,12 +42,13 @@ _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 GPT2_START_DOCSTRING = r"""
 
-    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a Flax Linen [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a regular Flax
-    Module and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen
+    [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a
+    regular Flax Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -59,11 +60,10 @@ GPT2_START_DOCSTRING = r"""
     Parameters:
         config ([`GPT2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the
-            model weights.
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
         dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
-            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on
-            GPUs) and `jax.numpy.bfloat16` (on TPUs).
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
+            `jax.numpy.bfloat16` (on TPUs).
 
             This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
             specified all the computation will be performed with the given `dtype`.
@@ -71,8 +71,8 @@ GPT2_START_DOCSTRING = r"""
             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
             parameters.**
 
-            If you wish to change the dtype of the model parameters, see
-            [`~FlaxPreTrainedModel.to_fp16`] and [`~FlaxPreTrainedModel.to_bf16`].
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 GPT2_INPUTS_DOCSTRING = r"""
@@ -80,9 +80,8 @@ GPT2_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length`. Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`GPT2Tokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`GPT2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -93,7 +92,8 @@ GPT2_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
         past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
