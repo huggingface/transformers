@@ -25,6 +25,7 @@ import numpy as np
 
 # Ensure there are no circular imports when importing the parent class
 from transformers import PreTrainedTokenizerFast
+from datasets.fingerprint import Hasher
 
 from transformers import (
     BatchEncoding,
@@ -112,6 +113,27 @@ class TokenizerUtilsTest(unittest.TestCase):
             self.assert_dump_and_restore(
                 tokenizer_r("Small example to encode", return_tensors=TensorType.NUMPY), np.array_equal
             )
+
+    @require_tokenizers
+    def test_hash_is_invariant(self):
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        hash_before = Hasher.hash(tokenizer)
+        tokenizer("This is a test")
+        hash_after = Hasher.hash(tokenizer)
+        self.assertEqual(hash_before, hash_after)
+
+        tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+        hash_before = Hasher.hash(tokenizer)
+        tokenizer("This is a test")
+        hash_after = Hasher.hash(tokenizer)
+        self.assertEqual(hash_before, hash_after)
+
+        # Here hash gets changed
+        tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+        hash_before = Hasher.hash(tokenizer)
+        tokenizer("This is a test", "With another sentence", truncation=True)
+        hash_after = Hasher.hash(tokenizer)
+        self.assertNotEqual(hash_before, hash_after)
 
     @require_tf
     @require_tokenizers
