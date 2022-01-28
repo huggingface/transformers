@@ -47,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "uw-madison/nystromformer-512"
 _CONFIG_FOR_DOC = "NystromformerConfig"
-_TOKENIZER_FOR_DOC = "NystromformerTokenizer"
+_TOKENIZER_FOR_DOC = "AutoTokenizer"
 
 NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uw-madison/nystromformer-512",

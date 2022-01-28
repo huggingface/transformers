@@ -3,6 +3,7 @@ import argparse
 import re
 from typing import Dict
 
+import torch
 from datasets import Audio, Dataset, load_dataset, load_metric
 
 from transformers import AutoFeatureExtractor, pipeline
@@ -68,7 +69,7 @@ def main(args):
     dataset = load_dataset(args.dataset, args.config, split=args.split, use_auth_token=True)
 
     # for testing: only process the first two examples as a test
-    dataset = dataset.select(range(10))
+    # dataset = dataset.select(range(10))
 
     # load processor
     feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_id)
@@ -78,7 +79,9 @@ def main(args):
     dataset = dataset.cast_column("audio", Audio(sampling_rate=sampling_rate))
 
     # load eval pipeline
-    asr = pipeline("automatic-speech-recognition", model=args.model_id)
+    if args.device is None:
+        args.device = 0 if torch.cuda.is_available() else -1
+    asr = pipeline("automatic-speech-recognition", model=args.model_id, device=args.device)
 
     # map function to decode audio
     def map_to_pred(batch):
@@ -122,6 +125,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--log_outputs", action="store_true", help="If defined, write outputs to log file for analysis."
+    )
+    parser.add_argument(
+        "--device",
+        type=int,
+        default=None,
+        help="The device to run the pipeline on. -1 for CPU (default), 0 for the first GPU and so on.",
     )
     args = parser.parse_args()
 

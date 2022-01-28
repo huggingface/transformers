@@ -2188,6 +2188,7 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 
         >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
@@ -2455,6 +2456,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(Flax{{coo
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 
         >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
@@ -2627,6 +2629,7 @@ FLAX_{{cookiecutter.uppercase_modelname}}_CONDITIONAL_GENERATION_DOCSTRING = """
     Mask filling example:
 
     ```python
+    >>> import jax
     >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
     
     >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
@@ -2638,7 +2641,7 @@ FLAX_{{cookiecutter.uppercase_modelname}}_CONDITIONAL_GENERATION_DOCSTRING = """
     >>> logits = model(input_ids).logits
     >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
     >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
-    >>> values, predictions = jax.lax.top_k(probs)
+    >>> values, predictions = jax.lax.top_k(probs, k=1)
 
     >>> tokenizer.decode(predictions).split()
     ```

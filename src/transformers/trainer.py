@@ -868,6 +868,14 @@ class Trainer:
 
             optimizer_cls = AdamW
             optimizer_kwargs.update(adam_kwargs)
+        elif args.optim == OptimizerNames.ADAMW_TORCH_XLA:
+            try:
+                from torch_xla.amp.syncfree import AdamW
+
+                optimizer_cls = AdamW
+                optimizer_kwargs.update(adam_kwargs)
+            except ImportError:
+                raise ValueError("Trainer failed to import syncfree AdamW from torch_xla.")
         elif args.optim == OptimizerNames.ADAMW_APEX_FUSED:
             try:
                 from apex.optimizers import FusedAdam
@@ -966,7 +974,7 @@ class Trainer:
             return
         with tune.checkpoint_dir(step=self.state.global_step) as checkpoint_dir:
             output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
-            self.save_model(output_dir)
+            self.save_model(output_dir, _internal_call=True)
             if self.args.should_save:
                 self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
                 torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
@@ -1634,7 +1642,7 @@ class Trainer:
             self.store_flos()
 
         output_dir = os.path.join(run_dir, checkpoint_folder)
-        self.save_model(output_dir)
+        self.save_model(output_dir, _internal_call=True)
         if self.deepspeed:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
             # config `stage3_gather_fp16_weights_on_model_save` is True
@@ -2002,7 +2010,7 @@ class Trainer:
         else:
             return self.args.process_index == 0
 
-    def save_model(self, output_dir: Optional[str] = None):
+    def save_model(self, output_dir: Optional[str] = None, _internal_call: bool = False):
         """
         Will save the model, so you can reload it using `from_pretrained()`.
 
@@ -2046,10 +2054,19 @@ class Trainer:
                 # now save the real model if stage3_gather_fp16_weights_on_model_save=True
                 # if false it will not be saved.
                 # This must be called on all ranks
-                self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME)
+                if not self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME):
+                    logger.warning(
+                        "deepspeed.save_fp16_model didn't save the model, since stage3_gather_fp16_weights_on_model_save=false. "
+                        "Saving the full checkpoint instead, use zero_to_fp32.py to recover weights"
+                    )
+                    self.deepspeed.save_checkpoint(output_dir)
 
         elif self.args.should_save:
             self._save(output_dir)
+
+        # Push to the Hub when `save_model` is called by the user.
+        if self.args.push_to_hub and not _internal_call:
+            self.push_to_hub(commit_message="Model save")
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -2768,9 +2785,10 @@ class Trainer:
                 model_name = Path(self.args.output_dir).name
             else:
                 model_name = self.args.hub_model_id.split("/")[-1]
+
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
-        self.save_model()
+        self.save_model(_internal_call=True)
 
         # Only push from one node.
         if not self.is_world_process_zero():
