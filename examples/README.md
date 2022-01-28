@@ -21,8 +21,6 @@ We also have some [research projects](https://github.com/huggingface/transformer
 
 While we strive to present as many use cases as possible, the example scripts are just that - examples. It is expected that they won't work out-of-the box on your specific problem and that you will be required to change a few lines of code to adapt them to your needs. To help you with that, most of the examples fully expose the preprocessing of the data, allowing you to tweak and edit them as required.
 
-Similarly, if you want the scripts to report another metric than the one they currently use, take a look at the `compute_metrics` function inside the script. It takes the full arrays of predictions and labels and has to return a dictionary of string keys and float values. Just change it to add your own metric.
-
 Please discuss on the [forum](https://discuss.huggingface.co/) or in an [issue](https://github.com/huggingface/transformers/issues) a feature you would like to implement in an example before submitting a PR; we welcome bug fixes, but since we want to keep the examples as simple as possible it's unlikely that we will merge a pull request adding more functionality at the cost of readability.
 
 ## Important note
