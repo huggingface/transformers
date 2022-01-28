@@ -388,7 +388,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import ViTFeatureExtractor, ViTModel
+            >>> from transformers import ViTFeatureExtractor, PoolFormerModel
             >>> from PIL import Image
             >>> import requests
 
@@ -396,7 +396,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
             >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
-            >>> model = ViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
+            >>> model = PoolFormerModel.from_pretrained('seaailabs/poolformer_s12')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -476,7 +476,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import ViTFeatureExtractor, ViTForImageClassification
+            >>> from transformers import ViTFeatureExtractor, PoolFormerForImageClassification
             >>> from PIL import Image
             >>> import requests
 
@@ -484,7 +484,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
             >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
-            >>> model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
+            >>> model = PoolFormerForImageClassification.from_pretrained('seaailabs/poolformer_s12')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)

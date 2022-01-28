@@ -165,13 +165,21 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
     outputs = model(pixel_values)
     logits = outputs.logits
 
-    expected_slice = torch.tensor(
-        [-0.5267, -0.0709, -0.3930, -0.6154, -0.2197, -1.1329, -1.0135,  0.4569, -1.0644, -1.3011, -0.4048, -0.4903]
-    )
+    # define expected logit slices for different models 
+    if size == "s12":
+        expected_slice = torch.tensor([-0.5267, -0.0709, -0.3930])
+    elif size == "s24":
+        expected_slice = torch.tensor([-0.0488,  0.1637, -0.0669])
+    elif size == "s36":
+        expected_slice = torch.tensor([-0.4368, -0.7142,  0.0809])
+    elif size == "m36":
+        expected_slice = torch.tensor([ 0.2335, -0.3859, -0.6380])
+    elif size == "m48":
+        expected_slice = torch.tensor([-0.3545,  0.1915,  0.2404])
 
     # verify logits
     assert logits.shape == expected_shape
-    assert torch.allclose(logits[0, :12], expected_slice, atol=1e-2)
+    assert torch.allclose(logits[0, :3], expected_slice, atol=1e-2)
 
     # finally, save model and feature extractor
     logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
@@ -184,7 +192,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--model_name",
-        default="segformer.b0.512x512.ade.160k",
+        default="poolformer_s12",
         type=str,
         help="Name of the model you'd like to convert.",
     )
