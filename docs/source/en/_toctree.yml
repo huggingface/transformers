@@ -1,4 +1,4 @@
-- sections: 
+- sections:
   - local: index
     title: 🤗 Transformers
   - local: quicktour
@@ -81,6 +81,29 @@
     title: "How to add a model to 🤗 Transformers?"
   - local: add_new_pipeline
     title: "How to add a pipeline to 🤗 Transformers?"
+<<<<<<< HEAD:docs/source/en/_toctree.yml
+=======
+  - local: fast_tokenizers
+    title: "Using tokenizers from 🤗 Tokenizers"
+  - local: performance
+    title: 'Performance and Scalability: How To Fit a Bigger Model and Train It Faster'
+  - local: parallelism
+    title: Model Parallelism
+  - local: perf_infer
+    title: Performance: Inference
+  - local: perf_infer_gpu_one
+    title: Performance: Inference on one GPU
+  - local: perf_infer_gpu_many
+    title: Performance: Inference on many GPUs
+  - local: perf_infer_cpu
+    title: Performance: Inference on CPU
+  - local: perf_train
+    title: Performance: Training
+  - local: perf_train_gpu_one
+    title: Performance: Training on one GPU
+  - local: perf_train_gpu_many
+    title: Performance: Training on many GPUs
+>>>>>>> fc54ebf1d (link the new docs):docs/source/_toctree.yml
   - local: testing
     title: Testing
   - local: pr_checks
