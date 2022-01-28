@@ -43,11 +43,11 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the input to a certain `size`.
-        size (`int` or `Tuple(int)`, *optional*, defaults to 224):
-            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize` is
-            set to `True`.
+            Whether to resize (and optionally center crop) the input to a certain `size`.
+        size (`int`, *optional*, defaults to 224):
+            Resize the input to the given size. If 384 or larger, the image is resized to (`size`, `size`). Else, the
+            smaller edge of the image will be matched to int(`size`/ `crop_pct`), after which the image is cropped to
+            `size`. Only has an effect if `do_resize` is set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
@@ -119,7 +119,7 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         rescaled_image = self.resize(image, size=size, resample=resample)
 
         return rescaled_image
-    
+
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
     ) -> BatchFeature:
@@ -177,7 +177,7 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         if not is_batched:
             images = [images]
 
-        # transformations (resizing + normalization)
+        # transformations (resizing + center cropping + normalization)
         if self.do_resize and self.size is not None:
             if self.size >= 384:
                 # warping (no cropping) when evaluated at 384 or larger
