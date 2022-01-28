@@ -986,7 +986,7 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
-        >>> tokenizer = MarianTokenizer.from_pretrained("facebook/marian-large-cnn")
+        >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
         >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
         >>> text = "My friends are cool but they eat too many carbs."
@@ -1051,9 +1051,10 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
-        >>> tokenizer = MarianTokenizer.from_pretrained("facebook/marian-large-cnn")
+        >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
         >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
         >>> text = "My friends are cool but they eat too many carbs."
@@ -1319,6 +1320,7 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import MarianTokenizer, FlaxMarianMTModel
 
         >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")

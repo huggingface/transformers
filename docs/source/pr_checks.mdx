@@ -45,7 +45,7 @@ All the jobs that begin with `ci/circleci: run_tests_` run parts of the Transfor
 Note that to avoid running tests when there is no real change in the modules they are testing, only part of the test suite is run each time: a utility is run to determine the differences in the library between before and after the PR (what GitHub shows you in the "Files changes" tab) and picks the tests impacted by that diff. That utility can be run locally with:
 
 ```bash
-python utils/test_fetcher.py
+python utils/tests_fetcher.py
 ```
 
 from the root of the Transformers repo. It will:

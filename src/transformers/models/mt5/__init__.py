@@ -76,4 +76,5 @@ else:
         globals()["__file__"],
         _import_structure,
         extra_objects={"MT5Tokenizer": MT5Tokenizer, "MT5TokenizerFast": MT5TokenizerFast},
+        module_spec=__spec__,
     )

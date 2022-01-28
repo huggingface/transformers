@@ -49,7 +49,7 @@ class ViTMAEConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -76,7 +76,8 @@ class ViTMAEConfig(PretrainedConfig):
         mask_ratio (`float`, *optional*, defaults to 0.75):
             The ratio of the number of masked tokens in the input sequence.
         norm_pix_loss (`bool`, *optional*, defaults to `False`):
-            Whether train with normalized pixels (see Table 3 in the paper).
+            Whether or not to train with normalized pixels (see Table 3 in the paper). Using normalized pixels improved
+            representation quality in the experiments of the authors.
 
     Example:
 
