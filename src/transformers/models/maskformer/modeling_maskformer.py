@@ -469,13 +469,15 @@ class MaskFormerLoss(nn.Module):
 
 class BackboneMixin(nn.Module):
     """This mixin defines a clear way to acces intermediate representation in the subclassing model.
-    A list of representations must be returned in the `forward` method, while their sizes in the `outputs_shape`.
+    A list of representations must be returned in the `forward` method, while their sizes in the `outputs_shapes`.
+    NOTE This should be add in a different PR, SwinTransformerBackbone will also work as it is without inherit from BackboneMixin
     """
 
     def forward(self, *args, **kwargs) -> List[Tensor]:
         raise NotImplemented
 
-    def get_outputs_shape(self) -> List[int]:
+    @property
+    def outputs_shapes(self) -> List[int]:
         raise NotImplemented
 
 
@@ -483,7 +485,6 @@ class BackboneMixin(nn.Module):
 class SwinTransformerBackbone(BackboneMixin):
     def __init__(self, config: SwinConfig):
         super().__init__()
-        print(config, "asddsads")
         self.model = SwinModel(config)
 
     def forward(self, *args, **kwargs) -> List[Tensor]:
@@ -498,8 +499,9 @@ class SwinTransformerBackbone(BackboneMixin):
     @property
     def input_resolutions(self) -> List[int]:
         return [layer.input_resolution for layer in self.model.encoder.layers]
-        
-    def get_outputs_shape(self) -> List[int]:
+
+    @property    
+    def outputs_shapes(self) -> List[int]:
         return [layer.dim for layer in self.model.encoder.layers]
 
 class ConvLayer(nn.Sequential):
@@ -658,10 +660,10 @@ class MaskFormerPixelLevelModule(nn.Module):
             SwinConfig(**{k.replace("swin_", ""): v for k, v in config.__dict__.items() if k.startswith("swin_")})
         )
         self.pixel_decoder = MaskFormerPixelDecoder(
-            in_features=self.backbone.get_outputs_shape()[-1],
+            in_features=self.backbone.outputs_shapes[-1],
             feature_size=config.fpn_feature_size,
             mask_feature_size=config.mask_feature_size,
-            lateral_widths=self.backbone.get_outputs_shape()[:-1],
+            lateral_widths=self.backbone.outputs_shapes[:-1],
         )
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
@@ -786,7 +788,7 @@ class MaskFormerModel(PreTrainedModel):
         super().__init__(config)
         self.pixel_level_module = MaskFormerPixelLevelModule(config)
         self.transformer_module = MaskFormerTransformerModule(
-            in_features=self.pixel_level_module.backbone.get_outputs_shape()[-1], config=config
+            in_features=self.pixel_level_module.backbone.outputs_shapes[-1], config=config
         )
         self.segmentation_module = MaskFormerSegmentationModule(config)
         self.matcher = MaskFormerHungarianMatcher(

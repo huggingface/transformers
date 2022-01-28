@@ -62,7 +62,7 @@ class MaskFormerConfig(PretrainedConfig):
         no_object_weight: Optional[float] = 0.1,
         use_auxilary_loss: Optional[bool] = False,
         num_queries: Optional[int] = 100,
-        swin_pretrain_img_size: Optional[int] = 384,
+        swin_image_size: Optional[int] = 384,
         swin_in_channels: Optional[int] = 3,
         swin_patch_size: Optional[int] = 4,
         swin_embed_dim: Optional[int] = 128,
@@ -102,7 +102,7 @@ class MaskFormerConfig(PretrainedConfig):
         self.no_object_weight = no_object_weight
         self.use_auxilary_loss = use_auxilary_loss
         # swin backbone parameters
-        self.swin_pretrain_img_size = swin_pretrain_img_size
+        self.swin_image_size = swin_image_size
         self.swin_in_channels = swin_in_channels
         self.swin_patch_size = swin_patch_size
         self.swin_embed_dim = swin_embed_dim
