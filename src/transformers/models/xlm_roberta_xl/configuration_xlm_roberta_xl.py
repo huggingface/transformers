@@ -24,8 +24,10 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-XLM_ROBERTA_XLA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # to fill
+XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "xlm-roberta-xl": "https://huggingface.co/facebook/xlm-roberta-xl/resolve/main/config.json",
+    "xlm-roberta-xxl": "https://huggingface.co/facebook/xlm-roberta-xxl/resolve/main/config.json",
+    # See all XLM-RoBERTa-XL models at https://huggingface.co/models?filter=xlm-roberta-xl
 }
 
 

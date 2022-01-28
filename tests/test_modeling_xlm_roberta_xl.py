@@ -472,7 +472,7 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 class XLMRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_xlm_roberta_xlarge(self):
-        model = XLMRobertaXLModel.from_pretrained("Soonhwan-Kwon/xlm-roberta-xlarge").to(torch_device)
+        model = XLMRobertaXLModel.from_pretrained("facebook/xlm-roberta-xl").to(torch_device)
         input_ids = torch.tensor(
             [[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]], device=torch_device
         )
@@ -491,7 +491,7 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
 
     @unittest.skip(reason="Model is too large to be tested on the CI")
     def test_xlm_roberta_xxlarge(self):
-        model = XLMRobertaXLModel.from_pretrained("Soonhwan-Kwon/xlm-roberta-xxlarge")
+        model = XLMRobertaXLModel.from_pretrained("facebook/xlm-roberta-xxl").to(torch_device)
         input_ids = torch.tensor(
             [[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]], device=torch_device
         )

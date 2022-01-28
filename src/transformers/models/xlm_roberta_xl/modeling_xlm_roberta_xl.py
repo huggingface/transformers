@@ -56,8 +56,8 @@ _CONFIG_FOR_DOC = "XLMRobertaXLConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Soonhwan-Kwon/xlm-roberta-xlarge",
-    "Soonhwan-Kwon/xlm-roberta-xxlarge",
+    "facebook/xlm-roberta-xl",
+    "facebook/xlm-roberta-xxl",
     # See all RoBERTa models at https://huggingface.co/models?filter=xlm-roberta-xl
 ]
 
