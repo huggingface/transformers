@@ -159,7 +159,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         # Model with LM heads mapping
         ("yoso", "YosoForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
-        ("xglm", "XGLMForConditionalGeneration"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -365,7 +364,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Sequence Classification mapping
         ("yoso", "YosoForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
-        ("xglm", "XGLMForSequenceClassification"),
         ("perceiver", "PerceiverForSequenceClassification"),
         ("qdqbert", "QDQBertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
@@ -415,7 +413,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         # Model for Question Answering mapping
         ("yoso", "YosoForQuestionAnswering"),
         ("nystromformer", "NystromformerForQuestionAnswering"),
-        ("xglm", "XGLMForQuestionAnswering"),
         ("qdqbert", "QDQBertForQuestionAnswering"),
         ("fnet", "FNetForQuestionAnswering"),
         ("gptj", "GPTJForQuestionAnswering"),
