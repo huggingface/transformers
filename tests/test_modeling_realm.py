@@ -346,7 +346,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
             self.model_tester.create_and_check_embedder(*config_and_inputs)
             self.model_tester.create_and_check_encoder(*config_and_inputs)
 
-    def test_retriever(self):
+    def test_scorer(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_scorer(*config_and_inputs)
 
@@ -410,6 +410,13 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         loss.backward()
 
         self.assertEqual(model.block_emb.device, torch.device("cpu"))
+
+        device = torch.device(torch_device)
+        with torch.no_grad():
+            model.block_embedding_to(device)
+            model(**inputs)
+
+        self.assertEqual(model.block_emb.device.type, device.type)
 
     @slow
     def test_embedder_from_pretrained(self):

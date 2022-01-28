@@ -1741,6 +1741,22 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         self.post_init()
 
+    @property
+    def searcher_beam_size(self):
+        if self.training:
+            return self.config.searcher_beam_size
+        return self.config.reader_beam_size
+
+    def block_embedding_to(self, device):
+        """Send `self.block_emb` to a specific device. This is useful for accelerating training and inference speed.
+
+        Args:
+            device (`str` or `torch.device`):
+                The device that `self.block_emb` will be sent to.
+        """
+
+        self.block_emb = self.block_emb.to(device)
+
     def to(self, *args, **kwargs):
         """Override `torch.nn.Module.to` in order to prevent `self.block_emb`, which would largely consume gpu resources, from
         sending to cuda.
@@ -1778,12 +1794,6 @@ class RealmForOpenQA(RealmPreTrainedModel):
             return t.to(device, dtype if t.is_floating_point() or t.is_complex() else None, non_blocking)
 
         return self._apply(convert)
-
-    @property
-    def searcher_beam_size(self):
-        if self.training:
-            return self.config.searcher_beam_size
-        return self.config.reader_beam_size
 
     @add_start_docstrings_to_model_forward(REALM_FOR_OPEN_QA_DOCSTRING.format("1, sequence_length"))
     @replace_return_docstrings(output_type=RealmForOpenQAOutput, config_class=_CONFIG_FOR_DOC)
@@ -1846,7 +1856,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
 
         # Retrieve possible answers
         has_answers, start_pos, end_pos, concat_inputs = self.retriever(
-            retrieved_block_ids, input_ids, answer_ids, max_length=self.config.reader_seq_len
+            retrieved_block_ids.cpu(), input_ids, answer_ids, max_length=self.config.reader_seq_len
         )
 
         concat_inputs = concat_inputs.to(self.reader.device)
