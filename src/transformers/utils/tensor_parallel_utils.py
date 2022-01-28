@@ -1,4 +1,24 @@
-from .. import BertPreTrainedModel, GPT2PreTrainedModel, T5PreTrainedModel, TransfoXLPreTrainedModel
+# coding=utf-8
+# Copyright 2021 TUNiB Inc and The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from transformers import (
+    BertPreTrainedModel,
+    GPT2PreTrainedModel,
+    TransfoXLPreTrainedModel,
+    T5PreTrainedModel,
+    RobertaPreTrainedModel,
+)
 
 
 """
@@ -10,14 +30,22 @@ TENSOR_PARALLEL_MAPPING = {
         "col": list of column parallel parameters,
         "row": list of row parallel parameters,
         "update": list of attributes to be updated,
-        "col_no_replacement": list of column parallel parameters without module replacement (Optional)
-        "row_no_replacement": list of row parallel parameters without module replacement (Optional),
+        "col_no_replacement": list of column parallel parameters without module replacement (opt)
+        "row_no_replacement": list of row parallel parameters without module replacement (opt),
         ...
         could be added more to avoid exceptions.
     }
 }
 
+Or if a model A has the same map with the other model B, define like:
+
+TENSOR_PARALLEL_MAPPING = {
+    PreTrainedModel class A: PreTrainedModel class B
+}
+
+Then, call ``copy_mapping(PreTrainedModel class A)``.
 """
+
 TENSOR_PARALLEL_MAPPING = {
     BertPreTrainedModel: {
         "col": ["query", "key", "value", "intermediate.dense"],
@@ -35,15 +63,27 @@ TENSOR_PARALLEL_MAPPING = {
         "row_no_replacement": ["relative_attention_bias"],
         "update": ["d_model", "n_heads", "inner_dim"],
     },
+    RobertaPreTrainedModel: BertPreTrainedModel,
 }
 
-# Optional: fused attention layers like nn.Linear(3 * dim, dim).
+
+def copy_mapping(model_cls):
+    TENSOR_PARALLEL_MAPPING[model_cls] = TENSOR_PARALLEL_MAPPING[
+        TENSOR_PARALLEL_MAPPING[model_cls]
+    ]
+
+
+# Copy the same mapping.
+copy_mapping(RobertaPreTrainedModel)
+
+
+# ie. nn.Linear(3 * dim, dim) (opt)
 FUSED_ATTENTION_MAPPING = {
     GPT2PreTrainedModel: {"attn.c_attn": 3, "crossattention.c_attn": 2},
     TransfoXLPreTrainedModel: {"qkv_net": 3},
 }
 
-# Optional: reversed parameters like nn.Linear(out_dim, in_dim) or Conv1D().
+# ie. nn.Linear(out_dim, in_dim) or Conv1D() (opt)
 REVERSED_PARAM_MAPPING = {
     GPT2PreTrainedModel: ["attn", "crossattention", "mlp"],
     TransfoXLPreTrainedModel: ["qkv_net"],
@@ -52,11 +92,11 @@ REVERSED_PARAM_MAPPING = {
 
 def get_mapping(model, mapping):
     """
-    Helper function to find mapping by model
+    Helper function to find
 
     Args:
         model (PreTrainedModel): model object
-        mapping (Dict): mapping object
+        mapping (Dict): map object
 
     Returns:
         Any: mapping object
@@ -115,22 +155,14 @@ def get_tensor_parallel_mapping(model):
 def is_reversed_param(model, param_name):
     """
     Check reversed parameter or not.
+    e.g. ``Conv1D`` of GPT2 and ``qkv_net`` of TransfoXL have reversed parameters
 
     Args:
         model (PreTrainedModel): model object
         param_name (str): the name of parameter (e.g. 'transformer.h.0.attn...')
 
-    Notes:
-        ``Conv1D`` of GPT2 and ``qkv_net`` of TransfoXL have reversed parameters
-
     Returns:
         bool: whether reversed parameter or not.
-
-    Examples:
-        >>> is_reversed_param(model, 'transformer.h.0.attn.c_attn')
-        True
-        >>> is_reversed_param(model, 'transformer.wte')
-        False
     """
     mapping = get_mapping(model, REVERSED_PARAM_MAPPING)
 
@@ -149,11 +181,8 @@ def get_fusion_degree(model, param_name):
         param_name (str): the name of parameter (e.g. 'transformer.h.0.attn...')
 
     Notes:
-        The `c_attn` layer in the self-attention layer of GPT2 is size of (dim * 3, dim).
+        The `c_attn` layer that has size of (dim * 3, dim) in GPT2.
         In this case, the fusion degree is 3.
-
-        The `c_attn` layer in the cross-attention attention layer of GPT2 is size of (dim * 2, dim).
-        In this case, the fusion degree is 2.
 
     Returns:
         int: the fusion degree
