@@ -412,9 +412,9 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(model.block_emb.device, torch.device("cpu"))
 
         device = torch.device(torch_device)
-        with torch.no_grad():
-            model.block_embedding_to(device)
-            model(**inputs)
+        model.block_embedding_to(device)
+        loss = model(**inputs).reader_output.loss
+        loss.backward()
 
         self.assertEqual(model.block_emb.device.type, device.type)
 
