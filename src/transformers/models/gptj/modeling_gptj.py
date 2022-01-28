@@ -29,7 +29,7 @@ from ...modeling_outputs import (
     QuestionAnsweringModelOutput,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, attention
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gptj import GPTJConfig
@@ -130,7 +130,34 @@ class GPTJAttention(nn.Module):
         new_shape = tensor.size()[:-2] + (num_attention_heads * attn_head_size,)
         return tensor.view(new_shape)
 
-    def _attn(
+    def _new_attn(
+        self,
+        query,
+        key,
+        value,
+        attention_mask=None,
+        head_mask=None,
+    ):
+
+        # compute causal mask from causal mask buffer
+        query_length, key_length = query.size(-2), key.size(-2)
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
+
+        # Keep the attention weights computation in fp32 to avoid overflow issues
+        query = query.to(torch.float32)
+        key = key.to(torch.float32)
+
+        bias = torch.where(causal_mask, 0, self.masked_bias)
+        if attention_mask is not None:
+            bias += attention_mask
+        if head_mask is not None:
+            bias += torch.log(head_mask)
+
+        attn_output, attn_weights = attention(self.config, queries.permute(0,2,1,3), keys.permute(0,2,1,3), bias = bias, dropout = self.dropout, return_attentions = True)
+
+        return attn_output.permute(0,2,1,3), attn_weights.permute(0,2,1,3)
+
+    def _old_attn(
         self,
         query,
         key,

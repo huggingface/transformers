@@ -2439,15 +2439,26 @@ def apply_chunking_to_forward(
 
     return forward_fn(*input_tensors)
 
-def attention(config, queries, keys, values, mask=None, bias=None):
-    #if config.chunk_size_query != 0 or config.chunk_size_key != 0:
-        return memory_efficient_attention.efficient_dot_product_attention_pt(
-                queries, keys, values, mask, bias, config.chunk_size_query, config.chunk_size_key)
-    #else:
-    #    # Take the dot product between the queries and keys to get the raw attention scores.
-    #    scores = torch.matmul(queries, keys.transpose(-1, -2))
-    #    
-    #    scores = scores / math.sqrt(
+def attention(config, queries, keys, values, mask=None, bias=None, dropout=None):
+    '''
+        queries: [Batches, Queries, Heads, Features]
+        keys: [Batches, Keys, Heads, Features]
+        values: [Batches, Values, Heads, Features]
+        mask: Bool
+        returns [Batches, Values, Heads, Features]
+    '''
+    query_size = config.chunk_size_query if config.chunk_size_query != 0 else queries.shape[-3]
+    key_size = config.chunk_size_key if config.chunk_size_key != 0 else keys.shape[-3]
+    if dropout is not None:
+        maskbias_shape = (*queries.shape[::-1], keys.shape[-3])
+        if mask is None:
+            mask = True
+        mask &= dropout(torch.ones(maskbias_shape)).to(torch.bool)
+        if bias is None:
+            bias = torch.zeros(maskbias_shape)
+        bias += math.log(1 / (1 - self.dropout.p))
+    return memory_efficient_attention.efficient_dot_product_attention_pt(
+            queries, keys, values, mask, bias, query_size, key_size)
 
 
 def torch_int_div(tensor1, tensor2):
