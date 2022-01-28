@@ -2054,7 +2054,12 @@ class Trainer:
                 # now save the real model if stage3_gather_fp16_weights_on_model_save=True
                 # if false it will not be saved.
                 # This must be called on all ranks
-                self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME)
+                if not self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME):
+                    logger.warning(
+                        "deepspeed.save_fp16_model didn't save the model, since stage3_gather_fp16_weights_on_model_save=false. "
+                        "Saving the full checkpoint instead, use zero_to_fp32.py to recover weights"
+                    )
+                    self.deepspeed.save_checkpoint(output_dir)
 
         elif self.args.should_save:
             self._save(output_dir)
