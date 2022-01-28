@@ -1369,7 +1369,7 @@ class MaskFormerSegmentationModule(nn.Module):
 
         out: Dict[str, Tensor] = {}
 
-        # NOTE this code is a little bit cumbersome, an easy fix is to always return a list of predictions, if we have auxilary loss then we are going to return more than one pred
+        # NOTE this code is a little bit cumbersome, an easy fix is to always return a list of predictions, if we have auxilary loss then we are going to return more than one element in the list
         if auxilary_loss:
             stacked_decoder_outputs: Tensor = torch.stack(decoder_outputs)
             classes: Tensor = self.class_predictor(stacked_decoder_outputs)
@@ -1467,7 +1467,7 @@ class MaskFormerModel(PreTrainedModel):
         loss: Tensor = None
 
         if labels is not None:
-            loss_dict = self.get_loss_dict(outputs, labels)
+            loss_dict.update(self.get_loss_dict(outputs, labels))
             loss = self.get_loss(loss_dict)
         else:
             # upsample the masks to match the inputs' spatial dimension
