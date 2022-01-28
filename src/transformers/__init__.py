@@ -1938,8 +1938,8 @@ if is_tf_available():
     _import_structure["models.speech_to_text"].extend(
         [
             "TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFSpeech2TextModel",
             "TFSpeech2TextForConditionalGeneration",
+            "TFSpeech2TextModel",
             "TFSpeech2TextPreTrainedModel",
         ]
     )

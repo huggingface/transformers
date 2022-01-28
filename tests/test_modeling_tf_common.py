@@ -57,6 +57,7 @@ if is_tf_available():
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
         TFAutoModel,
@@ -140,6 +141,7 @@ class TFModelTesterMixin:
                 *get_values(TF_MODEL_FOR_MASKED_LM_MAPPING),
                 *get_values(TF_MODEL_FOR_PRETRAINING_MAPPING),
                 *get_values(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
+                *get_values(TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING),
             ]:
                 inputs_dict["labels"] = tf.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
@@ -450,7 +452,16 @@ class TFModelTesterMixin:
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
 
         for model_class in self.all_model_classes:
-            if self.is_encoder_decoder:
+            if model_class.__name__ in ["TFSpeech2TextModel", "TFSpeech2TextForConditionalGeneration"]:
+                inputs = {
+                    "decoder_input_ids": tf.keras.Input(
+                        batch_shape=(2, max_input),
+                        name="decoder_input_ids",
+                        dtype="int32",
+                    ),
+                    "input_ids": tf.keras.Input(batch_shape=(2, 32, max_input), name="input_ids", dtype="float32"),
+                }
+            elif self.is_encoder_decoder:
                 inputs = {
                     "decoder_input_ids": tf.keras.Input(
                         batch_shape=(2, max_input),
@@ -706,23 +717,28 @@ class TFModelTesterMixin:
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        list_lm_models = (
+        text_in_text_out_models = (
             get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING)
             + get_values(TF_MODEL_FOR_MASKED_LM_MAPPING)
             + get_values(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING)
         )
+        speech_in_text_out_models = get_values(TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING)
 
         for model_class in self.all_model_classes:
             model = model_class(config)
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in list_lm_models:
+            if model_class in text_in_text_out_models:
                 x = model.get_output_embeddings()
                 assert isinstance(x, tf.keras.layers.Layer)
                 name = model.get_bias()
                 assert isinstance(name, dict)
                 for k, v in name.items():
                     assert isinstance(v, tf.Variable)
+            elif model_class in speech_in_text_out_models:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert name is None
             else:
                 x = model.get_output_embeddings()
                 assert x is None
@@ -929,13 +945,13 @@ class TFModelTesterMixin:
             model = model_class(config)
 
             if config.bos_token_id is None:
-                # if bos token id is not defined mobel needs input_ids
+                # if bos token id is not defined model needs input_ids
                 with self.assertRaises(AssertionError):
                     model.generate(do_sample=True, max_length=5)
                 # num_return_sequences = 1
                 self._check_generated_ids(model.generate(input_ids, do_sample=True))
-            else:
-                # num_return_sequences = 1
+            elif model_class.__name__ not in ["TFSpeech2TextForConditionalGeneration"]:
+                # Models with non-text inputs won't work here; num_return_sequences = 1
                 self._check_generated_ids(model.generate(do_sample=True, max_length=5))
 
             with self.assertRaises(AssertionError):
@@ -995,10 +1011,10 @@ class TFModelTesterMixin:
             model = model_class(config)
 
             if config.bos_token_id is None:
-                # if bos token id is not defined mobel needs input_ids, num_return_sequences = 1
+                # if bos token id is not defined model needs input_ids, num_return_sequences = 1
                 self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=2))
-            else:
-                # num_return_sequences = 1
+            elif model_class.__name__ not in ["TFSpeech2TextForConditionalGeneration"]:
+                # Models with non-text inputs won't work here; num_return_sequences = 1
                 self._check_generated_ids(model.generate(do_sample=True, max_length=5, num_beams=2))
 
             with self.assertRaises(AssertionError):

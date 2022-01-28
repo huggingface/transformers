@@ -505,7 +505,6 @@ class GenerationMixin:
         encoder_kwargs["return_dict"] = True
         encoder_kwargs[model_input_name] = inputs_tensor
         model_kwargs["encoder_outputs"]: ModelOutput = encoder(**encoder_kwargs)
-
         return model_kwargs
 
     def _prepare_decoder_input_ids_for_generation(

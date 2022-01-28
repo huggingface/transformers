@@ -394,9 +394,12 @@ class TFGenerationMixin:
 
         Parameters:
 
-            input_ids (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
-                The sequence used as a prompt for the generation. If `None` the method initializes it with
-                `bos_token_id` and a batch size of 1.
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length,
+            feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
+                The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
+                method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
+                should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
+                `input_ids`, `input_values`, `input_features`, or `pixel_values`.
             max_length (`int`, *optional*, defaults to 20):
                 The maximum length of the sequence to be generated.
             min_length (`int`, *optional*, defaults to 10):
@@ -756,7 +759,7 @@ class TFGenerationMixin:
             )
             # expand encoder_outputs
             encoder_outputs = (tf.gather(encoder_outputs[0], expanded_batch_idxs, axis=0),)
-            if 'attention_mask' in locals(): # vision models don't have this
+            if "attention_mask" in locals():  # vision models don't have this
                 attention_mask = tf.gather(attention_mask, expanded_batch_idxs, axis=0)
         else:
             encoder_outputs = None
@@ -872,6 +875,10 @@ class TFGenerationMixin:
             )
 
         while cur_len < max_length:
+            # past may have dropped the `encoder_outputs` component
+            if len(past) > 1 and past[0] != encoder_outputs:
+                past = (encoder_outputs, past)
+
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs
             )

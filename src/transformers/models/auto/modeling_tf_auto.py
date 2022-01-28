@@ -478,6 +478,7 @@ TFAutoModelForNextSentencePrediction = auto_class_update(
     TFAutoModelForNextSentencePrediction, head_doc="next sentence prediction"
 )
 
+
 class TFAutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
     _model_mapping = TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 

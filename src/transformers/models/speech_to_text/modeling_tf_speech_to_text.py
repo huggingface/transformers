@@ -131,13 +131,13 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
                 filters=self.mid_channels if i < self.num_layers - 1 else self.out_channels * 2,
                 kernel_size=k,
                 strides=2,
-                name=f"conv_layers.{i}"
+                name=f"conv_layers.{i}",
             )
             for i, k in enumerate(self.kernel_sizes)
         ]
 
     def call(self, input_features: tf.Tensor) -> tf.Tensor:
-        hidden_states = tf.identity(input_features) # TF Conv1D assumes Batch x Time x Channels, same as the input
+        hidden_states = tf.identity(input_features)  # TF Conv1D assumes Batch x Time x Channels, same as the input
         for i, conv in enumerate(self.conv_layers):
             # equivalent to `padding=k // 2` on PT's `nn.Conv1d`
             pad_len = self.kernel_sizes[i] // 2
@@ -148,11 +148,11 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
                     hidden_states,
                     tf.zeros((hidden_shapes[0], pad_len, hidden_shapes[2])),
                 ),
-                axis=1
+                axis=1,
             )
 
             hidden_states = conv(hidden_states)
-            hidden_states = glu(hidden_states, axis=2) # GLU over the Channel dimension
+            hidden_states = glu(hidden_states, axis=2)  # GLU over the Channel dimension
         return hidden_states
 
 
@@ -173,7 +173,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         description in Section 3.5 of "Attention Is All You Need".
         """
         half_dim = embedding_dim // 2
-        emb = tf.math.log(10000.) / (half_dim - 1)
+        emb = tf.math.log(10000.0) / (half_dim - 1)
         emb = tf.math.exp(tf.range(half_dim, dtype=tf.float32) * -emb)
         emb = tf.expand_dims(tf.range(num_embeddings, dtype=tf.float32), axis=1) * tf.expand_dims(emb, axis=0)
         emb = tf.reshape(tf.concat([tf.math.sin(emb), tf.math.cos(emb)], axis=1), shape=[num_embeddings, -1])
@@ -181,7 +181,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
             # zero pad
             emb = tf.concat([emb, tf.zeros(num_embeddings, 1)], axis=1)
         if padding_idx is not None:
-            emb = tf.concat([emb[:padding_idx, :], tf.zeros((1, emb.shape[1])), emb[padding_idx+1:, :]], axis=0)
+            emb = tf.concat([emb[:padding_idx, :], tf.zeros((1, emb.shape[1])), emb[padding_idx + 1 :, :]], axis=0)
         return emb
 
     def call(self, input_ids: tf.Tensor, past_key_values_length: int = 0) -> tf.Tensor:
@@ -193,11 +193,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         max_pos = self.padding_idx + 1 + seq_len
         if max_pos > shape_list(self.embeddings)[0]:
             self.get_embedding(max_pos + self.offset, self.embedding_dim, self.padding_idx)
-
-        return tf.reshape(
-            tf.gather(self.embeddings, tf.reshape(position_ids, -1), axis=0),
-            (bsz, seq_len, -1)
-        )
+        return tf.reshape(tf.gather(self.embeddings, tf.reshape(position_ids, (-1,)), axis=0), (bsz, seq_len, -1))
 
     @staticmethod
     def create_position_ids_from_input_ids(
@@ -382,11 +378,7 @@ class TFSpeech2TextEncoderLayer(tf.keras.layers.Layer):
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
     def call(
-        self,
-        hidden_states: tf.Tensor,
-        attention_mask: tf.Tensor,
-        layer_head_mask: tf.Tensor,
-        training: bool = False
+        self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training: bool = False
     ):
         """
         Args:
@@ -402,7 +394,7 @@ class TFSpeech2TextEncoderLayer(tf.keras.layers.Layer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
-            training=training
+            training=training,
         )
 
         # The tf.debugging asserts are not compliant with XLA then they
@@ -495,7 +487,7 @@ class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
             past_key_value=self_attn_past_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
-            training=training
+            training=training,
         )
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
@@ -515,7 +507,7 @@ class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
-                training=training
+                training=training,
             )
             hidden_states = self.dropout(hidden_states, training=training)
             hidden_states = residual + hidden_states
@@ -553,10 +545,16 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        return {
-            "input_ids": tf.random.normal([1, 584, 80]),
-            "decoder_input_ids": tf.constant([[1]], dtype=tf.int32)
-        }
+        return {"input_ids": tf.random.normal([1, 32, 80]), "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int32)}
+
+    def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
+        """
+        Computes the output length of the convolutional layers
+        """
+        for _ in range(self.config.num_conv_layers):
+            input_lengths = (input_lengths - 1) // 2 + 1
+
+        return input_lengths
 
     @tf.function(
         input_signature=[
@@ -738,19 +736,15 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
 
         subsampled_lengths = self._get_feat_extract_output_lengths(tf.math.reduce_sum(attention_mask, -1))
         bsz = shape_list(attention_mask)[0]
-
-        mask_cols = tf.transpose(
-            tf.expand_dims(
-                tf.scatter_nd(
-                    indices=tf.expand_dims(subsampled_lengths-1, -1),
-                    updates=tf.ones_like(subsampled_lengths, dtype=attention_mask.dtype),
-                    shape=[feature_vector_length]
-                ),
-                -1
-            )
+        indices = tf.concat(
+            (
+                tf.expand_dims(tf.range(bsz, dtype=attention_mask.dtype), -1),
+                tf.expand_dims(subsampled_lengths - 1, -1),
+            ),
+            axis=-1,
         )
-        mask_cols = tf.cast(tf.cast(mask_cols, tf.bool), tf.int32)
-        attention_mask = tf.matmul(tf.ones((bsz, 1), dtype=attention_mask.dtype), mask_cols)
+
+        attention_mask = tf.scatter_nd(indices=indices, updates=tf.ones(bsz), shape=[bsz, feature_vector_length])
         attention_mask = tf.cast(tf.reverse(tf.math.cumsum(tf.reverse(attention_mask, [-1]), -1), [-1]), tf.int64)
         return attention_mask
 
@@ -859,7 +853,7 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
                 hidden_states,
                 inputs["attention_mask"],
                 inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
-                training=training
+                training=training,
             )
 
             if inputs["output_attentions"]:
@@ -919,9 +913,7 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape, past_key_values_length=past_key_values_length
-            )
+            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1051,7 +1043,6 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
             inputs["attention_mask"], input_shape, inputs_embeds, past_key_values_length
         )
 
-        import pdb; pdb.set_trace()
         # expand encoder attention mask
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1111,6 +1102,9 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
                     all_cross_attns += (layer_cross_attn,)
 
         hidden_states = self.layer_norm(hidden_states)
+        if inputs["output_hidden_states"]:
+            all_hidden_states += (hidden_states,)
+
         next_cache = next_decoder_cache if use_cache else None
 
         if not inputs["return_dict"]:
@@ -1151,7 +1145,7 @@ class TFSpeech2TextMainLayer(tf.keras.layers.Layer):
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
-        encoder_outputs = None,
+        encoder_outputs=None,
         past_key_values=None,
         decoder_inputs_embeds=None,
         use_cache=None,
@@ -1443,12 +1437,12 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
-        >>> ds.set_format(type='tf')
+        >>> ds.set_format(type="tf")
 
         >>> input_features = processor(
         ...     ds["speech"][0], sampling_rate=16000, return_tensors="tf"
         >>> ).input_features  # Batch size 1
-        >>> generated_ids = model.generate(inputs=input_features)
+        >>> generated_ids = model.generate(input_features)
 
         >>> transcription = processor.batch_decode(generated_ids)
         ```"""

@@ -14,32 +14,20 @@
 # limitations under the License.
 """ Testing suite for the TensorFlow Speech2Text model. """
 
-import copy
-import inspect
-import os
-import tempfile
 import unittest
 
 from transformers import Speech2TextConfig
 from transformers.file_utils import cached_property, is_tf_available
-from transformers.testing_utils import (
-    require_sentencepiece,
-    require_tokenizers,
-    require_tf,
-    require_torchaudio,
-    slow,
-)
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
-from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_tf_common import TFModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from .test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFSpeech2TextForConditionalGeneration, TFSpeech2TextModel, Speech2TextProcessor
-    from transformers.models.speech_to_text.modeling_tf_speech_to_text import TFSpeech2TextDecoder, TFSpeech2TextEncoder
+    from transformers import Speech2TextProcessor, TFSpeech2TextForConditionalGeneration, TFSpeech2TextModel
 
 
 def prepare_speech_to_text_inputs_dict(
@@ -57,14 +45,14 @@ def prepare_speech_to_text_inputs_dict(
     if decoder_attention_mask is None:
         decoder_attention_mask = tf.math.not_equal(decoder_input_ids, config.pad_token_id)
     if head_mask is None:
-        head_mask = tf.ones(config.encoder_layers, config.encoder_attention_heads)
+        head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
     if decoder_head_mask is None:
-        decoder_head_mask = tf.ones(config.decoder_layers, config.decoder_attention_heads)
+        decoder_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = tf.ones(config.decoder_layers, config.decoder_attention_heads)
+        cross_attn_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
     return {
-        # "input_ids": input_features,
-        "input_features": input_features,
+        "input_ids": input_features,
+        # "input_features": input_features,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
         "decoder_attention_mask": attention_mask,
@@ -91,12 +79,12 @@ class TFSpeech2TextModelTester:
         num_conv_layers=2,
         conv_kernel_sizes=(5, 5),
         conv_channels=32,
-        input_feat_per_channel=24,
+        input_feat_per_channel=80,
         input_channels=1,
         hidden_act="relu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=80,
         max_source_positions=20,
         max_target_positions=20,
         eos_token_id=2,
@@ -195,11 +183,11 @@ class TFSpeech2TextModelTester:
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = tf.math.maximum(ids_tensor((self.batch_size, 3), config.vocab_size), 2)
-        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2, dtype=tf.int64)
 
         # append to next input_ids and
-        next_input_ids = tf.concat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = tf.concat([attention_mask, next_attn_mask], dim=-1)
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+        next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
         output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
@@ -207,64 +195,26 @@ class TFSpeech2TextModelTester:
         ]
 
         # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1])
+        random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
         output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
         output_from_past_slice = output_from_past[:, :, random_slice_idx]
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
-
-    def check_encoder_decoder_model_standalone(self, config, inputs_dict):
-        model = TFSpeech2TextModel(config=config)
-        outputs = model(**inputs_dict)
-
-        encoder_last_hidden_state = outputs.encoder_last_hidden_state
-        last_hidden_state = outputs.last_hidden_state
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            encoder = model.get_encoder()
-            encoder.save_pretrained(tmpdirname)
-            encoder = TFSpeech2TextEncoder.from_pretrained(tmpdirname)
-
-        encoder_last_hidden_state_2 = encoder(
-            inputs_dict["input_features"], attention_mask=inputs_dict["attention_mask"]
-        )[0]
-
-        self.parent.assertTrue(
-            tf.math.reduce_max(tf.math.abs(encoder_last_hidden_state_2 - encoder_last_hidden_state)) < 1e-3
-        )
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            decoder = model.get_decoder()
-            decoder.save_pretrained(tmpdirname)
-            decoder = TFSpeech2TextDecoder.from_pretrained(tmpdirname)
-
-        encoder_attention_mask = encoder._get_feature_vector_attention_mask(
-            encoder_last_hidden_state.shape[1], inputs_dict["attention_mask"]
-        )
-
-        last_hidden_state_2 = decoder(
-            input_ids=inputs_dict["decoder_input_ids"],
-            attention_mask=inputs_dict["decoder_attention_mask"],
-            encoder_hidden_states=encoder_last_hidden_state,
-            encoder_attention_mask=encoder_attention_mask,
-        )[0]
-
-        self.parent.assertTrue(tf.math.reduce_max(tf.math.abs(last_hidden_state_2 - last_hidden_state)) < 1e-3)
+        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, atol=1e-2)
 
 
 @require_tf
-class TFSpeech2TextModelTest(TFModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFSpeech2TextModel, TFSpeech2TextForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFSpeech2TextForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False
-    test_torchscript = True
+    test_onnx = False
 
-    input_name = "input_features"
+    input_name = "input_ids"
 
     def setUp(self):
         self.model_tester = TFSpeech2TextModelTester(self)
@@ -274,23 +224,9 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, GenerationTesterMixin, unittest
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_save_load_strict(self):
-        config, _ = self.model_tester.prepare_config_and_inputs()
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                _, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
-
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_encoder_decoder_model_standalone(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
     # not implemented currently
     def test_inputs_embeds(self):
@@ -443,98 +379,20 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, GenerationTesterMixin, unittest
                 [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
             )
 
+    def test_resize_token_embeddings(self):
+        # Overwritten method from parent; see `test_resize_embeddings_untied`
+        pass
+
     def test_resize_tokens_embeddings(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            return
-
-        for model_class in self.all_model_classes:
-            config = copy.deepcopy(original_config)
-            model = model_class(config)
-
-            model_vocab_size = config.vocab_size
-            # Retrieve the embeddings and clone theme
-            model_embed = model.resize_token_embeddings(model_vocab_size)
-            cloned_embeddings = model_embed.weight.clone()
-
-            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
-            # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
-
-            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
-            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
-            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
-            # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
-
-            # make sure that decoder_input_ids are resized
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            model(**self._prepare_for_class(inputs_dict, model_class))
-
-            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
-            models_equal = True
-            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
+        # see `test_resize_embeddings_untied`
+        pass
 
     def test_resize_embeddings_untied(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            return
-
-        original_config.tie_word_embeddings = False
-
-        # if model cannot untied embeddings -> leave test
-        if original_config.tie_word_embeddings:
-            return
-
-        for model_class in self.all_model_classes:
-            config = copy.deepcopy(original_config)
-            model = model_class(config)
-
-            # if no output embeddings -> leave test
-            if model.get_output_embeddings() is None:
-                continue
-
-            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_vocab_size = config.vocab_size
-            model.resize_token_embeddings(model_vocab_size + 10)
-            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
-            output_embeds = model.get_output_embeddings()
-            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
-            # Check bias if present
-            if output_embeds.bias is not None:
-                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
-
-            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
-            model.resize_token_embeddings(model_vocab_size - 15)
-            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
-            # Check that it actually resizes the embeddings matrix
-            output_embeds = model.get_output_embeddings()
-            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
-            # Check bias if present
-            if output_embeds.bias is not None:
-                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
+        # TODO: copy test from PT. Not working at the moment because the test relies on `model.resize_token_embeddings`,
+        # whose TF implementation assumes the use of `TFWrappedEmbeddings`. But with a `TFWrappedEmbeddings` we can't
+        # load the weights from PT (also, it induces TF1 behavior, so we might want to rework how
+        # `model.resize_token_embeddings` operates).
+        pass
 
     def test_generate_without_input_ids(self):
         pass
@@ -550,9 +408,8 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, GenerationTesterMixin, unittest
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
-        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-            num_interleave, dim=0
-        )
+        encoder_outputs["last_hidden_state"] = tf.repeat(encoder_outputs.last_hidden_state, num_interleave, axis=0)
+
         input_ids = input_ids[:, :, 0]
         input_ids = tf.zeros_like(input_ids[:, :1], dtype=tf.int64) + model._get_decoder_start_token_id()
         attention_mask = None
@@ -646,11 +503,7 @@ class TFSpeech2TextModelIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(4)
 
         inputs = processor(input_speech, return_tensors="tf", padding=True)
-
-        input_features = inputs.input_features
-        attention_mask = inputs.attention_mask
-
-        generated_ids = model.generate(input_features, attention_mask=attention_mask)
+        generated_ids = model.generate(inputs.input_features, attention_mask=inputs.attention_mask)
         generated_transcripts = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         EXPECTED_TRANSCRIPTIONS = [
@@ -659,5 +512,4 @@ class TFSpeech2TextModelIntegrationTests(unittest.TestCase):
             "he tells us that at this festive season of the year with christmas and roast beef looming before us similes drawn from eating and its results occur most readily to the mind",
             "he has grave doubts whether sir frederick leyton's work is really greek after all and can discover in it but little of rocky ithaca",
         ]
-
         self.assertListEqual(generated_transcripts, EXPECTED_TRANSCRIPTIONS)
