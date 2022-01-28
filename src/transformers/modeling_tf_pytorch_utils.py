@@ -253,6 +253,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     if tf_model._keys_to_ignore_on_load_unexpected is not None:
         for pat in tf_model._keys_to_ignore_on_load_unexpected:
             unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
+
     if len(unexpected_keys) > 0:
         logger.warning(
             f"Some weights of the PyTorch model were not used when "

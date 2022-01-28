@@ -187,6 +187,7 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
         max_pos = self.padding_idx + 1 + seq_len
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
+
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
 
     def create_position_ids_from_input_ids(
@@ -771,7 +772,6 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         inputs_embeds = self.conv(input_features)
         inputs_embeds = self.embed_scale * inputs_embeds
 

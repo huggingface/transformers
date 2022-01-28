@@ -875,8 +875,8 @@ class TFGenerationMixin:
             )
 
         while cur_len < max_length:
-            # past may have dropped the `encoder_outputs` component
-            if len(past) > 1 and past[0] != encoder_outputs:
+            # past drops the `encoder_outputs` during the loop and it may be needed (encoder-decoder models)
+            if len(past) > 1 and encoder_outputs is not None:
                 past = (encoder_outputs, past)
 
             model_inputs = self.prepare_inputs_for_generation(
@@ -1140,8 +1140,8 @@ class TFGenerationMixin:
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
-            # past may have dropped the `encoder_outputs` component
-            if len(past) > 1 and past[0] != encoder_outputs:
+            # past drops the `encoder_outputs` during the loop and it may be needed (encoder-decoder models)
+            if len(past) > 1 and encoder_outputs is not None:
                 past = (encoder_outputs, past)
 
             model_inputs = self.prepare_inputs_for_generation(
