@@ -326,9 +326,9 @@ class XLMRobertaXLAttention(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        intermediate = self.self_attn_layer_norm(hidden_states)
         self_outputs = self.self(
-            hidden_states,
+            intermediate,
             attention_mask,
             head_mask,
             encoder_hidden_states,
