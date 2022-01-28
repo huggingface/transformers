@@ -168,47 +168,45 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
                 )
 
 
-if is_torch_available():
-    PYTORCH_EXPORT_MODELS = {
-        ("albert", "hf-internal-testing/tiny-albert"),
-        ("bert", "bert-base-cased"),
-        ("ibert", "kssteven/ibert-roberta-base"),
-        ("camembert", "camembert-base"),
-        ("distilbert", "distilbert-base-cased"),
-        # ("longFormer", "longformer-base-4096"),
-        ("roberta", "roberta-base"),
-        ("xlm-roberta", "xlm-roberta-base"),
-        ("layoutlm", "microsoft/layoutlm-base-uncased"),
-    }
+PYTORCH_EXPORT_MODELS = {
+    ("albert", "hf-internal-testing/tiny-albert"),
+    ("bert", "bert-base-cased"),
+    ("ibert", "kssteven/ibert-roberta-base"),
+    ("camembert", "camembert-base"),
+    ("distilbert", "distilbert-base-cased"),
+    # ("longFormer", "longformer-base-4096"),
+    ("roberta", "roberta-base"),
+    ("xlm-roberta", "xlm-roberta-base"),
+    ("layoutlm", "microsoft/layoutlm-base-uncased"),
+}
 
-    PYTORCH_EXPORT_WITH_PAST_MODELS = {
-        ("gpt2", "gpt2"),
-        ("gpt-neo", "EleutherAI/gpt-neo-125M"),
-    }
+PYTORCH_EXPORT_WITH_PAST_MODELS = {
+    ("gpt2", "gpt2"),
+    ("gpt-neo", "EleutherAI/gpt-neo-125M"),
+}
 
-    PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
-        ("bart", "facebook/bart-base"),
-        ("mbart", "sshleifer/tiny-mbart"),
-        ("t5", "t5-small"),
-        ("marian", "Helsinki-NLP/opus-mt-en-de"),
-    }
+PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
+    ("bart", "facebook/bart-base"),
+    ("mbart", "sshleifer/tiny-mbart"),
+    ("t5", "t5-small"),
+    ("marian", "Helsinki-NLP/opus-mt-en-de"),
+}
 
-if is_tf_available():
-    TENSORFLOW_EXPORT_DEFAULT_MODELS = {
-        ("albert", "hf-internal-testing/tiny-albert"),
-        ("bart", "facebook/bart-base"),
-        ("bert", "bert-base-cased"),
-        ("distilbert", "distilbert-base-cased"),
-        ("gpt2", "gpt2"),
-        # ("GPT-Neo", "EleutherAI/gpt-neo-125M"),
-        # ("LongFormer", "longformer-base-4096",
-        # ("xlmroberta", "roberta-base"),
-        # ("LayoutLM", "microsoft/layoutlm-base-uncased"),
-        ("mbart", "sshleifer/tiny-mbart"),
-        # ("T5", "t5-small"),
-    }
+TENSORFLOW_EXPORT_DEFAULT_MODELS = {
+    ("albert", "hf-internal-testing/tiny-albert"),
+    ("bart", "facebook/bart-base"),
+    ("bert", "bert-base-cased"),
+    ("distilbert", "distilbert-base-cased"),
+    ("gpt2", "gpt2"),
+    # ("GPT-Neo", "EleutherAI/gpt-neo-125M"),
+    # ("LongFormer", "longformer-base-4096",
+    # ("xlmroberta", "roberta-base"),
+    # ("LayoutLM", "microsoft/layoutlm-base-uncased"),
+    ("mbart", "sshleifer/tiny-mbart"),
+    # ("T5", "t5-small"),
+}
 
-    TENSORFLOW_EXPORT_WITH_PAST_MODELS = {("bart", "facebook/bart-base"), ("gpt2", "gpt2"), ("t5", "t5-small")}
+TENSORFLOW_EXPORT_WITH_PAST_MODELS = {("bart", "facebook/bart-base"), ("gpt2", "gpt2"), ("t5", "t5-small")}
 
 
 def _get_models_to_test(export_models_list):
