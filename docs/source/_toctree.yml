@@ -58,19 +58,19 @@
   - local: parallelism
     title: Model Parallelism
   - local: perf_infer
-    title: Performance: Inference
+    title: Performance - Inference
   - local: perf_infer_gpu_one
-    title: Performance: Inference on one GPU
+    title: Performance - Inference on one GPU
   - local: perf_infer_gpu_many
-    title: Performance: Inference on many GPUs
+    title: Performance - Inference on many GPUs
   - local: perf_infer_cpu
-    title: Performance: Inference on CPU
+    title: Performance - Inference on CPU
   - local: perf_train
-    title: Performance: Training
+    title: Performance - Training
   - local: perf_train_gpu_one
-    title: Performance: Training on one GPU
+    title: Performance - Training on one GPU
   - local: perf_train_gpu_many
-    title: Performance: Training on many GPUs
+    title: Performance - Training on many GPUs
   - local: testing
     title: Testing
   - local: debugging
