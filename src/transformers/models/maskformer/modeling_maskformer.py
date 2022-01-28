@@ -1213,12 +1213,12 @@ class MaskFormerPixelDecoder(nn.Module):
         """
         super().__init__()
         self.fpn = FPNModel(*args, feature_size=feature_size, **kwargs)
-        self.mask_proj = nn.Conv2d(feature_size, mask_feature_size, kernel_size=3, padding=1)
+        self.mask_projection = nn.Conv2d(feature_size, mask_feature_size, kernel_size=3, padding=1)
 
     def forward(self, features: List[Tensor]) -> Tensor:
         fpn_features: List[Tensor] = self.fpn(features)
         # we use the last feature map
-        x = self.mask_proj(fpn_features[-1])
+        x = self.mask_projection(fpn_features[-1])
         return x
 
 
@@ -1580,8 +1580,9 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                     # create the area, since bool we just need to sum :)
                     mask_k_area: Tensor = mask_k.sum()
                     # this is the area of all the stuff in query k
+                    # TODO not 100%, why are the taking the k query here????
                     original_area: Tensor = (mask_probs[k] >= 0.5).sum()
-                    
+
                     mask_does_exist: bool = mask_k_area > 0 and original_area > 0
 
                     if mask_does_exist:

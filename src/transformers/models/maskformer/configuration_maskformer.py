@@ -50,7 +50,7 @@ class MaskFormerConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     """
-    model_type = "mask_former"
+    model_type = "maskformer"
 
     attribute_map = {"hidden_size": "d_model"}
 

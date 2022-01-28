@@ -25,7 +25,7 @@ _import_structure = {
 
 
 if is_torch_available():
-    _import_structure["modeling_deit"] = [
+    _import_structure["modeling_maskformer"] = [
         "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MaskFormerForPanopticSegmentation",
         "MaskFormerForSemanticSegmentation",

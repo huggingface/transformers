@@ -20,11 +20,11 @@ from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import MetadataCatalog
 from detectron2.projects.deeplab import add_deeplab_config
-from MaskFormer.mask_former import add_mask_former_config
-from MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
+from transformers.models.maskformer.MaskFormer.mask_former import add_mask_former_config
+from transformers.models.maskformer.MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
 
 
-from transformers.models.maskformer import ClassSpec, DatasetMetadata
+from transformers.models.maskformer.configuration_maskformer import ClassSpec, DatasetMetadata
 from transformers.models.maskformer import (
     MaskFormerConfig,
     MaskFormerForPanopticSegmentation,
@@ -171,7 +171,6 @@ class OriginalMaskFormerConfigToOursConverter:
             # default pretrained config values
             id2label={k: c.label for k, c in enumerate(dataset_metadata.classes)},
             label2id={c.label: k for k, c in enumerate(dataset_metadata.classes)},
-            num_labels=len(dataset_metadata.classes),
         )
 
         return config
@@ -224,8 +223,8 @@ class MaskFormerCheckpointConverter:
             ]
 
         renamed_keys = [
-            (f"{src_prefix}.mask_features.weight", f"{dst_prefix}.mask_proj.weight"),
-            (f"{src_prefix}.mask_features.bias", f"{dst_prefix}.mask_proj.bias"),
+            (f"{src_prefix}.mask_features.weight", f"{dst_prefix}.mask_projection.weight"),
+            (f"{src_prefix}.mask_features.bias", f"{dst_prefix}.mask_projection.bias"),
             # the layers in the original one are in reverse order, stem is the last one!
         ]
 
@@ -352,8 +351,8 @@ class MaskFormerCheckpointConverter:
 
         renamed_keys = [
             (f"{src_prefix}.query_embed.weight", f"{dst_prefix}.queries_embedder.weight"),
-            (f"{src_prefix}.input_projection.weight", f"{dst_prefix}.input_proj.weight"),
-            (f"{src_prefix}.input_projection.bias", f"{dst_prefix}.input_proj.bias"),
+            (f"{src_prefix}.input_proj.weight", f"{dst_prefix}.input_projection.weight"),
+            (f"{src_prefix}.input_proj.bias", f"{dst_prefix}.input_projection.bias"),
         ]
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
@@ -447,13 +446,12 @@ def test(src, dst):
         # turn off aux_loss loss
         src.sem_seg_head.predictor.aux_loss = False
         src_transformer_out = src.sem_seg_head.predictor(src_features["res5"], src_pixel_out[0])
-
         dst_queries = dst.transformer_module(dst_pixel_out[0])
         dst_transformer_out = dst.segmentation_module(dst_queries, dst_pixel_out[1])
 
-        assert torch.allclose(src_transformer_out["pred_logits"], dst_transformer_out["pred_logits"], atol=1e-4)
+        assert torch.allclose(src_transformer_out["pred_logits"], dst_transformer_out["preds_logits"], atol=1e-4)
 
-        assert torch.allclose(src_transformer_out["pred_masks"], dst_transformer_out["pred_masks"], atol=1e-4)
+        assert torch.allclose(src_transformer_out["pred_masks"], dst_transformer_out["preds_masks"], atol=1e-4)
 
         src_out = src([{"image": x.squeeze(0)}])
 
@@ -531,25 +529,41 @@ if __name__ == "__main__":
         type=Path,
         help="Path to the folder to output PyTorch models.",
     )
-    args = parser.parse_args()
+    # args = parser.parse_args()
 
-    checkpoints_dir: Path = args.checkpoints_dir
-    config_dir: Path = args.configs_dir
-    save_directory: Path = args.save_directory
+    # checkpoints_dir: Path = args.checkpoints_dir
+    # config_dir: Path = args.configs_dir
+    # save_directory: Path = args.save_directory
 
-    if not save_directory.exists():
-        save_directory.mkdir(parents=True)
+    # if not save_directory.exists():
+    #     save_directory.mkdir(parents=True)
 
-    checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
-    config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs")
+    # checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
+    # config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs")
 
-    for converter, config_file, checkpoint_file in MaskFormerCheckpointConverter.using_dirs(
-        checkpoints_dir, config_dir
-    ):
-        feature_extractor = OriginalMaskFormerConfigToFeatureExtractorConverter()(
-            setup_cfg(Args(config_file=config_file))
+    # for converter, config_file, checkpoint_file in MaskFormerCheckpointConverter.using_dirs(
+    #     checkpoints_dir, config_dir
+    # ):
+    #     feature_extractor = OriginalMaskFormerConfigToFeatureExtractorConverter()(
+    #         setup_cfg(Args(config_file=config_file))
+    #     )
+
+    #     converted: MaskFormerModel = converter()
+
+    original_config = setup_cfg(
+        Args(
+            config_file="/home/zuppif/Documents/Work/hugging_face/transformers/src/transformers/models/maskformer/MaskFormer/configs/ade20k-150/swin/maskformer_swin_base_IN21k_384_bs16_160k_res640.yaml"
         )
+    )
+    mask_former_kwargs = OriginalMaskFormer.from_config(original_config)
 
-        converted: MaskFormerModel = converter()
-        test(converter.original_model, converted)
-        converted.save_pretrained(save_directory=save_directory)
+    original_model = OriginalMaskFormer(**mask_former_kwargs).eval()
+    print(original_model)
+    # DetectionCheckpointer(original_model).load(original_checkpoint_file)
+
+    config: MaskFormerConfig = OriginalMaskFormerConfigToOursConverter()(original_config)
+
+    to_model = MaskFormerModel(config=config).eval()
+
+    test(original_model, MaskFormerCheckpointConverter(original_model, to_model)())
+    # converted.save_pretrained(save_directory=save_directory)
