@@ -36,15 +36,32 @@ from .configuration_sew import SEWConfig
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "SEWConfig"
-_CHECKPOINT_FOR_DOC = "asapp/sew-tiny-100k"
 _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 _FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
-_SEQ_CLASS_CHECKPOINT = "asapp/sew-tiny-100k"
 
 _HIDDEN_STATES_START_POSITION = 1
 
+
+# General docstring
+_CONFIG_FOR_DOC = "SEWConfig"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "asapp/sew-tiny-100k-ft-ls100h"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 512]
+
+# CTC docstring
+_CTC_EXPECTED_OUTPUT = (
+    "'MISTER QUILTER IS THE APPOSTILE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPOLLE'"
+)
+_CTC_EXPECTED_LOSS = 0.42
+
+# Audio class docstring
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_SEQ_CLASS_CHECKPOINT = "anton-l/sew-mid-100k-ft-keyword-spotting"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
+_SEQ_CLASS_EXPECTED_LOSS = 9.52
 
 SEW_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "asapp/sew-tiny-100k",
@@ -879,6 +896,7 @@ class SEWModel(SEWPreTrainedModel):
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -978,6 +996,8 @@ class SEWForCTC(SEWPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1108,6 +1128,8 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,

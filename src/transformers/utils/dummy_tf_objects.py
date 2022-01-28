@@ -21,6 +21,13 @@ def tf_top_k_top_p_filtering(*args, **kwargs):
     requires_backends(tf_top_k_top_p_filtering, ["tf"])
 
 
+class KerasMetricCallback(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class PushToHubCallback(metaclass=DummyObject):
     _backends = ["tf"]
 

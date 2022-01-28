@@ -22,8 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.16.0.dev0"
-
+__version__ = "4.17.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -334,6 +333,7 @@ _import_structure = {
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
+    "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -1523,6 +1523,19 @@ if is_torch_available():
             "load_tf_weights_in_xlnet",
         ]
     )
+    _import_structure["models.yoso"].extend(
+        [
+            "YOSO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "YosoForMaskedLM",
+            "YosoForMultipleChoice",
+            "YosoForQuestionAnswering",
+            "YosoForSequenceClassification",
+            "YosoForTokenClassification",
+            "YosoLayer",
+            "YosoModel",
+            "YosoPreTrainedModel",
+        ]
+    )
     _import_structure["optimization"] = [
         "Adafactor",
         "AdamW",
@@ -1549,7 +1562,7 @@ if is_tf_available():
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
-    _import_structure["keras_callbacks"] = ["PushToHubCallback"]
+    _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
     _import_structure["modeling_tf_outputs"] = []
     _import_structure["modeling_tf_utils"] = [
         "TFPreTrainedModel",
@@ -2468,6 +2481,7 @@ if TYPE_CHECKING:
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
     from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+    from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
 
     # Pipelines
     from .pipelines import (
@@ -3457,6 +3471,17 @@ if TYPE_CHECKING:
             XLNetPreTrainedModel,
             load_tf_weights_in_xlnet,
         )
+        from .models.yoso import (
+            YOSO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            YosoForMaskedLM,
+            YosoForMultipleChoice,
+            YosoForQuestionAnswering,
+            YosoForSequenceClassification,
+            YosoForTokenClassification,
+            YosoLayer,
+            YosoModel,
+            YosoPreTrainedModel,
+        )
 
         # Optimization
         from .optimization import (
@@ -3486,7 +3511,7 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
         from .generation_tf_utils import tf_top_k_top_p_filtering
-        from .keras_callbacks import PushToHubCallback
+        from .keras_callbacks import KerasMetricCallback, PushToHubCallback
         from .modeling_tf_layoutlm import (
             TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLayoutLMForMaskedLM,
