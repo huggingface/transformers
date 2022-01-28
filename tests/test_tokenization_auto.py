@@ -261,8 +261,8 @@ class AutoTokenizerTest(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 tokenizer.save_pretrained(tmp_dir)
 
-                new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
-                self.assertIsInstance(new_tokenizer, NewTokenizer)
+                new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir, trust_remote_code=True)
+                self.assertEqual(new_tokenizer.__class__.__name__, "NewTokenizer")
 
         finally:
             if "new-model" in CONFIG_MAPPING._extra_content:
@@ -300,11 +300,11 @@ class AutoTokenizerTest(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 tokenizer.save_pretrained(tmp_dir)
 
-                new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
-                self.assertIsInstance(new_tokenizer, NewTokenizerFast)
+                new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir, trust_remote_code=True)
+                self.assertEqual(new_tokenizer.__class__.__name__, "NewTokenizerFast")
 
-                new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir, use_fast=False)
-                self.assertIsInstance(new_tokenizer, NewTokenizer)
+                new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir, trust_remote_code=True, use_fast=False)
+                self.assertEqual(new_tokenizer.__class__.__name__, "NewTokenizer")
 
         finally:
             if "new-model" in CONFIG_MAPPING._extra_content:

@@ -416,10 +416,23 @@ def custom_object_save(obj, folder, config=None):
 
             if current_value is None:
                 current_value = (None, None)
+
+            slow_tokenizer_class = None
+            fast_tokenizer_class = None
+
             if obj.__class__.__name__.endswith("Fast"):
-                full_name = (current_value[0], full_name)
+                fast_tokenizer_class = f"{last_module}.{obj.__class__.__name__}"
+                if obj.__class__.__name__[:-4] in CUSTOM_CLASSES_REGISTER:
+                    slow_tokenizer_class = f"{last_module}.{obj.__class__.__name__[:-4]}"
             else:
-                full_name = (full_name, current_value[1])
+                slow_tokenizer_class = f"{last_module}.{obj.__class__.__name__}"
+                if f"{obj.__class__.__name__}Fast" in CUSTOM_CLASSES_REGISTER:
+                    fast_tokenizer_class = f"{last_module}.{obj.__class__.__name__}Fast"
+
+            full_name = (
+                current_value[0] if slow_tokenizer_class is None else slow_tokenizer_class,
+                current_value[1] if fast_tokenizer_class is None else fast_tokenizer_class,
+            )
 
         if isinstance(config, dict):
             config["auto_map"] = full_name
