@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from argparse import ArgumentParser
 from os import listdir, makedirs
 from pathlib import Path
@@ -370,6 +371,10 @@ def convert(
     Returns:
 
     """
+    warnings.warn(
+        "The `transformers.convert_graph_to_onnx` package is deprecated and will be removed in version 5 of Transformers",
+        FutureWarning,
+    )
     print(f"ONNX opset version set to: {opset}")
 
     # Load the pipeline
