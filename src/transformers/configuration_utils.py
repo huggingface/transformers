@@ -427,7 +427,7 @@ class PretrainedConfig(PushToHubMixin):
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self.__class__ in CUSTOM_CLASSES_REGISTER:
+        if self.__class__.__name__ in CUSTOM_CLASSES_REGISTER:
             custom_object_save(self, save_directory, config=self)
 
         # If we save using the predefined names, we can load using `from_pretrained`

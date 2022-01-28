@@ -24,14 +24,14 @@ import unittest.mock
 
 from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
-from transformers import AutoConfig, BertConfig, GPT2Config, is_torch_available
+from transformers import CONFIG_MAPPING, AutoConfig, BertConfig, GPT2Config, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import PASS, USER, is_staging_test
 
 
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures"))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from custom_configuration import CustomConfig
+from fixtures.custom_configuration import CustomConfig  # noqa E402
 
 
 config_common_kwargs = {
@@ -252,21 +252,29 @@ class ConfigPushToHubTester(unittest.TestCase):
                     self.assertEqual(v, getattr(new_config, k))
 
     def test_push_to_hub_dynamic_config(self):
-        config = CustomConfig(attribute=42)
-        AutoConfig.register("custom", CustomConfig)
+        try:
+            config = CustomConfig(attribute=42)
+            AutoConfig.register("custom", CustomConfig)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-config", use_auth_token=self._token)
-            config.save_pretrained(tmp_dir)
-            # test config.auto_map = {"AutoConfig": "custom_configuration.CustomConfig"}
-            # test custom_configuration.py exists and has code.
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-config", use_auth_token=self._token)
+                config.save_pretrained(tmp_dir)
 
-            repo.push_to_hub()
+                # This has added the proper auto_map field to the config
+                self.assertDictEqual(config.auto_map, {"AutoConfig": "custom_configuration.CustomConfig"})
+                # The code has been copied from fixtures
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_configuration.py")))
 
-        new_config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-config", trust_remote_code=True)
-        # Can't make an isinstance check because the new_config is from the FakeConfig class of a dynamic module
-        self.assertEqual(new_config.__class__.__name__, "CustomConfig")
-        self.assertEqual(new_config.attribute, 42)
+                repo.push_to_hub()
+
+            new_config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-config", trust_remote_code=True)
+            # Can't make an isinstance check because the new_config is from the FakeConfig class of a dynamic module
+            self.assertEqual(new_config.__class__.__name__, "CustomConfig")
+            self.assertEqual(new_config.attribute, 42)
+
+        finally:
+            if "custom" in AutoConfig._extra_content:
+                del CONFIG_MAPPING._extra_content["custom"]
 
 
 class ConfigTestUtils(unittest.TestCase):
