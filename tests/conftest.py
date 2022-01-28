@@ -29,7 +29,7 @@ sys.path.insert(1, git_repo_path)
 # they become normal warnings - i.e. the tests still need to test the current functionality
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-collect_ignore = ["fixtures/custom_modeling.py"]
+collect_ignore = ["tests/fixtures/custom_modeling.py"]
 
 
 def pytest_configure(config):
