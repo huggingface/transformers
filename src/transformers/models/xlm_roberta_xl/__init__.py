@@ -39,6 +39,7 @@ if is_torch_available():
         "XLMRobertaXLForSequenceClassification",
         "XLMRobertaXLForTokenClassification",
         "XLMRobertaXLModel",
+        "XLMRobertaXLPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -58,6 +59,7 @@ if TYPE_CHECKING:
             XLMRobertaXLForSequenceClassification,
             XLMRobertaXLForTokenClassification,
             XLMRobertaXLModel,
+            XLMRobertaXLPreTrainedModel,
         )
 
 else:
