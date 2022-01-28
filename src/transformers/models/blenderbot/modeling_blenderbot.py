@@ -291,16 +291,16 @@ class BlenderbotEncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        layer_head_mask: torch.Tensor,
+        attention_mask: torch.Tensor = None,
+        layer_head_mask: torch.Tensor = None,
         output_attentions: bool = False,
     ):
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
+            layer_head_mask (`torch.FloatTensor`, *optional*): mask for attention heads in a given layer of size
                 *(encoder_attention_heads,)*.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
