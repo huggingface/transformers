@@ -29,6 +29,7 @@ sys.path.insert(1, git_repo_path)
 # they become normal warnings - i.e. the tests still need to test the current functionality
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
+collect_ignore = ["fixtures/*.py"]
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipeline are tested")
