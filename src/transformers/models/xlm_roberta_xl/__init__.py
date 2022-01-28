@@ -43,9 +43,9 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_xlm_roberta_xl import (
-        XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        XLMRobertaConfig,
-        XLMRobertaOnnxConfig,
+        XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XLMRobertaXLConfig,
+        XLMRobertaXLOnnxConfig,
     )
 
     if is_torch_available():

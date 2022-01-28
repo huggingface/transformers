@@ -1507,6 +1507,7 @@ if is_torch_available():
             "XLMRobertaXLForSequenceClassification",
             "XLMRobertaXLForTokenClassification",
             "XLMRobertaXLModel",
+            "XLMRobertaXLPreTrainedModel",
         ]
     )
     _import_structure["models.xlnet"].extend(
@@ -3456,6 +3457,7 @@ if TYPE_CHECKING:
             XLMRobertaXLForSequenceClassification,
             XLMRobertaXLForTokenClassification,
             XLMRobertaXLModel,
+            XLMRobertaXLPreTrainedModel,
         )
         from .models.xlnet import (
             XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
