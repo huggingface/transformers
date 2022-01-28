@@ -15,9 +15,9 @@
 from transformers import (
     BertPreTrainedModel,
     GPT2PreTrainedModel,
-    TransfoXLPreTrainedModel,
-    T5PreTrainedModel,
     RobertaPreTrainedModel,
+    T5PreTrainedModel,
+    TransfoXLPreTrainedModel,
 )
 
 
@@ -68,9 +68,7 @@ TENSOR_PARALLEL_MAPPING = {
 
 
 def copy_mapping(model_cls):
-    TENSOR_PARALLEL_MAPPING[model_cls] = TENSOR_PARALLEL_MAPPING[
-        TENSOR_PARALLEL_MAPPING[model_cls]
-    ]
+    TENSOR_PARALLEL_MAPPING[model_cls] = TENSOR_PARALLEL_MAPPING[TENSOR_PARALLEL_MAPPING[model_cls]]
 
 
 # Copy the same mapping.
