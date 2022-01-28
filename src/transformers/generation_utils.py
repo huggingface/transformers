@@ -896,7 +896,8 @@ class GenerationMixin:
                 `decoder_input_ids`.
             bad_words_ids(`List[List[int]]`, *optional*):
                 List of token ids that are not allowed to be generated. In order to get the tokens of the words that
-                should not appear in the generated text, use `tokenizer(bad_word, add_prefix_space=True).input_ids`.
+                should not appear in the generated text, use `tokenizer(bad_word, add_prefix_space=True,
+                add_special_tokens=False).input_ids`.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch.
             max_time(`float`, *optional*, defaults to None):
@@ -1026,7 +1027,9 @@ class GenerationMixin:
         >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
         >>> input_context = "My cute dog"
         >>> # get tokens of words that should not be generated
-        >>> bad_words_ids = tokenizer(["idiot", "stupid", "shut up"], add_prefix_space=True).input_ids
+        >>> bad_words_ids = tokenizer(
+        ...     ["idiot", "stupid", "shut up"], add_prefix_space=True, add_special_tokens=False
+        >>> ).input_ids
         >>> # encode input context
         >>> input_ids = tokenizer(input_context, return_tensors="pt").input_ids
         >>> # generate sequences without allowing bad_words to be generated
