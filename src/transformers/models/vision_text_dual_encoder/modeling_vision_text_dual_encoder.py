@@ -214,6 +214,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         input_ids=None,
         attention_mask=None,
         position_ids=None,
+        token_type_ids=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -238,6 +239,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            token_type_ids=token_type_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -341,7 +343,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         ...     pixel_values=inputs.pixel_values,
         ...     return_loss=True,
         ... )
-        >>> loss, logits_per_image = outputs.loss, outputs.logits_per_imag  # this is the image-text similarity score
+        >>> loss, logits_per_image = outputs.loss, outputs.logits_per_image  # this is the image-text similarity score
 
         >>> # save and load from pretrained
         >>> model.save_pretrained("vit-bert")

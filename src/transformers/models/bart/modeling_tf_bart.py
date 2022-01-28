@@ -510,29 +510,36 @@ BART_START_DOCSTRING = r"""
 
 
 BART_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Summarization example:
 
-        >>> from transformers import BartTokenizer, TFBartForConditionalGeneration, BartConfig
+    ```python
+    >>> from transformers import BartTokenizer, TFBartForConditionalGeneration
 
-        >>> model = TFBartForConditionalGeneration.from_pretrained('facebook/bart-large') >>> tokenizer =
-        BartTokenizer.from_pretrained('facebook/bart-large')
+    >>> model = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large")
+    >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs." >>> inputs =
-        tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='tf')
+    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="tf")
 
-        >>> # Generate Summary >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5,
-        early_stopping=True) >>> print([tokenizer.decode(g, skip_special_tokens=True,
-        clean_up_tokenization_spaces=False) for g in summary_ids])
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    ```
 
-    Mask filling example::
+    Mask filling example:
 
-        >>> from transformers import BartTokenizer, TFBartForConditionalGeneration >>> tokenizer =
-        BartTokenizer.from_pretrained('facebook/bart-large') >>> TXT = "My friends are <mask> but they eat too many
-        carbs."
+    ```python
+    >>> from transformers import BartTokenizer, TFBartForConditionalGeneration
 
-        >>> model = TFBartForConditionalGeneration.from_pretrained('facebook/bart-large') >>> input_ids =
-        tokenizer([TXT], return_tensors='tf')['input_ids'] >>> logits = model(input_ids).logits >>> probs =
-        tf.nn.softmax(logits[0]) >>> # probs[5] is associated with the mask token
+    >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
+    >>> TXT = "My friends are <mask> but they eat too many carbs."
+
+    >>> model = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large")
+    >>> input_ids = tokenizer([TXT], return_tensors="tf")["input_ids"]
+    >>> logits = model(input_ids).logits
+    >>> probs = tf.nn.softmax(logits[0])
+    >>> # probs[5] is associated with the mask token
+    ```
 """
 
 
@@ -1376,7 +1383,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         if inputs["labels"] is not None:
             inputs["labels"] = tf.where(
                 inputs["labels"] == self.config.pad_token_id,
-                tf.fill(shape_list(inputs["labels"]), -100),
+                tf.cast(tf.fill(shape_list(inputs["labels"]), -100), inputs["labels"].dtype),
                 inputs["labels"],
             )
             inputs["use_cache"] = False
@@ -1405,7 +1412,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         )
         lm_logits = self.model.shared(outputs[0], mode="linear")
         lm_logits = lm_logits + self.final_logits_bias
-        masked_lm_loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], lm_logits)
+        masked_lm_loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], lm_logits)
 
         if not inputs["return_dict"]:
             output = (lm_logits,) + outputs[1:]

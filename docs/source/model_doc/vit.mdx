@@ -65,20 +65,22 @@ Tips:
 
 Following the original Vision Transformer, some follow-up works have been made:
 
-- DeiT (Data-efficient Image Transformers) by Facebook AI. DeiT models are distilled vision transformers. Refer to
-  [DeiT's documentation page](deit). The authors of DeiT also released more efficiently trained ViT models, which
-  you can directly plug into [`ViTModel`] or [`ViTForImageClassification`]. There
-  are 4 variants available (in 3 different sizes): *facebook/deit-tiny-patch16-224*, *facebook/deit-small-patch16-224*,
-  *facebook/deit-base-patch16-224* and *facebook/deit-base-patch16-384*. Note that one should use
-  [`DeiTFeatureExtractor`] in order to prepare images for the model.
+- [DeiT](deit) (Data-efficient Image Transformers) by Facebook AI. DeiT models are distilled vision transformers.
+  The authors of DeiT also released more efficiently trained ViT models, which you can directly plug into [`ViTModel`] or
+  [`ViTForImageClassification`]. There are 4 variants available (in 3 different sizes): *facebook/deit-tiny-patch16-224*,
+  *facebook/deit-small-patch16-224*, *facebook/deit-base-patch16-224* and *facebook/deit-base-patch16-384*. Note that one should
+  use [`DeiTFeatureExtractor`] in order to prepare images for the model.
 
-- BEiT (BERT pre-training of Image Transformers) by Microsoft Research. BEiT models outperform supervised pre-trained
+- [BEiT](beit) (BERT pre-training of Image Transformers) by Microsoft Research. BEiT models outperform supervised pre-trained
   vision transformers using a self-supervised method inspired by BERT (masked image modeling) and based on a VQ-VAE.
-  Refer to [BEiT's documentation page](beit).
 
 - DINO (a method for self-supervised training of Vision Transformers) by Facebook AI. Vision Transformers trained using
   the DINO method show very interesting properties not seen with convolutional models. They are capable of segmenting
   objects, without having ever been trained to do so. DINO checkpoints can be found on the [hub](https://huggingface.co/models?other=dino).
+
+- [MAE](vit_mae) (Masked Autoencoders) by Facebook AI. By pre-training Vision Transformers to reconstruct pixel values for a high portion
+  (75%) of masked patches (using an asymmetric encoder-decoder architecture), the authors show that this simple method outperforms
+  supervised pre-training after fine-tuning.
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code (written in JAX) can be
 found [here](https://github.com/google-research/vision_transformer).

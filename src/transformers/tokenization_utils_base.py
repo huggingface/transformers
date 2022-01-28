@@ -31,13 +31,16 @@ from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequenc
 import numpy as np
 from packaging import version
 
-import requests
+from requests import HTTPError
 
 from . import __version__
 from .file_utils import (
+    EntryNotFoundError,
     ExplicitEnum,
     PaddingStrategy,
     PushToHubMixin,
+    RepositoryNotFoundError,
+    RevisionNotFoundError,
     TensorType,
     _is_jax,
     _is_numpy,
@@ -47,7 +50,7 @@ from .file_utils import (
     add_end_docstrings,
     cached_path,
     copy_func,
-    get_list_of_files,
+    get_file_from_repo,
     hf_bucket_url,
     is_flax_available,
     is_offline_mode,
@@ -1437,6 +1440,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     # to make sure `tokenizer.pad(...)` works correctly
     model_input_names: List[str] = ["input_ids", "token_type_ids", "attention_mask"]
     padding_side: str = "right"
+    truncation_side: str = "right"
     slow_tokenizer_class = None
 
     def __init__(self, **kwargs):
@@ -1514,7 +1518,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return (
             f"{'PreTrainedTokenizerFast' if self.is_fast else 'PreTrainedTokenizer'}(name_or_path='{self.name_or_path}', "
             f"vocab_size={self.vocab_size}, model_max_len={self.model_max_length}, is_fast={self.is_fast}, "
-            f"padding_side='{self.padding_side}', special_tokens={self.special_tokens_map_extended})"
+            f"padding_side='{self.padding_side}', truncation_side='{self.truncation_side}', special_tokens={self.special_tokens_map_extended})"
         )
 
     def get_vocab(self) -> Dict[str, int]:
@@ -1645,12 +1649,26 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             vocab_files[file_id] = pretrained_model_name_or_path
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
-            fast_tokenizer_file = get_fast_tokenizer_file(
+
+            # Try to get the tokenizer config to see if there are versioned tokenizer files.
+            fast_tokenizer_file = FULL_TOKENIZER_FILE
+            resolved_config_file = get_file_from_repo(
                 pretrained_model_name_or_path,
-                revision=revision,
+                TOKENIZER_CONFIG_FILE,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
                 use_auth_token=use_auth_token,
+                revision=revision,
                 local_files_only=local_files_only,
             )
+            if resolved_config_file is not None:
+                with open(resolved_config_file, encoding="utf-8") as reader:
+                    tokenizer_config = json.load(reader)
+                    if "fast_tokenizer_files" in tokenizer_config:
+                        fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+
             additional_files_names = {
                 "added_tokens_file": ADDED_TOKENS_FILE,
                 "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
@@ -1703,9 +1721,28 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     else:
                         raise error
 
-                except requests.exceptions.HTTPError as err:
+                except RepositoryNotFoundError as err:
+                    logger.error(err)
+                    raise EnvironmentError(
+                        f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
+                        "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
+                        "pass a token having permission to this repo with `use_auth_token` or log in with "
+                        "`huggingface-cli login` and pass `use_auth_token=True`."
+                    )
+                except RevisionNotFoundError as err:
+                    logger.error(err)
+                    raise EnvironmentError(
+                        f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
+                        "for this model name. Check the model page at "
+                        f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
+                    )
+                except EntryNotFoundError:
+                    logger.debug(f"{pretrained_model_name_or_path} does not contain a file named {file_path}.")
+                    resolved_vocab_files[file_id] = None
+
+                except HTTPError as err:
                     if "404 Client Error" in str(err):
-                        logger.debug(err)
+                        logger.debug(f"Connection problem to access {file_path}.")
                         resolved_vocab_files[file_id] = None
                     else:
                         raise err
@@ -1717,17 +1754,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
-            msg = (
-                f"Can't load tokenizer for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
-                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
-                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
+            raise EnvironmentError(
+                f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                f"containing all relevant tokenizer files."
             )
-
-            if revision is not None:
-                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
-
-            raise EnvironmentError(msg)
 
         for file_id, file_path in vocab_files.items():
             if file_id not in resolved_vocab_files:
@@ -3041,8 +3073,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         ):
             if len(ids) > num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
-                overflowing_tokens = ids[-window_len:]
-                ids = ids[:-num_tokens_to_remove]
+                if self.truncation_side == "left":
+                    overflowing_tokens = ids[:window_len]
+                    ids = ids[num_tokens_to_remove:]
+                elif self.truncation_side == "right":
+                    overflowing_tokens = ids[-window_len:]
+                    ids = ids[:-num_tokens_to_remove]
+                else:
+                    raise ValueError(f"invalid truncation strategy: {self.truncation_side}, use 'left' or 'right'.")
+
             else:
                 error_msg = (
                     f"We need to remove {num_tokens_to_remove} to truncate the input "
@@ -3063,14 +3102,30 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
             for _ in range(num_tokens_to_remove):
                 if pair_ids is None or len(ids) > len(pair_ids):
-                    ids = ids[:-1]
+                    if self.truncation_side == "right":
+                        ids = ids[:-1]
+                    elif self.truncation_side == "left":
+                        ids = ids[1:]
+                    else:
+                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
                 else:
-                    pair_ids = pair_ids[:-1]
+                    if self.truncation_side == "right":
+                        pair_ids = pair_ids[:-1]
+                    elif self.truncation_side == "left":
+                        pair_ids = pair_ids[1:]
+                    else:
+                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
-                overflowing_tokens = pair_ids[-window_len:]
-                pair_ids = pair_ids[:-num_tokens_to_remove]
+                if self.truncation_side == "right":
+                    overflowing_tokens = pair_ids[-window_len:]
+                    pair_ids = pair_ids[:-num_tokens_to_remove]
+                elif self.truncation_side == "left":
+                    overflowing_tokens = pair_ids[:window_len]
+                    pair_ids = pair_ids[num_tokens_to_remove:]
+                else:
+                    raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
             else:
                 logger.error(
                     f"We need to remove {num_tokens_to_remove} to truncate the input "
@@ -3454,37 +3509,18 @@ For a more complete example, see the implementation of `prepare_seq2seq_batch`.
         return model_inputs
 
 
-def get_fast_tokenizer_file(
-    path_or_repo: Union[str, os.PathLike],
-    revision: Optional[str] = None,
-    use_auth_token: Optional[Union[bool, str]] = None,
-    local_files_only: bool = False,
-) -> str:
+def get_fast_tokenizer_file(tokenization_files: List[str]) -> str:
     """
-    Get the tokenizer file to use for this version of transformers.
+    Get the tokenization file to use for this version of transformers.
 
     Args:
-        path_or_repo (`str` or `os.PathLike`):
-            Can be either the id of a repo on huggingface.co or a path to a *directory*.
-        revision(`str`, *optional*, defaults to `"main"`):
-            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
-            identifier allowed by git.
-        use_auth_token (`str` or *bool*, *optional*):
-            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
-        local_files_only (`bool`, *optional*, defaults to `False`):
-            Whether or not to only rely on local files and not to attempt to download any files.
+        tokenization_files (`List[str]`): The list of available configuration files.
 
     Returns:
-        `str`: The tokenizer file to use.
+        `str`: The tokenization file to use.
     """
-    # Inspect all files from the repo/folder.
-    all_files = get_list_of_files(
-        path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
-    )
     tokenizer_files_map = {}
-    for file_name in all_files:
+    for file_name in tokenization_files:
         search = _re_tokenizer_file.search(file_name)
         if search is not None:
             v = search.groups()[0]
