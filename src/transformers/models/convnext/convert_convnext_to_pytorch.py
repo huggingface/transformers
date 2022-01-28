@@ -77,18 +77,6 @@ def get_convnext_config(checkpoint_url):
     return config, expected_shape
 
 
-# here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys():
-    rename_keys = [
-        ("norm.weight", "layernorm.weight"),
-        ("norm.bias", "layernorm.bias"),
-        ("head.weight", "classifier.weight"),
-        ("head.bias", "classifier.bias"),
-    ]
-
-    return rename_keys
-
-
 def rename_key(name):
     if "gamma" in name:
         name = name.replace("gamma", "gamma_parameter")
