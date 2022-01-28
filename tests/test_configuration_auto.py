@@ -15,6 +15,7 @@
 
 import importlib
 import os
+import sys
 import tempfile
 import unittest
 
@@ -25,11 +26,12 @@ from transformers.models.roberta.configuration_roberta import RobertaConfig
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
 
 
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures"))
+
+from custom_configuration import CustomConfig
+
+
 SAMPLE_ROBERTA_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/dummy-config.json")
-
-
-class NewModelConfig(BertConfig):
-    model_type = "new-model"
 
 
 class AutoConfigTest(unittest.TestCase):
@@ -65,24 +67,24 @@ class AutoConfigTest(unittest.TestCase):
 
     def test_new_config_registration(self):
         try:
-            AutoConfig.register("new-model", NewModelConfig)
+            AutoConfig.register("custom", CustomConfig)
             # Wrong model type will raise an error
             with self.assertRaises(ValueError):
-                AutoConfig.register("model", NewModelConfig)
+                AutoConfig.register("model", CustomConfig)
             # Trying to register something existing in the Transformers library will raise an error
             with self.assertRaises(ValueError):
                 AutoConfig.register("bert", BertConfig)
 
             # Now that the config is registered, it can be used as any other config with the auto-API
-            config = NewModelConfig()
+            config = CustomConfig()
             with tempfile.TemporaryDirectory() as tmp_dir:
                 config.save_pretrained(tmp_dir)
                 new_config = AutoConfig.from_pretrained(tmp_dir)
-                self.assertIsInstance(new_config, NewModelConfig)
+                self.assertIsInstance(new_config, CustomConfig)
 
         finally:
-            if "new-model" in CONFIG_MAPPING._extra_content:
-                del CONFIG_MAPPING._extra_content["new-model"]
+            if "custom" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["custom"]
 
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
