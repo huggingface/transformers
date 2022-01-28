@@ -25,6 +25,9 @@ _import_structure = {
     "configuration_convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
 }
 
+if is_vision_available():
+    _import_structure["feature_extraction_convnext"] = ["ConvNextFeatureExtractor"]
+
 if is_torch_available():
     _import_structure["modeling_convnext"] = [
         "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -36,6 +39,9 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
+
+    if is_vision_available():
+        from .feature_extraction_convnext import ConvNextFeatureExtractor
 
     if is_torch_available():
         from .modeling_convnext import (
