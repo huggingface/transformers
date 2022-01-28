@@ -15,16 +15,37 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 
 ## Less Memory
 
-### fp16
 
-### bf16
+### fp16 / bf16
+
+Enabling mixed precision will make your training both faster and use less memory. For full details see ...
+
+bf16 can only be used with Ampere based NVIDIA gpus (or newer). bf16 makes the training more stable than fp16 since it has almost the same numerical range as fp32.
+
+To activate these in HF Trainer-based examples simply add `--fp16` or `--bf16` to the command line arguments
+
+To activate these in your custom HF Trainer-based program, pass one of:
+
+```
+TrainingArguments(fp16=True)
+TrainingArguments(bf16=True)
+```
+
+To activate these in `accelerate` use: ... (XXX?)
+
+to use these in your own custom training loop, you need to enable `torch.cuda.amp` for more details see ...
+
 
 ### Gradient Accumulation
 
+
 ### Gradient Checkpointing
+
 
 ### Optimizer
 
+
+### Deepspeed ZeRO
 
 
 
