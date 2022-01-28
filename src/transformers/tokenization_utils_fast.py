@@ -46,8 +46,6 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
-
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 TOKENIZER_FILE = "tokenizer.json"
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
@@ -71,6 +69,8 @@ MODEL_TO_TRAINER_MAPPING = {
     "WordLevel": WordLevelTrainer,
     "WordPiece": WordPieceTrainer,
 }
+
+VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE}
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
