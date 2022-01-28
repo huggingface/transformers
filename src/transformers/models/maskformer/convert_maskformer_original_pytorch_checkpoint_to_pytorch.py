@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set
+from numpy import block
 
 import pytorch_lightning as pl
 import torch
@@ -197,6 +198,66 @@ class MaskFormerCheckpointConverter:
     def pop_all(self, renamed_keys: List[Tuple[str, str]], dst_state_dict: StateDict, src_state_dict: StateDict):
         for (src_key, dst_key) in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
+
+    def replace_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: MaskFormerConfig):
+        dst_prefix: str = "pixel_level_module.backbone"
+        src_prefix: str = "backbone"
+        
+        renamed_keys = [(
+            f"{src_prefix}.patch_embed.proj.weight", f"{dst_prefix}.model.embeddings.patch_embeddings.projection.weight"),
+            (f"{src_prefix}.patch_embed.proj.bias", f"{dst_prefix}.model.embeddings.patch_embeddings.projection.bias"),
+            (f"{src_prefix}.patch_embed.norm.weight", f"{dst_prefix}.model.embeddings.norm.weight"),
+            (f"{src_prefix}.patch_embed.norm.bias", f"{dst_prefix}.model.embeddings.norm.bias")
+        ]
+
+        for layer_idx in range(len(config.swin_depths)):
+            for block_idx in range(config.swin_depths[layer_idx]):
+                renamed_keys.extend(
+                    [   # src, dst
+                        (f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.norm1.weight", f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_before.weight"),
+
+                        (f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.norm1.bias", f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_before.bias"),
+
+                        (f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.relative_position_bias_table", f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.relative_position_bias_table")
+                    ]
+                )
+                # now we need to handle the attentions
+                # read in weights + bias of input projection layer of cross-attention
+        
+                src_att_weight = src_state_dict[f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"]
+                src_att_bias = src_state_dict[f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"]
+
+                dst_state_dict[f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block}.attention.self.query.weight"] = src_att_weight[:256, :]
+                dst_state_dict[f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block}.attention.self.query.bias"] = src_att_bias[:256]
+
+                dst_state_dict[f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block}.attention.self.key.weight"] = src_att_weight[256:512, :]
+                dst_state_dict[f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block}.attention.self.key.bias"] = src_att_bias[256:512]
+
+                dst_state_dict[f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block}.attention.self.value.weight"] = src_att_weight[-256:, :]
+                dst_state_dict[f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block}.attention.self.value.bias"] = src_att_bias[-256:]
+
+                # proj 
+                renamed_keys.extend([
+                    (f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.proj.weight", f"{dst_prefix}.model.encoder.layers.0.blocks.0.attention.output.dense.weight"),
+                    (f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.proj.bias", f"{dst_prefix}.model.encoder.layers.0.blocks.0.attention.output.dense.bias")
+                ])
+                
+                # second norm
+                renamed_keys.extend([
+                    (f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.norm2.weight", f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_after.weight"),
+                    (f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.norm2.bias", f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.layernorm_after.bias")
+                 ])
+
+                # mlp 
+                renamed_keys.extend([
+                    (f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.mlp.fc1.weight", f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.intermediate.dense.weight" ),
+                    (f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.mlp.fc1.bias", f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.intermediate.dense.bias"),
+                    (f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.mlp.fc2.weight", f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.output.dense.weight"),
+                    (f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.mlp.fc2.bias", f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.output.dense.bias")
+                 ])
+
+
+        self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     def replace_pixel_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "pixel_level_module.pixel_decoder"
@@ -558,12 +619,16 @@ if __name__ == "__main__":
     mask_former_kwargs = OriginalMaskFormer.from_config(original_config)
 
     original_model = OriginalMaskFormer(**mask_former_kwargs).eval()
-    print(original_model)
     # DetectionCheckpointer(original_model).load(original_checkpoint_file)
 
     config: MaskFormerConfig = OriginalMaskFormerConfigToOursConverter()(original_config)
 
     to_model = MaskFormerModel(config=config).eval()
 
-    test(original_model, MaskFormerCheckpointConverter(original_model, to_model)())
+    # for name, param in original_model.named_parameters():
+    #     print(name, param.shape)
+
+    MaskFormerCheckpointConverter(original_model, to_model).replace_backbone(to_model.state_dict(), original_model.state_dict(), to_model.config)
+
+    # test(original_model, MaskFormerCheckpointConverter(original_model, to_model)())
     # converted.save_pretrained(save_directory=save_directory)

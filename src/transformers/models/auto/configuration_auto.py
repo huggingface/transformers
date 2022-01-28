@@ -123,11 +123,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
-<<<<<<< HEAD
         ("maskformer", "MASK_FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-=======
         ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
->>>>>>> c4d1fd77fa52d72b66207c6002d3ec13cc36dca8
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_mae", "VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -207,11 +204,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-<<<<<<< HEAD
         ("maskformer", "MaskFormer"),
-=======
         ("yoso", "YOSO"),
->>>>>>> c4d1fd77fa52d72b66207c6002d3ec13cc36dca8
         ("swin", "Swin"),
         ("vilt", "ViLT"),
         ("vit_mae", "ViTMAE"),
