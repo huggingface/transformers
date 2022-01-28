@@ -33,6 +33,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vilt", "ViltModel"),
         ("vit_mae", "ViTMAEModel"),
         ("nystromformer", "NystromformerModel"),
+        ("xglm", "XGLMModel"),
         ("imagegpt", "ImageGPTModel"),
         ("qdqbert", "QDQBertModel"),
         ("fnet", "FNetModel"),
@@ -209,6 +210,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("xglm", "XGLMForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
