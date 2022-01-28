@@ -1364,13 +1364,13 @@ class MaskFormerSegmentationModule(nn.Module):
         )
 
     def forward(
-        self, decoder_outputs: Tuple[Tensor], pixel_embeddings: Tensor, auxilary_loss: bool = True
+        self, decoder_outputs: Tuple[Tensor], pixel_embeddings: Tensor, use_auxilary_loss: bool = True
     ) -> Dict[str, Tensor]:
 
         out: Dict[str, Tensor] = {}
 
         # NOTE this code is a little bit cumbersome, an easy fix is to always return a list of predictions, if we have auxilary loss then we are going to return more than one element in the list
-        if auxilary_loss:
+        if use_auxilary_loss:
             stacked_decoder_outputs: Tensor = torch.stack(decoder_outputs)
             classes: Tensor = self.class_predictor(stacked_decoder_outputs)
             out.update({PREDICTIONS_LOGITS_KEY: classes[-1]})
@@ -1461,7 +1461,7 @@ class MaskFormerModel(PreTrainedModel):
     ) -> MaskFormerOutput:
         image_features, pixel_embeddings = self.pixel_level_module(pixel_values)
         queries = self.transformer_module(image_features)
-        outputs: Dict[str, Tensor] = self.segmentation_module(queries, pixel_embeddings)
+        outputs: Dict[str, Tensor] = self.segmentation_module(queries, pixel_embeddings, self.config.use_auxilary_loss)
 
         loss_dict: Dict[str, Tensor] = {}
         loss: Tensor = None
@@ -1545,14 +1545,14 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
 
         _, _, h, w = preds_masks.shape
 
-        # for each query, the best score and its index
-        pred_scores, pred_labels = F.softmax(preds_logits, dim=-1).max(-1)  # out = [BATH,NUM_QUERIES]
+        # for each query, the best scores and their indeces
+        pred_scores, pred_labels = F.softmax(preds_logits, dim=-1).max(-1)
+        # pred_scores and pred_labels shape = [BATH,NUM_QUERIES]
         mask_probs = preds_masks.sigmoid()
-
+        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
+        # now, we need to iterate over the batch size to correctly process the segmentation we got from the queries using our thresholds. Even if the original predicted masks have the same shape across the batch, they won't after thresholding so batch-wise operations are impossible
         for (mask_probs, pred_scores, pred_labels) in zip(mask_probs, pred_scores, pred_labels):
 
-            # NOTE we can't do it in a batch-wise fashion
-            # since to_keep may have different sizes in each prediction
             mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(mask_probs, pred_scores, pred_labels)
             we_detect_something: bool = mask_probs.shape[0] > 0
 
@@ -1560,32 +1560,32 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
 
             segments: List[PanopticSegmentationSegment] = []
 
-            current_segment_id: int = 0
-
             if we_detect_something:
+                current_segment_id: int = 0
                 # weight each mask by its score
                 mask_probs *= pred_scores.view(-1, 1, 1)
+                # find out for each pixel what is the most likely class to be there
                 mask_labels: Tensor = mask_probs.argmax(0)
-                # mask_labels is a [H,W] where each pixel has a class label
-                # basically for each pixel we find out what is the most likely class to be there
+                # mask_labels shape = [H,W] where each pixel has a class label
                 stuff_memory_list: Dict[str, int] = {}
                 # this is a map between stuff and segments id, the used it to keep track of the instances of one class
 
                 for k in range(pred_labels.shape[0]):
                     pred_class: int = pred_labels[k].item()
-                    # we are checking if pred_class is in the range of the continuous values allowed
+                    # check if pred_class is not a "thing", so it can be merged with other instance. For example, class "sky" cannot have more then one instance
                     class_spec: ClassSpec = self.model.config.dataset_metadata.classes[pred_class]
                     is_stuff = not class_spec.is_thing
-                    # get the mask associated with the k query
+                    # get the mask associated with the k class
                     mask_k: Tensor = mask_labels == k
                     # create the area, since bool we just need to sum :)
                     mask_k_area: Tensor = mask_k.sum()
                     # this is the area of all the stuff in query k
                     original_area: Tensor = (mask_probs[k] >= 0.5).sum()
-                    # find out how much of the all area mask_k is using
-                    masks_do_exist: bool = mask_k_area > 0 and original_area > 0
+                    
+                    mask_does_exist: bool = mask_k_area > 0 and original_area > 0
 
-                    if masks_do_exist:
+                    if mask_does_exist:
+                        # find out how much of the all area mask_k is using
                         area_ratio: float = mask_k_area / original_area
                         mask_k_is_overlapping_enough: bool = area_ratio.item() > self.overlap_mask_area_threshold
 
