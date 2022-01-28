@@ -35,6 +35,7 @@ from transformers.models.maskformer import (
     MaskFormerModel,
 )
 
+from pprint import pprint
 
 StateDict = Dict[str, Tensor]
 # easier to use pythong logging instead of going trough the hf utility logging file
@@ -309,6 +310,13 @@ class MaskFormerCheckpointConverter:
                         ),
                     ]
                 )
+
+                dst_state_dict[
+                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.relative_position_index"
+                ].copy_(
+                    src_state_dict[f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.relative_position_index"]
+                )
+
             if layer_idx < num_layers - 1:
                 # patch merging
                 renamed_keys.extend(
@@ -340,6 +348,16 @@ class MaskFormerCheckpointConverter:
                     ),
                 ]
             )
+
+        # model.layernorm.weight and our hiddin_state_norms[3] have to be the same
+
+        dst_state_dict[f"{dst_prefix}.model.layernorm.weight"].copy_(
+            dst_state_dict[f"{dst_prefix}.hidden_states_norms.3.weight"]
+        )
+
+        dst_state_dict[f"{dst_prefix}.model.layernorm.bias"].copy_(
+            dst_state_dict[f"{dst_prefix}.hidden_states_norms.3.bias"]
+        )
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
