@@ -342,7 +342,7 @@ class MaskFormerLoss(nn.Module):
             eos_coef (float): TODO no idea
             losses (List[str]): A list of losses to be used TODO probably remove it
         """
-        
+
         super().__init__()
         requires_backends(self, ["scipy"])
         self.num_classes = num_classes
@@ -467,6 +467,7 @@ class MaskFormerLoss(nn.Module):
         num_masks_clamped: Number = torch.clamp(num_masks_pt / get_world_size(), min=1).item()
         return num_masks_clamped
 
+
 class BackboneMixin(nn.Module):
     """This mixin defines a clear way to acces intermediate representation in the subclassing model.
     A list of representations must be returned in the `forward` method, while their sizes in the `outputs_shapes`.
@@ -481,18 +482,20 @@ class BackboneMixin(nn.Module):
         raise NotImplemented
 
 
-
 class SwinTransformerBackbone(BackboneMixin):
     def __init__(self, config: SwinConfig):
         super().__init__()
         self.model = SwinModel(config)
+        self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(out_shape) for out_shape in self.outputs_shapes])
 
     def forward(self, *args, **kwargs) -> List[Tensor]:
         output = self.model(*args, **kwargs, output_hidden_states=True)
         permuted_hidden_states: List[Tensor] = []
         # we need to reshape the hidden state to their original spatial dimensions
-        for hidden_state, (h, w) in zip(output.hidden_states, self.input_resolutions):
-            permuted_hidden_state = rearrange(hidden_state, 'b (h w) d -> b d h w', h=h, w=w).contiguous()
+        for i, (hidden_state, (h, w)) in enumerate(zip(output.hidden_states, self.input_resolutions)):
+            norm = self.hidden_states_norms[i]
+            norm_hidden_state = norm(hidden_state)
+            permuted_hidden_state = rearrange(norm_hidden_state, "b (h w) d -> b d h w", h=h, w=w).contiguous()
             permuted_hidden_states.append(permuted_hidden_state)
         return permuted_hidden_states
 
@@ -500,9 +503,10 @@ class SwinTransformerBackbone(BackboneMixin):
     def input_resolutions(self) -> List[int]:
         return [layer.input_resolution for layer in self.model.encoder.layers]
 
-    @property    
+    @property
     def outputs_shapes(self) -> List[int]:
         return [layer.dim for layer in self.model.encoder.layers]
+
 
 class ConvLayer(nn.Sequential):
     def __init__(self, in_features: int, out_features: int, kernel_size: int = 3, padding: int = 1):
