@@ -1,0 +1,59 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+1. **[MaskFormer](https://huggingface.co/docs/transformers/model_doc/maskformer)** (from Meta and UIUC) released with the paper [Per-Pixel Classification is Not All You Need for Semantic Segmentation](https://arxiv.org/abs/2107.06278) by Bowen Cheng, Alexander G. Schwing, Alexander Kirillov
+
+# MaskFormer
+
+## Overview
+
+The MaskFormer model was proposed in [Per-Pixel Classification is Not All You Need for Semantic Segmentation>(https://arxiv.org/abs/2107.06278) by <INSERT AUTHORS HERE>. Bowen Cheng, Alexander G. Schwing, Alexander Kirillov
+
+The abstract from the paper is the following:
+
+_Modern approaches typically formulate semantic segmentation as a per-pixel classification task, while instance-level segmentation is handled with an alternative mask classification. Our key insight: mask classification is sufficiently general to solve both semantic- and instance-level segmentation tasks in a unified manner using the exact same model, loss, and training procedure. Following this observation, we propose MaskFormer, a simple mask classification model which predicts a set of binary masks, each associated with a single global class label prediction. Overall, the proposed mask classification-based method simplifies the landscape of effective approaches to semantic and panoptic segmentation tasks and shows excellent empirical results. In particular, we observe that MaskFormer outperforms per-pixel classification baselines when the number of classes is large. Our mask classification-based method outperforms both current state-of-the-art semantic (55.6 mIoU on ADE20K) and panoptic segmentation (52.7 PQ on COCO) models._
+
+Tips:
+
+- One can use the [`AutoFeatureExtractor`] API to prepare images for the model.
+
+This model was contributed by [francesco](<https://huggingface.co/francesco)`. The original code can be found [here](https://github.com/facebookresearch/MaskFormer).
+
+## MaskFormer specific outputs
+
+### Base
+
+[[autodoc]] models.maskformer.modeling_maskformer.MaskFormerOutput
+
+### Segmentation
+
+[[autodoc]] models.maskformer.modeling_maskformer.MaskFormerForSemanticSegmentationOutput
+
+### Panoptic Segmentation
+
+[[autodoc]] models.maskformer.modeling_maskformer.MaskFormerForPanopticSegmentationOutput
+
+## MaskFormerConfig
+
+[[autodoc]] MaskFormerConfig
+
+## MaskFormerModel
+
+[[autodoc]] MaskFormerModel - forward
+
+## MaskFormerForSemanticSegmentation
+
+[[autodoc]] MaskFormerForSemanticSegmentation - forward
+
+## MaskFormerForPanopticSegmentation
+
+[[autodoc]] MaskFormerForPanopticSegmentation - forward
