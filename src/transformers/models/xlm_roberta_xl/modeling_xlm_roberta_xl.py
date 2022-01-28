@@ -67,7 +67,6 @@ class XLMRobertaXLEmbeddings(nn.Module):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -76,7 +75,6 @@ class XLMRobertaXLEmbeddings(nn.Module):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -279,25 +277,23 @@ class XLMRobertaXLSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class XLMRobertaXLSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = hidden_states + input_tensor
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->XLMRobertaXL
 class XLMRobertaXLAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
+        self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.self = XLMRobertaXLSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = XLMRobertaXLSelfOutput(config)
         self.pruned_heads = set()
@@ -330,6 +326,7 @@ class XLMRobertaXLAttention(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
+        hidden_states = self.self_attn_layer_norm(hidden_states)
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -371,7 +368,6 @@ class XLMRobertaXLOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->XLMRobertaXL
 class XLMRobertaXLLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -386,6 +382,7 @@ class XLMRobertaXLLayer(nn.Module):
             self.crossattention = XLMRobertaXLAttention(config, position_embedding_type="absolute")
         self.intermediate = XLMRobertaXLIntermediate(config)
         self.output = XLMRobertaXLOutput(config)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -452,17 +449,18 @@ class XLMRobertaXLLayer(nn.Module):
         return outputs
 
     def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
+        intermediate_output = self.LayerNorm(attention_output)
+        intermediate_output = self.intermediate(intermediate_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->XLMRobertaXL
 class XLMRobertaXLEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([XLMRobertaXLLayer(config) for _ in range(config.num_hidden_layers)])
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
     def forward(
@@ -530,6 +528,8 @@ class XLMRobertaXLEncoder(nn.Module):
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
+
+        hidden_states = self.LayerNorm(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
