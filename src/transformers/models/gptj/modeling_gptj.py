@@ -156,7 +156,7 @@ class GPTJAttention(nn.Module):
         if head_mask is not None:
             bias += torch.log(head_mask)
 
-        attn_output, attn_weights = attention(self.config, query.permute(0,2,1,3), key.permute(0,2,1,3), value.permute(0,2,1,3), bias = bias, dropout = self.dropout, return_attentions = True)
+        attn_output, attn_weights = attention(self.config, query.permute(0,2,1,3), key.permute(0,2,1,3), value.permute(0,2,1,3), bias = bias, dropout = self.attn_dropout, return_attentions = True)
 
         return attn_output.permute(0,2,1,3), attn_weights.permute(0,2,1,3)
 
