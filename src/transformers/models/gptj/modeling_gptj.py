@@ -15,6 +15,7 @@
 """ PyTorch GPT-J model."""
 
 from typing import Tuple
+import os
 
 import torch
 import torch.utils.checkpoint
@@ -72,6 +73,8 @@ def apply_rotary_pos_emb(x, sincos, offset=0):
 class GPTJAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
+
+        self.config = config
 
         max_positions = config.max_position_embeddings
         self.register_buffer(
@@ -147,13 +150,13 @@ class GPTJAttention(nn.Module):
         query = query.to(torch.float32)
         key = key.to(torch.float32)
 
-        bias = torch.where(causal_mask, 0, self.masked_bias)
+        bias = torch.where(causal_mask, torch.tensor(0, dtype=torch.float32, device=key.device), self.masked_bias.to(torch.float32))
         if attention_mask is not None:
             bias += attention_mask
         if head_mask is not None:
             bias += torch.log(head_mask)
 
-        attn_output, attn_weights = attention(self.config, queries.permute(0,2,1,3), keys.permute(0,2,1,3), bias = bias, dropout = self.dropout, return_attentions = True)
+        attn_output, attn_weights = attention(self.config, query.permute(0,2,1,3), key.permute(0,2,1,3), value.permute(0,2,1,3), bias = bias, dropout = self.dropout, return_attentions = True)
 
         return attn_output.permute(0,2,1,3), attn_weights.permute(0,2,1,3)
 
@@ -253,7 +256,10 @@ class GPTJAttention(nn.Module):
             present = None
 
         # compute self-attention: V x Softmax(QK^T)
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        if os.environ.get('NEW_ATTN'):
+            attn_output, attn_weights = self._new_attn(query, key, value, attention_mask, head_mask)
+        else:
+            attn_output, attn_weights = self._old_attn(query, key, value, attention_mask, head_mask)
 
         attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
         attn_output = self.out_proj(attn_output)

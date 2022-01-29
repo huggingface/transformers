@@ -1,0 +1,16 @@
+import os
+import torch
+import transformers
+
+config = transformers.GPTJConfig()
+config.n_embd = 16
+config.n_head = 2
+config.n_layer = 2
+config.n_positions = 16
+config.output_attentions = True
+
+model = transformers.GPTJModel(config)
+o = model(input_ids=torch.tensor([1]))
+
+os.environ['NEW_ATTN'] = '1'
+o2 = model(input_ids=torch.tensor([1]))
