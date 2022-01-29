@@ -184,6 +184,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
+            language_codes=language_codes,
             tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
@@ -196,6 +197,8 @@ class PLBartTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
         self.language_codes = language_codes
+
+        fairseq_language_codes = FAIRSEQ_LANGUAGE_CODES[self.language_codes]
 
         # Original fairseq vocab and spm vocab must be "aligned":
         # Vocab    |    0    |    1    |   2    |    3    |  4  |  5  |  6  |   7   |   8   |  9
@@ -211,7 +214,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
 
         self.sp_model_size = len(self.sp_model)
         self.lang_code_to_id = {
-            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
+            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(fairseq_language_codes)
         }
         self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
 

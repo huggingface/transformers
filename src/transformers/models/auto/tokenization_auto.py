@@ -54,13 +54,6 @@ else:
                     "PLBartTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            (
-                "plbart_multi",
-                (
-                    "PLBartMultiTokenizer" if is_sentencepiece_available() else None,
-                    "PLBartMultiTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
             ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),

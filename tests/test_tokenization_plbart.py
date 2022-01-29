@@ -43,11 +43,11 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="base", keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_full_tokenizer(self):
-        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="base", keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -168,7 +168,7 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tokenizer: PLBartTokenizer = PLBartTokenizer.from_pretrained(
-            cls.checkpoint_name, src_lang="python", tgt_lang="en_XX"
+            cls.checkpoint_name, language_codes="base", src_lang="python", tgt_lang="en_XX"
         )
         cls.pad_token_id = 1
         return cls

@@ -505,7 +505,7 @@ class PLBartPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (PLBartDecoder, PLBartDecoder)):
+        if isinstance(module, (PLBartDecoder, PLBartEncoder)):
             module.gradient_checkpointing = value
 
     @property
