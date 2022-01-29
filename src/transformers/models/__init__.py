@@ -31,6 +31,7 @@ from . import (
     bigbird_pegasus,
     blenderbot,
     blenderbot_small,
+    bort,
     byt5,
     camembert,
     canine,
@@ -115,8 +116,10 @@ from . import (
     wav2vec2_phoneme,
     wav2vec2_with_lm,
     wavlm,
+    xglm,
     xlm,
     xlm_prophetnet,
     xlm_roberta,
     xlnet,
+    yoso,
 )

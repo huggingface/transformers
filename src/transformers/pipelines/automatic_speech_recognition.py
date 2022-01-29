@@ -300,12 +300,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 logits = outputs["logits"].numpy()
                 stride = outputs.get("stride", None)
                 if stride is not None:
-                    try:
-                        total_n, left, right = stride
-                    except Exception:
-                        import ipdb
-
-                        ipdb.set_trace()
+                    total_n, left, right = stride
                     # Total_n might be < logits.shape[1]
                     # because of padding, that's why
                     # we need to reconstruct this information

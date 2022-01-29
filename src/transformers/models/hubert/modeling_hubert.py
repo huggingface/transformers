@@ -40,14 +40,28 @@ from .configuration_hubert import HubertConfig
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "HubertConfig"
-_CHECKPOINT_FOR_DOC = "facebook/hubert-large-ls960-ft"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 _FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
-_SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"
 
 _HIDDEN_STATES_START_POSITION = 1
+
+# General docstring
+_CONFIG_FOR_DOC = "HubertConfig"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "facebook/hubert-large-ls960-ft"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
+
+# CTC docstring
+_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
+_CTC_EXPECTED_LOSS = 22.68
+
+# Audio class docstring
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
+_SEQ_CLASS_EXPECTED_LOSS = 8.53
 
 
 HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1098,6 +1112,8 @@ class HubertForCTC(HubertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1228,6 +1244,8 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,

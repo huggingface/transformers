@@ -394,6 +394,33 @@ class TokenizerTesterMixin:
         self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
         self.check_subword_sampling(tokenizer_new)
 
+    def test_save_sentencepiece_tokenizer(self) -> None:
+        if not self.test_sentencepiece or not self.test_slow_tokenizer:
+            return
+        # We want to verify that we will be able to save the tokenizer even if the original files that were used to
+        # build the tokenizer have been deleted in the meantime.
+        text = "This is text to test the tokenizer."
+
+        tokenizer_slow_1 = self.get_tokenizer()
+        encoding_tokenizer_slow_1 = tokenizer_slow_1(text)
+
+        tmpdirname_1 = tempfile.mkdtemp()
+        tmpdirname_2 = tempfile.mkdtemp()
+
+        tokenizer_slow_1.save_pretrained(tmpdirname_1)
+        tokenizer_slow_2 = self.tokenizer_class.from_pretrained(tmpdirname_1)
+        encoding_tokenizer_slow_2 = tokenizer_slow_2(text)
+
+        shutil.rmtree(tmpdirname_1)
+        tokenizer_slow_2.save_pretrained(tmpdirname_2)
+
+        tokenizer_slow_3 = self.tokenizer_class.from_pretrained(tmpdirname_2)
+        encoding_tokenizer_slow_3 = tokenizer_slow_3(text)
+        shutil.rmtree(tmpdirname_2)
+
+        self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_2)
+        self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_3)
+
     def test_model_input_names_signature(self):
         accepted_model_main_input_names = [
             "input_ids",  # nlp models
