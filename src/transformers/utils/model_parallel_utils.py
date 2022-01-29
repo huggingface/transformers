@@ -21,11 +21,11 @@ class TPInfo(object):
     def __init__(
         self,
         *name,
-        fuse: bool = False,
+        combined_qkv: bool = False,
         reverse: bool = False,
     ):
         self.name = name
-        self.fuse = fuse
+        self.combined_qkv = combined_qkv
         self.reverse = reverse
 
     def __str__(self):
@@ -37,7 +37,7 @@ class TPInfo(object):
 
 Col = type("COLUMN", (TPInfo,), {"code": "Col"})
 Row = type("ROW", (TPInfo,), {"code": "Row"})
-Update = type("UPDATE", (TPInfo,), {"code": "Update", "parallel": False})
+Update = type("UPDATE", (TPInfo,), {"code": "Update"})
 
 
 class TPMapping(object):
@@ -58,13 +58,12 @@ class TPMapping(object):
             Update("num_attention_heads", "all_head_size"),
         ],
         T5=[
-            Col("Attention.q", "Attention.k", "Attention.v"),
-            Col("relative_attention_bias", reverse=True),
-            Row("DenseReluDense.wi", "Attention.o", "DenseReluDense.wo"),
+            Col("q", "k", "v", "DenseReluDense.wi"),
+            Row("o", "DenseReluDense.wo", "relative_attention_bias"),
             Update("d_model", "n_heads", "inner_dim"),
         ],
         GPT2=[
-            Col("c_attn", reverse=True, fuse=True),
+            Col("c_attn", reverse=True, combined_qkv=True),
             Col("q_attn", reverse=True),
             Row("c_proj", reverse=True),
             Update("embed_dim", "split_size", "num_heads"),
@@ -155,13 +154,13 @@ class TPMapping(object):
 
         return None
 
-    def is_fused_param(self, model, param_name):
+    def is_combined_qkv_param(self, model, param_name):
         elem = self.search(model, param_name)
         if elem is not None:
-            return elem.fuse
+            return elem.combined_qkv
 
-    def get_fusion_degree(self, model, param_name, module):
-        if self.is_fused_param(model, param_name) and hasattr(module, "weight"):
+    def get_combined_qkv_degree(self, model, param_name, module):
+        if self.is_combined_qkv_param(model, param_name) and hasattr(module, "weight"):
             bigger = max(module.weight.size(0), module.weight.size(1))
             smaller = min(module.weight.size(0), module.weight.size(1))
             return bigger // smaller
