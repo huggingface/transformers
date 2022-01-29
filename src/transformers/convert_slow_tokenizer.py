@@ -937,6 +937,7 @@ class XGLMConverter(SpmConverter):
             ],
         )
 
+
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
