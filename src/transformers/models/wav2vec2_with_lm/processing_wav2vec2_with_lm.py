@@ -42,6 +42,10 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
     Args:
         text (list of `str`):
             Decoded logits in text from. Usually the speech transcription.
+        logit_score (list of `float`):
+            Total logit score of the beam associated with produced text.
+        lm_score (list of `float`):
+            Fused lm_score of the beam associated with produced text.
     """
 
     text: Union[List[str], str]
