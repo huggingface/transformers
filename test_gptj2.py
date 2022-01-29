@@ -9,6 +9,7 @@ config.n_layer = 2
 config.n_positions = 16
 config.output_attentions = True
 
+os.environ['NEW_ATTN'] = ''
 model = transformers.GPTJModel(config)
 o = model(input_ids=torch.tensor([1]))
 

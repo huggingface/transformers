@@ -2439,7 +2439,7 @@ def apply_chunking_to_forward(
 
     return forward_fn(*input_tensors)
 
-def attention(config, queries, keys, values, mask=None, bias=None, dropout=None):
+def attention(config, queries, keys, values, mask=None, bias=None, dropout=None, return_attentions=False):
     '''
         queries: [Batches, Queries, Heads, Features]
         keys: [Batches, Keys, Heads, Features]
@@ -2453,12 +2453,12 @@ def attention(config, queries, keys, values, mask=None, bias=None, dropout=None)
         maskbias_shape = (*queries.shape[::-1], keys.shape[-3])
         if mask is None:
             mask = True
-        mask &= dropout(torch.ones(maskbias_shape)).to(torch.bool)
+        mask &= dropout(torch.ones(maskbias_shape, device=queries.device)).to(torch.bool)
         if bias is None:
-            bias = torch.zeros(maskbias_shape)
-        bias += math.log(1 / (1 - self.dropout.p))
+            bias = torch.zeros(maskbias_shape, dtype=queries.dtype, device=queries.device)
+        bias += torch.log(1 / (torch.tensor(1, dtype=bias.dtype, device=bias.device) - dropout.p))
     return memory_efficient_attention.efficient_dot_product_attention_pt(
-            queries, keys, values, mask, bias, query_size, key_size)
+            queries, keys, values, mask, bias, query_size, key_size, return_attentions)
 
 
 def torch_int_div(tensor1, tensor2):
