@@ -12,60 +12,24 @@ specific language governing permissions and limitations under the License.
 
 # 🤗 Transformers
 
-State-of-the-art Machine Learning for Jax, Pytorch and TensorFlow
+State-of-the-art Machine Learning for PyTorch, TensorFlow and JAX.
 
-🤗 Transformers (formerly known as _pytorch-transformers_ and _pytorch-pretrained-bert_) provides thousands of pretrained models to perform tasks on different modalities such as text, vision, and audio.
+🤗 Transformers provides APIs to easily download and train state-of-the-art pretrained models. Using pretrained models can reduce your compute costs, carbon footprint, and save you time from training a model from scratch. The models can be used across different modalities such as:
 
-These models can applied on:
+* 📝 Text: text classification, information extraction, question answering, summarization, translation, and text generation in over 100 languages.
+* 🖼️ Images: image classification, object detection, and segmentation.
+* 🗣️ Audio: speech recognition and audio classification.
+* 🐙 Multimodal: table question answering, optical character recognition, information extraction from scanned documents, video classification, and visual question answering.
 
-* 📝 Text, for tasks like text classification, information extraction, question answering, summarization, translation, text generation, in over 100 languages.
-* 🖼️ Images, for tasks like image classification, object detection, and segmentation.
-* 🗣️ Audio, for tasks like speech recognition and audio classification.
+Our library supports seamless integration between three of the most popular deep learning libraries: [PyTorch](https://pytorch.org/), [TensorFlow](https://www.tensorflow.org/) and [JAX](https://jax.readthedocs.io/en/latest/). Train your model in three lines of code in one framework, and load it for inference with another.
 
-Transformer models can also perform tasks on **several modalities combined**, such as table question answering, optical character recognition, information extraction from scanned documents, video classification, and visual question answering.
-
-🤗 Transformers provides APIs to quickly download and use those pretrained models on a given text, fine-tune them on your own datasets and then share them with the community on our [model hub](https://huggingface.co/models). At the same time, each python module defining an architecture is fully standalone and can be modified to enable quick research experiments.
-
-🤗 Transformers is backed by the three most popular deep learning libraries — [Jax](https://jax.readthedocs.io/en/latest/), [PyTorch](https://pytorch.org/) and [TensorFlow](https://www.tensorflow.org/) — with a seamless integration between them. It's straightforward to train your models with one before loading them for inference with the other.
-
-This is the documentation of our repository [transformers](https://github.com/huggingface/transformers). You can
-also follow our [online course](https://huggingface.co/course) that teaches how to use this library, as well as the
-other libraries developed by Hugging Face and the Hub.
+Each 🤗 Transformers architecture is defined in a standalone Python module so they can be easily customized for research and experiments.
 
 ## If you are looking for custom support from the Hugging Face team
 
 <a target="_blank" href="https://huggingface.co/support">
 <img alt="HuggingFace Expert Acceleration Program" src="https://huggingface.co/front/thumbnails/support.png" style="max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
 </a><br>
-
-## Features
-
-1. Easy-to-use state-of-the-art models:
-    - High performance on natural language understanding & generation, computer vision, and audio tasks.
-    - Low barrier to entry for educators and practitioners.
-    - Few user-facing abstractions with just three classes to learn.
-    - A unified API for using all our pretrained models.
-
-1. Lower compute costs, smaller carbon footprint:
-    - Researchers can share trained models instead of always retraining.
-    - Practitioners can reduce compute time and production costs.
-    - Dozens of architectures with over 20,000 pretrained models, some in more than 100 languages.
-
-1. Choose the right framework for every part of a model's lifetime:
-    - Train state-of-the-art models in 3 lines of code.
-    - Move a single model between TF2.0/PyTorch/JAX frameworks at will.
-    - Seamlessly pick the right framework for training, evaluation and production.
-
-1. Easily customize a model or an example to your needs:
-    - We provide examples for each architecture to reproduce the results published by its original authors.
-    - Model internals are exposed as consistently as possible.
-    - Model files can be used independently of the library for quick experiments.
-
-[All the model checkpoints](https://huggingface.co/models) are seamlessly integrated from the huggingface.co [model
-hub](https://huggingface.co) where they are uploaded directly by [users](https://huggingface.co/users) and
-[organizations](https://huggingface.co/organizations).
-
-Current number of checkpoints: <img src="https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen">
 
 ## Contents
 
