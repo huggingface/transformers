@@ -118,7 +118,10 @@ Next, load a dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co
 Now you can iterate over the dataset with the pipeline. `KeyDataset` retrieves the item in the dictionary returned by the dataset:
 
 ```py
->>> for out in tqdm.tqdm(speech_recognizer(KeyDataset(dataset, "file"))):
+>>> from transformers.pipelines.base import KeyDataset
+>>> from tqdm.auto import tqdm
+
+>>> for out in tqdm(speech_recognizer(KeyDataset(dataset, "file"))):
 ...     print(out)
 {"text": "HE HOPED THERE WOULD BE STEW FOR DINNER TURNIPS AND CARROTS AND BRUISED POTATOES AND FAT MUTTON PIECES TO BE LADLED OUT IN THICK PEPPERED FLOWER FAT AND SAUCE"}
 ```
@@ -141,7 +144,7 @@ Use the [`AutoModelForSequenceClassification`] and ['AutoTokenizer'] to load the
 ===PT-TF-SPLIT===
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
->>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True)
+>>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
 
@@ -165,7 +168,7 @@ Let's return to our example and see how you can use the `AutoClass` to replicate
 
 ### AutoTokenizer
 
-A tokenizer is responsible for preprocessing text in a way that is understandable by the model. First, the tokenizer will split the text into words called *tokens*. There are multiple rules that govern the tokenization process, including how to split a word and at what level (learn more [here](./tokenizer_summary)). The most important thing to remember though is you need to instantiate the tokenizer with the same model name to ensure you're using the same tokenization rules a model was pretrained with.
+A tokenizer is responsible for preprocessing text into a format that is understandable to the model. First, the tokenizer will split the text into words called *tokens*. There are multiple rules that govern the tokenization process, including how to split a word and at what level (learn more about tokenization [here](./tokenizer_summary)). The most important thing to remember though is you need to instantiate the tokenizer with the same model name to ensure you're using the same tokenization rules a model was pretrained with.
 
 Load a tokenizer with [`AutoTokenizer`]:
 
@@ -270,7 +273,7 @@ function (like softmax) because the final activation function is often fused wit
 
 </Tip>
 
-Models are a standard [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) so you can use them in your usual training loop. However, to make things easier, 🤗 Transformers provides a [`Trainer`] class for PyTorch that adds functionality for distributed training, mixed precision, and more. For TensorFlow, you can use the `fit` method from [Keras](https://keras.io/). Refer to the [training tutorial](./training) for more details.
+Models are a standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) so you can use them in your usual training loop. However, to make things easier, 🤗 Transformers provides a [`Trainer`] class for PyTorch that adds functionality for distributed training, mixed precision, and more. For TensorFlow, you can use the `fit` method from [Keras](https://keras.io/). Refer to the [training tutorial](./training) for more details.
 
 <Tip>
 
