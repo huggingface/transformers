@@ -16,8 +16,8 @@ import copy
 import importlib
 from math import ceil
 
-class TPInfo(object):
 
+class TPInfo(object):
     def __init__(
         self,
         *name,
@@ -181,6 +181,7 @@ class TPMapping(object):
         elem = self.search(model, param_name)
         if elem is not None:
             return elem.code == "Row"
+
 
 def assert_device_map(device_map, num_blocks):
     blocks = list(range(0, num_blocks))
