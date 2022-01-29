@@ -49,7 +49,7 @@ Files are also easily edited in a repository, and you can view the commit histor
 
 ## Setup
 
-Before sharing a model to the Hub, you will need your Hugging Face credentials. If you have access to a terminal, run the following command in the virtual environment where 🤗 Transformers is installed. This will store your access token in your Hugging Face cache folder (by default: `~/.cache/`):
+Before sharing a model to the Hub, you will need your Hugging Face credentials. If you have access to a terminal, run the following command in the virtual environment where 🤗 Transformers is installed. This will store your access token in your Hugging Face cache folder (`~/.cache/` by default):
 
 ```bash
 huggingface-cli login
@@ -132,7 +132,7 @@ After you fine-tune your model, call [`~transformers.Trainer.push_to_hub`] on [`
 
 ## Push a model with `PushToHubCallback`
 
-TensorFlow users can enable the same functionality with `PushToHubCallback`. In the `PushToHubCallback` function, add:
+TensorFlow users can enable the same functionality with [`PushToHubCallback`]. In the [`PushToHubCallback`] function, add:
 
 - An output directory for your model.
 - A tokenizer.
@@ -205,7 +205,7 @@ From here, add some information about your model:
 - Choose whether your model is public or private.
 - Specify the license usage for your model.
 
-Now click on the **Files** tab and click on the **Add file** button to upload a new file to your repository. Then drag-and-drop a file to upload and you can add a commit message.
+Now click on the **Files** tab and click on the **Add file** button to upload a new file to your repository. Then drag-and-drop a file to upload and add a commit message.
 
 ![upload_file](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/upload_file.png)
 
@@ -214,6 +214,6 @@ Now click on the **Files** tab and click on the **Add file** button to upload a 
 To make sure users understand your model's capabilities, limitations, potential biases and ethical considerations, please add a model card to your repository. The model card is defined in the `README.md` file. You can add a model card by:
 
 * Manually creating and uploading a `README.md` file.
-* Clicking on the **Edit model carad** button in your model repository.
+* Clicking on the **Edit model card** button in your model repository.
 
-Take a look at the DistilBert [model card](https://huggingface.co/distilbert-base-uncased) for a good example of the type of information the model card should include. For more information about other options you can control in the `README.md` file such as a model's carbon footprint or widget examples, refer to the documentation [here](https://huggingface.co/docs/hub/model-repos).
+Take a look at the DistilBert [model card](https://huggingface.co/distilbert-base-uncased) for a good example of the type of information a model card should include. For more details about other options you can control in the `README.md` file such as a model's carbon footprint or widget examples, refer to the documentation [here](https://huggingface.co/docs/hub/model-repos).
