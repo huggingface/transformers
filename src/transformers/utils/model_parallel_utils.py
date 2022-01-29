@@ -18,16 +18,6 @@ from math import ceil
 
 
 class TPInfo(object):
-    """
-    A class to describe tensor parallelization information.
-
-    Args:
-        name (Tuple[str]): the name of parameter
-        fuse (int): the degree of fusion
-        parallel (bool): parallelizable param or not
-        reverse (bool): reversed param or not
-    """
-
     def __init__(
         self,
         *name,
@@ -120,14 +110,6 @@ class TPMapping(object):
 
     @staticmethod
     def _load_class_by_model_name(model_name):
-        """
-        Load base class obj by class name
-        Args:
-            model_name (str): model name (e.g. Bert, GPT2, T5, ...)
-
-        Returns:
-            class: XXXPreTrainedModel
-        """
         transformers = importlib.import_module("transformers")
         cls = getattr(transformers, f"{model_name}PreTrainedModel", None)
         if cls is None:
@@ -136,72 +118,27 @@ class TPMapping(object):
         return cls
 
     def get_mapping(self, model):
-        """
-        Get mapping by model obj
-
-        Args:
-            model (PreTrainedModel): model object (e.g. BertForSequenceClassification)
-
-        Returns:
-            dict: mapping by model
-        """
         for cls, mapping in self.__MAPPING__.items():
             if isinstance(model, cls):
                 return mapping
         return None
 
     def column_parallel_params(self, model):
-        """
-        Get list of column parallel param elements
-
-        Args:
-            model (PreTrainedModel): model obj
-
-        Returns:
-            List[COLUMN]: list of column parallel param elements
-        """
         mapping = self.get_mapping(model)
         if mapping is not None:
             return mapping["COL"]
 
     def row_parallel_params(self, model):
-        """
-        Get list of row parallel param elements
-
-        Args:
-            model (PreTrainedModel): model obj
-
-        Returns:
-            List[ROW]: list of row parallel param elements
-        """
         mapping = self.get_mapping(model)
         if mapping is not None:
             return mapping["ROW"]
 
     def update_attrs(self, model):
-        """
-        Get list of update attribute elements
-
-        Args:
-            model (PreTrainedModel): model obj
-
-        Returns:
-            List[UPDATE]: list of update attribute elements
-        """
         mapping = self.get_mapping(model)
         if mapping is not None:
             return mapping["UPDATE"]
 
     def search(self, model, param_name):
-        """
-        Get element by parameter name
-
-        Args:
-            model (PreTrainedModel): model obj
-
-        Returns:
-            TPInfo: element by parameter name
-        """
         mapping = self.get_mapping(model)
         count_contain_elem_in_param = False
         param_split = param_name.split(".")
@@ -217,32 +154,11 @@ class TPMapping(object):
         return None
 
     def is_fused_param(self, model, param_name):
-        """
-        Check whether the param is fused or not
-
-        Args:
-            model (PreTrainedModel): model obj
-            param_name (str): name of parameter
-
-        Returns:
-            bool: whether the param is fused or not
-        """
         elem = self.search(model, param_name)
         if elem is not None:
             return elem.fuse
 
     def get_fusion_degree(self, model, param_name, module):
-        """
-        Get fusion degree
-
-        Args:
-            model (PreTrainedModel): model obj
-            param_name (str): name of parameter
-            module (nn.Module): module that has `weight` parameter
-
-        Returns:
-            int: fusion degree of module
-        """
         if self.is_fused_param(model, param_name) and hasattr(module, "weight"):
             bigger = max(module.weight.size(0), module.weight.size(1))
             smaller = min(module.weight.size(0), module.weight.size(1))
@@ -250,32 +166,11 @@ class TPMapping(object):
         return 1
 
     def is_reversed_param(self, model, param_name):
-        """
-        Check whether the parameter is reversed or not
-
-        Args:
-            model (PreTrainedModel): model obj
-            param_name (str): name of parameter
-
-        Returns:
-            bool: whether the param is reversed or not
-        """
         elem = self.search(model, param_name)
         if elem is not None:
             return elem.reverse
 
     def is_parallelizable_param(self, model, param_name):
-        """
-        Check whether the parameter is parallelizable or not
-
-        Args:
-            model (PreTrainedModel): model obj
-            param_name (str): name of parameter
-
-        Returns:
-            bool: whether the param is parallelizable or not
-        """
-
         elem = self.search(model, param_name)
         if elem is not None:
             return elem.parallel
