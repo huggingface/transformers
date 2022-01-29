@@ -1896,7 +1896,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         encoder = model.get_encoder()
 
-        encoder_outputs = encoder(input_values)
+        encoder_outputs = encoder(inp/gut_values)
 
         output_sequences_no_mask = model.generate(encoder_outputs=encoder_outputs).cpu()
         output_sequences_with_mask = model.generate(encoder_outputs=encoder_outputs, attention_mask=attention_mask)
