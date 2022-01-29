@@ -19,6 +19,7 @@ import argparse
 import json
 from collections import OrderedDict
 from pathlib import Path
+from stat import ST_SIZE
 
 import torch
 from PIL import Image
@@ -28,9 +29,10 @@ from huggingface_hub import cached_download, hf_hub_url
 from transformers import (
     PoolFormerConfig,
     PoolFormerForImageClassification,
+    DeiTFeatureExtractor,
 )
 from transformers.utils import logging
-from transformers.utils.dummy_vision_objects import DeiTFeatureExtractor
+# from transformers.utils.dummy_vision_objects import DeiTFeatureExtractor
 
 
 logging.set_verbosity_info()
@@ -41,8 +43,9 @@ def replace_key_with_offset(key, offset, original_name, new_name):
     Replaces the key by subtracting the offset from the original layer number
     """
     to_find = original_name.split(".")[0]
-    orig_block_num = int(key[:key.find(to_find)][-4])
-    layer_num = int(key[:key.find(to_find)][-2])
+    key_list = key.split(".")
+    orig_block_num = int(key_list[key_list.index(to_find)-2])
+    layer_num = int(key_list[key_list.index(to_find)-1])
     new_block_num = orig_block_num - offset
     
     key = key.replace(
@@ -82,13 +85,14 @@ def rename_keys(state_dict):
             key = replace_key_with_offset(key, patch_emb_offset, "norm1", "before_norm")
         if "norm2" in key:
             key = replace_key_with_offset(key, patch_emb_offset, "norm2", "after_norm")
-        if "layer_scale" in key:
-            key = replace_key_with_offset(key, patch_emb_offset, "layer_scale", "layer_scale")
+        if "layer_scale_1" in key:
+            key = replace_key_with_offset(key, patch_emb_offset, "layer_scale_1", "layer_scale_1")
+        if "layer_scale_2" in key:
+            key = replace_key_with_offset(key, patch_emb_offset, "layer_scale_2", "layer_scale_2")
         if "head" in key:
             key = key.replace("head", "classifier")
         new_state_dict[key] = value
     return new_state_dict
-
 
 # We will verify our results on a COCO image
 def prepare_img():
@@ -149,10 +153,11 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
     else:
         raise ValueError(f"Size {size} not supported")
 
+    print(size)
     # load feature extractor (only resize + normalize)
-    size = (224, 224)
+    img_size = (224, 224)
     feature_extractor = DeiTFeatureExtractor(
-        size=size,
+        size=img_size,
         resample=Image.BILINEAR,
         crop_size=224,
     )
@@ -164,7 +169,7 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
     logger.info(f"Converting model {model_name}...")
 
     # load original state dict
-    state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))["state_dict"]
+    state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))
 
     # rename keys
     state_dict = rename_keys(state_dict)
@@ -180,15 +185,17 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
 
     # define expected logit slices for different models 
     if size == "s12":
-        expected_slice = torch.tensor([-0.5267, -0.0709, -0.3930])
+        expected_slice = torch.tensor([-0.3045, -0.6758, -0.4869])
     elif size == "s24":
-        expected_slice = torch.tensor([-0.0488,  0.1637, -0.0669])
+        expected_slice = torch.tensor([ 0.4402, -0.1374, -0.8045])
     elif size == "s36":
-        expected_slice = torch.tensor([-0.4368, -0.7142,  0.0809])
+        expected_slice = torch.tensor([-0.6080, -0.5133, -0.5898])
     elif size == "m36":
-        expected_slice = torch.tensor([ 0.2335, -0.3859, -0.6380])
+        expected_slice = torch.tensor([ 0.3952,  0.2263, -1.2668])
     elif size == "m48":
-        expected_slice = torch.tensor([-0.3545,  0.1915,  0.2404])
+        expected_slice = torch.tensor([ 0.1167, -0.0656, -0.3423])
+    else:
+        raise ValueError(f"Size {size} not supported")
 
     # verify logits
     assert logits.shape == expected_shape
@@ -198,7 +205,6 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
     logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
