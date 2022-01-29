@@ -16,22 +16,17 @@ import copy
 import importlib
 from math import ceil
 
-
 class TPInfo(object):
+
     def __init__(
         self,
         *name,
         fuse: bool = False,
-        parallel: bool = True,
-        reverse: bool = True,
-        # nn.Linear stores data reversely.
-        # nn.Linear(in, out) -> Parameter(out, int)
+        reverse: bool = False,
     ):
         self.name = name
         self.fuse = fuse
         self.reverse = reverse
-        self.parallel = parallel
-        self.code = None
 
     def __str__(self):
         return f"{self.__class__.__qualname__}({self.name})"
@@ -40,9 +35,9 @@ class TPInfo(object):
         return self.__str__()
 
 
-Col = type("COLUMN", (TPInfo,), {"code": "COLUMN"})
-Row = type("ROW", (TPInfo,), {"code": "ROW"})
-Update = type("UPDATE", (TPInfo,), {"code": "UPDATE", "parallel": False})
+Col = type("COLUMN", (TPInfo,), {"code": "Col"})
+Row = type("ROW", (TPInfo,), {"code": "Row"})
+Update = type("UPDATE", (TPInfo,), {"code": "Update", "parallel": False})
 
 
 class TPMapping(object):
@@ -64,14 +59,14 @@ class TPMapping(object):
         ],
         T5=[
             Col("Attention.q", "Attention.k", "Attention.v"),
-            Col("relative_attention_bias", reverse=False),
+            Col("relative_attention_bias", reverse=True),
             Row("DenseReluDense.wi", "Attention.o", "DenseReluDense.wo"),
             Update("d_model", "n_heads", "inner_dim"),
         ],
         GPT2=[
-            Col("c_attn", reverse=False, fuse=True),
-            Col("q_attn", reverse=False),
-            Row("c_proj", reverse=False),
+            Col("c_attn", reverse=True, fuse=True),
+            Col("q_attn", reverse=True),
+            Row("c_proj", reverse=True),
             Update("embed_dim", "split_size", "num_heads"),
         ],
         Electra=[
@@ -127,27 +122,33 @@ class TPMapping(object):
     def column_parallel_params(self, model):
         mapping = self.get_mapping(model)
         if mapping is not None:
-            return mapping["COL"]
+            return mapping["Col"]
 
     def row_parallel_params(self, model):
         mapping = self.get_mapping(model)
         if mapping is not None:
-            return mapping["ROW"]
+            return mapping["Row"]
 
     def update_attrs(self, model):
         mapping = self.get_mapping(model)
         if mapping is not None:
-            return mapping["UPDATE"]
+            return mapping["Update"]
 
     def search(self, model, param_name):
         mapping = self.get_mapping(model)
-        count_contain_elem_in_param = False
+        count_contain_elem_in_param = 0
         param_split = param_name.split(".")
+        first_check = []
 
-        for code, elem in mapping.items():
+        for code, elems in mapping.items():
+            for elem in elems:
+                if elem.name in param_name:
+                    first_check.append(elem)
+
+        for elem in first_check:
             elem_split = elem.name.split(".")
-            for _elem_split in elem_split:
-                if _elem_split in param_split:
+            for split in elem_split:
+                if split in param_split:
                     count_contain_elem_in_param += 1
             if count_contain_elem_in_param == len(elem_split):
                 return elem
@@ -171,11 +172,15 @@ class TPMapping(object):
         if elem is not None:
             return elem.reverse
 
-    def is_parallelizable_param(self, model, param_name):
+    def is_column_parallel(self, model, param_name):
         elem = self.search(model, param_name)
         if elem is not None:
-            return elem.parallel
+            return elem.code == "Col"
 
+    def is_row_parallel(self, model, param_name):
+        elem = self.search(model, param_name)
+        if elem is not None:
+            return elem.code == "Row"
 
 def assert_device_map(device_map, num_blocks):
     blocks = list(range(0, num_blocks))
