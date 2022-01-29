@@ -139,6 +139,7 @@ class XLMRobertaXLEmbeddings(nn.Module):
 
         Args:
             inputs_embeds: torch.Tensor
+
         Returns: torch.Tensor
         """
         input_shape = inputs_embeds.size()[:-1]
@@ -1536,6 +1537,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
 
     Args:
         x: torch.Tensor x:
+
     Returns: torch.Tensor
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
