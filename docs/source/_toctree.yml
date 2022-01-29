@@ -22,7 +22,7 @@
   - local: accelerate
     title: Distributed training with 🤗 Accelerate
   - local: model_sharing
-    title: Model sharing and uploading
+    title: Share a model
   - local: tokenizer_summary
     title: Summary of the tokenizers
   - local: multilingual
