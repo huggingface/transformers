@@ -1390,10 +1390,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
         loss = None
         if inputs["labels"] is not None:
-            # shift labels to the left and cut last logit token
-            logits = logits[:, :-1]
-            labels = inputs["labels"][:, 1:]
-            loss = self.hf_compute_loss(labels, logits)
+            loss = self.hf_compute_loss(inputs["labels"], logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + transformer_outputs[1:]
