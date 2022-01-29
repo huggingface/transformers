@@ -2727,13 +2727,6 @@ class PLBartForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class PLBartForQuestionAnswering(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class PLBartForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
