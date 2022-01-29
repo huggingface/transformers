@@ -31,6 +31,7 @@ class TPInfo(object):
         self.fuse = fuse
         self.reverse = reverse
         self.parallel = parallel
+        self.code = None
 
     def __str__(self):
         return f"{self.__class__.__qualname__}({self.name})"
