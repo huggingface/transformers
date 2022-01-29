@@ -14,7 +14,7 @@
 # limitations under the License.
 """Convert PoolFormer checkpoints."""
 
-
+import math
 import argparse
 import json
 from collections import OrderedDict
@@ -30,7 +30,7 @@ from transformers import (
     PoolFormerForImageClassification,
 )
 from transformers.utils import logging
-from transformers.utils.dummy_vision_objects import ViTFeatureExtractor
+from transformers.utils.dummy_vision_objects import DeiTFeatureExtractor
 
 
 logging.set_verbosity_info()
@@ -51,6 +51,11 @@ def replace_key_with_offset(key, offset, original_name, new_name):
     )
     return key
 
+def calc_crop_size(original_size, crop_pct):
+    """
+    Calculates the new crop size
+    """
+    return int(math.floor(original_size[0] / crop_pct))
 
 def rename_keys(state_dict):
     new_state_dict = OrderedDict()
@@ -117,31 +122,39 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
         config.depths = [2, 2, 6, 2]
         config.hidden_sizes = [64, 128, 320, 512]
         config.mlp_ratio = 4.0
+        crop_pcent = 0.9
     elif size == "s24":
         config.depths = [4, 4, 12, 4]
         config.hidden_sizes = [64, 128, 320, 512]
         config.mlp_ratio = 4.0
+        crop_pcent = 0.9
     elif size == "s36":
         config.depths = [6, 6, 18, 6]
         config.hidden_sizes = [64, 128, 320, 512]
         config.mlp_ratio = 4.0
         config.layer_scale_init_value = 1e-6
+        crop_pcent = 0.9
     elif size == "m36":
         config.depths = [6, 6, 18, 6]
         config.hidden_sizes = [96, 192, 384, 768]
         config.mlp_ratio = 4.0
         config.layer_scale_init_value = 1e-6
+        crop_pcent = 0.95
     elif size == "m48":
         config.depths = [8, 8, 24, 8]
         config.hidden_sizes = [96, 192, 384, 768]
         config.mlp_ratio = 4.0
         config.layer_scale_init_value = 1e-6
+        crop_pcent = 0.95
     else:
         raise ValueError(f"Size {size} not supported")
 
     # load feature extractor (only resize + normalize)
-    feature_extractor = ViTFeatureExtractor(
-        image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
+    size = (224, 224)
+    feature_extractor = DeiTFeatureExtractor(
+        size=size,
+        resample=Image.BILINEAR,
+        crop_size=224,
     )
 
     # Prepare image
