@@ -39,7 +39,7 @@ _CHECKPOINT_FOR_DOC = "seaailabs/poolformer_s12"
 _CONFIG_FOR_DOC = "PoolFormerConfig"
 
 POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "seaailabs/poolformer_s12",
+    "sail/poolformer_s12",
     # See all PoolFormer models at https://huggingface.co/models?filter=poolformer
 ]
 
