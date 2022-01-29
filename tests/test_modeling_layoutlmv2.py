@@ -122,7 +122,8 @@ class LayoutLMv2ModelTester:
                     bbox[i, j, 0] = t
 
         image = ImageList(
-            torch.zeros(self.batch_size, self.num_channels, self.image_size, self.image_size), self.image_size
+            torch.zeros(self.batch_size, self.num_channels, self.image_size, self.image_size, device=torch_device),
+            self.image_size,
         )
 
         input_mask = None

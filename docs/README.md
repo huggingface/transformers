@@ -40,7 +40,7 @@ check how they look like before committing for instance). You don't have to comm
 ## Building the documentation
 
 Once you have setup the `doc-builder` and additional packages, you can generate the documentation by typing th
-folowwing command:
+following command:
 
 ```bash
 doc-builder build transformers docs/source/ --build_dir ~/tmp/test-build
@@ -53,15 +53,14 @@ Markdown editor.
 ---
 **NOTE**
 
-It's not possible to see locally how the final documentation will look like for now. We are working on solutions to
-enable this, but any pre-visualiser of Markdown file should already give you a good idea of the result!
+It's not possible to see locally how the final documentation will look like for now. Once you have opened a PR, you
+will see a bot add a comment to a link where the documentation with your changes lives.
 
 ---
 
 ## Adding a new element to the navigation bar
 
-Accepted files are reStructuredText (.rst) and Markdown (.md or .mdx). We are progressively moving away from rst so you should
-create any new documentation file in the .mdx format. 
+Accepted files are Markdown (.md or .mdx).
 
 Create a file with its extension and put it in the source directory. You can then link it to the toc-tree by putting
 the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/master/docs/source/_toctree.yml) file.
@@ -92,17 +91,11 @@ Use the relative style to link to the new file so that the versioned docs contin
 For an example of a rich moved sections set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/master/docs/source/main_classes/trainer.mdx).
 
 
-## Preview the documentation in a pull request
-
-Coming soon!
-
 ## Writing Documentation - Specification
 
 The `huggingface/transformers` documentation follows the
 [Google documentation](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html) style for docstrings,
-although we can write them directly in Markdown. Parts of it are written in ReStructuredText
-([Sphinx simple documentation](https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html) but we are
-updating those.
+although we can write them directly in Markdown.
 
 ### Adding a new tutorial
 
@@ -134,6 +127,8 @@ When adding a new model:
     - PyTorch head models
     - TensorFlow base model
     - TensorFlow head models
+    - Flax base model
+    - Flax head models
 
 These classes should be added using our Markdown syntax. Usually as follows:
 
@@ -179,7 +174,7 @@ function to be in the main package.
 If you want to create a link to some internal class or function, you need to
 provide its path. For instance: \[\`file_utils.ModelOutput\`\]. This will be converted into a link with
 `file_utils.ModelOutput` in the description. To get rid of the path and only keep the name of the object you are
-linking to, add a ~: \[\`~file_utils.ModelOutput\`\] will generate a link with `ModelOutput` in the description.
+linking to in the description, add a ~: \[\`~file_utils.ModelOutput\`\] will generate a link with `ModelOutput` in the description.
 
 The same wroks for methods so you can either use \[\`XXXClass.method\`\] or \[~\`XXXClass.method\`\].
 
@@ -279,3 +274,12 @@ them by URL. We recommend putting them in the following dataset: [huggingface/do
 If an external contribution, feel free to add the images to your PR and ask a Hugging Face member to migrate your images
 to this dataset.
 
+## Styling the docstring
+
+We have an automatic script running with the `make style` comment that will make sure that:
+- the docstrings fully take advantage of the line width
+- all code examples are formatted using black, like the code of the Transformers library
+
+This script may have some weird failures if you made a syntax mistake or if you uncover a bug. Therefore, it's
+recommended to commit your changes before running `make style`, so you can revert the changes done by that script
+easily.
