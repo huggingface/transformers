@@ -2471,8 +2471,8 @@ def attention(queries, keys, values, mask=None, bias=None, dropout=None, chunk_s
             raise ValueError("output_attentions enabled but access when discarded by chunking is unimplemented")
         n_batches, n_heads, n_queries, n_features = queries.shape
         n_keys = keys.shape[-2]
-        queries = queries.permute(0,2,1,3)
-        keys = keys.permute(0,2,1,3)
+        queries = queries.permute(0,2,1,3).to(weights_dtype)
+        keys = keys.permute(0,2,1,3).to(weights_dtype)
         values = values.permute(0,2,1,3)
         query_size = chunk_size_query if chunk_size_query != 0 else queries.shape[-3]
         key_size = chunk_size_key if chunk_size_key != 0 else keys.shape[-3]

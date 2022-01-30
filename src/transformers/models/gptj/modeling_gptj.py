@@ -157,7 +157,7 @@ class GPTJAttention(nn.Module):
         if head_mask is not None:
             bias += torch.log(head_mask)
 
-        attn_output, attn_weights = attention(query, key, value, bias = bias, dropout = self.attn_dropout, chunk_size_query = self.config.chunk_size_query, chunk_size_key = self.config.chunk_size_key, output_attentions = output_attentions, scale = self.scale_attn)
+        attn_output, attn_weights = attention(query, key, value, bias = bias, dropout = self.attn_dropout, chunk_size_query = self.config.chunk_size_query, chunk_size_key = self.config.chunk_size_key, scale = self.scale_attn, weights_dtype = torch.float32, output_attentions = output_attentions)
 
         return attn_output, attn_weights
 
