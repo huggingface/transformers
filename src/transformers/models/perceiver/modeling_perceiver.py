@@ -272,47 +272,36 @@ class PerceiverSelfAttention(nn.Module):
         hiddens = self.num_heads * v_head_dim
 
         #import pdb; pdb.set_trace()
-        if self.config.chunk_size_query > 0 or self.config.chunk_size_key > 0:
+        #if self.config.chunk_size_query > 0 or self.config.chunk_size_key > 0:
 
-            maskbias_shape = (*queries.shape[:-1], keys.shape[-2])
-            mask = self.dropout(torch.ones(maskbias_shape)).to(torch.bool)
-            if attention_mask is None:
-                attention_mask = torch.zeros(maskbias_shape)
-            else:
-                attention_mask = attention_mask.expand(maskbias_shape)
-            bias = attention_mask + math.log(1 / (1 - self.dropout.p))
+        context_layer, _ = attention(queries, keys, values, bias=attention_mask, dropout=self.dropout, chunk_size_query=self.config.chunk_size_query, chunk_size_key=self.config.chunk_size_key, output_attentions=output_attentions, weights_dtype=None, post_bias=head_mask)
+        context_layer = context_layer.contiguous()
+        #            #dropout = self.dropout,
+        #    #context_layer = attention_probs.permute(0,2,1,3)
+        #else:
+        #    # Take the dot product between the queries and keys to get the raw attention scores.
+        #    attention_scores = torch.matmul(queries, keys.transpose(-1, -2))
 
-            # Mask heads if we want to
-            if head_mask is not None:
-                bias += math.log(head_mask)
+        #    attention_scores = attention_scores / math.sqrt(q_head_dim)
 
-            context_layer = attention(self.config, queries.permute(0,2,1,3), keys.permute(0,2,1,3), values.permute(0,2,1,3), mask, bias)
-                    #dropout = self.dropout,
-            #context_layer = attention_probs.permute(0,2,1,3)
-        else:
-            # Take the dot product between the queries and keys to get the raw attention scores.
-            attention_scores = torch.matmul(queries, keys.transpose(-1, -2))
+        #    if attention_mask is not None:
+        #        # Apply the attention mask (precomputed for all layers in PerceiverModel forward() function)
+        #        attention_scores = attention_scores + attention_mask
 
-            attention_scores = attention_scores / math.sqrt(q_head_dim)
+        #    # Normalize the attention scores to probabilities.
+        #    attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
-            if attention_mask is not None:
-                # Apply the attention mask (precomputed for all layers in PerceiverModel forward() function)
-                attention_scores = attention_scores + attention_mask
+        #    # This is actually dropping out entire tokens to attend to, which might
+        #    # seem a bit unusual, but is taken from the original Transformer paper.
+        #    attention_probs = self.dropout(attention_probs)
 
-            # Normalize the attention scores to probabilities.
-            attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        #    # Mask heads if we want to
+        #    if head_mask is not None:
+        #        attention_probs = attention_probs * head_mask
 
-            # This is actually dropping out entire tokens to attend to, which might
-            # seem a bit unusual, but is taken from the original Transformer paper.
-            attention_probs = self.dropout(attention_probs)
+        #    context_layer = torch.matmul(attention_probs, values)
 
-            # Mask heads if we want to
-            if head_mask is not None:
-                attention_probs = attention_probs * head_mask
-
-            context_layer = torch.matmul(attention_probs, values)
-
-            context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        #    context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (hiddens,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
