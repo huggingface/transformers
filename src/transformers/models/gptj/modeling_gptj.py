@@ -219,7 +219,7 @@ class GPTJAttention(nn.Module):
             present = None
 
         # compute self-attention: V x Softmax(QK^T)
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        attn_output, attn_weights = self._attn(query, key, value, output_attentions, attention_mask, head_mask)
 
         attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
         attn_output = self.out_proj(attn_output)

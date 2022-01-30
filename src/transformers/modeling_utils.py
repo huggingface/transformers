@@ -2469,13 +2469,19 @@ def attention(queries, keys, values, mask=None, bias=None, dropout=None, chunk_s
     if chunk_size_query > 0 or chunk_size_key > 0: # chunking to save memory
         if output_attentions:
             raise ValueError("output_attentions enabled but access when discarded by chunking is unimplemented")
+        n_batches, n_heads, n_queries, n_features = queries.shape
+        n_keys = keys.shape[-2]
         queries = queries.permute(0,2,1,3)
         keys = keys.permute(0,2,1,3)
         values = values.permute(0,2,1,3)
         query_size = chunk_size_query if chunk_size_query != 0 else queries.shape[-3]
         key_size = chunk_size_key if chunk_size_key != 0 else keys.shape[-3]
+        maskbias_shape = (*queries.shape[:-3], n_heads, n_queries, n_keys)
+        if bias is not None:
+            bias = bias.expand(maskbias_shape)
+        if mask is not None:
+            mask = mask.expand(maskbias_shape)
         if dropout is not None:
-            maskbias_shape = (*queries.shape[:-3], queries.shape[-2], queries.shape[-3], keys.shape[-3])
             if mask is None:
                 mask = True
             mask &= dropout(torch.ones(maskbias_shape, device=queries.device)).to(torch.bool)
@@ -2483,9 +2489,11 @@ def attention(queries, keys, values, mask=None, bias=None, dropout=None, chunk_s
                 bias = torch.zeros(maskbias_shape, dtype=queries.dtype, device=queries.device)
             bias = bias + torch.log(1 / (torch.tensor(1, dtype=bias.dtype, device=bias.device) - dropout.p))
         if post_bias is not None:
+            if bias is None:
+                bias = torch.zeros(maskbias_shape, dtype=queries.dtype, device=queries.device)
             bias = bias + torch.log(post_bias)
         if scale is not None:
-            queries = queries * torch.tensor(keys.shape[-1], dtype=queries.dtype, device=queries.device).sqrt()  / scale
+            queries = queries * torch.tensor(keys.shape[-1], dtype=queries.dtype, device=queries.device).sqrt() / scale
         output = memory_efficient_attention.efficient_dot_product_attention_pt(
             queries, keys, values, mask, bias, query_size, key_size)
         return output.permute(0,2,1,3), None
