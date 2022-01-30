@@ -44,7 +44,7 @@ class TPMapping(object):
     __MAPPING__ = dict(
         Albert=[
             Col("query", "key", "value", "ffn"),
-            Row("dense", "ffn_output"),
+            Row("attention.dense", "ffn_output"),
             Update("num_attention_heads", "all_head_size"),
         ],
         Bart=[
@@ -64,7 +64,7 @@ class TPMapping(object):
         ],
         GPT2=[
             Col("c_attn", reverse=True, combined_qkv=True),
-            Col("q_attn", reverse=True),
+            Col("c_fc", "q_attn", reverse=True),
             Row("c_proj", reverse=True),
             Update("embed_dim", "split_size", "num_heads"),
         ],
