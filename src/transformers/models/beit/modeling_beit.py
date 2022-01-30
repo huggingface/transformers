@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -142,14 +142,11 @@ class BeitEmbeddings(nn.Module):
 
     """
 
-    def __init__(self, config):
+    def __init__(self, config, use_mask_token=False):
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        if config.use_mask_token:
-            self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        else:
-            self.mask_token = None
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
         self.patch_embeddings = PatchEmbeddings(
             image_size=config.image_size,
             patch_size=config.patch_size,
@@ -166,15 +163,15 @@ class BeitEmbeddings(nn.Module):
     def forward(self, pixel_values, bool_masked_pos=None):
 
         embeddings = self.patch_embeddings(pixel_values)
-        batch_size, seq_len, _ = embeddings.size()
 
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        batch_size, seq_len, _ = embeddings.size()
         if bool_masked_pos is not None:
             mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
             # replace the masked visual tokens by mask_tokens
             w = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
             embeddings = embeddings * (1 - w) + mask_tokens * w
 
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
         if self.position_embeddings is not None:
             embeddings = embeddings + self.position_embeddings
@@ -607,11 +604,11 @@ BEIT_INPUTS_DOCSTRING = r"""
     BEIT_START_DOCSTRING,
 )
 class BeitModel(BeitPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = BeitEmbeddings(config)
+        self.embeddings = BeitEmbeddings(config, use_mask_token=use_mask_token)
         self.encoder = BeitEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
 
         self.layernorm = (
@@ -718,12 +715,18 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.num_labels = config.num_labels
-        self.beit = BeitModel(config, add_pooling_layer=False)
+        self.beit = BeitModel(config, add_pooling_layer=False, use_mask_token=True)
 
-        # Classifier head
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
+        if config.decoder_type == "beit":
+            self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+            self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
+        elif config.decoder_type == "simmim":
+            self.decoder = nn.Sequential(
+                nn.Conv2d(in_channels=config.hidden_size, out_channels=config.encoder_stride ** 2 * 3, kernel_size=1),
+                nn.PixelShuffle(config.encoder_stride),
+            )
+        else:
+            raise ValueError(f"Unknown decoder type {config.decoder_type}. Only 'beit' and 'simmim' are supported.")
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -743,16 +746,13 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
+        labels (`torch.LongTensor` of shape `(num_masked_patches,)`, `optional`):
+            Labels for computing the masked image modeling loss. Only required in case config.decoder_type == "beit".
+            Indices should be in `[0, ..., config.vocab_size]`, containing the target visual token indices of the
+            masked patches in the batch. They should be created as input_ids[bool_masked_pos]`, where the `input_ids`
+            are the visual token indices of a dVAE of choice.
         Returns:
-
         Examples:
-
         ```python
         >>> from transformers import BeitFeatureExtractor, BeitForMaskedImageModeling
         >>> from PIL import Image
@@ -760,10 +760,8 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-
         >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
         >>> model = BeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
-
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
@@ -780,20 +778,41 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-        prediction_scores = self.lm_head(sequence_output[:, 1:])
 
-        masked_lm_loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(prediction_scores[bool_masked_pos], labels)
+        masked_im_loss = None
+        if self.config.decoder_type == "beit":
+            sequence_output = self.layernorm(sequence_output)
+            prediction_scores = self.lm_head(sequence_output[:, 1:])
+
+            if labels is not None:
+                loss_fct = CrossEntropyLoss()  # -100 index = padding token
+                masked_im_loss = loss_fct(prediction_scores[bool_masked_pos], labels)
+        elif self.config.decoder_type == "simmim":
+            # Reshape to (batch_size, num_channels, height, width)
+            sequence_output = sequence_output[:, 1:]
+            B, L, C = sequence_output.shape
+            H = W = int(L ** 0.5)
+            sequence_output = sequence_output.permute(0, 2, 1).reshape(B, C, H, W)
+            # Reconstruct pixel values
+            prediction_scores = self.decoder(sequence_output)
+
+            if bool_masked_pos is not None:
+                bool_masked_pos = bool_masked_pos.reshape(-1, H, W)
+                mask = (
+                    bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
+                    .repeat_interleave(self.config.patch_size, 2)
+                    .unsqueeze(1)
+                    .contiguous()
+                )
+                reconstruction_loss = nn.functional.l1_loss(pixel_values, prediction_scores, reduction="none")
+                masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            return ((masked_im_loss,) + output) if masked_im_loss is not None else output
 
         return MaskedLMOutput(
-            loss=masked_lm_loss,
+            loss=masked_im_loss,
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,

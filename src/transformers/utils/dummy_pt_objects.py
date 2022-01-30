@@ -3782,6 +3782,13 @@ class ViTForImageClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class ViTForMaskedImageModeling(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ViTModel(metaclass=DummyObject):
     _backends = ["torch"]
 

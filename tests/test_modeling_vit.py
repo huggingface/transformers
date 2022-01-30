@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ViTForImageClassification, ViTModel
+    from transformers import ViTForImageClassification, ViTForMaskedImageModeling, ViTModel
     from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
@@ -148,6 +148,7 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
         (
             ViTModel,
             ViTForImageClassification,
+            ViTForMaskedImageModeling,
         )
         if is_torch_available()
         else ()

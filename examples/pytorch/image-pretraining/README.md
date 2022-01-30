@@ -16,9 +16,77 @@ limitations under the License.
 
 # Image pretraining examples
 
+This directory contains Python scripts that allow you to pre-train Transformers for computer vision tasks on your own data, after which you can easily load the weights into a `ViTForImageClassification` for instance. It currently includes scripts for:
+- [SimMIM](#simmim) (by Microsoft Research)
+- [MAE](#mae) (by Facebook AI).
+
 NOTE: If you encounter problems/have suggestions for improvement, open an issue on Github and tag @NielsRogge.
 
-This directory contains a script, `run_mae.py`, that can be used to pre-train a Vision Transformer as a masked autoencoder (MAE), as proposed in [Masked Autoencoders Are Scalable Vision Learners](https://arxiv.org/abs/2111.06377). The script can be used to train a `ViTMAEForPreTraining` model in the Transformers library, using PyTorch. After self-supervised pre-training, one can load the weights of the encoder directly into a `ViTForImageClassification`. The MAE method allows for learning high-capacity models that generalize well: e.g., a vanilla ViT-Huge model achieves the best accuracy (87.8%) among methods that use only ImageNet-1K data.
+
+# SimMIM
+
+The `run_mim.py` script can be used to pre-train any Vision Transformer in the library (concretly, any model supported by the `AutoModelForMaskedImageModeling` API) for masked image modeling (as proposed in [SimMIM: A Simple Framework for Masked Image Modeling](https://arxiv.org/abs/2111.09886)) using PyTorch.
+
+The goal for the model is to predict raw pixel values for the masked patches. The model is trained using a simple L1 loss.
+
+## Using datasets from 🤗 `datasets`
+
+Here we show how to pre-train a `ViT` from scratch for masked image modeling on the [cifar10](https://huggingface.co/datasets/cifar10) dataset. To pre-train a `BEiT` model (which is a Vision Transformer with relative position embeddings instead of absolute ones) from scratch, just change the `model_type` argument to "beit". 
+
+Alternatively, one can decide to further pre-train an already pre-trained (or fine-tuned) checkpoint from the [hub](https://huggingface.co/). This can be done by setting the `model_name_or_path` argument to "google/vit-base-patch16-224-in21k" for example (and not specifying the `model_type` argument).
+
+```bash
+python run_mim.py \
+    --model_type vit \
+    --output_dir ./outputs/ \
+    --remove_unused_columns False \
+    --label_names bool_masked_pos \
+    --do_train \
+    --do_eval \
+    --learning_rate 2e-5 \
+    --num_train_epochs 5 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
+    --logging_strategy steps \
+    --logging_steps 10 \
+    --evaluation_strategy epoch \
+    --save_strategy epoch \
+    --load_best_model_at_end True \
+    --save_total_limit 3 \
+    --seed 1337
+```
+
+## Using your own data
+
+To use your own dataset, the training script expects the following directory structure:
+
+```bash
+root/dog/xxx.png
+root/dog/xxy.png
+root/dog/[...]/xxz.png
+
+root/cat/123.png
+root/cat/nsdf3.png
+root/cat/[...]/asd932_.png
+```
+
+Once you've prepared your dataset, you can can run the script like this:
+
+```bash
+python run_mim.py \
+    --model_type vit \
+    --dataset_name nateraw/image-folder \
+    --train_dir <path-to-train-root> \
+    --output_dir ./outputs/ \
+    --remove_unused_columns False \
+    --label_names bool_masked_pos \
+    --do_train \
+    --do_eval
+```
+
+# MAE
+
+The `run_mae.py` script can be used to pre-train a Vision Transformer as a masked autoencoder (MAE), as proposed in [Masked Autoencoders Are Scalable Vision Learners](https://arxiv.org/abs/2111.06377). The script can be used to train a `ViTMAEForPreTraining` model in the Transformers library, using PyTorch. After self-supervised pre-training, one can load the weights of the encoder directly into a `ViTForImageClassification`. The MAE method allows for learning high-capacity models that generalize well: e.g., a vanilla ViT-Huge model achieves the best accuracy (87.8%) among methods that use only ImageNet-1K data.
 
 The goal for the model is to predict raw pixel values for the masked patches. As the model internally masks patches and learns to reconstruct them, there's no need for any labels. The model uses the mean squared error (MSE) between the reconstructed and original images in the pixel space.
 
@@ -100,7 +168,7 @@ python run_mae.py \
   - To provide your own validation split in its own directory, you can pass the `--validation_dir <path-to-val-root>` flag.
 
 
-## Sharing your model on 🤗 Hub
+# Sharing your model on 🤗 Hub
 
 0. If you haven't already, [sign up](https://huggingface.co/join) for a 🤗 account
 
@@ -122,7 +190,7 @@ $ huggingface-cli login
 3. When running the script, pass the following arguments:
 
 ```bash
-python run_mae.py \
+python run_xxx.py \
     --push_to_hub \
     --push_to_hub_model_id <name-of-your-model> \
     ...
