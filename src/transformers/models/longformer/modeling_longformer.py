@@ -1705,17 +1705,26 @@ class LongformerModel(LongformerPreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         # undo padding
+        all_hidden_states = None
+        if output_hidden_states:
+            all_hidden_states = encoder_outputs[1]
+
         if padding_len > 0:
             # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
             sequence_output = sequence_output[:, :-padding_len]
+            if output_hidden_states:
+               all_hidden_states = tuple([state[:, :padding_len] for state in all_hidden_states])
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            if output_hidden_states:
+                return (sequence_output, pooled_output, all_hidden_states) + encoder_outputs[2:]
+            else:
+                return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return LongformerBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
+            hidden_states=all_hidden_states,
             attentions=encoder_outputs.attentions,
             global_attentions=encoder_outputs.global_attentions,
         )
