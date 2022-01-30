@@ -68,6 +68,16 @@ class TPMapping(object):
             Row("c_proj", reverse=True),
             Update("embed_dim", "split_size", "num_heads"),
         ],
+        GPTNeo=[
+            Col("q_proj", "k_proj", "v_proj", "c_fc"),
+            Row("out_proj", "c_proj"),
+            Update("embed_dim", "num_heads"),
+        ],
+        GPTJ=[
+            Col("q_proj", "k_proj", "v_proj", "fc_in"),
+            Row("out_proj", "fc_out"),
+            Update("embed_dim", "num_attention_heads"),
+        ],
         Electra=[
             Col("query", "key", "value", "intermediate.dense"),
             Row("output.dense"),
