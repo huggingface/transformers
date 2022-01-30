@@ -1587,7 +1587,7 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
                 all_attentions = all_attentions + (tf.transpose(layer_outputs[1], (0, 2, 1, 3)),)
 
                 # bzs x num_attn_heads x num_global_attn x seq_len => bzs x num_attn_heads x seq_len x num_global_attn
-                all_global_attentions = all_global_attentions + (tf.transpose(layer_outputs[2], (0, 1, 3, 2)))
+                all_global_attentions = all_global_attentions + (tf.transpose(layer_outputs[2], (0, 1, 3, 2)),)
 
         # Add last layer
         if output_hidden_states:
