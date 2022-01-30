@@ -13,7 +13,7 @@ config.output_attentions = True
 
 os.environ['NEW_ATTN'] = ''
 model = transformers.GPTJModel(config)
-o = model(input_ids=torch.tensor([1]))
+o = model(input_ids=torch.tensor([1, 2, 3, 4]))
 
 os.environ['NEW_ATTN'] = '1'
-o2 = model(input_ids=torch.tensor([1]))
+o2 = model(input_ids=torch.tensor([1, 2, 3, 4]))

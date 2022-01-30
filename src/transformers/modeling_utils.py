@@ -2444,13 +2444,14 @@ def attention(config, queries, keys, values, mask=None, bias=None, dropout=None,
         queries: [Batches, Queries, Heads, Features]
         keys: [Batches, Keys, Heads, Features]
         values: [Batches, Values, Heads, Features]
-        mask: Bool
+        mask: [Batches, Heads, Queries, Keys] of Bool
+
         returns [Batches, Values, Heads, Features]
     '''
     query_size = config.chunk_size_query if config.chunk_size_query != 0 else queries.shape[-3]
     key_size = config.chunk_size_key if config.chunk_size_key != 0 else keys.shape[-3]
     if dropout is not None:
-        maskbias_shape = (*queries.shape[:-1], keys.shape[-3])
+        maskbias_shape = (*queries.shape[:-3], queries.shape[-2], queries.shape[-3], keys.shape[-3])
         if mask is None:
             mask = True
         mask &= dropout(torch.ones(maskbias_shape, device=queries.device)).to(torch.bool)
