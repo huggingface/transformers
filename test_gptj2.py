@@ -2,6 +2,8 @@ import os
 import torch
 import transformers
 
+torch.manual_seed(0)
+
 config = transformers.GPTJConfig()
 config.n_embd = 16
 config.n_head = 2
