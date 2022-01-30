@@ -133,11 +133,12 @@ class GPTJAttention(nn.Module):
         new_shape = tensor.size()[:-2] + (num_attention_heads * attn_head_size,)
         return tensor.view(new_shape)
 
-    def _new_attn(
+    def _attn(
         self,
         query,
         key,
         value,
+        output_attentions,
         attention_mask=None,
         head_mask=None,
     ):
@@ -156,45 +157,7 @@ class GPTJAttention(nn.Module):
         if head_mask is not None:
             bias += torch.log(head_mask)
 
-        attn_output, attn_weights = attention(self.config, query.permute(0,2,1,3), key.permute(0,2,1,3), value.permute(0,2,1,3), bias = bias, dropout = self.attn_dropout, return_attentions = True)
-
-        return attn_output.permute(0,2,1,3), attn_weights.permute(0,2,1,3)
-
-    def _old_attn(
-        self,
-        query,
-        key,
-        value,
-        attention_mask=None,
-        head_mask=None,
-    ):
-
-        # compute causal mask from causal mask buffer
-        query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
-
-        # Keep the attention weights computation in fp32 to avoid overflow issues
-        query = query.to(torch.float32)
-        key = key.to(torch.float32)
-
-        attn_weights = torch.matmul(query, key.transpose(-1, -2))
-        attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
-
-        attn_weights = attn_weights / self.scale_attn
-
-        if attention_mask is not None:
-            # Apply the attention mask
-            attn_weights = attn_weights + attention_mask
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-        attn_weights = attn_weights.to(value.dtype)
-        attn_weights = self.attn_dropout(attn_weights)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
-
-        attn_output = torch.matmul(attn_weights, value)
+        attn_output, attn_weights = attention(query, key, value, bias = bias, dropout = self.attn_dropout, chunk_size_query = self.config.chunk_size_query, chunk_size_key = self.config.chunk_size_key, output_attentions = output_attentions, scale = self.scale_attn)
 
         return attn_output, attn_weights
 
@@ -256,10 +219,7 @@ class GPTJAttention(nn.Module):
             present = None
 
         # compute self-attention: V x Softmax(QK^T)
-        if os.environ.get('NEW_ATTN'):
-            attn_output, attn_weights = self._new_attn(query, key, value, attention_mask, head_mask)
-        else:
-            attn_output, attn_weights = self._old_attn(query, key, value, attention_mask, head_mask)
+        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
         attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
         attn_output = self.out_proj(attn_output)

@@ -2439,28 +2439,90 @@ def apply_chunking_to_forward(
 
     return forward_fn(*input_tensors)
 
-def attention(config, queries, keys, values, mask=None, bias=None, dropout=None, return_attentions=False):
+def attention(queries, keys, values, mask=None, bias=None, dropout=None, chunk_size_query=0, chunk_size_key=0, output_attentions=False, weights_dtype=torch.float32, scale=None, post_bias=None):
     '''
-        queries: [Batches, Queries, Heads, Features]
-        keys: [Batches, Keys, Heads, Features]
-        values: [Batches, Values, Heads, Features]
+        queries: [Batches, Heads, Queries, Features]
+        keys: [Batches, Heads, Keys, Features]
+        values: [Batches, Heads, Values, Features]
         mask: [Batches, Heads, Queries, Keys] of Bool
+                disables weights where false
+        bias: [Batches, Heads, Queries, Keys]
+                added to attention weights before softmax
+        dropout: torch.nn.Dropout
+                attention weights are passed through this before output is calculated
+        chunk_size_query:
+                size to process queries in. memory usage is queries * keys * heads * batches * dtypesize
+        chunk_size_key:
+                size to process keys in. memory usage is queries * keys * heads * batches * dtypesize
+        output_attentions: Bool
+                return attention weights if True. not implemented for chunking.
+        weights_dtype:
+                weights can be cast to this type during dot and softmax, if desired
+        scale:
+                if specified, weights are divided by this value before softmax
+        post_bias:
+                an additional bias to be multiplied after the softmax rather than summed before
 
-        returns [Batches, Values, Heads, Features]
+        returns: ([..., Values, Heads, Features], Attentions)
+                Attentions is None if output_attentions is not set
     '''
-    query_size = config.chunk_size_query if config.chunk_size_query != 0 else queries.shape[-3]
-    key_size = config.chunk_size_key if config.chunk_size_key != 0 else keys.shape[-3]
-    if dropout is not None:
-        maskbias_shape = (*queries.shape[:-3], queries.shape[-2], queries.shape[-3], keys.shape[-3])
-        if mask is None:
-            mask = True
-        mask &= dropout(torch.ones(maskbias_shape, device=queries.device)).to(torch.bool)
-        if bias is None:
-            bias = torch.zeros(maskbias_shape, dtype=queries.dtype, device=queries.device)
-        bias += torch.log(1 / (torch.tensor(1, dtype=bias.dtype, device=bias.device) - dropout.p))
-    return memory_efficient_attention.efficient_dot_product_attention_pt(
-            queries, keys, values, mask, bias, query_size, key_size, return_attentions)
+    if chunk_size_query > 0 or chunk_size_key > 0: # chunking to save memory
+        if output_attentions:
+            raise ValueError("output_attentions enabled but access when discarded by chunking is unimplemented")
+        queries = queries.permute(0,2,1,3)
+        keys = keys.permute(0,2,1,3)
+        values = values.permute(0,2,1,3)
+        query_size = chunk_size_query if chunk_size_query != 0 else queries.shape[-3]
+        key_size = chunk_size_key if chunk_size_key != 0 else keys.shape[-3]
+        if dropout is not None:
+            maskbias_shape = (*queries.shape[:-3], queries.shape[-2], queries.shape[-3], keys.shape[-3])
+            if mask is None:
+                mask = True
+            mask &= dropout(torch.ones(maskbias_shape, device=queries.device)).to(torch.bool)
+            if bias is None:
+                bias = torch.zeros(maskbias_shape, dtype=queries.dtype, device=queries.device)
+            bias = bias + torch.log(1 / (torch.tensor(1, dtype=bias.dtype, device=bias.device) - dropout.p))
+        if post_bias is not None:
+            bias = bias + torch.log(post_bias)
+        if scale is not None:
+            queries = queries * torch.tensor(keys.shape[-1], dtype=queries.dtype, device=queries.device).sqrt()  / scale
+        output = memory_efficient_attention.efficient_dot_product_attention_pt(
+            queries, keys, values, mask, bias, query_size, key_size)
+        return output.permute(0,2,1,3), None
+    else: # no chunking
+        if weights_dtype is not None:
+            queries = queries.to(torch.float32)
+            keys = keys.to(torch.float32)
 
+        weights = torch.matmul(queries, keys.transpose(-1, -2))
+
+        if bias is not None:
+            weights = weights + bias
+
+        if scale is not None:
+            weights = weights / scale
+        else:
+            weights = weights / torch.tensor(keys.shape[-1], dtype=queries.dtype, device=queries.device).sqrt()
+
+        if mask is not None:
+            big_neg = torch.finfo(weights.dtype).min
+            big_neg = torch.tensor(big_neg, dtype=weights.dtype)
+            weights = torch.where(mask, aweights, big_neg)
+
+        weights = nn.functional.softmax(weights, dim=-1)
+
+        if weights_dtype is not None:
+            weights = weights.to(values.dtype)
+
+        if dropout is not None:
+            weights = dropout(weights)
+
+        if post_bias is not None:
+            weights = weights * post_bias
+
+        output = torch.matmul(weights, values)
+
+        return output, (weights if output_attentions else None)
 
 def torch_int_div(tensor1, tensor2):
     """
