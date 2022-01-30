@@ -44,6 +44,9 @@ from .configuration_wav2vec2 import Wav2Vec2Config
 
 logger = logging.get_logger(__name__)
 
+
+_HIDDEN_STATES_START_POSITION = 2
+
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
 _TOKENIZER_FOR_DOC = "Wav2Vec2Tokenizer"
@@ -1667,7 +1670,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             loss = None
 
         if not inputs["return_dict"]:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
         return TFCausalLMOutput(
