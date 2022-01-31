@@ -225,7 +225,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
                 processed["stride"] = stride
             yield {"is_last": True, **processed}
-        return processed
 
     def _forward(self, model_inputs):
         is_last = model_inputs.pop("is_last")
