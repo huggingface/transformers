@@ -452,16 +452,7 @@ class TFModelTesterMixin:
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ in ["TFSpeech2TextModel", "TFSpeech2TextForConditionalGeneration"]:
-                inputs = {
-                    "decoder_input_ids": tf.keras.Input(
-                        batch_shape=(2, max_input),
-                        name="decoder_input_ids",
-                        dtype="int32",
-                    ),
-                    "input_ids": tf.keras.Input(batch_shape=(2, 32, max_input), name="input_ids", dtype="float32"),
-                }
-            elif self.is_encoder_decoder:
+            if self.is_encoder_decoder:
                 inputs = {
                     "decoder_input_ids": tf.keras.Input(
                         batch_shape=(2, max_input),
@@ -1013,8 +1004,8 @@ class TFModelTesterMixin:
             if config.bos_token_id is None:
                 # if bos token id is not defined model needs input_ids, num_return_sequences = 1
                 self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=2))
-            elif model_class.__name__ not in ["TFSpeech2TextForConditionalGeneration"]:
-                # Models with non-text inputs won't work here; num_return_sequences = 1
+            else:
+                # num_return_sequences = 1
                 self._check_generated_ids(model.generate(do_sample=True, max_length=5, num_beams=2))
 
             with self.assertRaises(AssertionError):

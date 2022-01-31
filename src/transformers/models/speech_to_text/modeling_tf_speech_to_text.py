@@ -231,7 +231,11 @@ class TFSpeech2TextAttention(tf.keras.layers.Layer):
         self.num_heads = num_heads
         self.dropout = tf.keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
@@ -382,11 +386,11 @@ class TFSpeech2TextEncoderLayer(tf.keras.layers.Layer):
     ):
         """
         Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`tf.Tensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
-                *(encoder_attention_heads,)*
+                `(encoder_attention_heads,)`
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -462,17 +466,17 @@ class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`tf.Tensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             encoder_hidden_states (`tf.Tensor`):
-                cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (`tf.Tensor`): encoder attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
-                *(decoder_attention_heads,)*
+                `(decoder_attention_heads,)`
             cross_attn_layer_head_mask (`tf.Tensor`): mask for heads of the cross-attention module.
-                *(decoder_attention_heads,)*
+                `(decoder_attention_heads,)`
             past_key_value (`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states
@@ -524,12 +528,7 @@ class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
 
-        return (
-            hidden_states,
-            self_attn_weights,
-            cross_attn_weights,
-            present_key_value,
-        )
+        return (hidden_states, self_attn_weights, cross_attn_weights, present_key_value,)
 
 
 class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
@@ -1079,6 +1078,9 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
                 continue
 
             past_key_value = inputs["past_key_values"][idx] if inputs["past_key_values"] is not None else None
+            cross_attn_layer_head_mask = (
+                inputs["cross_attn_head_mask"][idx] if inputs["cross_attn_head_mask"] is not None else None
+            )
 
             hidden_states, layer_self_attn, layer_cross_attn, present_key_value = decoder_layer(
                 hidden_states,
@@ -1086,9 +1088,7 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
                 encoder_hidden_states=inputs["encoder_hidden_states"],
                 encoder_attention_mask=inputs["encoder_attention_mask"],
                 layer_head_mask=inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
-                cross_attn_layer_head_mask=inputs["cross_attn_head_mask"][idx]
-                if inputs["cross_attn_head_mask"] is not None
-                else None,
+                cross_attn_layer_head_mask=cross_attn_layer_head_mask
                 past_key_value=past_key_value,
             )
 
@@ -1545,35 +1545,16 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         encoder_outputs=None,
         **kwargs
     ):
-        assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
-        if len(past) == 1:
-            assert isinstance(past[0], tf.Tensor), f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}"
-            encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
-            past_key_values = None
-        else:
-            assert (
-                len(past) == 2
-            ), "`past` has to be of length 2 with the encoder_outputs at the first position and past_key_values at the second position."
-            encoder_outputs, past_key_values = past
-            if isinstance(encoder_outputs, tuple):
-                assert isinstance(
-                    encoder_outputs[0], tf.Tensor
-                ), f"`encoder_outputs[0]` has to be of type `tf.Tensor`, but is {type(encoder_outputs[0])}"
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs[0])
-            elif isinstance(encoder_outputs, tf.Tensor):
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs)
-            assert (
-                past_key_values
-            ), f"decoder cached states must be truthy. got {past_key_values} from the 2nd element of past"
+        # This will happen after the first iteration of the generation loop
+        if isinstance(past[0], tuple):
+            past_key_values = past
             decoder_input_ids = decoder_input_ids[:, -1:]
-
-        assert isinstance(
-            encoder_outputs, TFBaseModelOutput
-        ), f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}."
+        else:
+            past_key_values = None
 
         return {
             "input_ids": None,  # needs to be passed to make Keras.layer.__call__ happy
-            "encoder_outputs": encoder_outputs,
+            "encoder_outputs": TFBaseModelOutput(last_hidden_state=encoder_outputs[0]),
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
