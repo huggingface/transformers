@@ -20,7 +20,7 @@ from collections import OrderedDict
 from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import CUSTOM_CLASSES_REGISTER, get_class_from_dynamic_module
+from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...file_utils import CONFIG_NAME
 from ...utils import logging
 
@@ -664,4 +664,3 @@ class AutoConfig:
                 "match!"
             )
         CONFIG_MAPPING.register(model_type, config)
-        CUSTOM_CLASSES_REGISTER[config.__name__] = "AutoConfig"

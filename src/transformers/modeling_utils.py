@@ -32,7 +32,7 @@ from requests import HTTPError
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
-from .dynamic_module_utils import CUSTOM_CLASSES_REGISTER, custom_object_save
+from .dynamic_module_utils import custom_object_save
 from .file_utils import (
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
@@ -447,6 +447,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     config_class = None
     base_model_prefix = ""
     main_input_name = "input_ids"
+    _auto_class = None
 
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
@@ -1056,7 +1057,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self.__class__.__name__ in CUSTOM_CLASSES_REGISTER:
+        if self._auto_class is not None:
             custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
@@ -1810,6 +1811,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 setattr(submodule, param_name, new_val)
 
         del state_dict
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="AutoModel"):
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        cls._auto_class = auto_class
 
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.

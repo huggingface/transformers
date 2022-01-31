@@ -29,7 +29,7 @@ from jax.random import PRNGKey
 from requests import HTTPError
 
 from .configuration_utils import PretrainedConfig
-from .dynamic_module_utils import CUSTOM_CLASSES_REGISTER, custom_object_save
+from .dynamic_module_utils import custom_object_save
 from .file_utils import (
     FLAX_WEIGHTS_NAME,
     WEIGHTS_NAME,
@@ -88,6 +88,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     config_class = None
     base_model_prefix = ""
     main_input_name = "input_ids"
+    _auto_class = None
 
     def __init__(
         self,
@@ -700,7 +701,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self.__class__.__name__ in CUSTOM_CLASSES_REGISTER:
+        if self._auto_class is not None:
             custom_object_save(self, save_directory, config=self.config)
 
         self.config.save_pretrained(save_directory)
@@ -717,6 +718,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if push_to_hub:
             url = self._push_to_hub(repo, commit_message=commit_message)
             logger.info(f"Model pushed to the hub in this commit: {url}")
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="FlaxAutoModel"):
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        cls._auto_class = auto_class
 
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.

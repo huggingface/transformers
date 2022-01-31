@@ -21,7 +21,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import CUSTOM_CLASSES_REGISTER, get_class_from_dynamic_module
+from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...file_utils import get_file_from_repo, is_sentencepiece_available, is_tokenizers_available
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
@@ -593,7 +593,3 @@ class AutoTokenizer:
                 fast_tokenizer_class = existing_fast
 
         TOKENIZER_MAPPING.register(config_class, (slow_tokenizer_class, fast_tokenizer_class))
-        if slow_tokenizer_class is not None:
-            CUSTOM_CLASSES_REGISTER[slow_tokenizer_class.__name__] = "AutoTokenizer"
-        if fast_tokenizer_class is not None:
-            CUSTOM_CLASSES_REGISTER[fast_tokenizer_class.__name__] = "AutoTokenizer"

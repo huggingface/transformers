@@ -18,6 +18,7 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 import transformers.models.auto
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
@@ -26,9 +27,9 @@ from transformers.models.roberta.configuration_roberta import RobertaConfig
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
 
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
 
-from fixtures.custom_configuration import CustomConfig  # noqa E402
+from test_module.custom_configuration import CustomConfig  # noqa E402
 
 
 SAMPLE_ROBERTA_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/dummy-config.json")
@@ -79,8 +80,8 @@ class AutoConfigTest(unittest.TestCase):
             config = CustomConfig()
             with tempfile.TemporaryDirectory() as tmp_dir:
                 config.save_pretrained(tmp_dir)
-                new_config = AutoConfig.from_pretrained(tmp_dir, trust_remote_code=True)
-                self.assertEqual(new_config.__class__.__name__, "CustomConfig")
+                new_config = AutoConfig.from_pretrained(tmp_dir)
+                self.assertIsInstance(new_config, CustomConfig)
 
         finally:
             if "custom" in CONFIG_MAPPING._extra_content:

@@ -14,10 +14,10 @@
 # limitations under the License.
 
 import copy
-import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 from transformers import BertConfig, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
@@ -32,15 +32,15 @@ from transformers.testing_utils import (
 from .test_modeling_bert import BertModelTester
 
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
 
-from fixtures.custom_configuration import CustomConfig  # noqa E402
+from test_module.custom_configuration import CustomConfig  # noqa E402
 
 
 if is_torch_available():
     import torch
 
-    from fixtures.custom_modeling import CustomModel
+    from test_module.custom_modeling import CustomModel
     from transformers import (
         AutoConfig,
         AutoModel,
@@ -346,9 +346,9 @@ class AutoModelTest(unittest.TestCase):
 
                     with tempfile.TemporaryDirectory() as tmp_dir:
                         model.save_pretrained(tmp_dir)
-                        new_model = auto_class.from_pretrained(tmp_dir, trust_remote_code=True)
+                        new_model = auto_class.from_pretrained(tmp_dir)
                         # The model is a CustomModel but from the new dynamically imported class.
-                        self.assertEqual(new_model.__class__.__name__, "CustomModel")
+                        self.assertIsInstance(new_model, CustomModel)
 
         finally:
             if "custom" in CONFIG_MAPPING._extra_content:

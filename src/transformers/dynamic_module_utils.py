@@ -19,7 +19,6 @@ import os
 import re
 import shutil
 import sys
-from collections import OrderedDict
 from pathlib import Path
 from typing import Dict, Optional, Union
 
@@ -30,10 +29,6 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
-
-# The register for all custom classes the user adds to the auto API.
-CUSTOM_CLASSES_REGISTER = OrderedDict([])
 
 
 def init_hf_modules():
@@ -410,7 +405,7 @@ def custom_object_save(obj, folder, config=None):
             if isinstance(config, dict):
                 current_value = config.get("auto_map", None)
             elif getattr(config, "auto_map", None) is not None:
-                current_value = config.auto_map[CUSTOM_CLASSES_REGISTER[obj.__class__.__name__]]
+                current_value = config.auto_map[obj._auto_class]
             else:
                 current_value = None
 
@@ -422,12 +417,12 @@ def custom_object_save(obj, folder, config=None):
 
             if obj.__class__.__name__.endswith("Fast"):
                 fast_tokenizer_class = f"{last_module}.{obj.__class__.__name__}"
-                if obj.__class__.__name__[:-4] in CUSTOM_CLASSES_REGISTER:
-                    slow_tokenizer_class = f"{last_module}.{obj.__class__.__name__[:-4]}"
+            #    if obj.__class__.__name__[:-4] in CUSTOM_CLASSES_REGISTER:
+            #        slow_tokenizer_class = f"{last_module}.{obj.__class__.__name__[:-4]}"
             else:
                 slow_tokenizer_class = f"{last_module}.{obj.__class__.__name__}"
-                if f"{obj.__class__.__name__}Fast" in CUSTOM_CLASSES_REGISTER:
-                    fast_tokenizer_class = f"{last_module}.{obj.__class__.__name__}Fast"
+            #    if f"{obj.__class__.__name__}Fast" in CUSTOM_CLASSES_REGISTER:
+            #        fast_tokenizer_class = f"{last_module}.{obj.__class__.__name__}Fast"
 
             full_name = (
                 current_value[0] if slow_tokenizer_class is None else slow_tokenizer_class,
@@ -437,9 +432,9 @@ def custom_object_save(obj, folder, config=None):
         if isinstance(config, dict):
             config["auto_map"] = full_name
         elif getattr(config, "auto_map", None) is not None:
-            config.auto_map[CUSTOM_CLASSES_REGISTER[obj.__class__.__name__]] = full_name
+            config.auto_map[obj._auto_class] = full_name
         else:
-            config.auto_map = {CUSTOM_CLASSES_REGISTER[obj.__class__.__name__]: full_name}
+            config.auto_map = {obj._auto_class: full_name}
 
     # Copy module file to the output folder.
     object_file = sys.modules[obj.__module__].__file__

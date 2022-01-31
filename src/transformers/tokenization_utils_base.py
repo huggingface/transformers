@@ -34,7 +34,7 @@ from packaging import version
 from requests import HTTPError
 
 from . import __version__
-from .dynamic_module_utils import CUSTOM_CLASSES_REGISTER, custom_object_save
+from .dynamic_module_utils import custom_object_save
 from .file_utils import (
     EntryNotFoundError,
     ExplicitEnum,
@@ -1436,6 +1436,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     pretrained_vocab_files_map: Dict[str, Dict[str, str]] = {}
     pretrained_init_configuration: Dict[str, Dict[str, Any]] = {}
     max_model_input_sizes: Dict[str, Optional[int]] = {}
+    _auto_class: Optional[str] = None
 
     # first name has to correspond to main model input name
     # to make sure `tokenizer.pad(...)` works correctly
@@ -2072,7 +2073,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self.__class__.__name__ in CUSTOM_CLASSES_REGISTER:
+        if self._auto_map is not None:
             custom_object_save(self, save_directory, config=tokenizer_config)
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
@@ -3394,6 +3395,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         sequence-to-sequence models that need a slightly different processing for the labels.
         """
         yield
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="AutoTokenizer"):
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        cls._auto_class = auto_class
 
     def prepare_seq2seq_batch(
         self,

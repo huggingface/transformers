@@ -24,6 +24,7 @@ import sys
 import tempfile
 import unittest
 import warnings
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -32,7 +33,6 @@ import transformers
 from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import (
-    CONFIG_MAPPING,
     AutoConfig,
     AutoModel,
     AutoModelForSequenceClassification,
@@ -57,16 +57,16 @@ from transformers.testing_utils import (
 )
 
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
 
-from fixtures.custom_configuration import CustomConfig  # noqa E402
+from test_module.custom_configuration import CustomConfig  # noqa E402
 
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from fixtures.custom_modeling import CustomModel
+    from test_module.custom_modeling import CustomModel
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
@@ -2176,36 +2176,29 @@ class ModelPushToHubTester(unittest.TestCase):
                 self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_dynamic_model(self):
-        try:
-            AutoConfig.register("custom", CustomConfig)
-            AutoModel.register(CustomConfig, CustomModel)
+        CustomConfig.register_for_auto_class()
+        CustomModel.register_for_auto_class()
 
-            config = CustomConfig(hidden_size=32)
-            model = CustomModel(config)
+        config = CustomConfig(hidden_size=32)
+        model = CustomModel(config)
 
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-model", use_auth_token=self._token)
-                model.save_pretrained(tmp_dir)
-                # checks
-                self.assertDictEqual(
-                    config.auto_map,
-                    {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
-                )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-model", use_auth_token=self._token)
+            model.save_pretrained(tmp_dir)
+            # checks
+            self.assertDictEqual(
+                config.auto_map,
+                {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
+            )
 
-                repo.push_to_hub()
+            repo.push_to_hub()
 
-            new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
-            # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module
-            self.assertEqual(new_model.__class__.__name__, "CustomModel")
-            for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                self.assertTrue(torch.equal(p1, p2))
+        new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
+        # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module
+        self.assertEqual(new_model.__class__.__name__, "CustomModel")
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
 
-            config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
-            new_model = AutoModel.from_config(config, trust_remote_code=True)
-            self.assertEqual(new_model.__class__.__name__, "CustomModel")
-
-        finally:
-            if "custom" in CONFIG_MAPPING._extra_content:
-                del CONFIG_MAPPING._extra_content["custom"]
-            if CustomConfig in MODEL_MAPPING._extra_content:
-                del MODEL_MAPPING._extra_content[CustomConfig]
+        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
+        new_model = AutoModel.from_config(config, trust_remote_code=True)
+        self.assertEqual(new_model.__class__.__name__, "CustomModel")

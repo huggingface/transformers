@@ -35,7 +35,7 @@ from huggingface_hub import Repository, list_repo_files
 from requests import HTTPError
 
 from .configuration_utils import PretrainedConfig
-from .dynamic_module_utils import CUSTOM_CLASSES_REGISTER, custom_object_save
+from .dynamic_module_utils import custom_object_save
 from .file_utils import (
     DUMMY_INPUTS,
     TF2_WEIGHTS_NAME,
@@ -662,6 +662,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     config_class = None
     base_model_prefix = ""
     main_input_name = "input_ids"
+    _auto_class = None
 
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
@@ -1363,7 +1364,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
-        if self.__class__.___name__ in CUSTOM_CLASSES_REGISTER:
+        if self._auto_class is not None:
             custom_object_save(self, save_directory, config=self.config)
 
         self.config.save_pretrained(save_directory)
@@ -2013,6 +2014,13 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             output = self.last_dropout(output, training=training)
 
         return output
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="TFAutoModel"):
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        cls._auto_class = auto_class
 
 
 def shape_list(tensor: Union[tf.Tensor, np.ndarray]) -> List[int]:
