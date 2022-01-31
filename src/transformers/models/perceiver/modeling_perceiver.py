@@ -275,7 +275,7 @@ class PerceiverSelfAttention(nn.Module):
         #if self.config.chunk_size_query > 0 or self.config.chunk_size_key > 0:
 
         context_layer, _ = attention(queries, keys, values, bias=attention_mask, dropout=self.dropout, chunk_size_query=self.config.chunk_size_query, chunk_size_key=self.config.chunk_size_key, output_attentions=output_attentions, weights_dtype=None, post_bias=head_mask)
-        context_layer = context_layer.contiguous()
+        context_layer = context_layer.permute(0,2,1,3).contiguous()
         #            #dropout = self.dropout,
         #    #context_layer = attention_probs.permute(0,2,1,3)
         #else:

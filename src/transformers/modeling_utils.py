@@ -2463,7 +2463,7 @@ def attention(queries, keys, values, mask=None, bias=None, dropout=None, chunk_s
         post_bias:
                 an additional bias to be multiplied after the softmax rather than summed before
 
-        returns: ([..., Values, Heads, Features], Attentions)
+        returns: ([..., Heads, Values, Features], Attentions)
                 Attentions is None if output_attentions is not set
     '''
     if chunk_size_query > 0 or chunk_size_key > 0: # chunking to save memory
