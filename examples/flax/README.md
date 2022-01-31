@@ -54,7 +54,7 @@ procedure.
 
 ## Running on single or multiple GPUs
 
-All of our JAX/Flax examples also run efficiently on single and multiple GPUs. You can use the same instructions in the README to lanuch training on GPU.
+All of our JAX/Flax examples also run efficiently on single and multiple GPUs. You can use the same instructions in the README to launch training on GPU.
 Distributed training is supported out-of-the box and scripts will use all the GPUs that are detected.
 
 You should follow this [guide for installing JAX on GPUs](https://github.com/google/jax/#pip-installation-gpu-cuda) since the installation depends on
