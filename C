@@ -233,11 +233,11 @@ def _compute_mask_indices(
         num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
         num_masked_span = max(num_masked_span, min_masks)
 
-        # make sure num masked span <= sequence_length
+        # make sure num masked indices <= sequence_length
         if num_masked_span * mask_length > sequence_length:
             num_masked_span = sequence_length // mask_length
 
-        # make sure num_masked span is also <= input_length - (mask_length - 1)
+        # make sure num_masked spans is not longer than input_length - (mask_length -1)
         if input_length - (mask_length - 1) < num_masked_span:
             num_masked_span = max(input_length - (mask_length - 1), 0)
 
@@ -273,8 +273,12 @@ def _compute_mask_indices(
         # Picking first sample just pads those vectors twice.
         if len(spec_aug_mask_idx) == 0:
             # this case can only happen if `input_length` is strictly smaller then
-            # `sequence_length` in which case the last token has to be a padding
-            # token which we can use as a dummy mask id
+            # `sequence_length`
+            if input_length >= sequence_length:
+                raise ValueError(
+                    "You seem to have found a bug! Please open an issue on Transformers:"
+                    " https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title= "
+                )
             dummy_mask_idx = sequence_length - 1
         else:
             dummy_mask_idx = spec_aug_mask_idx[0]
