@@ -139,17 +139,21 @@ def convert_deformable_detr_checkpoint(checkpoint_path, single_scale, dilation, 
     # verify our conversion
     outputs = model(pixel_values.to(device))
 
-    print("Shape of logits:", outputs.logits.shape)
-    print("First values of logits:", outputs.logits[0, :3, :3])
+    expected_logits = torch.tensor([[-9.6645, -4.3449, -5.8705], [-9.7035, -3.8504, -5.0724], [-10.5634, -5.3379, -7.5116]])
+    expected_boxes = torch.tensor([[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]])
 
-    expected_logits = torch.tensor(
-        [[-9.6645, -4.3449, -5.8705], [-9.7035, -3.8504, -5.0724], [-10.5634, -5.3379, -7.5116]]
-    ).to(device)
-    expected_boxes = torch.tensor([[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]]).to(
-        device
-    )
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
-    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
+    if single_scale:
+        expected_logits = torch.tensor([[ -9.9051,  -4.2541,  -6.4852],
+        [ -9.6947,  -4.0854,  -6.8033],
+        [-10.0665,  -5.8470,  -7.7003]])
+        expected_boxes = torch.tensor([[0.7292, 0.4991, 0.5532],
+        [0.7959, 0.2426, 0.4236],
+        [0.7582, 0.3518, 0.4451]])
+
+    print("Logits:", outputs.logits[0,:3,:3])
+    
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
+    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes.to(device), atol=1e-4)
 
     # Save model and feature extractor
     logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
@@ -168,7 +172,7 @@ if __name__ == "__main__":
         help="Path to Pytorch checkpoint (.pth file) you'd like to convert.",
     )
     parser.add_argument(
-        "--single_scale", type=bool, default=False, help="Whether to set config.num_features_levels = 1."
+        "--single_scale", action='store_true', help="Whether to set config.num_features_levels = 1."
     )
     parser.add_argument("--dilation", type=bool, default=False, help="Whether to set config.dilation=True.")
     parser.add_argument(
