@@ -402,32 +402,21 @@ def custom_object_save(obj, folder, config=None):
         full_name = f"{last_module}.{obj.__class__.__name__}"
         # Special handling for tokenizers
         if "Tokenizer" in full_name:
-            if isinstance(config, dict):
-                current_value = config.get("auto_map", None)
-            elif getattr(config, "auto_map", None) is not None:
-                current_value = config.auto_map[obj._auto_class]
-            else:
-                current_value = None
-
-            if current_value is None:
-                current_value = (None, None)
-
             slow_tokenizer_class = None
             fast_tokenizer_class = None
-
             if obj.__class__.__name__.endswith("Fast"):
+                # Fast tokenizer: we have the fast tokenizer class and we may have the slow one has an attribute.
                 fast_tokenizer_class = f"{last_module}.{obj.__class__.__name__}"
-            #    if obj.__class__.__name__[:-4] in CUSTOM_CLASSES_REGISTER:
-            #        slow_tokenizer_class = f"{last_module}.{obj.__class__.__name__[:-4]}"
+                if getattr(obj, "slow_tokenizer_class", None) is not None:
+                    slow_tokenizer = getattr(obj, "slow_tokenizer_class")
+                    slow_tok_module_name = slow_tokenizer.__module__
+                    last_slow_tok_module = slow_tok_module_name.split(".")[-1]
+                    slow_tokenizer_class = f"{last_slow_tok_module}.{slow_tokenizer.__name__}"
             else:
+                # Slow tokenizer: no way to have the fast class
                 slow_tokenizer_class = f"{last_module}.{obj.__class__.__name__}"
-            #    if f"{obj.__class__.__name__}Fast" in CUSTOM_CLASSES_REGISTER:
-            #        fast_tokenizer_class = f"{last_module}.{obj.__class__.__name__}Fast"
 
-            full_name = (
-                current_value[0] if slow_tokenizer_class is None else slow_tokenizer_class,
-                current_value[1] if fast_tokenizer_class is None else fast_tokenizer_class,
-            )
+            full_name = (slow_tokenizer_class, fast_tokenizer_class)
 
         if isinstance(config, dict):
             config["auto_map"] = full_name
