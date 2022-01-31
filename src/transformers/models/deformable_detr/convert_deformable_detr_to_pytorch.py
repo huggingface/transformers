@@ -150,6 +150,14 @@ def convert_deformable_detr_checkpoint(checkpoint_path, single_scale, dilation, 
         [0.7959, 0.2426, 0.4236],
         [0.7582, 0.3518, 0.4451]])
 
+    if single_scale and dilation:
+        expected_logits = torch.tensor([[ -8.9652,  -4.1074,  -5.6635],
+        [ -9.0596,  -4.9447,  -6.6075],
+        [-10.1178,  -4.5275,  -6.2671]])
+        expected_boxes = torch.tensor([[0.7665, 0.4130, 0.4769],
+        [0.8364, 0.1841, 0.3391],
+        [0.6261, 0.3895, 0.7978]])
+
     print("Logits:", outputs.logits[0,:3,:3])
     
     assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
@@ -174,7 +182,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--single_scale", action='store_true', help="Whether to set config.num_features_levels = 1."
     )
-    parser.add_argument("--dilation", type=bool, default=False, help="Whether to set config.dilation=True.")
+    parser.add_argument("--dilation", action='store_true', help="Whether to set config.dilation=True.")
     parser.add_argument(
         "--pytorch_dump_folder_path",
         default=None,
