@@ -147,9 +147,17 @@ def postprocess_qa_predictions(
                     # provided).
                     if token_is_max_context is not None and not token_is_max_context.get(str(start_index), False):
                         continue
+
+                    # We shouldn't get index errors now because of all the cehcks above, but for some reason, some
+                    # are still there, see https://github.com/huggingface/transformers/issues/15401#issuecomment-1024845936
+                    try:
+                        example_offsets = (offset_mapping[start_index][0], offset_mapping[end_index][1])
+                    except IndexError:
+                        continue
+
                     prelim_predictions.append(
                         {
-                            "offsets": (offset_mapping[start_index][0], offset_mapping[end_index][1]),
+                            "offsets": example_offsets,
                             "score": start_logits[start_index] + end_logits[end_index],
                             "start_logit": start_logits[start_index],
                             "end_logit": end_logits[end_index],
