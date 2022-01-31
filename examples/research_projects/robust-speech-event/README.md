@@ -1,9 +1,9 @@
-# Robust Speech Challange 🤗
+# Robust Speech Challenge 🤗
 
 Welcome to the robust speech recognition challenge 🎙️ !
 
 The goal of this event is to build **robust**, **real-world** speech recognition (ASR) systems in as many languages as possible 🌏🌍🌎.
-If necessary and available, free access to a V100 32 GB GPU will kindly be provided by the [OVH could team](https://us.ovhcloud.com/) 🚀.
+If necessary and available, free access to a V100S 32 GB GPU will kindly be provided by the [OVHcloud team]( https://www.ovhcloud.com/) 🚀.
 This document summarizes all the relevant information required for the speech community event 📋.
 
 To sign-up, please see [this forum post](https://discuss.huggingface.co/t/open-to-the-community-robust-speech-recognition-challenge/13614) 🤗. Please make sure to:
@@ -82,12 +82,7 @@ You should have received an invite by email. If you didn't receive an invite, pl
 
 ## Important dates
 
-- **12.01.** Official announcement of the community event. Make sure to sign-up in [this google form](TODO: )
-- **12.01. - 19.01.** Participants sign up for the event.
-- **19.01.** Release of all relevant guides and training scripts.
-- **24.01.** Start of the community week! OVH & Hugging Face gives access to GPUs.
-- **24.01. - 07.02.** The OVH & Hugging Face team will be available for any questions, problems the participants might have.
-- **07.02.** Access to GPU is deactivated and community week officially ends.
+![timeline](https://github.com/patrickvonplaten/scientific_images/raw/master/Robush%20Speech%20Challenge.png)
 
 
 ## Data and preprocessing
@@ -476,7 +471,7 @@ hyperparameters.
 
 ## How to finetune with OVH cloud
 
-For a more detailed guide on setting up OVHcloud please watch this video: TODO
+[![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://youtu.be/XkMnYocAEO0) For a more detailed guide on setting up OVHcloud please watch this video: https://youtu.be/XkMnYocAEO0
 
 ### Creating an OVHCloud account
 *TIP*: If you haven't created a project on OVHcloud yet, make sure you've received your GPU voucher code *beforehand*, 
@@ -502,7 +497,7 @@ Click `+ Launch a new job` on the AI Training page.
    * In `5. Configure your job` select **1** `GPU`.
    * Validate the info and Create the job.
 6. On the `AI Training Jobs` screen wait until the job's status changes from `Pending` to `Running`.
-7. Click `HTTP Access` and log in with the AI training user you've created earlier. 
+7. Click `HTTP Access` from the Job's details page and log in with the AI training user you've created earlier. 
 Once logged in, you can close the page and click `HTTP Access` to launch a JupyterLab notebook.
 8. Awesome, now you have a free GPU-enabled Jupyter instance!
 
@@ -510,6 +505,8 @@ Once logged in, you can close the page and click `HTTP Access` to launch a Jupyt
 like the one in step 5. The Dockerfile for it is available here: 
 [baaastijn/Dockerimages](https://github.com/baaastijn/Dockerimages/tree/main/Hugginface_challenge_speech).
 Once you've built your image, push it to https://hub.docker.com/ and select it during the OVHcloud job creation.
+
+For more quick tutorials about OVHcloud AI products, check out the showcase https://vimeo.com/showcase/8903300
 
 ## How to combine n-gram with acoustic model
 
@@ -662,27 +659,21 @@ The following table summarizes what platform to use for which problem.
 
 ## Talks
 
-We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozilla's Common Voice, Kensho-Technologies, Hugging Face.
+We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozilla's Common Voice, Meta AI Research and Hugging Face.
 
 ### Thursday, January 20th
 
-- [Watch the talks on YouTube](TODO)
-- [Chat history](TODO)
-
  Speaker        | Topic                           | Time                  |  Video |
 |-------------|---------------------------------|------------------------|------------------------|
-| Patrick von Platen, Hugging Face | TODO | ??? UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
-| Raymond Grossman and Jeremy Lopez, Kensho-Technologies | Pyctcdecode & Speech2text decoding | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
+| Patrick von Platen, Hugging Face | Introduction to Robust Speech Challenge | 4h30pm - 5h00pm UTC     | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=X9e5Tto-Iuk)
+| Raymond Grossman and Jeremy Lopez, Kensho-Technologies | Pyctcdecode & Speech2text decoding | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=mp7fHMTnK9A)
 
 ### Friday, January 21th
 
-- [Watch the talks on YouTube](TODO)
-- [Chat history](TODO)
-
  Speaker        | Topic                           | Time                  | Video |
 |-------------|---------------------------------|------------------------|------------------------|
-| Gabriel Habayeb, Mozilla Common Voice | TODO | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
-| Changhan Wang, Meta AI Research | XLS-R: Large-Scale Cross-lingual Speech Representation Learning on 128 Languages | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](TODO)
+| Gabriel Habayeb, Mozilla Common Voice | Unlocking global speech with Mozilla Common Voice | 4h30pm - 5h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=Vvn984QmAVg)
+| Changhan Wang, Meta AI Research | XLS-R: Large-Scale Cross-lingual Speech Representation Learning on 128 Languages | 5h30pm - 6h00pm UTC      | [![Youtube](https://www.youtube.com/s/desktop/f506bd45/img/favicon_32.png)](https://www.youtube.com/watch?v=ic_J7ZCROBM)
 
 ### Talks & Speakers
 
@@ -699,9 +690,9 @@ We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozi
 	- Jeremy is a machine learning engineer at Kensho Technologies and has worked on a variety of different topics including search and speech recognition. Before working at Kensho, he earned a PhD in experimental particle physics at MIT and continued doing physics research as a postdoc at the University of Colorado Boulder.
 
 #### Gabriel Habayeb, Data Engineer, Common Voice @ Mozilla
-- Talk: Common Voice
-- Abstract: 
-- Speaker info: 
+- Talk: Unlocking global speech with Mozilla Common Voice
+- Abstract: Hear from Common Voice Data Engineer Gabriel Habayeb (Mozilla Foundation) as he talks about how Common Voice makes it easy to crowdsource voice data in global languages, as well as getting key insights into the dataset itself, how we maintain quality, use metadata - and our plans for the future!
+- Speaker info: Gabriel is a software developer with the Common Voice team at the Mozilla Foundation with a focus on data engineering. Before joining the Foundation, he spent the last six years working across different industries, including education, enterprise and not-for-profit organizations.
 
 #### Changhan Wang, Main author of XLS-R and Research Engineer, Meta AI Research
 - Talk: XLS-R: Large-Scale Cross-lingual Speech Representation Learning on 128 Languages
