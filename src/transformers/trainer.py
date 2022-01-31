@@ -422,6 +422,13 @@ class Trainer:
         if train_dataset is not None and not isinstance(train_dataset, collections.abc.Sized) and args.max_steps <= 0:
             raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
 
+        if (
+            train_dataset is not None
+            and isinstance(train_dataset, torch.utils.data.IterableDataset)
+            and args.group_by_length
+        ):
+            raise ValueError("the `--group_by_length` option is only available for `Dataset`, not `IterableDataset")
+
         self._signature_columns = None
 
         # Mixed precision setup
