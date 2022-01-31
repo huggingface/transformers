@@ -185,9 +185,27 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         stride = None
         if isinstance(inputs, dict):
             stride = inputs.get("stride", None)
+            in_sampling_rate = inputs.pop("sampling_rate")
             inputs = inputs.get("raw")
-            if stride is not None and stride[0] + stride[1] > inputs.shape[0]:
-                raise ValueError("Stride is too large for input")
+            if in_sampling_rate != self.feature_extractor.sampling_rate:
+                import torch
+                from torchaudio import functional as F
+
+                inputs = F.resample(
+                    torch.from_numpy(inputs), in_sampling_rate, self.feature_extractor.sampling_rate
+                ).numpy()
+                ratio = self.feature_extractor.sampling_rate / in_sampling_rate
+            else:
+                ratio = 1
+            if stride is not None:
+                if stride[0] + stride[1] > inputs.shape[0]:
+                    raise ValueError("Stride is too large for input")
+
+                # Stride needs to get the chunk length here, it's going to get
+                # swallowed by the `feature_extractor` later, and then batching
+                # can add extra data in the inputs, so we need to keep track
+                # of the original length in the stride so we can cut properly.
+                stride = (inputs.shape[0], int(round(stride[0] * ratio)), int(round(stride[1] * ratio)))
         if not isinstance(inputs, np.ndarray):
             raise ValueError(f"We expect a numpy ndarray as input, got `{type(inputs)}`")
         if len(inputs.shape) != 1:
@@ -220,7 +238,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
             )
             if stride is not None:
-                if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
+                if self.type == "seq2seq":
                     raise ValueError("Stride is only usable with CTC models, try removing it")
 
                 processed["stride"] = stride
