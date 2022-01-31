@@ -939,6 +939,9 @@ class GenerationMixin:
                  Custom stopping criteria that complement the default stopping criteria built from arguments and a
                  model's config. If a stopping criteria is passed that is already created with the arguments or a
                  model's config an error is thrown. This feature is intended for advanced users.
+            constraints (`List[Constraint]`, *optional*):
+                 Custom constraints that can be added to the generation to ensure that the output will contain the use
+                 of certain tokens as defined by `Constraint` objects, in the most sensible way possible.    
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -960,7 +963,6 @@ class GenerationMixin:
                 crash. Note that using `remove_invalid_values` can slow down generation.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
-
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
                 is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific kwargs
@@ -2845,13 +2847,11 @@ class GenerationMixin:
         synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
-        from transformers import GPT2Tokenizer
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
         r"""
         Generates sequences for models with a language modeling head using beam search decoding.
 
         Parameters:
-
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             constrained_beam_scorer (`ConstrainedBeamScorer`):
@@ -2864,6 +2864,10 @@ class GenerationMixin:
             stopping_criteria (`StoppingCriteriaList`, *optional*):
                 An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
                 used to tell if the generation loop should stop.
+            logits_warper (`LogitsProcessorList`, *optional*):
+                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsWarper`] used
+                to warp the prediction score distribution of the language modeling head applied before multinomial
+                sampling at each generation step.
             max_length (`int`, *optional*, defaults to 20):
                 **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
                 tokens. The maximum length of the sequence to be generated.
@@ -2929,7 +2933,7 @@ class GenerationMixin:
         ... }
 
         >>> constraints = [
-        ...     PhrasalConstraint(tokenizer.encode("required phrase"))
+        ...     PhrasalConstraint(tokenizer.encode("required phrase")[0])
         ... ]
 
 
@@ -2948,7 +2952,7 @@ class GenerationMixin:
         ...     ]
         ... )
 
-        >>> outputs = model.constrained_beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
+        >>> outputs = model.constrained_beam_search(input_ids, beam_scorer, constraints=constraints, logits_processor=logits_processor, **model_kwargs)
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         ```"""
@@ -3001,7 +3005,6 @@ class GenerationMixin:
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
-
         this_peer_finished = False  # used by synced_gpus only
         while True:
 
@@ -3030,6 +3033,10 @@ class GenerationMixin:
                 continue  # don't waste resources running the code we don't need
 
             next_token_logits = outputs.logits[:, -1, :]
+
+            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
+            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
+            next_token_logits = outputs.logits[:, -1, :]
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `nn.functional.log_softmax` operation.
             next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
@@ -3037,12 +3044,11 @@ class GenerationMixin:
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
 
+            next_token_scores_processed = logits_processor(input_ids, next_token_scores)
 
-            next_token_scores = logits_processor(input_ids, next_token_scores)
+            scores_for_all_vocab = next_token_scores_processed.clone()
 
-            scores_for_all_vocab = next_token_scores.clone()
-
-            next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
+            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
 
 
             # Store scores, attentions and hidden_states when required
@@ -3090,7 +3096,6 @@ class GenerationMixin:
             beam_idx = beam_outputs["next_beam_indices"]
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-            
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )

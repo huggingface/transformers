@@ -37,7 +37,7 @@ if is_torch_available():
         VisionEncoderDecoderModel,
         top_k_top_p_filtering,
     )
-    from transformers.generation_beam_search import BeamSearchScorer
+    from transformers.generation_beam_search import BeamSearchScorer, ConstrainedBeamSearchScorer
     from transformers.generation_logits_process import (
         ForcedBOSTokenLogitsProcessor,
         ForcedEOSTokenLogitsProcessor,
@@ -63,6 +63,8 @@ if is_torch_available():
         SampleDecoderOnlyOutput,
         SampleEncoderDecoderOutput,
     )
+    from transformers.generation_beam_constraints import PhrasalConstraint
+
 
 
 class GenerationTesterMixin:
@@ -187,6 +189,26 @@ class GenerationTesterMixin:
             do_early_stopping=beam_kwargs["early_stopping"],
             num_beam_hyps_to_keep=num_return_sequences,
             num_beam_groups=beam_kwargs["num_beam_groups"],
+        )
+        return beam_kwargs, beam_scorer
+
+
+    @staticmethod
+    def _get_constrained_beam_scorer_and_kwargs(batch_size, max_length, constraints, num_return_sequences=1):
+        beam_kwargs = {
+            "early_stopping": False,
+            "length_penalty": 2.0,
+            "num_beams": num_return_sequences * 4,
+            "num_return_sequences": num_return_sequences,
+        }
+        beam_scorer = ConstrainedBeamSearchScorer(
+            batch_size=batch_size,
+            constraints=constraints,
+            num_beams=beam_kwargs["num_beams"],
+            device=torch_device,
+            length_penalty=beam_kwargs["length_penalty"],
+            do_early_stopping=beam_kwargs["early_stopping"],
+            num_beam_hyps_to_keep=num_return_sequences,
         )
         return beam_kwargs, beam_scorer
 
@@ -515,6 +537,69 @@ class GenerationTesterMixin:
             output_group_beam_search = model.group_beam_search(
                 input_ids_clone,
                 beam_scorer,
+                max_length=max_length,
+                attention_mask=attention_mask_clone,
+                logits_processor=logits_processor,
+                output_scores=output_scores,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict_in_generate=return_dict_in_generate,
+                **kwargs,
+            )
+        return output_generate, output_group_beam_search
+
+    def _constrained_beam_search_generate(
+        self,
+        model,
+        input_ids,
+        attention_mask,
+        max_length,
+        constrained_beam_scorer,
+        constraints,
+        beam_kwargs,
+        logits_processor,
+        logits_process_kwargs,
+        output_scores=False,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict_in_generate=False,
+    ):
+        output_generate = model.generate(
+            input_ids,
+            attention_mask=attention_mask,
+            do_sample=False,
+            max_length=max_length,
+            output_scores=output_scores,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict_in_generate=return_dict_in_generate,
+            remove_invalid_values=True,
+            constraints=constraints,
+            **beam_kwargs,
+            **logits_process_kwargs,
+        )
+
+        # group_beam_search does not automatically interleave `batch_size` dim for `num_beams`
+        kwargs = {}
+        if model.config.is_encoder_decoder:
+            encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
+                model,
+                input_ids,
+                attention_mask,
+                num_interleave=constrained_beam_scorer.num_beams,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+            kwargs["encoder_outputs"] = encoder_outputs
+            input_ids_clone = input_ids_clone.repeat_interleave(constrained_beam_scorer.num_beams, dim=0)
+        else:
+            attention_mask_clone = attention_mask.repeat_interleave(constrained_beam_scorer.num_beams, dim=0)
+            input_ids_clone = input_ids.repeat_interleave(constrained_beam_scorer.num_beams, dim=0)
+
+        with torch.no_grad():
+            output_group_beam_search = model.constrained_beam_search(
+                input_ids_clone,
+                constrained_beam_scorer,
                 max_length=max_length,
                 attention_mask=attention_mask_clone,
                 logits_processor=logits_processor,
@@ -1085,6 +1170,153 @@ class GenerationTesterMixin:
                     output, input_ids, model.config, num_return_sequences=num_return_sequences * beam_scorer.num_beams
                 )
 
+    def test_constrained_beam_search_generate(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
+            # It is important set set the eos_token_id to None to ensure that no sequences
+            # shorter than `max_length` can be generated which could lead to flaky circle ci
+            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
+            config.eos_token_id = None
+            config.forced_eos_token_id = None
+
+            model = model_class(config).to(torch_device).eval()
+            max_length = 10
+
+            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
+            )
+
+            # check `generate()` and `group_beam_search()` are equal
+            # Sample constraints
+            min_id = torch.min(input_ids) + 3
+            max_id = torch.max(input_ids)
+            force_tokens = torch.randint(min_id, max_id, (1, 2)).type(torch.LongTensor)[0]
+            constraints = [
+                PhrasalConstraint(force_tokens),
+            ]
+
+            beam_kwargs, beam_scorer = self._get_constrained_beam_scorer_and_kwargs(
+                input_ids.shape[0], max_length, constraints, num_return_sequences=1
+            )
+            output_generate, output_beam_search = self._constrained_beam_search_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=max_length,
+                constrained_beam_scorer=beam_scorer,
+                constraints=constraints,
+                beam_kwargs=beam_kwargs,
+                logits_processor=logits_processor,
+                logits_process_kwargs=logits_process_kwargs,
+            )
+            self.assertListEqual(output_generate.tolist(), output_beam_search.tolist())
+            for generation_output in output_generate:
+                self._check_sequence_inside_sequence(force_tokens, generation_output)
+
+            # check `generate()` and `constrained_beam_search()` are equal for `num_return_sequences`
+            # Sample constraints
+            force_tokens = torch.randint(min_id, max_id, (1, 2)).type(torch.LongTensor)[0]
+            constraints = [
+                PhrasalConstraint(force_tokens),
+            ]
+
+            num_return_sequences = 2
+            max_length = 10
+
+            beam_kwargs, beam_scorer = self._get_constrained_beam_scorer_and_kwargs(
+                input_ids.shape[0], max_length, constraints, num_return_sequences=num_return_sequences
+            )
+
+            output_generate, output_beam_search = self._constrained_beam_search_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=max_length,
+                constrained_beam_scorer=beam_scorer,
+                constraints=constraints,
+                beam_kwargs=beam_kwargs,
+                logits_processor=logits_processor,
+                logits_process_kwargs=logits_process_kwargs,
+            )
+            self.assertListEqual(output_generate.tolist(), output_beam_search.tolist())
+
+            for generation_output in output_generate:
+                self._check_sequence_inside_sequence(force_tokens, generation_output)
+
+    def test_constrained_beam_search_generate_dict_output(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
+            # disable cache
+            config.use_cache = False
+
+            # It is important set set the eos_token_id to None to ensure that no sequences
+            # shorter than `max_length` can be generated which could lead to flaky circle ci
+            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
+            config.eos_token_id = None
+            config.forced_eos_token_id = None
+
+            model = model_class(config).to(torch_device).eval()
+            if model.config.is_encoder_decoder:
+                max_length = 4
+
+            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
+            )
+
+            # Sample constraints
+            min_id = torch.min(input_ids) + 3
+            max_id = torch.max(input_ids)
+            force_tokens = torch.randint(min_id, max_id, (1, 2)).type(torch.LongTensor)[0]
+            constraints = [
+                PhrasalConstraint(force_tokens),
+            ]
+
+            beam_kwargs, beam_scorer = self._get_constrained_beam_scorer_and_kwargs(
+                input_ids.shape[0], max_length, constraints, num_return_sequences=1
+            )
+            output_generate, output_beam_search = self._constrained_beam_search_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=max_length,
+                constrained_beam_scorer=beam_scorer,
+                constraints=constraints,
+                beam_kwargs=beam_kwargs,
+                logits_processor=logits_processor,
+                logits_process_kwargs=logits_process_kwargs,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_beam_search, BeamSearchEncoderDecoderOutput)
+                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
+            else:
+                self.assertIsInstance(output_beam_search, BeamSearchDecoderOnlyOutput)
+                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
+
+            self.assertListEqual(output_generate.sequences.tolist(), output_beam_search.sequences.tolist())
+            self.assertTrue(
+                torch.allclose(output_generate["sequences_scores"], output_beam_search["sequences_scores"], atol=1e-3)
+            )
+            self.assertTrue(output_generate["sequences_scores"].shape == (output_generate["sequences"].shape[0],))
+            self.assertTrue((output_generate["sequences_scores"] < 0).all().item())
+
+            for output in (output_beam_search, output_generate):
+                self._check_outputs(output, input_ids, model.config, num_return_sequences=beam_scorer.num_beams)
+
     def test_generate_with_head_masking(self):
         """Test designed for encoder-decoder models to ensure the attention head masking is used."""
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
@@ -1254,6 +1486,25 @@ class GenerationTesterMixin:
             [encoder_expected_shape] * len(hidden_states),
         )
 
+    def _check_sequence_inside_sequence(
+        self, tensor_1, tensor_2
+    ):
+        # set to same device. we don't care what device.
+        tensor_1, tensor_2 = tensor_1.cpu(), tensor_2.cpu()
+
+        in_order = tensor_1.size(0) <= tensor_2.size(0)
+        longer = tensor_2 if in_order else tensor_1
+        shorter = tensor_1 if in_order else tensor_2
+        
+        flag = False
+        chunk_size = shorter.size(0)
+        for chunk_idx in range(longer.size(0) - chunk_size + 1):
+            subseq = longer[chunk_idx : chunk_idx+chunk_size]
+            if torch.equal(subseq, shorter):
+                flag = True
+                break
+        
+        assert flag
 
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
@@ -1896,7 +2147,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         encoder = model.get_encoder()
 
-        encoder_outputs = encoder(inp/gut_values)
+        encoder_outputs = encoder(input_values)
 
         output_sequences_no_mask = model.generate(encoder_outputs=encoder_outputs).cpu()
         output_sequences_with_mask = model.generate(encoder_outputs=encoder_outputs, attention_mask=attention_mask)
