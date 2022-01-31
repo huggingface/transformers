@@ -2852,10 +2852,10 @@ class GenerationMixin:
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
-            constrained_beam_scorer (`ConstrainedBeamScorer`):
-                An derived instance of [`BeamScorer`] that defines how beam hypotheses are constructed, stored and
+            constrained_beam_scorer (`ConstrainedBeamSearchScorer`):
+                A derived instance of [`BeamScorer`] that defines how beam hypotheses are constructed, stored and
                 sorted during generation, while satisfying a list of positive constraints. For more information, the
-                documentation of [`ConstrainedBeamScorer`] should be read.
+                documentation of [`ConstrainedBeamSearchScorer`] should be read.
             logits_processor (`LogitsProcessorList`, *optional*):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
