@@ -170,7 +170,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
             position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
         # expand embeddings if needed
-        max_pos = self.padding_idx + 1 + seq_len
+        max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
