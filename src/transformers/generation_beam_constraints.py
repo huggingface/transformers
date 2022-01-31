@@ -153,12 +153,12 @@ class TokenConstraint(Constraint):
     @add_start_docstrings(TOKEN_CONSTRAINT_DOCSTRING)
     def __init__(self, token_id: int):
         super(Constraint, self).__init__()
-        if not (isinstance(token_id, int) or isinstance(token_id, torch.LongTensor)) or token_id < 0:
+        if not (isinstance(token_id, int) or isinstance(token_id, (torch.LongTensor, torch.cuda.LongTensor))) or token_id < 0:
             raise ValueError(
                 f"`token_id` has to be a positive integer or a `torch.LongTensor` with one positive integer, but is {token_id}"
             )
         else:
-            if isinstance(token_id, torch.LongTensor) and token_id.size(0) > 1:
+            if isinstance(token_id, (torch.LongTensor, torch.cuda.LongTensor)) and token_id.size(0) > 1:
                 raise ValueError(
                     f"`token_id` has to be a positive integer or a `torch.LongTensor` with one integer, but is {token_id}."
                     "For sequential constraints for multiple tokens, refer to `PhrasalConstraint`."
@@ -203,7 +203,7 @@ class PhrasalConstraint(Constraint):
         super(Constraint, self).__init__()
 
         is_int_list = isinstance(token_ids, List) and isinstance(token_ids[0], int)
-        is_long_tensor = isinstance(token_ids, torch.LongTensor) and len(token_ids.size()) == 1
+        is_long_tensor = isinstance(token_ids, (torch.LongTensor, torch.cuda.LongTensor)) and len(token_ids.size()) == 1
         if not (is_int_list or is_long_tensor) or torch.any(token_ids < 0):
             raise ValueError(
                 f"`token_ids` has to be a single list of positive integers or a `torch.LongTensor` but is {token_ids}"
