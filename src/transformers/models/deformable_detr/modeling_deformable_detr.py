@@ -203,8 +203,8 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~AutoFeatureExtractor.post_process`] to retrieve the
-            unnormalized bounding boxes.
+            possible padding). You can use [`~AutoFeatureExtractor.post_process`] to retrieve the unnormalized bounding
+            boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -266,13 +266,12 @@ class DeformableDetrSegmentationOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~AutoFeatureExtractor.post_process`] to retrieve the
-            unnormalized bounding boxes.
+            possible padding). You can use [`~AutoFeatureExtractor.post_process`] to retrieve the unnormalized bounding
+            boxes.
         pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
-            Segmentation masks logits for all queries. See also
-            [`~AutoFeatureExtractor.post_process_segmentation`] or
-            [`~AutoFeatureExtractor.post_process_panoptic`] to evaluate instance and panoptic segmentation
-            masks respectively.
+            Segmentation masks logits for all queries. See also [`~AutoFeatureExtractor.post_process_segmentation`] or
+            [`~AutoFeatureExtractor.post_process_panoptic`] to evaluate instance and panoptic segmentation masks
+            respectively.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -403,7 +402,9 @@ class DeformableDetrTimmConvEncoder(nn.Module):
         requires_backends(self, ["timm"])
 
         out_indices = (2, 3, 4) if config.num_feature_levels > 1 else (4,)
-        backbone = create_model(config.backbone, pretrained=True, features_only=True, out_indices=out_indices, **kwargs)
+        backbone = create_model(
+            config.backbone, pretrained=True, features_only=True, out_indices=out_indices, **kwargs
+        )
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
@@ -1024,8 +1025,8 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values can be obtained using [`AutoFeatureExtractor`]. See [`AutoFeatureExtractor.__call__`] for
+            details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1196,6 +1197,10 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         self.gradient_checkpointing = False
         self.return_intermediate = config.return_intermediate
 
+        # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
+        self.bbox_embed = None
+        self.class_embed = None
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1297,6 +1302,19 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 )
 
             hidden_states = layer_outputs[0]
+
+            # hack implementation for iterative bounding box refinement
+            if self.bbox_embed is not None:
+                tmp = self.bbox_embed[idx](hidden_states)
+                if reference_points.shape[-1] == 4:
+                    new_reference_points = tmp + inverse_sigmoid(reference_points)
+                    new_reference_points = new_reference_points.sigmoid()
+                else:
+                    assert reference_points.shape[-1] == 2
+                    new_reference_points = tmp
+                    new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
+                    new_reference_points = new_reference_points.sigmoid()
+                reference_points = new_reference_points.detach()
 
             if self.return_intermediate:
                 intermediate += (hidden_states,)
@@ -1480,9 +1498,9 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         print("Shapes of features:")
         for (src, mask) in features:
             print(src.shape)
-        
-        #print(self.input_proj[0](features[-1][0]))
-        
+
+        # print(self.input_proj[0](features[-1][0]))
+
         srcs = []
         masks = []
         for l, (src, mask) in enumerate(features):
