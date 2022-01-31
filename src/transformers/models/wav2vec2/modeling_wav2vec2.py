@@ -236,7 +236,11 @@ def _compute_mask_indices(
         # make sure num masked indices <= sequence_length
         if num_masked_span * mask_length > sequence_length:
             num_masked_span = sequence_length // mask_length
-
+        
+        # make sure num_masked spans is not longer than input_length - (mask_length -1) 
+        if input_length - (mask_length - 1) < num_masked_span:
+           num_masked_span = input_length - (mask_length - 1)
+        
         return num_masked_span
 
     # compute number of masked spans in batch
