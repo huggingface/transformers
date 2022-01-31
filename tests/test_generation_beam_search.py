@@ -428,11 +428,6 @@ class ConstrainedBeamSearchTester:
         input_ids = torch.cat([input_ids[output_indices, :], output_tokens.unsqueeze(-1)], dim=-1)
 
         # finalize
-
-        print("input_ids", input_ids.size())
-        print("output_scores", output_scores.size())
-        print("self.sequence_length", self.sequence_length)
-        print("max_length", max_length)
         sequence_output = constrained_beam_scorer.finalize(
             input_ids,
             output_scores,
