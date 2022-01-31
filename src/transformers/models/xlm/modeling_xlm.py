@@ -660,7 +660,7 @@ class XLMPredLayer(nn.Module):
             outputs = (scores,) + outputs
             if y is not None:
                 loss = nn.functional.cross_entropy(
-                    scores.view(-1, self.n_words), y.view(-1), reduction="elementwise_mean"
+                    scores.view(-1, self.n_words), y.view(-1), reduction="mean"
                 )
                 outputs = (loss,) + outputs
         else:
