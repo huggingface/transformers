@@ -2332,10 +2332,15 @@ class Trainer:
                 model = model.to(dtype=torch.bfloat16, device=args.device)
 
         batch_size = dataloader.batch_size
+        # Do this before wrapping.
+        if isinstance(dataloader.dataset, IterableDatasetShard):
+            eval_dataset = dataloader.dataset.dataset
+        else:
+            eval_dataset = dataloader.dataset
 
         logger.info(f"***** Running {description} *****")
-        if isinstance(dataloader.dataset, collections.abc.Sized):
-            logger.info(f"  Num examples = {self.num_examples(dataloader)}")
+        if isinstance(eval_dataset, collections.abc.Sized):
+            logger.info(f"  Num examples = {len(eval_dataset)}")
         else:
             logger.info("  Num examples: Unknown")
         logger.info(f"  Batch size = {batch_size}")
@@ -2343,8 +2348,6 @@ class Trainer:
         model.eval()
 
         self.callback_handler.eval_dataloader = dataloader
-        # Do this before wrapping.
-        eval_dataset = dataloader.dataset
 
         if is_torch_tpu_available():
             dataloader = pl.ParallelLoader(dataloader, [args.device]).per_device_loader(args.device)
@@ -2427,7 +2430,7 @@ class Trainer:
             all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
 
         # Number of samples
-        if not isinstance(eval_dataset, IterableDataset):
+        if isinstance(eval_dataset, collections.abc.Sized):
             num_samples = len(eval_dataset)
         # The instance check is weird and does not actually check for the type, but whether the dataset has the right
         # methods. Therefore we need to make sure it also has the attribute.

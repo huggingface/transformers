@@ -26,8 +26,8 @@ from typing import Dict, List, Optional, Union
 import datasets
 import numpy as np
 import torch
-from torch.utils.data import IterableDataset
 from datasets import IterableDatasetDict, load_dataset, load_metric
+from torch.utils.data import IterableDataset
 
 import transformers
 from transformers import (
@@ -43,15 +43,16 @@ from transformers import (
     Wav2Vec2Processor,
     set_seed,
 )
+from transformers.trainer_pt_utils import IterableDatasetShard
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
-# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.16.0.dev0")
+# Will error if the minimal version of Transformers is not installed. Remove at your own risk.
+check_min_version("4.17.0.dev0")
 
-require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
+require_version("datasets>=1.18.2", "To fix: pip install 'datasets>=1.18.2'")
 
 
 logger = logging.getLogger(__name__)
@@ -184,6 +185,13 @@ class DataTrainingArguments:
             "value if set."
         },
     )
+    shuffle_buffer_size: Optional[int] = field(
+        default=500,
+        metadata={
+            "help": "The number of streamed examples to download before shuffling them. The large the buffer, "
+            "the closer it is to real offline shuffling."
+        },
+    )
     chars_to_ignore: Optional[List[str]] = list_field(
         default=None,
         metadata={"help": "A list of characters to remove from the transcripts."},
@@ -233,31 +241,6 @@ class DataTrainingArguments:
             " input audio to a sequence of phoneme sequences."
         },
     )
-
-
-class StreamingDataset(IterableDataset):
-    """
-    Iterable dataset that returns a constant stream of examples, resetting the source dataset's iterator
-    after it reaches the end
-    Args:
-        dataset (datasets.IterableDataset): The source streaming dataset.
-    """
-
-    def __init__(self, dataset):
-        self.dataset = dataset
-        self.epoch = 0
-
-    def __iter__(self):
-        iterator = iter(self.dataset)
-        more_examples = True
-        while more_examples:
-            try:
-                yield next(iterator)
-            except StopIteration:
-                iterator = iter(self.dataset)
-                self.epoch += 1
-                logger.info(f"Dataset epoch: {self.epoch}")
-
 
 
 @dataclass
@@ -459,27 +442,20 @@ def main():
         model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
     )
 
-    # 4. Next, if no tokenizer file is defined,
-    # we create the vocabulary of the model by extracting all unique characters from
-    # the training and evaluation datasets
-    # We need to make sure that only first rank saves vocabulary
-    # make sure all processes wait until vocab is created
+    # 4. Now we can instantiate the tokenizer and model
+    # Note for distributed training, the .from_pretrained methods guarantee that only
+    # one local process can concurrently download model & vocab.
+
     tokenizer_name_or_path = model_args.tokenizer_name_or_path
-    tokenizer_kwargs = {}
     if tokenizer_name_or_path is None:
         raise ValueError(
             "Tokenizer has to be created before training in streaming mode. Please specify --tokenizer_name_or_path"
         )
-
-    # 5. Now we can instantiate the tokenizer and model
-    # Note for distributed training, the .from_pretrained methods guarantee that only
-    # one local process can concurrently download model & vocab.
-
     # load feature_extractor and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
+        config=config,
         use_auth_token=data_args.use_auth_token,
-        **tokenizer_kwargs,
     )
 
     # adapt config
@@ -514,7 +490,7 @@ def main():
     if model_args.freeze_feature_encoder:
         model.freeze_feature_encoder()
 
-    # 6. Now we preprocess the datasets including loading the audio, resampling and normalization
+    # 5. Now we preprocess the datasets including loading the audio, resampling and normalization
     audio_column_name = data_args.audio_column_name
 
     # `phoneme_language` is only relevant if the model is fine-tuned on phoneme classification
@@ -544,11 +520,15 @@ def main():
             vectorized_datasets[split] = (
                 dataset.map(prepare_dataset)
                 .remove_columns(raw_column_names[split] + ["target_text"])
-                .shuffle(buffer_size=100, seed=training_args.seed)
                 .with_format("torch")
             )
+            if split == "train":
+                vectorized_datasets[split] = vectorized_datasets[split].shuffle(
+                    buffer_size=data_args.shuffle_buffer_size,
+                    seed=training_args.seed,
+                )
 
-    # 7. Next, we can prepare the training.
+    # 6. Next, we can prepare the training.
     # Let's use word error rate (WER) as our evaluation metric,
     # instantiate a data collator and the trainer
 
@@ -592,11 +572,13 @@ def main():
     max_input_length = data_args.max_duration_in_seconds * feature_extractor.sampling_rate
     data_collator = DataCollatorCTCWithPadding(processor=processor, max_length=max_input_length)
 
-    # trainer callback to reinitialize and reshuffle the streamable datasets at the end of each epoch
+    # trainer callback to reinitialize and reshuffle the streamable datasets at the beginning of each epoch
     class ShuffleCallback(TrainerCallback):
-        def on_epoch_end(self, args, state, control, **kwargs):
-            for dataset in vectorized_datasets.values():
-                dataset.set_epoch(dataset._epoch + 1)
+        def on_epoch_begin(self, args, state, control, train_dataloader, **kwargs):
+            if isinstance(train_dataloader.dataset, IterableDatasetShard):
+                pass  # set_epoch() is handled by the Trainer
+            elif isinstance(train_dataloader.dataset, IterableDataset):
+                train_dataloader.dataset.set_epoch(train_dataloader.dataset._epoch + 1)
 
     # Initialize Trainer
     trainer = Trainer(
@@ -604,13 +586,13 @@ def main():
         data_collator=data_collator,
         args=training_args,
         compute_metrics=compute_metrics,
-        train_dataset=StreamingDataset(vectorized_datasets["train"]) if training_args.do_train else None,
+        train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        tokenizer=feature_extractor,
+        tokenizer=processor,
         callbacks=[ShuffleCallback()],
     )
 
-    # 8. Finally, we can start training
+    # 7. Finally, we can start training
 
     # Training
     if training_args.do_train:

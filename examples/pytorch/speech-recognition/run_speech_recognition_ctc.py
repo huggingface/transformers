@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.16.0.dev0")
 
-require_version("datasets>=1.13.3", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
+require_version("datasets>=1.13.3", "To fix: pip install 'datasets>=1.13.3'")
 
 
 logger = logging.getLogger(__name__)
@@ -669,7 +669,7 @@ def main():
         compute_metrics=compute_metrics,
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        tokenizer=feature_extractor,
+        tokenizer=processor,
     )
 
     # 8. Finally, we can start training
