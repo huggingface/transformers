@@ -86,7 +86,7 @@ def prepare_img():
 
 @torch.no_grad()
 def convert_deformable_detr_checkpoint(
-    checkpoint_path, single_scale, dilation, with_box_refine, pytorch_dump_folder_path
+    checkpoint_path, single_scale, dilation, with_box_refine, two_stage, pytorch_dump_folder_path
 ):
     """
     Copy/paste/tweak model's weights to our Deformable DETR structure.
@@ -99,6 +99,7 @@ def convert_deformable_detr_checkpoint(
         config.num_feature_levels = 1
     config.dilation = dilation
     config.with_box_refine = with_box_refine
+    config.two_stage = two_stage
     # set labels
     config.num_labels = 91
     repo_id = "datasets/huggingface/label-files"
@@ -165,6 +166,12 @@ def convert_deformable_detr_checkpoint(
         )
         expected_boxes = torch.tensor([[0.7828, 0.2208, 0.4323], [0.0892, 0.5996, 0.1319], [0.5524, 0.6389, 0.8914]])
 
+    if with_box_refine and two_stage:
+        expected_logits = torch.tensor(
+            [[-6.7108, -4.3213, -6.3777], [-8.9014, -6.1799, -6.7240], [-6.9315, -4.4735, -6.2298]]
+        )
+        expected_boxes = torch.tensor([[0.2583, 0.5499, 0.4683], [0.7652, 0.9068, 0.4882], [0.5490, 0.2763, 0.0564]])
+
     print("Logits:", outputs.logits[0, :3, :3])
 
     assert torch.allclose(outputs.logits[0, :3, :3], expected_logits.to(device), atol=1e-4)
@@ -188,7 +195,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--single_scale", action="store_true", help="Whether to set config.num_features_levels = 1.")
     parser.add_argument("--dilation", action="store_true", help="Whether to set config.dilation=True.")
-    parser.add_argument("--with_box_refine", action="store_true", help="Whether to set config.dilation=True.")
+    parser.add_argument("--with_box_refine", action="store_true", help="Whether to set config.with_box_refine=True.")
+    parser.add_argument("--two_stage", action="store_true", help="Whether to set config.two_stage=True.")
     parser.add_argument(
         "--pytorch_dump_folder_path",
         default=None,
@@ -198,5 +206,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     convert_deformable_detr_checkpoint(
-        args.checkpoint_path, args.single_scale, args.dilation, args.with_box_refine, args.pytorch_dump_folder_path
+        args.checkpoint_path,
+        args.single_scale,
+        args.dilation,
+        args.with_box_refine,
+        args.two_stage,
+        args.pytorch_dump_folder_path,
     )
