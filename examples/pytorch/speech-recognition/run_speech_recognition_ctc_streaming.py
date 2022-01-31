@@ -26,7 +26,7 @@ from typing import Dict, List, Optional, Union
 import datasets
 import numpy as np
 import torch
-from datasets import IterableDatasetDict, load_dataset, load_metric
+from datasets import IterableDatasetDict, load_dataset, load_metric, interleave_datasets
 from torch.utils.data import IterableDataset
 
 import transformers
@@ -362,10 +362,18 @@ def main():
     raw_datasets = IterableDatasetDict()
     raw_column_names = {}
 
+    def load_streaming_dataset(split, **kwargs):
+        if split.contains("+"):
+            return interleave_datasets([
+                load_dataset(split=split_name, **kwargs) for split_name in split.split("+")
+            ])
+        else:
+            return load_dataset(split=split, **kwargs)
+
     if training_args.do_train:
-        raw_datasets["train"] = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
+        raw_datasets["train"] = load_streaming_dataset(
+            path=data_args.dataset_name,
+            name=data_args.dataset_config_name,
             split=data_args.train_split_name,
             use_auth_token=data_args.use_auth_token,
             streaming=True,
@@ -390,9 +398,9 @@ def main():
             raw_datasets["train"] = raw_datasets["train"].take(range(data_args.max_train_samples))
 
     if training_args.do_eval:
-        raw_datasets["eval"] = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
+        raw_datasets["eval"] = load_streaming_dataset(
+            path=data_args.dataset_name,
+            name=data_args.dataset_config_name,
             split=data_args.eval_split_name,
             use_auth_token=data_args.use_auth_token,
             streaming=True,
