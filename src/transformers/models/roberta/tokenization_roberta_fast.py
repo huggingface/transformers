@@ -192,7 +192,6 @@ class RobertaTokenizerFast(PreTrainedTokenizerFast):
 
         self.add_prefix_space = add_prefix_space
 
-        # the pre_tokenizer is already updated in the GPT2TokenizerFast `__init__`
         tokenizer_component = "post_processor"
         tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
         if tokenizer_component_instance:
