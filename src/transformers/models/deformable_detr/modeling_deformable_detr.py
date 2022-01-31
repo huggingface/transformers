@@ -110,10 +110,10 @@ MSDA = load_cuda_kernels()
 @dataclass
 class DeformableDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
-    Base class for outputs of the DEFORMABLE_DETR decoder. This class adds one attribute to
-    BaseModelOutputWithCrossAttentions, namely an optional stack of intermediate decoder activations, i.e. the output
-    of each decoder layer, each of them gone through a layernorm. This is useful when training the model with auxiliary
-    decoding losses.
+    Base class for outputs of the DeformableDetrDecoder. This class adds two attributes to
+    BaseModelOutputWithCrossAttentions, namely:
+    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
+    - a stacked tensor of intermediate reference points.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -203,7 +203,7 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~DeformableDetrFeatureExtractor.post_process`] to retrieve the
+            possible padding). You can use [`~AutoFeatureExtractor.post_process`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -266,12 +266,12 @@ class DeformableDetrSegmentationOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~DeformableDetrFeatureExtractor.post_process`] to retrieve the
+            possible padding). You can use [`~AutoFeatureExtractor.post_process`] to retrieve the
             unnormalized bounding boxes.
         pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
             Segmentation masks logits for all queries. See also
-            [`~DeformableDetrFeatureExtractor.post_process_segmentation`] or
-            [`~DeformableDetrFeatureExtractor.post_process_panoptic`] to evaluate instance and panoptic segmentation
+            [`~AutoFeatureExtractor.post_process_segmentation`] or
+            [`~AutoFeatureExtractor.post_process_panoptic`] to evaluate instance and panoptic segmentation
             masks respectively.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -393,16 +393,17 @@ class DeformableDetrTimmConvEncoder(nn.Module):
 
     """
 
-    def __init__(self, name: str, dilation: bool):
+    def __init__(self, config):
         super().__init__()
 
         kwargs = {}
-        if dilation:
+        if config.dilation:
             kwargs["output_stride"] = 16
 
         requires_backends(self, ["timm"])
 
-        backbone = create_model(name, pretrained=True, features_only=True, out_indices=(2, 3, 4), **kwargs)
+        out_indices = (2, 3, 4) if config.num_feature_levels > 1 else (4,)
+        backbone = create_model(config.backbone, pretrained=True, features_only=True, out_indices=out_indices, **kwargs)
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
@@ -410,7 +411,7 @@ class DeformableDetrTimmConvEncoder(nn.Module):
         self.intermediate_channel_sizes = self.model.feature_info.channels()
         self.strides = self.model.feature_info.reduction()
 
-        if "resnet" in name:
+        if "resnet" in config.backbone:
             for name, parameter in self.model.named_parameters():
                 if "layer2" not in name and "layer3" not in name and "layer4" not in name:
                     parameter.requires_grad_(False)
@@ -1023,8 +1024,8 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`DeformableDetrFeatureExtractor`]. See
-            [`DeformableDetrFeatureExtractor.__call__`] for details.
+            Pixel values can be obtained using [`AutoFeatureExtractor`]. See
+            [`AutoFeatureExtractor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1350,7 +1351,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DeformableDetrTimmConvEncoder(config.backbone, config.dilation)
+        backbone = DeformableDetrTimmConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = DeformableDetrConvModel(backbone, position_embeddings)
 
@@ -1379,14 +1380,11 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             self.input_proj = nn.ModuleList(
                 [
                     nn.Sequential(
-                        nn.Conv2d(backbone.intermediate_channel_sizes[0], config.d_model, kernel_size=1),
+                        nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
                         nn.GroupNorm(32, config.d_model),
                     )
                 ]
             )
-
-        # Create projection layer (original DETR)
-        # self.input_projection = nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
 
         if not config.two_stage:
             self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model * 2)
@@ -1450,14 +1448,14 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DeformableDetrFeatureExtractor, DeformableDetrModel
+        >>> from transformers import AutoFeatureExtractor, DeformableDetrModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = DeformableDetrFeatureExtractor.from_pretrained("sensetime/deformable-detr")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("sensetime/deformable-detr")
         >>> model = DeformableDetrModel.from_pretrained("sensetime/deformable-detr")
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1479,9 +1477,16 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         # which is a list of tuples
         features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
 
+        print("Shapes of features:")
+        for (src, mask) in features:
+            print(src.shape)
+        
+        #print(self.input_proj[0](features[-1][0]))
+        
         srcs = []
         masks = []
         for l, (src, mask) in enumerate(features):
+            print("L:", l)
             srcs.append(self.input_proj[l](src))
             masks.append(mask)
             assert mask is not None
@@ -1502,13 +1507,6 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         query_embeds = None
         if not self.config.two_stage:
             query_embeds = self.query_position_embeddings.weight
-
-        print("Src means:")
-        for src in srcs:
-            print(src.mean())
-        print("Position embeddings means:")
-        for pos in position_embeddings_list:
-            print(pos.mean())
 
         # Prepare encoder inputs (by flattening)
         src_flatten = []
@@ -1719,14 +1717,14 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DeformableDetrFeatureExtractor, DeformableDetrForObjectDetection
+        >>> from transformers import AutoFeatureExtractor, DeformableDetrForObjectDetection
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = DeformableDetrFeatureExtractor.from_pretrained("sensetime/deformable-detr")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("sensetime/deformable-detr")
         >>> model = DeformableDetrForObjectDetection.from_pretrained("sensetime/deformable-detr")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
@@ -1906,14 +1904,14 @@ class DeformableDetrForSegmentation(DeformableDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DeformableDetrFeatureExtractor, DeformableDetrForSegmentation
+        >>> from transformers import AutoFeatureExtractor, DeformableDetrForSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = DeformableDetrFeatureExtractor.from_pretrained("sensetime/deformable-detr-panoptic")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("sensetime/deformable-detr-panoptic")
         >>> model = DeformableDetrForSegmentation.from_pretrained("sensetime/deformable-detr-panoptic")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
