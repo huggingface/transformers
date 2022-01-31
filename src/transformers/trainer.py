@@ -548,7 +548,6 @@ class Trainer:
             self._signature_columns += ["label", "label_ids"]
 
         ignored_columns = list(set(dataset.column_names) - set(self._signature_columns))
-
         if len(ignored_columns) > 0:
             dset_description = "" if description is None else f"in the {description} set "
             logger.info(
