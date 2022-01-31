@@ -802,6 +802,11 @@ class GenerationTesterMixin:
                 logits_process_kwargs=logits_process_kwargs,
                 logits_processor=logits_processor,
             )
+
+            print("input_ids", input_ids)
+            print("output_generate", output_generate)
+            assert False
+
             self.assertListEqual(output_generate.tolist(), output_beam_search.tolist())
 
             # check `generate()` and `beam_search()` are equal for `num_return_sequences`
@@ -1179,7 +1184,7 @@ class GenerationTesterMixin:
             config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
-            max_length = 10
+            max_length = 20
 
             logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
                 input_ids.shape[-1],
@@ -1189,10 +1194,16 @@ class GenerationTesterMixin:
                 max_length,
             )
 
-            # check `generate()` and `group_beam_search()` are equal
+            # check `generate()` and `constrained_beam_search()` are equal
             # Sample constraints
-            min_id = torch.min(input_ids) + 3
-            max_id = torch.max(input_ids)
+            if not input_ids.dtype == torch.float32:
+                min_id = torch.min(input_ids) + 3
+                max_id = torch.max(input_ids)
+            else:
+                # otherwise this throws an error for Speech2TextModel since its inputs are floating points
+                min_id = 3
+                max_id = 100
+
             force_tokens = torch.randint(min_id, max_id, (1, 2)).type(torch.LongTensor)[0]
             constraints = [
                 PhrasalConstraint(force_tokens),
@@ -1224,7 +1235,7 @@ class GenerationTesterMixin:
             ]
 
             num_return_sequences = 2
-            max_length = 10
+            max_length = 20
 
             beam_kwargs, beam_scorer = self._get_constrained_beam_scorer_and_kwargs(
                 input_ids.shape[0], max_length, constraints, num_return_sequences=num_return_sequences
@@ -1261,7 +1272,7 @@ class GenerationTesterMixin:
 
             model = model_class(config).to(torch_device).eval()
             if model.config.is_encoder_decoder:
-                max_length = 4
+                max_length = 20
 
             logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
                 input_ids.shape[-1],
@@ -1272,8 +1283,13 @@ class GenerationTesterMixin:
             )
 
             # Sample constraints
-            min_id = torch.min(input_ids) + 3
-            max_id = torch.max(input_ids)
+            if not input_ids.dtype == torch.float32:
+                min_id = torch.min(input_ids) + 3
+                max_id = torch.max(input_ids)
+            else:
+                # otherwise this throws an error for Speech2TextModel since its inputs are floating points
+                min_id = 3
+                max_id = 100
             force_tokens = torch.randint(min_id, max_id, (1, 2)).type(torch.LongTensor)[0]
             constraints = [
                 PhrasalConstraint(force_tokens),
