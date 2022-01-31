@@ -113,7 +113,7 @@ def convert_deformable_detr_checkpoint(checkpoint_path, single_scale, dilation, 
     encoding = feature_extractor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
-    logger.info(f"Converting model...")
+    logger.info("Converting model...")
 
     # load original state dict
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
@@ -139,11 +139,16 @@ def convert_deformable_detr_checkpoint(checkpoint_path, single_scale, dilation, 
     # verify our conversion
     outputs = model(pixel_values.to(device))
 
+    print("Shape of logits:", outputs.logits.shape)
+    print("First values of logits:", outputs.logits[0, :3, :3])
+
     expected_logits = torch.tensor(
         [[-9.6645, -4.3449, -5.8705], [-9.7035, -3.8504, -5.0724], [-10.5634, -5.3379, -7.5116]]
+    ).to(device)
+    expected_boxes = torch.tensor([[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]]).to(
+        device
     )
-    expected_boxes = torch.tensor([[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]])
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
 
     # Save model and feature extractor
