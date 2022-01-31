@@ -36,7 +36,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/xglm-564M": 1024,
+    "facebook/xglm-564M": 2048,
 }
 
 
