@@ -179,11 +179,17 @@ class DeformableDetrModelOutput(Seq2SeqModelOutput):
             ...
         inter_references_out
             ...
+        enc_outputs_class
+            ...
+        enc_outputs_coord_unact
+            ...
     """
 
     stacked_intermediate_hidden_states: Optional[torch.FloatTensor] = None
     init_reference_out: Optional[torch.FloatTensor] = None
     inter_references_out: Optional[torch.FloatTensor] = None
+    enc_outputs_class: Optional = None
+    enc_outputs_coord_unact: Optional = None
 
 
 @dataclass
@@ -1446,6 +1452,54 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
         return valid_ratio
 
+    def get_proposal_pos_embed(self, proposals):
+        num_pos_feats = 128
+        temperature = 10000
+        scale = 2 * math.pi
+
+        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
+        dim_t = temperature ** (2 * (dim_t // 2) / num_pos_feats)
+        # N, L, 4
+        proposals = proposals.sigmoid() * scale
+        # N, L, 4, 128
+        pos = proposals[:, :, :, None] / dim_t
+        # N, L, 4, 64, 2
+        pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4).flatten(2)
+        return pos
+
+    def gen_encoder_output_proposals(self, memory, memory_padding_mask, spatial_shapes):
+        N_, S_, C_ = memory.shape
+        proposals = []
+        _cur = 0
+        for lvl, (H_, W_) in enumerate(spatial_shapes):
+            mask_flatten_ = memory_padding_mask[:, _cur : (_cur + H_ * W_)].view(N_, H_, W_, 1)
+            valid_H = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
+            valid_W = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
+
+            grid_y, grid_x = torch.meshgrid(
+                torch.linspace(0, H_ - 1, H_, dtype=torch.float32, device=memory.device),
+                torch.linspace(0, W_ - 1, W_, dtype=torch.float32, device=memory.device),
+            )
+            grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
+
+            scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(N_, 1, 1, 2)
+            grid = (grid.unsqueeze(0).expand(N_, -1, -1, -1) + 0.5) / scale
+            wh = torch.ones_like(grid) * 0.05 * (2.0 ** lvl)
+            proposal = torch.cat((grid, wh), -1).view(N_, -1, 4)
+            proposals.append(proposal)
+            _cur += H_ * W_
+        output_proposals = torch.cat(proposals, 1)
+        output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
+        output_proposals = torch.log(output_proposals / (1 - output_proposals))
+        output_proposals = output_proposals.masked_fill(memory_padding_mask.unsqueeze(-1), float("inf"))
+        output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
+
+        output_memory = memory
+        output_memory = output_memory.masked_fill(memory_padding_mask.unsqueeze(-1), float(0))
+        output_memory = output_memory.masked_fill(~output_proposals_valid, float(0))
+        output_memory = self.enc_output_norm(self.enc_output(output_memory))
+        return output_memory, output_proposals
+
     @add_start_docstrings_to_model_forward(DEFORMABLE_DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DeformableDetrModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1499,12 +1553,9 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         for (src, mask) in features:
             print(src.shape)
 
-        # print(self.input_proj[0](features[-1][0]))
-
         srcs = []
         masks = []
         for l, (src, mask) in enumerate(features):
-            print("L:", l)
             srcs.append(self.input_proj[l](src))
             masks.append(mask)
             assert mask is not None
@@ -1592,8 +1643,51 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
 
         # Fifth, prepare decoder inputs
         bs, _, c = encoder_outputs[0].shape
+        enc_outputs_class = None
+        enc_outputs_coord_unact = None
         if self.config.two_stage:
-            raise NotImplementedError("To do")
+            print("First values of memory:", encoder_outputs[0][0, :3, :3])
+            print("Last values of memory:", encoder_outputs[0][0, -3:, -3:])
+            print("Mean of memory:", encoder_outputs[0].mean())
+
+            print("Mask flatten:", mask_flatten)
+
+            output_memory, output_proposals = self.gen_encoder_output_proposals(
+                encoder_outputs[0], ~mask_flatten, spatial_shapes
+            )
+
+            print("First values of output memory:", output_memory[0, :3, :3])
+            print("Mean of output memory:", output_memory.mean())
+            print("Last values of output memory:", output_memory[0, -3:, -3:])
+            print("First values of output proposals:", output_proposals[0, :3, :3])
+            print("Mean of output_proposals:", output_proposals.mean())
+
+            # hack implementation for two-stage Deformable DETR
+            enc_outputs_class = self.decoder.class_embed[self.config.decoder_layers](output_memory)
+            enc_outputs_coord_unact = (
+                self.decoder.bbox_embed[self.config.decoder_layers](output_memory) + output_proposals
+            )
+
+            print("Shape of enc_outputs_class:", enc_outputs_class.shape)
+            print("First values of enc_outputs_class:", enc_outputs_class[0, :3, :3])
+            print("Last values of enc_outputs_class:", enc_outputs_class[0, -3:, -3:])
+            print("Mean of enc_outputs_class:", enc_outputs_class.mean())
+            print("First values of enc_outputs_coord_unact:", enc_outputs_coord_unact[0, :3, :3])
+
+            topk = self.config.two_stage_num_proposals
+            print("Topk:", topk)
+            topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
+            print("First values of topk proposals:", topk_proposals[0, :3])
+            topk_coords_unact = torch.gather(enc_outputs_coord_unact, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4))
+            print("First values of topk_coords_unact:", topk_coords_unact[0, :3, :3])
+            topk_coords_unact = topk_coords_unact.detach()
+            reference_points = topk_coords_unact.sigmoid()
+            init_reference_out = reference_points
+            pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact)))
+
+            print("First values of pos_trans_out:", pos_trans_out[0, :3, :3])
+
+            query_embed, tgt = torch.split(pos_trans_out, c, dim=2)
         else:
             query_embed, tgt = torch.split(query_embeds, c, dim=1)
             query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
@@ -1629,8 +1723,6 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         print("Last hidden states of decoder:", decoder_outputs[0][0, :3, :3])
 
         inter_references_out = decoder_outputs.stacked_intermediate_reference_points
-        if self.config.two_stage:
-            raise NotImplementedError("To do")
 
         if not return_dict:
             return decoder_outputs + encoder_outputs
@@ -1646,6 +1738,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             stacked_intermediate_hidden_states=decoder_outputs.stacked_intermediate_hidden_states,
             init_reference_out=init_reference_out,
             inter_references_out=inter_references_out,
+            enc_outputs_class=enc_outputs_class,
+            enc_outputs_coord_unact=enc_outputs_coord_unact,
         )
 
 
@@ -1766,13 +1860,10 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             return_dict=return_dict,
         )
 
+        # TODO add support for return_dict = False
         hs = outputs.stacked_intermediate_hidden_states
         init_reference = outputs.init_reference_out
         inter_references = outputs.inter_references_out
-
-        print("Shape of hs:", hs.shape)
-        print("Shape of init_reference:", init_reference.shape)
-        print("Shape of inter_references:", inter_references.shape)
 
         # class logits + predicted bounding boxes
         outputs_classes = []
@@ -1800,9 +1891,6 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         logits = outputs_class[-1]
         pred_boxes = outputs_coord[-1]
 
-        if self.config.two_stage:
-            raise NotImplementedError("To do")
-
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
             # First: create the matcher
@@ -1828,6 +1916,9 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
                 outputs_coord = self.bbox_embed(intermediate).sigmoid()
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+            if self.config.two_stage:
+                enc_outputs_coord = outputs.enc_outputs_coord_unact.sigmoid()
+                outputs["enc_outputs"] = {"pred_logits": outputs.enc_outputs_class, "pred_boxes": enc_outputs_coord}
 
             loss_dict = criterion(outputs_loss, labels)
             # Fourth: compute total loss, as a weighted sum of the various losses
@@ -2434,6 +2525,24 @@ class DeformableDetrLoss(nn.Module):
                     l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
                     l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
+
+        if "enc_outputs" in outputs:
+            enc_outputs = outputs["enc_outputs"]
+            bin_targets = copy.deepcopy(targets)
+            for bt in bin_targets:
+                bt["labels"] = torch.zeros_like(bt["labels"])
+            indices = self.matcher(enc_outputs, bin_targets)
+            for loss in self.losses:
+                if loss == "masks":
+                    # Intermediate masks losses are too costly to compute, we ignore them.
+                    continue
+                kwargs = {}
+                if loss == "labels":
+                    # Logging is enabled only for the last layer
+                    kwargs["log"] = False
+                l_dict = self.get_loss(loss, enc_outputs, bin_targets, indices, num_boxes, **kwargs)
+                l_dict = {k + "_enc": v for k, v in l_dict.items()}
+                losses.update(l_dict)
 
         return losses
 
