@@ -18,11 +18,11 @@ from abc import ABC, abstractmethod
 from collections import UserDict
 from typing import List, Optional, Tuple
 
-import torch
 import numpy as np
+import torch
 
-from .generation_beam_constraints import Constraint, ConstraintListState
 from .file_utils import add_start_docstrings
+from .generation_beam_constraints import Constraint, ConstraintListState
 
 
 PROCESS_INPUTS_DOCSTRING = r"""
@@ -81,6 +81,41 @@ FINALIZE_INPUTS_DOCSTRING = r"""
         `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`: The generated sequences.
         The second dimension (sequence_length) is either equal to `max_length` or shorter if all batches finished early
         due to the `eos_token_id`.
+
+"""
+
+
+CONSTRAINT_PROCESS_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_beams, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using any class inheriting from [`PreTrainedTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        next_scores (`torch.FloatTensor` of shape `(batch_size, 2 * num_beams)`):
+            Current scores of the top `2 * num_beams` non-finished beam hypotheses.
+        next_tokens (`torch.LongTensor` of shape `(batch_size, 2 * num_beams)`):
+            `input_ids` of the tokens corresponding to the top `2 * num_beams` non-finished beam hypotheses.
+        next_indices (`torch.LongTensor` of shape `(batch_size, 2 * num_beams)`):
+            Beam indices indicating to which beam hypothesis the `next_tokens` correspond.
+        scores_for_all_vocab (`torch.FloatTensor` of shape `(batch_size * num_beams, sequence_length)`):
+            The scores of all tokens in the vocabulary for each of the beam hypotheses.
+        pad_token_id (`int`, *optional*):
+            The id of the *padding* token.
+        eos_token_id (`int`, *optional*):
+            The id of the *end-of-sequence* token.
+
+    Return:
+        `UserDict`: A dictionary composed of the fields as defined above:
+
+            - **next_beam_scores** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Updated scores of all
+              non-finished beams.
+            - **next_beam_tokens** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Next tokens to be added
+              to the non-finished beam_hypotheses.
+            - **next_beam_indices** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Beam indices
+              indicating to which beam the next tokens shall be added.
 
 """
 
@@ -365,8 +400,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         num_beams (`int`):
             Number of beams for beam search.
         constraints (`List[Constraint]`):
-            A list of positive constraints represented as `Constraint` objects that must be fulfilled in 
-            the generation output. For more information, the documentation of [`Constraint`] should be read.
+            A list of positive constraints represented as `Constraint` objects that must be fulfilled in the generation
+            output. For more information, the documentation of [`Constraint`] should be read.
         device (`torch.device`):
             Defines the device type (*e.g.*, `"cpu"` or `"cuda"`) on which this instance of `BeamSearchScorer` will be
             allocated.
@@ -416,8 +451,6 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         ]
         self._done = torch.tensor([False for _ in range(batch_size)], dtype=torch.bool, device=self.device)
 
-        
-
         if not isinstance(num_beams, int) or num_beams <= 1:
             raise ValueError(
                 f"`num_beams` has to be an integer strictly greater than 1, but is {num_beams}. For `num_beams` == 1, one should make use of `greedy_search` instead."
@@ -441,19 +474,14 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         return self._done.all()
 
     def make_constraint_states(self, n):
-        return [
-            ConstraintListState([
-                constraint.copy()
-                for constraint in self.constraints
-            ])    
-            for _ in range(n)
-        ] 
+        return [ConstraintListState([constraint.copy() for constraint in self.constraints]) for _ in range(n)]
 
     def check_completes_constraints(self, sequence):
         new_state = self.make_constraint_states(1)[0]
         new_state = new_state.reset(sequence)
         return new_state.completed
 
+    @add_start_docstrings(CONSTRAINT_PROCESS_INPUTS_DOCSTRING)
     def process(
         self,
         input_ids: torch.LongTensor,
@@ -496,7 +524,6 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 next_beam_indices[batch_idx, :] = 0
                 continue
 
-            
             # next tokens for this sentence.
             beam_idx = 0
             for beam_token_rank, (next_token, next_score, next_index) in enumerate(
@@ -505,7 +532,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 batch_beam_idx = batch_idx * self.group_size + next_index
                 # add to generated hypotheses if end of sentence
                 if (eos_token_id is not None) and (next_token.item() == eos_token_id):
-                        
+
                     # if beam_token does not belong to top num_beams tokens, it should not be added
                     is_beam_token_worse_than_top_num_beams = beam_token_rank >= self.group_size
                     if is_beam_token_worse_than_top_num_beams:
@@ -541,7 +568,6 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             next_beam_tokens[batch_idx] = new_tokens
             next_beam_indices[batch_idx] = new_indices
 
-
             if beam_idx < self.group_size:
                 raise ValueError(
                     f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id: {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
@@ -568,50 +594,47 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         sent_beam_scores: torch.FloatTensor,
         sent_beam_tokens: torch.LongTensor,
         sent_beam_indices: torch.LongTensor,
-        push_progress: bool = False
+        push_progress: bool = False,
     ):
         # from transformers import GPT2Tokenizer
         # tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        '''
-        sent_beam_tokens are the next {num_beams} number of tokens that are under consideration
-        for this beam (candidate next tokens)
+        """
+        sent_beam_tokens are the next {num_beams} number of tokens that are under consideration for this beam
+        (candidate next tokens)
 
         1. Adding "advance_tokens"
-            using ConstraintStateList.advance(), we propose new tokens to be added into this
-            "candidate list" that will advance us in fulfilling the constraints. 
+            using ConstraintStateList.advance(), we propose new tokens to be added into this "candidate list" that will
+            advance us in fulfilling the constraints.
 
         2. Selecting best candidates such that we end up with highest probable candidates
             that fulfill our constraints.
-        '''
+        """
         orig_len = sent_beam_indices.size(0)
         device = sent_beam_indices.get_device()
 
         # initialize states
-        topk_contraint_states = self.make_constraint_states(orig_len) 
+        topk_contraint_states = self.make_constraint_states(orig_len)
         advance_constraint_states = self.make_constraint_states(orig_len)
 
-        sidx, eidx = batch_idx*orig_len, (batch_idx+1) * orig_len
+        sidx, eidx = batch_idx * orig_len, (batch_idx + 1) * orig_len
         this_batch_input_ids = input_ids[sidx:eidx]
         this_batch_token_scores = vocab_scores[sidx:eidx]
-        full_hypotheses = torch.cat((
-            input_ids[sent_beam_indices], 
-            sent_beam_tokens.unsqueeze(-1)), 
-            dim=-1
-        )
+        full_hypotheses = torch.cat((input_ids[sent_beam_indices], sent_beam_tokens.unsqueeze(-1)), dim=-1)
 
         # need to make new hypothesis that advance the constraints
         track_new = {"new_seqs": [], "new_states": [], "new_indices": [], "new_tokens": [], "new_scores": []}
         for seq_idx, pre_seq in enumerate(this_batch_input_ids):
-            '''
+            """
             pre_seq = ith sequence generated before this step.
-            
-            input_ids -> (topk)     generic beam search best model next tokens 
-                      -> (advance)  constraints forcing the next token
-            either way, we need to sort them into "banks" later, so store a "ConstraintListState" for all types of hypotheses.
-            '''
+
+            input_ids -> (topk) generic beam search best model next tokens
+                      -> (advance) constraints forcing the next token
+            either way, we need to sort them into "banks" later, so store a "ConstraintListState" for all types of
+            hypotheses.
+            """
             topk_state = topk_contraint_states[seq_idx]
-            topk_state.reset(full_hypotheses[seq_idx]) 
-            
+            topk_state.reset(full_hypotheses[seq_idx])
+
             advance_state = advance_constraint_states[seq_idx]
             advance_state.reset(pre_seq)
 
@@ -621,7 +644,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                     # since adding each `advance_token` leads to a different hypothesis, create new state instance.
                     new_state = advance_state.copy(stateful=True)
                     new_state.add(advance_token)
-                    
+
                     advance_seq = torch.cat((pre_seq, advance_token.unsqueeze(0)), -1).cpu().tolist()
                     if advance_seq not in track_new["new_seqs"]:
                         # prevent duplicates, which are basically bound to happen in this process.
@@ -629,29 +652,29 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                         track_new["new_indices"].append(seq_idx)
                         track_new["new_tokens"].append(advance_token)
                         track_new["new_scores"].append(this_batch_token_scores[seq_idx].take(advance_token))
-                        track_new["new_states"].append(new_state)            
+                        track_new["new_states"].append(new_state)
             elif push_progress:
-                '''
-                Basically, `sent_beam_indices` often chooses very little among `input_ids` the generated sequences
-                that actually fulfill our constraints. For example, let constraints == ["loves pies"] and
+                """
+                Basically, `sent_beam_indices` often chooses very little among `input_ids` the generated sequences that
+                actually fulfill our constraints. For example, let constraints == ["loves pies"] and
 
-                    pre_seq_1 = "The child loves pies and"
-                    pre_seq_2 = "The child plays in the playground and"
-                
-                Without this step, if `sent_beam_indices` is something like [1,1], then 
+                    pre_seq_1 = "The child loves pies and" pre_seq_2 = "The child plays in the playground and"
+
+                Without this step, if `sent_beam_indices` is something like [1,1], then
                     1. `pre_seq_1` won't be added to the list of (topk) hypothesis since it's not in the indices and
-                    2.  it won't be added to the list of (advance) hypothesis since it's completed already.
-                        (this is the else part of `if constraints_completed[seq_idx]`)
+                    2.  it won't be added to the list of (advance) hypothesis since it's completed already. (this is
+                        the else part of `if constraints_completed[seq_idx]`)
                     3. it ends up simply getting removed from consideration.
-                
-                #3 might be fine and actually desired, since it's likely that it's a low-probability output anyways, especially 
-                if it's not in the list of `sent_beam_indices`. But this often leads to lengthened beam search times, 
-                since completed sequences keep getting removed after all this effort for constrained generation. 
-                
-                Here, we basically take `pre_seq_1` and to "push" it into the considered list of
-                hypotheses, by simply appending the next likely token in the vocabulary and adding it to the list of hypotheses.
-                '''
-                new_score, new_token = torch.max(this_batch_token_scores[seq_idx], 0) # some next probable token
+
+                #3 might be fine and actually desired, since it's likely that it's a low-probability output anyways,
+                especially if it's not in the list of `sent_beam_indices`. But this often leads to lengthened beam
+                search times, since completed sequences keep getting removed after all this effort for constrained
+                generation.
+
+                Here, we basically take `pre_seq_1` and to "push" it into the considered list of hypotheses, by simply
+                appending the next likely token in the vocabulary and adding it to the list of hypotheses.
+                """
+                new_score, new_token = torch.max(this_batch_token_scores[seq_idx], 0)  # some next probable token
                 advance_seq = torch.cat((pre_seq, new_token.unsqueeze(0)), -1)
 
                 advance_state = advance_constraint_states[seq_idx]
@@ -664,27 +687,24 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                     track_new["new_indices"].append(seq_idx)
                     track_new["new_tokens"].append(new_token)
                     track_new["new_scores"].append(new_score)
-                    track_new["new_states"].append(advance_state)       
+                    track_new["new_states"].append(advance_state)
 
         if len(track_new["new_indices"]) > 0:
             new_indices = torch.tensor(track_new["new_indices"]).to(device)
             new_tokens = torch.stack(track_new["new_tokens"]).to(device)
             new_scores = torch.stack(track_new["new_scores"]).to(device)
-            
+
             all_states = topk_contraint_states + track_new["new_states"]
             all_tokens = torch.cat((sent_beam_tokens, new_tokens), -1)
             all_scores = torch.cat((sent_beam_scores, new_scores), -1)
-            all_banks = torch.tensor([one.get_bank() 
-                for one in all_states
-            ]).to(device)
+            all_banks = torch.tensor([one.get_bank() for one in all_states]).to(device)
 
             zipped = all_banks * 100 + all_scores
             indices = zipped.sort(descending=True).indices
-            sorted_banks = all_banks[indices] 
-            '''
-            Then we end up with 
-            {sorted among bank C}, {sorted among bank C-1}, ..., {sorted among bank 0}
-            '''        
+            sorted_banks = all_banks[indices]
+            """
+            Then we end up with {sorted among bank C}, {sorted among bank C-1}, ..., {sorted among bank 0}
+            """
             counter = -1
             cur_bank = sorted_banks[0]
             increments = []
@@ -728,7 +748,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 batch_beam_idx = batch_idx * self.num_beams + beam_id
                 final_score = final_beam_scores[batch_beam_idx].item()
                 final_tokens = input_ids[batch_beam_idx]
-                
+
                 completes_constraint = self.check_completes_constraints(final_tokens)
                 if completes_constraint:
                     beam_hyp.add(final_tokens, final_score)
@@ -770,7 +790,6 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 "sequence_scores": best_scores,
             }
         )
-
 
 
 class BeamHypotheses:
@@ -818,4 +837,3 @@ class BeamHypotheses:
             cur_score = best_sum_logprobs / cur_len ** self.length_penalty
             ret = self.worst_score >= cur_score
             return ret
-

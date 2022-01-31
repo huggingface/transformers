@@ -37,6 +37,7 @@ if is_torch_available():
         VisionEncoderDecoderModel,
         top_k_top_p_filtering,
     )
+    from transformers.generation_beam_constraints import PhrasalConstraint
     from transformers.generation_beam_search import BeamSearchScorer, ConstrainedBeamSearchScorer
     from transformers.generation_logits_process import (
         ForcedBOSTokenLogitsProcessor,
@@ -63,8 +64,6 @@ if is_torch_available():
         SampleDecoderOnlyOutput,
         SampleEncoderDecoderOutput,
     )
-    from transformers.generation_beam_constraints import PhrasalConstraint
-
 
 
 class GenerationTesterMixin:
@@ -191,7 +190,6 @@ class GenerationTesterMixin:
             num_beam_groups=beam_kwargs["num_beam_groups"],
         )
         return beam_kwargs, beam_scorer
-
 
     @staticmethod
     def _get_constrained_beam_scorer_and_kwargs(batch_size, max_length, constraints, num_return_sequences=1):
@@ -1486,25 +1484,24 @@ class GenerationTesterMixin:
             [encoder_expected_shape] * len(hidden_states),
         )
 
-    def _check_sequence_inside_sequence(
-        self, tensor_1, tensor_2
-    ):
+    def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # set to same device. we don't care what device.
         tensor_1, tensor_2 = tensor_1.cpu(), tensor_2.cpu()
 
         in_order = tensor_1.size(0) <= tensor_2.size(0)
         longer = tensor_2 if in_order else tensor_1
         shorter = tensor_1 if in_order else tensor_2
-        
+
         flag = False
         chunk_size = shorter.size(0)
         for chunk_idx in range(longer.size(0) - chunk_size + 1):
-            subseq = longer[chunk_idx : chunk_idx+chunk_size]
+            subseq = longer[chunk_idx : chunk_idx + chunk_size]
             if torch.equal(subseq, shorter):
                 flag = True
                 break
-        
+
         assert flag
+
 
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):

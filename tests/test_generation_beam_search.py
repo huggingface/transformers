@@ -25,8 +25,8 @@ from .test_modeling_common import floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
+    from transformers.generation_beam_constraints import PhrasalConstraint
     from transformers.generation_beam_search import BeamHypotheses, BeamSearchScorer, ConstrainedBeamSearchScorer
-    from transformers.generation_beam_constraints import Constraint, PhrasalConstraint
 
 
 class BeamSearchTester:
@@ -284,7 +284,9 @@ class ConstrainedBeamSearchTester:
         next_tokens = ids_tensor((self.batch_size, 2 * self.num_beams), self.vocab_size).to(torch_device)
         next_indices = ids_tensor((self.batch_size, 2 * self.num_beams), self.num_beams).to(torch_device)
         next_scores, _ = (-floats_tensor((self.batch_size, 2 * self.num_beams)).to(torch_device)).sort(descending=True)
-        scores_for_all_vocab, _ = (-floats_tensor((self.batch_size * self.num_beams, self.vocab_size)).to(torch_device)).sort(descending=True)
+        scores_for_all_vocab, _ = (
+            -floats_tensor((self.batch_size * self.num_beams, self.vocab_size)).to(torch_device)
+        ).sort(descending=True)
         return (input_ids, next_tokens, next_indices, next_scores, scores_for_all_vocab)
 
     def check_beam_hypotheses(self, input_ids, *args):
@@ -324,12 +326,12 @@ class ConstrainedBeamSearchTester:
         # -20.0 is worse than worst score => should be finished
         self.parent.assertTrue(beam_hyp.is_done(-20.0, self.sequence_length))
 
-    def check_constrained_beam_scorer_update(self, input_ids, next_tokens, next_indices, next_scores, scores_for_all_vocab):
+    def check_constrained_beam_scorer_update(
+        self, input_ids, next_tokens, next_indices, next_scores, scores_for_all_vocab
+    ):
         # check too many eos tokens
         constrained_beam_scorer = self.prepare_constrained_beam_scorer()
-        fulfilling_sequence = torch.stack(
-            [constraint.token_ids for constraint in self.constraints]
-        ).flatten()
+        fulfilling_sequence = torch.stack([constraint.token_ids for constraint in self.constraints]).flatten()
         fulfill_len = fulfilling_sequence.size(0)
         input_ids[:, :fulfill_len] = fulfilling_sequence
 
@@ -337,14 +339,18 @@ class ConstrainedBeamSearchTester:
         tokens[0, :] = self.eos_token_id
 
         with self.parent.assertRaises(ValueError):
-            constrained_beam_scorer.process(input_ids, next_scores, tokens, next_indices, scores_for_all_vocab, eos_token_id=self.eos_token_id)
+            constrained_beam_scorer.process(
+                input_ids, next_scores, tokens, next_indices, scores_for_all_vocab, eos_token_id=self.eos_token_id
+            )
 
         # check all batches are done
         constrained_beam_scorer = self.prepare_constrained_beam_scorer()
 
         tokens = next_tokens.clone()
-        tokens[:, :self.num_beams] = self.eos_token_id
-        constrained_beam_scorer.process(input_ids, next_scores, tokens, next_indices, scores_for_all_vocab, eos_token_id=self.eos_token_id)
+        tokens[:, : self.num_beams] = self.eos_token_id
+        constrained_beam_scorer.process(
+            input_ids, next_scores, tokens, next_indices, scores_for_all_vocab, eos_token_id=self.eos_token_id
+        )
         # beam scorer should be done
         self.parent.assertTrue(constrained_beam_scorer.is_done)
 
@@ -385,18 +391,20 @@ class ConstrainedBeamSearchTester:
                 input_ids[correct_idx].tolist(), constrained_beam_scorer._beam_hyps[batch_idx].beams[0][-1].tolist()
             )
 
-    def check_constrained_beam_scorer_finalize(self, input_ids, next_tokens, next_indices, next_scores, scores_for_all_vocab):
+    def check_constrained_beam_scorer_finalize(
+        self, input_ids, next_tokens, next_indices, next_scores, scores_for_all_vocab
+    ):
         # max_length should be only one more than current input_ids to check that eos is correctly appended
         max_length = self.sequence_length + 1
 
         # for testing finalize, we do want to have fulfilled constraints
-        fulfilling_sequence = torch.stack(
-            [constraint.token_ids for constraint in self.constraints]
-        ).flatten()
+        fulfilling_sequence = torch.stack([constraint.token_ids for constraint in self.constraints]).flatten()
         fulfill_len = fulfilling_sequence.size(0)
         input_ids[:, :fulfill_len] = fulfilling_sequence
 
-        constrained_beam_scorer = self.prepare_constrained_beam_scorer(num_beam_hyps_to_keep=1, length_penalty=1.0, do_early_stopping=False)
+        constrained_beam_scorer = self.prepare_constrained_beam_scorer(
+            num_beam_hyps_to_keep=1, length_penalty=1.0, do_early_stopping=False
+        )
 
         constraints = constrained_beam_scorer.constraints
         # update beams and append to input_ids
@@ -418,8 +426,6 @@ class ConstrainedBeamSearchTester:
         output_tokens = beam_outputs["next_beam_tokens"]
         output_indices = beam_outputs["next_beam_indices"]
         input_ids = torch.cat([input_ids[output_indices, :], output_tokens.unsqueeze(-1)], dim=-1)
-
-        
 
         # finalize
 
@@ -457,18 +463,15 @@ class ConstrainedBeamSearchTester:
         # test that the constraint is indeed fulfilled
         for output in sequences:
             for constraint in constraints:
-                forced_token_ids = constraint.token_ids 
+                forced_token_ids = constraint.token_ids
                 self.parent.assertEqual(self._check_sequence_inside_sequence(output, forced_token_ids), True)
 
         # now test that if `num_beam_hyps_to_keep` is 3 => all beams are returned
-        
 
         # constrained_beam_scorer.num_beam_hyps_to_keep = self.num_beams
         constrained_beam_scorer = self.prepare_constrained_beam_scorer(
-            num_beam_hyps_to_keep=self.num_beams, 
-            length_penalty=1.0, 
-            do_early_stopping=False
-        )   
+            num_beam_hyps_to_keep=self.num_beams, length_penalty=1.0, do_early_stopping=False
+        )
 
         sequence_output = constrained_beam_scorer.finalize(
             input_ids,
@@ -485,28 +488,23 @@ class ConstrainedBeamSearchTester:
         self.parent.assertListEqual(list(sequences.shape), [self.num_beams * self.batch_size, max_length])
         self.parent.assertListEqual(list(sequence_scores.shape), [self.num_beams * self.batch_size])
 
-    
-    def _check_sequence_inside_sequence(
-        self, tensor_1, tensor_2
-    ):
+    def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # set to same device. we don't care what device.
         tensor_1, tensor_2 = tensor_1.cpu(), tensor_2.cpu()
 
         in_order = tensor_1.size(0) <= tensor_2.size(0)
         longer = tensor_2 if in_order else tensor_1
         shorter = tensor_1 if in_order else tensor_2
-        
+
         flag = False
         chunk_size = shorter.size(0)
         for chunk_idx in range(longer.size(0) - chunk_size + 1):
-            subseq = longer[chunk_idx : chunk_idx+chunk_size]
+            subseq = longer[chunk_idx : chunk_idx + chunk_size]
             if torch.equal(subseq, shorter):
                 flag = True
                 break
-        
-        return flag
-    
 
+        return flag
 
 
 @require_torch

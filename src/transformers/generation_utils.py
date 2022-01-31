@@ -24,6 +24,7 @@ import torch.distributed as dist
 from torch import nn
 
 from .file_utils import ModelOutput
+from .generation_beam_constraints import Constraint
 from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .generation_logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
@@ -47,10 +48,6 @@ from .generation_stopping_criteria import (
     StoppingCriteria,
     StoppingCriteriaList,
     validate_stopping_criteria,
-)
-from .generation_beam_constraints import (
-    Constraint,
-    ConstraintListState
 )
 from .utils import logging
 
@@ -941,7 +938,7 @@ class GenerationMixin:
                  model's config an error is thrown. This feature is intended for advanced users.
             constraints (`List[Constraint]`, *optional*):
                  Custom constraints that can be added to the generation to ensure that the output will contain the use
-                 of certain tokens as defined by `Constraint` objects, in the most sensible way possible.    
+                 of certain tokens as defined by `Constraint` objects, in the most sensible way possible.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -1138,7 +1135,9 @@ class GenerationMixin:
         is_greedy_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is False and constraints is None
         is_sample_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is True and constraints is None
         is_beam_gen_mode = (num_beams > 1) and (num_beam_groups == 1) and do_sample is False and constraints is None
-        is_beam_sample_gen_mode = (num_beams > 1) and (num_beam_groups == 1) and do_sample is True and constraints is None
+        is_beam_sample_gen_mode = (
+            (num_beams > 1) and (num_beam_groups == 1) and do_sample is True and constraints is None
+        )
         is_group_beam_gen_mode = (num_beams > 1) and (num_beam_groups > 1) and constraints is None
 
         if num_beam_groups > num_beams:
@@ -1368,7 +1367,6 @@ class GenerationMixin:
                 synced_gpus=synced_gpus,
                 **model_kwargs,
             )
-
 
     def greedy_search(
         self,
@@ -2856,7 +2854,7 @@ class GenerationMixin:
                 The sequence used as a prompt for the generation.
             constrained_beam_scorer (`ConstrainedBeamScorer`):
                 An derived instance of [`BeamScorer`] that defines how beam hypotheses are constructed, stored and
-                sorted during generation, while satisfying a list of positive constraints. For more information, the 
+                sorted during generation, while satisfying a list of positive constraints. For more information, the
                 documentation of [`ConstrainedBeamScorer`] should be read.
             logits_processor (`LogitsProcessorList`, *optional*):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
@@ -2908,7 +2906,7 @@ class GenerationMixin:
         ...     LogitsProcessorList,
         ...     MinLengthLogitsProcessor,
         ...     ConstrainedBeamSearchScorer,
-        ...     PhrasalConstraint
+        ...     PhrasalConstraint,
         ... )
         >>> import torch
 
@@ -2932,17 +2930,12 @@ class GenerationMixin:
         ...     )
         ... }
 
-        >>> constraints = [
-        ...     PhrasalConstraint(tokenizer.encode("required phrase")[0])
-        ... ]
+        >>> constraints = [PhrasalConstraint(tokenizer.encode("required phrase")[0])]
 
 
         >>> # instantiate beam scorer
         >>> beam_scorer = ConstrainedBeamSearchScorer(
-        ...     batch_size=1,
-        ...     num_beams=num_beams,
-        ...     device=model.device,
-        ...     constraints=constraints
+        ...     batch_size=1, num_beams=num_beams, device=model.device, constraints=constraints
         ... )
 
         >>> # instantiate logits processors
@@ -2952,11 +2945,13 @@ class GenerationMixin:
         ...     ]
         ... )
 
-        >>> outputs = model.constrained_beam_search(input_ids, beam_scorer, constraints=constraints, logits_processor=logits_processor, **model_kwargs)
+        >>> outputs = model.constrained_beam_search(
+        ...     input_ids, beam_scorer, constraints=constraints, logits_processor=logits_processor, **model_kwargs
+        ... )
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         ```"""
-        # init values        
+        # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
@@ -3018,7 +3013,6 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
-            
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             outputs = self(
@@ -3050,7 +3044,6 @@ class GenerationMixin:
 
             next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
 
-
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
@@ -3072,7 +3065,6 @@ class GenerationMixin:
             # reshape for beam search
             vocab_size = next_token_scores.shape[-1]
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
-
 
             next_token_scores, next_tokens = torch.topk(
                 next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
@@ -3145,7 +3137,8 @@ class GenerationMixin:
                 )
         else:
             return sequence_outputs["sequences"]
-  
+
+
 def top_k_top_p_filtering(
     logits: torch.FloatTensor,
     top_k: int = 0,
