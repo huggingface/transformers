@@ -610,7 +610,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             that fulfill our constraints.
         """
         orig_len = sent_beam_indices.size(0)
-        device = sent_beam_indices.get_device()
+        device = sent_beam_indices.device
 
         # initialize states
         topk_contraint_states = self.make_constraint_states(orig_len)
