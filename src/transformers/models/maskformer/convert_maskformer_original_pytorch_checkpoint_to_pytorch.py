@@ -261,6 +261,9 @@ class MaskFormerCheckpointConverter:
                     f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.value.bias"
                 ] = src_att_bias[-offset:]
 
+                # let's pop them
+                src_state_dict.pop(f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight")
+                src_state_dict.pop(f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias")
                 # proj
                 renamed_keys.extend(
                     [
@@ -311,10 +314,13 @@ class MaskFormerCheckpointConverter:
                     ]
                 )
 
-                dst_state_dict[
-                    f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.relative_position_index"
-                ].copy_(
-                    src_state_dict[f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.relative_position_index"]
+                renamed_keys.extend(
+                    [
+                        (
+                            f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.relative_position_index",
+                            f"{dst_prefix}.model.encoder.layers.{layer_idx}.blocks.{block_idx}.attention.self.relative_position_index",
+                        )
+                    ]
                 )
 
             if layer_idx < num_layers - 1:
@@ -335,29 +341,41 @@ class MaskFormerCheckpointConverter:
                         ),
                     ]
                 )
-            # hidden states norms
-            renamed_keys.extend(
-                [
-                    (
-                        f"{src_prefix}.norm{layer_idx}.weight",
-                        f"{dst_prefix}.hidden_states_norms.{layer_idx}.weight",
-                    ),
-                    (
-                        f"{src_prefix}.norm{layer_idx}.bias",
-                        f"{dst_prefix}.hidden_states_norms.{layer_idx}.bias",
-                    ),
-                ]
-            )
-
+                # hidden states norms
+                renamed_keys.extend(
+                    [
+                        (
+                            f"{src_prefix}.norm{layer_idx}.weight",
+                            f"{dst_prefix}.hidden_states_norms.{layer_idx}.weight",
+                        ),
+                        (
+                            f"{src_prefix}.norm{layer_idx}.bias",
+                            f"{dst_prefix}.hidden_states_norms.{layer_idx}.bias",
+                        ),
+                    ]
+                )
+            else:
+                renamed_keys.extend(
+                    [
+                        (
+                            f"{src_prefix}.norm3.weight",
+                            f"{dst_prefix}.model.layernorm.weight",
+                        ),
+                        (
+                            f"{src_prefix}.norm3.bias",
+                            f"{dst_prefix}.model.layernorm.bias",
+                        ),
+                    ]
+                )
         # model.layernorm.weight and our hiddin_state_norms[3] have to be the same
+        assert torch.allclose(dst_state_dict[f"{dst_prefix}.hidden_states_norms.3.weight"], dst_state_dict[f"{dst_prefix}.model.layernorm.weight"])
+        # dst_state_dict[f"{dst_prefix}.hidden_states_norms.3.weight"].copy_(
+        #     dst_state_dict[f"{dst_prefix}.model.layernorm.weight"]
+        # )
 
-        dst_state_dict[f"{dst_prefix}.model.layernorm.weight"].copy_(
-            dst_state_dict[f"{dst_prefix}.hidden_states_norms.3.weight"]
-        )
-
-        dst_state_dict[f"{dst_prefix}.model.layernorm.bias"].copy_(
-            dst_state_dict[f"{dst_prefix}.hidden_states_norms.3.bias"]
-        )
+        # dst_state_dict[f"{dst_prefix}.hidden_states_norms.3.bias"].copy_(
+        #     dst_state_dict[f"{dst_prefix}.model.layernorm.bias"]
+        # )
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
@@ -537,7 +555,9 @@ class MaskFormerCheckpointConverter:
         self.replace_segmentation_module(dst_state_dict, src_state_dict)
 
         logger.info(f"Missed keys are {pformat(dst_state_dict.diff())}")
+        logger.info(f"Not copied keys are {pformat(src_state_dict.keys())}")
         logger.info("🙌 Done")
+
         self.to_model.load_state_dict(dst_state_dict)
 
         return self.to_model
@@ -581,6 +601,9 @@ config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskForme
 
 def test(src, dst):
     with torch.no_grad():
+
+        src = src.eval()
+        dst = dst.eval()
 
         x = torch.zeros((1, 3, 384, 384))
 
@@ -715,8 +738,8 @@ if __name__ == "__main__":
 
     to_model = MaskFormerModel(config=config).eval()
 
-    for name, param in to_model.pixel_level_module.named_parameters():
-        print(name, param.shape)
+    # for name, param in to_model.pixel_level_module.named_parameters():
+    #     print(name, param.shape)
 
     # MaskFormerCheckpointConverter(original_model, to_model).replace_backbone(
     #     to_model.state_dict(), original_model.state_dict(), to_model.config

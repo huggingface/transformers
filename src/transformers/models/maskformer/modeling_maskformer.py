@@ -492,14 +492,15 @@ class SwinTransformerBackbone(BackboneMixin):
 
     def forward(self, *args, **kwargs) -> List[Tensor]:
         output = self.model(*args, **kwargs, output_hidden_states=True)
-        permuted_hidden_states: List[Tensor] = []
+        hidden_states_permuted: List[Tensor] = []
         # we need to reshape the hidden state to their original spatial dimensions
         for i, (hidden_state, (h, w)) in enumerate(zip(output.hidden_states, self.input_resolutions)):
             norm = self.hidden_states_norms[i]
-            norm_hidden_state = norm(hidden_state)
-            permuted_hidden_state = rearrange(norm_hidden_state, "b (h w) d -> b d h w", h=h, w=w).contiguous()
-            permuted_hidden_states.append(permuted_hidden_state)
-        return permuted_hidden_states
+            hidden_state_norm = norm(hidden_state)
+            # our pixel decoder (FPN) expect 3D tensors (features)
+            hidden_state_permuted = rearrange(hidden_state_norm, "b (h w) d -> b d h w", h=h, w=w).contiguous()
+            hidden_states_permuted.append(hidden_state_permuted)
+        return hidden_states_permuted
 
     @property
     def input_resolutions(self) -> List[int]:
@@ -603,14 +604,12 @@ class PositionEmbeddingSine(nn.Module):
         self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
     ):
         super().__init__()
+        if scale is not None and normalize is False:
+            raise ValueError("normalize should be True if scale is passed")
         self.num_pos_feats = num_pos_feats
         self.temperature = temperature
         self.normalize = normalize
-        if scale is not None and normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * torch.pi
-        self.scale = scale
+        self.scale = 2 * torch.pi if scale is None else scale
 
     def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
