@@ -528,7 +528,12 @@ class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
 
-        return (hidden_states, self_attn_weights, cross_attn_weights, present_key_value,)
+        return (
+            hidden_states,
+            self_attn_weights,
+            cross_attn_weights,
+            present_key_value,
+        )
 
 
 class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
@@ -1088,7 +1093,7 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
                 encoder_hidden_states=inputs["encoder_hidden_states"],
                 encoder_attention_mask=inputs["encoder_attention_mask"],
                 layer_head_mask=inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
-                cross_attn_layer_head_mask=cross_attn_layer_head_mask
+                cross_attn_layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=past_key_value,
             )
 

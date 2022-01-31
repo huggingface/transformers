@@ -452,7 +452,16 @@ class TFModelTesterMixin:
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
 
         for model_class in self.all_model_classes:
-            if self.is_encoder_decoder:
+            if model_class.__name__ in ["TFSpeech2TextModel", "TFSpeech2TextForConditionalGeneration"]:
+                inputs = {
+                    "decoder_input_ids": tf.keras.Input(
+                        batch_shape=(2, max_input),
+                        name="decoder_input_ids",
+                        dtype="int32",
+                    ),
+                    "input_ids": tf.keras.Input(batch_shape=(2, 32, max_input), name="input_ids", dtype="float32"),
+                }
+            elif self.is_encoder_decoder:
                 inputs = {
                     "decoder_input_ids": tf.keras.Input(
                         batch_shape=(2, max_input),

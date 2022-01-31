@@ -458,6 +458,43 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
         )
 
     # overwritten from parent due to the inability to work when non-text inputs are not passed
+    def test_lm_head_model_random_no_beam_search_generate(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict.get("input_ids", None)
+
+        # iterate over all generative models
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+
+            if config.bos_token_id is None:
+                # if bos token id is not defined model needs input_ids
+                with self.assertRaises(AssertionError):
+                    model.generate(do_sample=True, max_length=5)
+                # num_return_sequences = 1
+                self._check_generated_ids(model.generate(input_ids, do_sample=True))
+            # else:
+            # num_return_sequences = 1
+            # self._check_generated_ids(model.generate(do_sample=True, max_length=5))
+
+            with self.assertRaises(AssertionError):
+                # generating multiple sequences when no beam search generation
+                # is not allowed as it would always generate the same sequences
+                model.generate(input_ids, do_sample=False, num_return_sequences=2)
+
+            # num_return_sequences > 1, sample
+            self._check_generated_ids(model.generate(input_ids, do_sample=True, num_return_sequences=2))
+
+            # check bad words tokens language generation
+            # create list of 1-seq bad token and list of 2-seq of bad tokens
+            bad_words_ids = [self._generate_random_bad_tokens(1, model), self._generate_random_bad_tokens(2, model)]
+            output_tokens = model.generate(
+                input_ids, do_sample=True, bad_words_ids=bad_words_ids, num_return_sequences=2
+            )
+            # only count generated tokens
+            generated_ids = output_tokens[:, input_ids.shape[-1] :]
+            self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
+
+    # overwritten from parent due to the inability to work when non-text inputs are not passed
     def test_lm_head_model_random_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict.get("input_ids", None)
@@ -469,8 +506,8 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
                 # if bos token id is not defined model needs input_ids, num_return_sequences = 1
                 self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=2))
             # else:
-                # num_return_sequences = 1
-                # self._check_generated_ids(model.generate(do_sample=True, max_length=5, num_beams=2))
+            # num_return_sequences = 1
+            # self._check_generated_ids(model.generate(do_sample=True, max_length=5, num_beams=2))
 
             with self.assertRaises(AssertionError):
                 # generating more sequences than having beams leads is not possible
@@ -497,42 +534,6 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
             # only count generated tokens
             generated_ids = output_tokens[:, input_ids.shape[-1] :]
             self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
-
-    # overwritten from parent due to input shape required for speech
-    def test_compile_tf_model(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        max_input = getattr(self.model_tester, "max_position_embeddings", 512)
-        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
-
-        for model_class in self.all_model_classes:
-            inputs = {
-                "decoder_input_ids": tf.keras.Input(
-                    batch_shape=(2, max_input),
-                    name="decoder_input_ids",
-                    dtype="int32",
-                ),
-                "input_ids": tf.keras.Input(batch_shape=(2, 32, max_input), name="input_ids", dtype="float32"),
-            }
-
-            # Prepare our model
-            model = model_class(config)
-            model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
-            # Let's load it from the disk to be sure we can use pretrained weights
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=False)
-                model = model_class.from_pretrained(tmpdirname)
-
-            outputs_dict = model(inputs)
-            hidden_states = outputs_dict[0]
-
-            # Add a dense layer on top to test integration with other keras modules
-            outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
-
-            # Compile extended model
-            extended_model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
-            extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
 
 
 @require_tf

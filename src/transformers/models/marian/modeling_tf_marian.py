@@ -189,7 +189,11 @@ class TFMarianAttention(tf.keras.layers.Layer):
         self.num_heads = num_heads
         self.dropout = tf.keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
@@ -339,11 +343,11 @@ class TFMarianEncoderLayer(tf.keras.layers.Layer):
     def call(self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training=False):
         """
         Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`tf.Tensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
-                *(encoder_attention_heads,)*
+                `(encoder_attention_heads,)`
         """
         residual = hidden_states
         hidden_states, self_attn_weights, _ = self.self_attn(
@@ -416,17 +420,17 @@ class TFMarianDecoderLayer(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`tf.Tensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             encoder_hidden_states (`tf.Tensor`):
-                cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (`tf.Tensor`): encoder attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
-                *(decoder_attention_heads,)*
+                `(decoder_attention_heads,)`
             cross_attn_layer_head_mask (`tf.Tensor`): mask for heads of the cross-attention module.
-                *(decoder_attention_heads,)*
+                `(decoder_attention_heads,)`
             past_key_value (`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states

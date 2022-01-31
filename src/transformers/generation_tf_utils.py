@@ -394,7 +394,8 @@ class TFGenerationMixin:
 
         Parameters:
 
-            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length, feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length,
+            feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
                 method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
                 should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
@@ -856,7 +857,7 @@ class TFGenerationMixin:
         sent_lengths = tf.ones_like(input_ids[:, 0]) * max_length
 
         # defined for encoder-decoder models, None for decoder-only models
-        past = encoder_outputs  #TODO: remove this line and change models that depend on this to use `encoder_outputs`
+        past = encoder_outputs  # TODO: remove this line and change models that depend on this to use `encoder_outputs`
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and kwargs["output_scores"]) else None
@@ -881,7 +882,7 @@ class TFGenerationMixin:
                 attention_mask=attention_mask,
                 use_cache=use_cache,
                 encoder_outputs=encoder_outputs,
-                **kwargs
+                **kwargs,
             )
             outputs = self(
                 **model_inputs,
@@ -1118,7 +1119,7 @@ class TFGenerationMixin:
         beam_scores = tf.reshape(beam_scores, (batch_size * num_beams,))
 
         # cache compute states
-        past = encoder_outputs #TODO: remove this line and change models that depend on this to use `encoder_outputs`
+        past = encoder_outputs  # TODO: remove this line and change models that depend on this to use `encoder_outputs`
         # to stay similar to torch : past = (encoder_outputs, None) if encoder_outputs is not None else None
 
         # init attention / hidden states / scores tuples
@@ -1147,7 +1148,7 @@ class TFGenerationMixin:
                 attention_mask=attention_mask,
                 use_cache=use_cache,
                 encoder_outputs=encoder_outputs,
-                **kwargs
+                **kwargs,
             )
             outputs = self(
                 **model_inputs,
