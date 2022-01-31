@@ -364,8 +364,8 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
             check_encoder_attentions_output(outputs)
 
     # TODO: Remove this once a more thorough pt/tf equivalence could be implemented in `test_modeling_tf_common.py`.
-    # (currently, such a test will fail some other model tests: it requires some time to fix them.)
-    # @is_pt_tf_cross_test
+    # (Currently, such a test will fail some other model tests: it requires some time to fix them.)
+    @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence_extra(self):
         import torch
 
@@ -431,7 +431,7 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
             tf_hidden_states[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
-            self.assertLessEqual(max_diff, 4e-2)
+            self.assertLessEqual(max_diff, 1e-4)
 
             has_labels = any(
                 x in tf_inputs_dict_maybe_with_labels for x in ["labels", "next_sentence_label", "start_positions"]
@@ -466,7 +466,7 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
                         # large difference (up to 0.1x). PR #15294 addresses this issue.
                         # There is also an inconsistency between PT/TF `XLNetLMHeadModel`.
                         # Before these issues are fixed & merged, set a higher threshold here to pass the test.
-                        self.assertLessEqual(max_diff, 2e-1)
+                        self.assertLessEqual(max_diff, 1e-4)
 
                     tf_logits = tfo[1].numpy()
                     pt_logits = pto[1].numpy()
@@ -483,7 +483,7 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
                     tf_logits[pt_nans] = 0
 
                     max_diff = np.amax(np.abs(tf_logits - pt_logits))
-                    self.assertLessEqual(max_diff, 4e-2)
+                    self.assertLessEqual(max_diff, 1e-4)
 
     def test_xla_mode(self):
         # TODO JP: Make LED XLA compliant
