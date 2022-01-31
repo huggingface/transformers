@@ -225,6 +225,13 @@ else:
                     None,
                 ),
             ),
+            (
+                "xglm",
+                (
+                    "XGLMTokenizer" if is_sentencepiece_available() else None,
+                    "XGLMTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
         ]
     )
 

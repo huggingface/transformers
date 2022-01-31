@@ -312,6 +312,8 @@
       title: XLM-ProphetNet
     - local: model_doc/xlm-roberta
       title: XLM-RoBERTa
+    - local: model_doc/xlm-roberta-xl
+      title: XLM-RoBERTa-XL
     - local: model_doc/xlnet
       title: XLNet
     - local: model_doc/xlsr_wav2vec2
