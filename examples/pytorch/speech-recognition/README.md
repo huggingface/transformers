@@ -178,8 +178,8 @@ python -m torch.distributed.launch \
 	--gradient_checkpointing
 ```
 
-On 8 V100 GPUs, this script should run in *ca.* 18 minutes and yield a CTC loss of **0.39** and word error rate
-of **0.36**.
+On 4 V100 GPUs, this script should run in *ca.* 3h 14min and yield a CTC loss of **0.58** and word error rate
+of **0.40**.
 
 ### Examples CTC
 
