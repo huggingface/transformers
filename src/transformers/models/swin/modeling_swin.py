@@ -669,7 +669,7 @@ class SwinModel(SwinPreTrainedModel):
         self.encoder = SwinEncoder(config, self.embeddings.patch_grid)
 
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
-        self.pool = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
+        self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -746,8 +746,8 @@ class SwinModel(SwinPreTrainedModel):
         sequence_output = self.layernorm(sequence_output)
 
         pooled_output = None
-        if self.pool is not None:
-            pooled_output = self.pool(sequence_output.transpose(1, 2))
+        if self.pooler is not None:
+            pooled_output = self.pooler(sequence_output.transpose(1, 2))
             pooled_output = torch.flatten(pooled_output, 1)
 
         if not return_dict:
