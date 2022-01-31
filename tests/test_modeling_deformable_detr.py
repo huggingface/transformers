@@ -31,7 +31,7 @@ from .test_modeling_common import ModelTesterMixin, _config_zero_init, floats_te
 if is_timm_available():
     import torch
 
-    from transformers import DeformableDetrForObjectDetection, DeformableDetrForSegmentation, DeformableDetrModel
+    from transformers import DeformableDetrForObjectDetection, DeformableDetrModel
 
 
 if is_vision_available():
@@ -124,7 +124,7 @@ class DeformableDetrModelTester:
         inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         return config, inputs_dict
 
-    def create_and_check_detr_model(self, config, pixel_values, pixel_mask, labels):
+    def create_and_check_deformable_detr_model(self, config, pixel_values, pixel_mask, labels):
         model = DeformableDetrModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -136,7 +136,7 @@ class DeformableDetrModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size)
         )
 
-    def create_and_check_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
+    def create_and_check_deformable_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
         model = DeformableDetrForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
@@ -144,13 +144,13 @@ class DeformableDetrModelTester:
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
 
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
 
@@ -160,7 +160,6 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         (
             DeformableDetrModel,
             DeformableDetrForObjectDetection,
-            DeformableDetrForSegmentation,
         )
         if is_timm_available()
         else ()
@@ -176,7 +175,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ in ["DeformableDetrForObjectDetection", "DeformableDetrForSegmentation"]:
+            if model_class.__name__ == "DeformableDetrForObjectDetection":
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -205,27 +204,27 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_detr_model(self):
+    def test_deformable_detr_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_detr_model(*config_and_inputs)
+        self.model_tester.create_and_check_deformable_detr_model(*config_and_inputs)
 
-    def test_detr_object_detection_head_model(self):
+    def test_deformable_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_detr_object_detection_head_model(*config_and_inputs)
+        self.model_tester.create_and_check_deformable_detr_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="DETR does not use inputs_embeds")
+    @unittest.skip(reason="Deformable DETR does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="DETR does not have a get_input_embeddings method")
+    @unittest.skip(reason="Deformable DETR does not have a get_input_embeddings method")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="DETR is not a generative model")
+    @unittest.skip(reason="Deformable DETR is not a generative model")
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip(reason="DETR does not use token embeddings")
+    @unittest.skip(reason="Deformable DETR does not use token embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
@@ -276,9 +275,6 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                 # Object Detection model returns pred_logits and pred_boxes
                 if model_class.__name__ == "DeformableDetrForObjectDetection":
                     correct_outlen += 2
-                # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
-                if model_class.__name__ == "DeformableDetrForSegmentation":
-                    correct_outlen += 3
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned
 
@@ -405,7 +401,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
-                    self.model_tester.num_labels + 1,
+                    self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
 

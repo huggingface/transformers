@@ -255,74 +255,6 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-@dataclass
-class DeformableDetrSegmentationOutput(ModelOutput):
-    """
-    Output type of [`DeformableDetrForSegmentation`].
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-            Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
-            bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
-            scale-invariant IoU loss.
-        loss_dict (`Dict`, *optional*):
-            A dictionary containing the individual losses. Useful for logging.
-        logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
-            Classification logits (including no-object) for all queries.
-        pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
-            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~AutoFeatureExtractor.post_process`] to retrieve the unnormalized bounding
-            boxes.
-        pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
-            Segmentation masks logits for all queries. See also [`~AutoFeatureExtractor.post_process_segmentation`] or
-            [`~AutoFeatureExtractor.post_process_panoptic`] to evaluate instance and panoptic segmentation masks
-            respectively.
-        auxiliary_outputs (`list[Dict]`, *optional*):
-            Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
-            and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
-            `pred_boxes`) for each decoder layer.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of each
-            layer plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder, after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the encoder at the output of each
-            layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the encoder, after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
-    logits: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    auxiliary_outputs: Optional[List[Dict]] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
@@ -984,14 +916,8 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.init_std
-        xavier_std = self.config.init_xavier_std
 
-        if isinstance(module, DeformableDetrMHAttentionMap):
-            nn.init.zeros_(module.k_linear.bias)
-            nn.init.zeros_(module.q_linear.bias)
-            nn.init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
-            nn.init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
-        elif isinstance(module, DeformableDetrLearnedPositionEmbedding):
+        if isinstance(module, DeformableDetrLearnedPositionEmbedding):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
@@ -1924,6 +1850,9 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             # Fourth: compute total loss, as a weighted sum of the various losses
             weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
             weight_dict["loss_giou"] = self.config.giou_loss_coefficient
+            print("LOSS KEYS")
+            for k,v in loss_dict.items():
+                print(k, v.shape)
             if self.config.auxiliary_loss:
                 aux_weight_dict = {}
                 for i in range(self.config.decoder_layers - 1):
@@ -1952,340 +1881,6 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
-
-
-@add_start_docstrings(
-    """
-    DETR Model (consisting of a backbone and encoder-decoder Transformer) with a segmentation head on top, for tasks
-    such as COCO panoptic.
-
-    """,
-    DEFORMABLE_DETR_START_DOCSTRING,
-)
-class DeformableDetrForSegmentation(DeformableDetrPreTrainedModel):
-    def __init__(self, config: DeformableDetrConfig):
-        super().__init__(config)
-
-        # object detection model
-        self.deformable_detr = DeformableDetrForObjectDetection(config)
-
-        # segmentation head
-        hidden_size, number_of_heads = config.d_model, config.encoder_attention_heads
-        intermediate_channel_sizes = self.deformable_detr.model.backbone.conv_encoder.intermediate_channel_sizes
-
-        self.mask_head = DeformableDetrMaskHeadSmallConv(
-            hidden_size + number_of_heads, intermediate_channel_sizes[::-1][-3:], hidden_size
-        )
-
-        self.bbox_attention = DeformableDetrMHAttentionMap(
-            hidden_size, hidden_size, number_of_heads, dropout=0.0, std=config.init_xavier_std
-        )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(DEFORMABLE_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DeformableDetrSegmentationOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values,
-        pixel_mask=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss, DICE/F-1 loss and Focal loss. List of dicts, each
-            dictionary containing at least the following 3 keys: 'class_labels', 'boxes' and 'masks' (the class labels,
-            bounding boxes and segmentation masks of an image in the batch respectively). The class labels themselves
-            should be a `torch.LongTensor` of len `(number of bounding boxes in the image,)`, the boxes a
-            `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)` and the masks a
-            `torch.FloatTensor` of shape `(number of bounding boxes in the image, height, width)`.
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoFeatureExtractor, DeformableDetrForSegmentation
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("sensetime/deformable-detr-panoptic")
-        >>> model = DeformableDetrForSegmentation.from_pretrained("sensetime/deformable-detr-panoptic")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> # model predicts COCO classes, bounding boxes, and masks
-        >>> logits = outputs.logits
-        >>> bboxes = outputs.pred_boxes
-        >>> masks = outputs.pred_masks
-        ```"""
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        batch_size, num_channels, height, width = pixel_values.shape
-        device = pixel_values.device
-
-        if pixel_mask is None:
-            pixel_mask = torch.ones((batch_size, height, width), device=device)
-
-        # First, get list of feature maps and position embeddings
-        features, position_embeddings_list = self.deformable_detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
-
-        # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        feature_map, mask = features[-1]
-        batch_size, num_channels, height, width = feature_map.shape
-        projected_feature_map = self.deformable_detr.model.input_projection(feature_map)
-
-        # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
-        # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
-        flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        position_embeddings = position_embeddings_list[-1].flatten(2).permute(0, 2, 1)
-
-        flattened_mask = mask.flatten(1)
-
-        # Fourth, sent flattened_features + flattened_mask + position embeddings through encoder
-        # flattened_features is a Tensor of shape (batch_size, heigth*width, hidden_size)
-        # flattened_mask is a Tensor of shape (batch_size, heigth*width)
-        if encoder_outputs is None:
-            encoder_outputs = self.deformable_detr.model.encoder(
-                inputs_embeds=flattened_features,
-                attention_mask=flattened_mask,
-                position_embeddings=position_embeddings,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-
-        # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
-        query_position_embeddings = self.deformable_detr.model.query_position_embeddings.weight.unsqueeze(0).repeat(
-            batch_size, 1, 1
-        )
-        queries = torch.zeros_like(query_position_embeddings)
-
-        decoder_outputs = self.deformable_detr.model.decoder(
-            inputs_embeds=queries,
-            attention_mask=None,
-            position_embeddings=position_embeddings,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=flattened_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = decoder_outputs[0]
-
-        # Sixth, compute logits, pred_boxes and pred_masks
-        logits = self.deformable_detr.class_embed(sequence_output)
-        pred_boxes = self.deformable_detr.bbox_embed(sequence_output).sigmoid()
-
-        memory = encoder_outputs[0].permute(0, 2, 1).view(batch_size, self.config.d_model, height, width)
-        mask = flattened_mask.view(batch_size, height, width)
-
-        # FIXME h_boxes takes the last one computed, keep this in mind
-        # important: we need to invert the mask, since in the original implementation the mask works inverted
-        # bbox_mask is of shape (batch_size, num_queries, number_of_attention_heads in bbox_attention, height/32, width/32)
-        bbox_mask = self.bbox_attention(sequence_output, memory, mask=~mask)
-
-        seg_masks = self.mask_head(projected_feature_map, bbox_mask, [features[2][0], features[1][0], features[0][0]])
-
-        pred_masks = seg_masks.view(
-            batch_size, self.deformable_detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1]
-        )
-
-        loss, loss_dict, auxiliary_outputs = None, None, None
-        if labels is not None:
-            # First: create the matcher
-            matcher = DeformableDetrHungarianMatcher(
-                class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
-            )
-            # Second: create the criterion
-            losses = ["labels", "boxes", "cardinality", "masks"]
-            criterion = DeformableDetrLoss(
-                matcher=matcher,
-                num_classes=self.config.num_labels,
-                eos_coef=self.config.eos_coefficient,
-                losses=losses,
-            )
-            criterion.to(self.device)
-            # Third: compute the losses, based on outputs and labels
-            outputs_loss = {}
-            outputs_loss["logits"] = logits
-            outputs_loss["pred_boxes"] = pred_boxes
-            outputs_loss["pred_masks"] = pred_masks
-            if self.config.auxiliary_loss:
-                intermediate = (
-                    decoder_outputs.stacked_intermediate_hidden_states if return_dict else decoder_outputs[-1]
-                )
-                outputs_class = self.class_embed(intermediate)
-                outputs_coord = self.bbox_embed(intermediate).sigmoid()
-                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
-                outputs_loss["auxiliary_outputs"] = auxiliary_outputs
-
-            loss_dict = criterion(outputs_loss, labels)
-            # Fourth: compute total loss, as a weighted sum of the various losses
-            weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
-            weight_dict["loss_giou"] = self.config.giou_loss_coefficient
-            weight_dict["loss_mask"] = self.config.mask_loss_coefficient
-            weight_dict["loss_dice"] = self.config.dice_loss_coefficient
-            if self.config.auxiliary_loss:
-                aux_weight_dict = {}
-                for i in range(self.config.decoder_layers - 1):
-                    aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
-                weight_dict.update(aux_weight_dict)
-            loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
-
-        if not return_dict:
-            if auxiliary_outputs is not None:
-                output = (logits, pred_boxes, pred_masks) + auxiliary_outputs + decoder_outputs + encoder_outputs
-            else:
-                output = (logits, pred_boxes, pred_masks) + decoder_outputs + encoder_outputs
-            return ((loss, loss_dict) + output) if loss is not None else output
-
-        return DeformableDetrSegmentationOutput(
-            loss=loss,
-            loss_dict=loss_dict,
-            logits=logits,
-            pred_boxes=pred_boxes,
-            pred_masks=pred_masks,
-            auxiliary_outputs=auxiliary_outputs,
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
-
-
-def _expand(tensor, length: int):
-    return tensor.unsqueeze(1).repeat(1, int(length), 1, 1, 1).flatten(0, 1)
-
-
-# taken from https://github.com/facebookresearch/detr/blob/master/models/segmentation.py
-class DeformableDetrMaskHeadSmallConv(nn.Module):
-    """
-    Simple convolutional head, using group norm. Upsampling is done using a FPN approach
-    """
-
-    def __init__(self, dim, fpn_dims, context_dim):
-        super().__init__()
-
-        assert (
-            dim % 8 == 0
-        ), "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in GroupNorm is set to 8"
-
-        inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
-
-        self.lay1 = nn.Conv2d(dim, dim, 3, padding=1)
-        self.gn1 = nn.GroupNorm(8, dim)
-        self.lay2 = nn.Conv2d(dim, inter_dims[1], 3, padding=1)
-        self.gn2 = nn.GroupNorm(8, inter_dims[1])
-        self.lay3 = nn.Conv2d(inter_dims[1], inter_dims[2], 3, padding=1)
-        self.gn3 = nn.GroupNorm(8, inter_dims[2])
-        self.lay4 = nn.Conv2d(inter_dims[2], inter_dims[3], 3, padding=1)
-        self.gn4 = nn.GroupNorm(8, inter_dims[3])
-        self.lay5 = nn.Conv2d(inter_dims[3], inter_dims[4], 3, padding=1)
-        self.gn5 = nn.GroupNorm(8, inter_dims[4])
-        self.out_lay = nn.Conv2d(inter_dims[4], 1, 3, padding=1)
-
-        self.dim = dim
-
-        self.adapter1 = nn.Conv2d(fpn_dims[0], inter_dims[1], 1)
-        self.adapter2 = nn.Conv2d(fpn_dims[1], inter_dims[2], 1)
-        self.adapter3 = nn.Conv2d(fpn_dims[2], inter_dims[3], 1)
-
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_uniform_(m.weight, a=1)
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x: Tensor, bbox_mask: Tensor, fpns: List[Tensor]):
-        # here we concatenate x, the projected feature map, of shape (batch_size, d_model, heigth/32, width/32) with
-        # the bbox_mask = the attention maps of shape (batch_size, n_queries, n_heads, height/32, width/32).
-        # We expand the projected feature map to match the number of heads.
-        x = torch.cat([_expand(x, bbox_mask.shape[1]), bbox_mask.flatten(0, 1)], 1)
-
-        x = self.lay1(x)
-        x = self.gn1(x)
-        x = nn.functional.relu(x)
-        x = self.lay2(x)
-        x = self.gn2(x)
-        x = nn.functional.relu(x)
-
-        cur_fpn = self.adapter1(fpns[0])
-        if cur_fpn.size(0) != x.size(0):
-            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
-        x = self.lay3(x)
-        x = self.gn3(x)
-        x = nn.functional.relu(x)
-
-        cur_fpn = self.adapter2(fpns[1])
-        if cur_fpn.size(0) != x.size(0):
-            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
-        x = self.lay4(x)
-        x = self.gn4(x)
-        x = nn.functional.relu(x)
-
-        cur_fpn = self.adapter3(fpns[2])
-        if cur_fpn.size(0) != x.size(0):
-            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
-        x = self.lay5(x)
-        x = self.gn5(x)
-        x = nn.functional.relu(x)
-
-        x = self.out_lay(x)
-        return x
-
-
-class DeformableDetrMHAttentionMap(nn.Module):
-    """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
-
-    def __init__(self, query_dim, hidden_dim, num_heads, dropout=0.0, bias=True, std=None):
-        super().__init__()
-        self.num_heads = num_heads
-        self.hidden_dim = hidden_dim
-        self.dropout = nn.Dropout(dropout)
-
-        self.q_linear = nn.Linear(query_dim, hidden_dim, bias=bias)
-        self.k_linear = nn.Linear(query_dim, hidden_dim, bias=bias)
-
-        self.normalize_fact = float(hidden_dim / self.num_heads) ** -0.5
-
-    def forward(self, q, k, mask: Optional[Tensor] = None):
-        q = self.q_linear(q)
-        k = nn.functional.conv2d(k, self.k_linear.weight.unsqueeze(-1).unsqueeze(-1), self.k_linear.bias)
-        queries_per_head = q.view(q.shape[0], q.shape[1], self.num_heads, self.hidden_dim // self.num_heads)
-        keys_per_head = k.view(k.shape[0], self.num_heads, self.hidden_dim // self.num_heads, k.shape[-2], k.shape[-1])
-        weights = torch.einsum("bqnc,bnchw->bqnhw", queries_per_head * self.normalize_fact, keys_per_head)
-
-        if mask is not None:
-            weights.masked_fill_(mask.unsqueeze(1).unsqueeze(1), float("-inf"))
-        weights = nn.functional.softmax(weights.flatten(2), dim=-1).view(weights.size())
-        weights = self.dropout(weights)
-        return weights
 
 
 def dice_loss(inputs, targets, num_boxes):
@@ -2345,7 +1940,7 @@ class DeformableDetrLoss(nn.Module):
     matched ground-truth / prediction (supervise class and box)
     """
 
-    def __init__(self, matcher, num_classes, eos_coef, losses):
+    def __init__(self, matcher, num_classes, eos_coef, losses, focal_alpha=0.25):
         """
         Create the criterion.
 
@@ -2359,37 +1954,58 @@ class DeformableDetrLoss(nn.Module):
         Parameters:
             matcher: module able to compute a matching between targets and proposals.
             num_classes: number of object categories, omitting the special no-object category.
-            weight_dict: dict containing as key the names of the losses and as values their relative weight.
             eos_coef: relative classification weight applied to the no-object category.
             losses: list of all the losses to be applied. See get_loss for list of available losses.
+            focal_alpha: alpha in Focal Loss.
         """
         super().__init__()
-        self.num_classes = num_classes
-        self.matcher = matcher
-        self.eos_coef = eos_coef
-        self.losses = losses
-        empty_weight = torch.ones(self.num_classes + 1)
-        empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
 
-    # removed logging parameter, which was part of the original implementation
-    def loss_labels(self, outputs, targets, indices, num_boxes):
-        """
-        Classification loss (NLL) targets dicts must contain the key "class_labels" containing a tensor of dim
-        [nb_target_boxes]
+        self.matcher = matcher
+        self.num_classes = num_classes
+        self.losses = losses
+        self.focal_alpha = focal_alpha
+
+    # # removed logging parameter, which was part of the original implementation
+    # def loss_labels(self, outputs, targets, indices, num_boxes):
+    #     """
+    #     Classification loss (NLL) targets dicts must contain the key "class_labels" containing a tensor of dim
+    #     [nb_target_boxes]
+    #     """
+    #     assert "logits" in outputs, "No logits were found in the outputs"
+    #     src_logits = outputs["logits"]
+
+    #     idx = self._get_src_permutation_idx(indices)
+    #     target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
+    #     target_classes = torch.full(
+    #         src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+    #     )
+    #     target_classes[idx] = target_classes_o
+
+    #     loss_ce = nn.functional.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+    #     losses = {"loss_ce": loss_ce}
+
+    #     return losses
+
+    def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
+        """Classification loss (NLL)
+        targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
         assert "logits" in outputs, "No logits were found in the outputs"
         src_logits = outputs["logits"]
 
         idx = self._get_src_permutation_idx(indices)
         target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(
-            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
-        )
+        target_classes = torch.full(src_logits.shape[:2], self.num_classes,
+                                    dtype=torch.int64, device=src_logits.device)
         target_classes[idx] = target_classes_o
 
-        loss_ce = nn.functional.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
-        losses = {"loss_ce": loss_ce}
+        target_classes_onehot = torch.zeros([src_logits.shape[0], src_logits.shape[1], src_logits.shape[2] + 1],
+                                            dtype=src_logits.dtype, layout=src_logits.layout, device=src_logits.device)
+        target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
+
+        target_classes_onehot = target_classes_onehot[:,:,:-1]
+        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2) * src_logits.shape[1]
+        losses = {'loss_ce': loss_ce}
 
         return losses
 
@@ -2432,38 +2048,6 @@ class DeformableDetrLoss(nn.Module):
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
 
-    def loss_masks(self, outputs, targets, indices, num_boxes):
-        """
-        Compute the losses related to the masks: the focal loss and the dice loss.
-
-        Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
-        """
-        assert "pred_masks" in outputs, "No predicted masks found in outputs"
-
-        src_idx = self._get_src_permutation_idx(indices)
-        tgt_idx = self._get_tgt_permutation_idx(indices)
-        src_masks = outputs["pred_masks"]
-        src_masks = src_masks[src_idx]
-        masks = [t["masks"] for t in targets]
-        # TODO use valid to mask invalid areas due to padding in loss
-        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
-        target_masks = target_masks.to(src_masks)
-        target_masks = target_masks[tgt_idx]
-
-        # upsample predictions to the target size
-        src_masks = nn.functional.interpolate(
-            src_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
-        )
-        src_masks = src_masks[:, 0].flatten(1)
-
-        target_masks = target_masks.flatten(1)
-        target_masks = target_masks.view(src_masks.shape)
-        losses = {
-            "loss_mask": sigmoid_focal_loss(src_masks, target_masks, num_boxes),
-            "loss_dice": dice_loss(src_masks, target_masks, num_boxes),
-        }
-        return losses
-
     def _get_src_permutation_idx(self, indices):
         # permute predictions following indices
         batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
@@ -2481,7 +2065,6 @@ class DeformableDetrLoss(nn.Module):
             "labels": self.loss_labels,
             "cardinality": self.loss_cardinality,
             "boxes": self.loss_boxes,
-            "masks": self.loss_masks,
         }
         assert loss in loss_map, f"Loss {loss} not supported"
         return loss_map[loss](outputs, targets, indices, num_boxes)
@@ -2519,9 +2102,6 @@ class DeformableDetrLoss(nn.Module):
             for i, auxiliary_outputs in enumerate(outputs["auxiliary_outputs"]):
                 indices = self.matcher(auxiliary_outputs, targets)
                 for loss in self.losses:
-                    if loss == "masks":
-                        # Intermediate masks losses are too costly to compute, we ignore them.
-                        continue
                     l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
                     l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
@@ -2533,9 +2113,6 @@ class DeformableDetrLoss(nn.Module):
                 bt["labels"] = torch.zeros_like(bt["labels"])
             indices = self.matcher(enc_outputs, bin_targets)
             for loss in self.losses:
-                if loss == "masks":
-                    # Intermediate masks losses are too costly to compute, we ignore them.
-                    continue
                 kwargs = {}
                 if loss == "labels":
                     # Logging is enabled only for the last layer

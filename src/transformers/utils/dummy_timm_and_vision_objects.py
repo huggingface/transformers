@@ -13,13 +13,6 @@ class DeformableDetrForObjectDetection(metaclass=DummyObject):
         requires_backends(self, ["timm", "vision"])
 
 
-class DeformableDetrForSegmentation(metaclass=DummyObject):
-    _backends = ["timm", "vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["timm", "vision"])
-
-
 class DeformableDetrModel(metaclass=DummyObject):
     _backends = ["timm", "vision"]
 

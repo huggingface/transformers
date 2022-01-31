@@ -696,7 +696,6 @@ else:
         [
             "DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DeformableDetrForObjectDetection",
-            "DeformableDetrForSegmentation",
             "DeformableDetrModel",
             "DeformableDetrPreTrainedModel",
         ]
@@ -3522,7 +3521,6 @@ if TYPE_CHECKING:
         from .models.deformable_detr import(
             DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             DeformableDetrForObjectDetection,
-            DeformableDetrForSegmentation,
             DeformableDetrModel,
             DeformableDetrPreTrainedModel,
         )
