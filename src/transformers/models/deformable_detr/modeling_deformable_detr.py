@@ -1967,11 +1967,11 @@ class DeformableDetrForSegmentation(DeformableDetrPreTrainedModel):
         super().__init__(config)
 
         # object detection model
-        self.detr = DeformableDetrForObjectDetection(config)
+        self.deformable_detr = DeformableDetrForObjectDetection(config)
 
         # segmentation head
         hidden_size, number_of_heads = config.d_model, config.encoder_attention_heads
-        intermediate_channel_sizes = self.detr.model.backbone.conv_encoder.intermediate_channel_sizes
+        intermediate_channel_sizes = self.deformable_detr.model.backbone.conv_encoder.intermediate_channel_sizes
 
         self.mask_head = DeformableDetrMaskHeadSmallConv(
             hidden_size + number_of_heads, intermediate_channel_sizes[::-1][-3:], hidden_size
