@@ -143,12 +143,14 @@ However, the `--shuffle_buffer_size` argument controls how many examples we can 
 
 
 ```bash
-python -m torch.distributed.launch \
+**python -m torch.distributed.launch \
 	--nproc_per_node 4 run_speech_recognition_ctc_streaming.py \
 	--dataset_name="common_voice" \
 	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
 	--tokenizer_name_or_path="anton-l/wav2vec2-tokenizer-turkish" \
 	--dataset_config_name="tr" \
+	--train_split_name="train+validation" \
+	--eval_split_name="test" \
 	--output_dir="wav2vec2-xls-r-common_voice-tr-ft" \
 	--overwrite_output_dir \
 	--max_steps="5000" \
@@ -175,11 +177,11 @@ python -m torch.distributed.launch \
 	--fp16 \
 	--push_to_hub \
 	--do_train --do_eval \
-	--gradient_checkpointing
+	--gradient_checkpointing**
 ```
 
-On 4 V100 GPUs, this script should run in *ca.* 3h 14min and yield a CTC loss of **0.58** and word error rate
-of **0.40**.
+On 4 V100 GPUs, this script should run in *ca.* 3h 31min and yield a CTC loss of **0.35** and word error rate
+of **0.29**.
 
 ### Examples CTC
 
@@ -229,7 +231,7 @@ they can serve as a baseline to improve upon.
 | [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) | 0.35 | - | 1 GPU V100   |  1h20min                      | [here](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-demo)  | [run.sh](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-demo/blob/main/run.sh) |
 | [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-xls-r-300m](https://huggingface.co/facebook/wav2vec2-xls-r-300m)  | 0.31     | - | 8 GPU V100   |  1h05            | [here](https://huggingface.co/patrickvonplaten/wav2vec2-large-xls-r-300m-common_voice-tr-ft)      |  [run.sh](https://huggingface.co/patrickvonplaten/wav2vec2-large-xls-r-300m-common_voice-tr-ft/blob/main/run.sh) |
 | [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"`  | [facebook/wav2vec2-xls-r-1b](https://huggingface.co/facebook/wav2vec2-xls-r-1b)  | 0.21 | -  | 2 GPU Titan 24 GB RAM   |  15h10            | [here](https://huggingface.co/patrickvonplaten/wav2vec2-xls-r-1b-common_voice-tr-ft)      |  [run.sh](https://huggingface.co/patrickvonplaten/wav2vec2-large-xls-r-1b-common_voice-tr-ft/blob/main/run.sh) |
-| [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"` in streaming mode  | [facebook/wav2vec2-xls-r-300m](https://huggingface.co/facebook/wav2vec2-xls-r-300m)  | 0.40     | - | 4 GPU V100   |  3h14            | [here](https://huggingface.co/anton-l/wav2vec2-xls-r-common_voice-tr-ft)      |  [run.sh](https://huggingface.co/anton-l/wav2vec2-xls-r-common_voice-tr-ft/blob/main/run.sh) |
+| [Common Voice](https://huggingface.co/datasets/common_voice)| `"tr"` in streaming mode  | [facebook/wav2vec2-xls-r-300m](https://huggingface.co/facebook/wav2vec2-xls-r-300m)  | 0.29     | - | 4 GPU V100   |  3h31            | [here](https://huggingface.co/anton-l/wav2vec2-xls-r-common_voice-tr-ft-stream)      |  [run.sh](https://huggingface.co/anton-l/wav2vec2-xls-r-common_voice-tr-ft-stream/blob/main/run.sh) |
 
 
 #### Multilingual Librispeech CTC

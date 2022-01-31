@@ -26,7 +26,7 @@ from typing import Dict, List, Optional, Union
 import datasets
 import numpy as np
 import torch
-from datasets import IterableDatasetDict, load_dataset, load_metric, interleave_datasets
+from datasets import IterableDatasetDict, interleave_datasets, load_dataset, load_metric
 from torch.utils.data import IterableDataset
 
 import transformers
@@ -50,7 +50,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
-check_min_version("4.17.0.dev0")
+check_min_version("4.16.0.dev0")
 
 require_version("datasets>=1.18.2", "To fix: pip install 'datasets>=1.18.2'")
 
@@ -145,15 +145,16 @@ class DataTrainingArguments:
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
     train_split_name: str = field(
-        default="train",
+        default="train+validation",
         metadata={
-            "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
+            "help": "The name of the training data set split to use (via the datasets library). Defaults to "
+            "'train+validation'"
         },
     )
     eval_split_name: str = field(
         default="test",
         metadata={
-            "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
+            "help": "The name of the training data set split to use (via the datasets library). Defaults to 'test'"
         },
     )
     audio_column_name: str = field(
@@ -219,18 +220,6 @@ class DataTrainingArguments:
             "help": "If :obj:`True`, will use the token generated when running"
             ":obj:`transformers-cli login` as HTTP bearer authorization for remote files."
         },
-    )
-    unk_token: str = field(
-        default="[UNK]",
-        metadata={"help": "The unk token for the tokenizer"},
-    )
-    pad_token: str = field(
-        default="[PAD]",
-        metadata={"help": "The padding token for the tokenizer"},
-    )
-    word_delimiter_token: str = field(
-        default="|",
-        metadata={"help": "The word delimiter token for the tokenizer"},
     )
     phoneme_language: Optional[str] = field(
         default=None,
@@ -362,53 +351,27 @@ def main():
     raw_datasets = IterableDatasetDict()
     raw_column_names = {}
 
-    def load_streaming_dataset(split, **kwargs):
-        if split.contains("+"):
-            return interleave_datasets([
-                load_dataset(split=split_name, **kwargs) for split_name in split.split("+")
-            ])
+    def load_streaming_dataset(split, sampling_rate, **kwargs):
+        if "+" in split:
+            dataset_splits = [load_dataset(split=split_name, **kwargs) for split_name in split.split("+")]
+            # `features` and `cast_column` won't be available after interleaving, so we'll use them here
+            features = dataset_splits[0].features
+            # make sure that the dataset decodes audio with a correct sampling rate
+            dataset_splits = [
+                dataset.cast_column(data_args.audio_column_name, datasets.features.Audio(sampling_rate=sampling_rate))
+                for dataset in dataset_splits
+            ]
+
+            interleaved_dataset = interleave_datasets(dataset_splits)
+            return interleaved_dataset, features
         else:
-            return load_dataset(split=split, **kwargs)
-
-    if training_args.do_train:
-        raw_datasets["train"] = load_streaming_dataset(
-            path=data_args.dataset_name,
-            name=data_args.dataset_config_name,
-            split=data_args.train_split_name,
-            use_auth_token=data_args.use_auth_token,
-            streaming=True,
-        )
-        raw_column_names["train"] = list(raw_datasets["train"].features.keys())
-
-        if data_args.audio_column_name not in raw_datasets["train"].features.keys():
-            raise ValueError(
-                f"--audio_column_name '{data_args.audio_column_name}' not found in dataset '{data_args.dataset_name}'. "
-                "Make sure to set `--audio_column_name` to the correct audio column - one of "
-                f"{', '.join(raw_datasets['train'].column_names)}."
+            dataset = load_dataset(split=split, **kwargs)
+            features = dataset.features
+            # make sure that the dataset decodes audio with a correct sampling rate
+            dataset = dataset.cast_column(
+                data_args.audio_column_name, datasets.features.Audio(sampling_rate=sampling_rate)
             )
-
-        if data_args.text_column_name not in raw_datasets["train"].features.keys():
-            raise ValueError(
-                f"--text_column_name {data_args.text_column_name} not found in dataset '{data_args.dataset_name}'. "
-                "Make sure to set `--text_column_name` to the correct text column - one of "
-                f"{', '.join(raw_datasets['train'].column_names)}."
-            )
-
-        if data_args.max_train_samples is not None:
-            raw_datasets["train"] = raw_datasets["train"].take(range(data_args.max_train_samples))
-
-    if training_args.do_eval:
-        raw_datasets["eval"] = load_streaming_dataset(
-            path=data_args.dataset_name,
-            name=data_args.dataset_config_name,
-            split=data_args.eval_split_name,
-            use_auth_token=data_args.use_auth_token,
-            streaming=True,
-        )
-        raw_column_names["eval"] = list(raw_datasets["eval"].features.keys())
-
-        if data_args.max_eval_samples is not None:
-            raw_datasets["eval"] = raw_datasets["eval"].take(range(data_args.max_eval_samples))
+            return dataset, features
 
     # `datasets` takes care of automatically loading and resampling the audio,
     # so we just need to set the correct target sampling rate and normalize the input
@@ -416,11 +379,48 @@ def main():
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
     )
-    # make sure that the dataset decodes audio with a correct sampling rate
-    for split, dataset in raw_datasets.items():
-        raw_datasets[split] = raw_datasets[split].cast_column(
-            data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
+
+    if training_args.do_train:
+        raw_datasets["train"], train_features = load_streaming_dataset(
+            path=data_args.dataset_name,
+            name=data_args.dataset_config_name,
+            split=data_args.train_split_name,
+            use_auth_token=data_args.use_auth_token,
+            streaming=True,
+            sampling_rate=feature_extractor.sampling_rate,
         )
+        raw_column_names["train"] = list(train_features.keys())
+
+        if data_args.audio_column_name not in raw_column_names["train"]:
+            raise ValueError(
+                f"--audio_column_name '{data_args.audio_column_name}' not found in dataset '{data_args.dataset_name}'. "
+                "Make sure to set `--audio_column_name` to the correct audio column - one of "
+                f"{', '.join(raw_column_names['train'])}."
+            )
+
+        if data_args.text_column_name not in raw_column_names["train"]:
+            raise ValueError(
+                f"--text_column_name {data_args.text_column_name} not found in dataset '{data_args.dataset_name}'. "
+                "Make sure to set `--text_column_name` to the correct text column - one of "
+                f"{', '.join(raw_column_names['train'])}."
+            )
+
+        if data_args.max_train_samples is not None:
+            raw_datasets["train"] = raw_datasets["train"].take(range(data_args.max_train_samples))
+
+    if training_args.do_eval:
+        raw_datasets["eval"], eval_features = load_streaming_dataset(
+            path=data_args.dataset_name,
+            name=data_args.dataset_config_name,
+            split=data_args.eval_split_name,
+            use_auth_token=data_args.use_auth_token,
+            streaming=True,
+            sampling_rate=feature_extractor.sampling_rate,
+        )
+        raw_column_names["eval"] = list(eval_features.keys())
+
+        if data_args.max_eval_samples is not None:
+            raw_datasets["eval"] = raw_datasets["eval"].take(range(data_args.max_eval_samples))
 
     # 2. We remove some special characters from the datasets
     # that make training complicated and do not help in transcribing the speech
