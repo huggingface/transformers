@@ -154,17 +154,17 @@ Then fine-tune your model by calling [`~transformers.Trainer.train`]:
 
 ### Convert dataset to TensorFlow format
 
-First, you need a [`DataCollator`](main_classes/data_collator) to assemble your tensors into a batch. You can use [`DataCollatorWithPadding`] to also apply a padding strategy. This will pad each input to the longest length in each batch (also known as _dynamic padding_), which will speed up your training. Make sure you specify `return_tensors` to return TensorFlow tensors:
+The [`DefaultDataCollator`] assembles tensors into a batch for the model to train on. Make sure you specify `return_tensors` to return TensorFlow tensors:
 
 ```py
->>> from transformers import DataCollatorWithPadding
+>>> from transformers import DefaultDataCollator
 
->>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
+>>> data_collator = DefaultDataCollator(return_tensors="tf")
 ```
 
 <Tip>
 
-[`Trainer`] uses [`transformers.DataCollatorWithPadding`] by default so you don't have to explicitly specify it.
+[`Trainer`] uses [`DataCollatorWithPadding`] by default so you don't need to explicitly specify a data collator.
 
 </Tip>
 
