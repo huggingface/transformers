@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning a 🤗 Transformers model on token classification tasks (NER, POS, CHUNKS) relying on the accelerate library
+Fine-tuning (m)LUKE model on token classification tasks (NER, POS, CHUNKS) relying on the accelerate library 🤗
 without using a Trainer.
 """
 
@@ -26,6 +26,7 @@ import random
 from pathlib import Path
 
 import torch
+import datasets
 from datasets import ClassLabel, load_dataset, load_metric
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
@@ -35,12 +36,10 @@ from accelerate import Accelerator, DistributedDataParallelKwargs
 from huggingface_hub import Repository
 from luke_utils import DataCollatorForLukeTokenClassification, is_punctuation, padding_tensor
 from transformers import (
-    CONFIG_MAPPING,
-    MODEL_MAPPING,
     AdamW,
-    AutoConfig,
-    AutoModelForTokenClassification,
-    AutoTokenizer,
+    LukeConfig,
+    LukeForEntitySpanClassification,
+    LukeTokenizer,
     SchedulerType,
     default_data_collator,
     get_scheduler,
@@ -53,14 +52,10 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
 
-# You should update this to your particular problem to have better documentation of `model_type`
-MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
-MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
-
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Finetune a transformers model on a text classification task (NER) with accelerate library"
+        description="Finetune (m)LUKE on a token classification task (such as NER) with the accelerate library"
     )
     parser.add_argument(
         "--dataset_name",
@@ -187,13 +182,6 @@ def parse_args():
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
     parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
     parser.add_argument(
-        "--model_type",
-        type=str,
-        default=None,
-        help="Model type to use if training from scratch.",
-        choices=MODEL_TYPES,
-    )
-    parser.add_argument(
         "--label_all_tokens",
         action="store_true",
         help="Setting labels of all special tokens to -100 and thus PyTorch will ignore them.",
@@ -257,13 +245,9 @@ def main():
     # accelerator.is_local_main_process is only True for one process per machine.
     logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
     if accelerator.is_local_main_process:
-        import datasets
-
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
     else:
-        import datasets
-
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
 
@@ -362,11 +346,10 @@ def main():
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     if args.config_name:
-        config = AutoConfig.from_pretrained(args.config_name, num_labels=num_labels)
+        config = LukeConfig.from_pretrained(args.config_name, num_labels=num_labels)
     elif args.model_name_or_path:
-        config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels)
+        config = LukeConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels)
     else:
-        config = CONFIG_MAPPING[args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
     tokenizer_name_or_path = args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
@@ -376,7 +359,7 @@ def main():
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
-    tokenizer = AutoTokenizer.from_pretrained(
+    tokenizer = LukeTokenizer.from_pretrained(
         tokenizer_name_or_path,
         use_fast=False,
         task="entity_span_classification",
@@ -385,14 +368,14 @@ def main():
     )
 
     if args.model_name_or_path:
-        model = AutoModelForTokenClassification.from_pretrained(
+        model = LukeForEntitySpanClassification.from_pretrained(
             args.model_name_or_path,
             from_tf=bool(".ckpt" in args.model_name_or_path),
             config=config,
         )
     else:
         logger.info("Training new model from scratch")
-        model = AutoModelForTokenClassification.from_config(config)
+        model = LukeForEntitySpanClassification.from_config(config)
 
     model.resize_token_embeddings(len(tokenizer))
 
@@ -674,6 +657,7 @@ def main():
     for epoch in range(args.num_train_epochs):
         model.train()
         for step, batch in enumerate(train_dataloader):
+            _ = batch.pop("original_entity_spans")
             outputs = model(**batch)
             loss = outputs.loss
             loss = loss / args.gradient_accumulation_steps
@@ -690,10 +674,11 @@ def main():
 
         model.eval()
         for step, batch in enumerate(eval_dataloader):
+            original_entity_spans = batch.pop("original_entity_spans")
             with torch.no_grad():
                 outputs = model(**batch)
 
-            preds, refs = get_luke_labels(outputs, batch[label_column_name], batch["original_entity_spans"])
+            preds, refs = get_luke_labels(outputs, batch[label_column_name], original_entity_spans)
 
             metric.add_batch(
                 predictions=preds,
