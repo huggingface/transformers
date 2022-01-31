@@ -1359,7 +1359,9 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
                 "instantiate the model as follows: `UniSpeechForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
-        output_hidden_size = config.output_hidden_size if config.add_adapter else config.hidden_size
+        output_hidden_size = (
+            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
+        )
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
