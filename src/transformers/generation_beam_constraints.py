@@ -334,14 +334,14 @@ class ConstraintListState:
     def add(self, token_id: Union[int, torch.LongTensor]):
         complete, stepped = False, False
 
-        if isinstance(token_id, torch.LongTensor):
-            if (token_id.size(0)) > 1:
-                raise ValueError(
-                    f"`token_id` has to be a positive integer or a `torch.LongTensor` with one integer, but is {token_id}."
-                    "It must have length 1."
-                )
-            else:
-                token_id = token_id[0]
+        # if isinstance(token_id, torch.LongTensor):
+        #     if (token_id.size(0)) > 1:
+        #         raise ValueError(
+        #             f"`token_id` has to be a positive integer or a `torch.LongTensor` with one integer, but is {token_id}."
+        #             "It must have length 1."
+        #         )
+        #     else:
+        #         token_id = token_id[0]
 
         if self.completed:
             complete = True
