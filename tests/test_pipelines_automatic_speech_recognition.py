@@ -462,6 +462,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         # (85, 100)
         self.assertEqual(nested_simplify(input_values[:, 80:100]), nested_simplify(outs[4]["input_values"]))
 
+    @require_torch
     def test_stride(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
