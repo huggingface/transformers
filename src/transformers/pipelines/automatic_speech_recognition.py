@@ -31,8 +31,6 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 
 
-
-
 def rescale_stride(tokens_or_logits, stride):
     """
     Rescales the stride values from audio space to tokens/logits space.
@@ -94,17 +92,17 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     to support multiple audio formats
     """
 
-    def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
+    def __init__(self, model, tokenizer, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
         """
         Arguments:
-            feature_extractor ([`SequenceFeatureExtractor`]):
-                The feature extractor that will be used by the pipeline to encode waveform for the model.
             model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
                 The model that will be used by the pipeline to make predictions. This needs to be a model inheriting
                 from [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
             tokenizer ([`PreTrainedTokenizer`]):
                 The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
                 [`PreTrainedTokenizer`].
+            feature_extractor ([`SequenceFeatureExtractor`]):
+                The feature extractor that will be used by the pipeline to encode waveform for the model.
             chunk_length_s (`float`, *optional*, defaults to 0):
                 The input length for in each chunk. If `0` then chunking is disabled (default). Only available for CTC
                 models.
@@ -123,26 +121,25 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the
                 model on the associated CUDA device id.
         """
-        super().__init__(*args, **kwargs)
 
-        self.feature_extractor = feature_extractor
-
-        if self.framework == "tf":
-            raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
-
-        self.check_model_type(dict(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()))
-
-        if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
+        if model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
             self.type = "seq2seq"
         elif (
-            self.feature_extractor._processor_class
-            and self.feature_extractor._processor_class.endswith("WithLM")
+            feature_extractor._processor_class
+            and feature_extractor._processor_class.endswith("WithLM")
             and kwargs.get("decoder", None) is not None
         ):
             self.decoder = kwargs["decoder"]
             self.type = "ctc_with_lm"
         else:
             self.type = "ctc"
+
+        super().__init__(model, tokenizer, feature_extractor, *args, **kwargs)
+
+        if self.framework == "tf":
+            raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
+
+        self.check_model_type(dict(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()))
 
     def __call__(
         self,
