@@ -949,9 +949,9 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         loss = None
         if inputs["labels"] is not None:
             # shift labels to the left and cut last logit token
-            logits = logits[:, :-1]
+            shifted_logits = logits[:, :-1]
             labels = inputs["labels"][:, 1:]
-            loss = self.hf_compute_loss(labels, logits)
+            loss = self.hf_compute_loss(labels, shifted_logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + transformer_outputs[1:]
