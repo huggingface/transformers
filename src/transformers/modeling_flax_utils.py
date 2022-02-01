@@ -721,6 +721,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     @classmethod
     def register_for_auto_class(cls, auto_class="FlaxAutoModel"):
+        """
+        Register this class with a given auto class. This should only be used for custom models as the ones in
+        the library are already mapped with an auto class.
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"FlaxAutoModel"`):
+                The auto class to register this new model with.
+        """
         if not isinstance(auto_class, str):
             auto_class = auto_class.__name__
 

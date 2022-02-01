@@ -862,6 +862,14 @@ class PretrainedConfig(PushToHubMixin):
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoConfig"):
+        """
+        Register this class with a given auto class. This should only be used for custom configurations as the ones in
+        the library are already mapped with `AutoConfig`.
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"AutoConfig"`):
+                The auto class to register this new configuration with.
+        """
         if not isinstance(auto_class, str):
             auto_class = auto_class.__name__
 
