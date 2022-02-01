@@ -467,6 +467,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+        self.config_tester.run_tests_with_class_weights()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -545,6 +546,13 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        config_and_inputs[0].class_weights = [1., 1., 1. ]
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        # We expect an exception when the class_weights do not match the number of classes
+        config_and_inputs[0].class_weights = [1., 1.]
+        with self.assertRaises(ValueError) as context:
+            self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        self.assertTrue('mismatched' in str(context.exception))
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -79,7 +79,7 @@ config_common_kwargs = {
 }
 
 
-class ConfigTester(object):
+class ConfigTester(unittest.TestCase):
     def __init__(self, parent, config_class=None, has_text_modality=True, **kwargs):
         self.parent = parent
         self.config_class = config_class
@@ -156,6 +156,20 @@ class ConfigTester(object):
         self.parent.assertEqual(len(config.id2label), 3)
         self.parent.assertEqual(len(config.label2id), 3)
 
+    # TODO This test can be merged with the previous one
+    def create_and_test_config_with_class_weights(self):
+        # Check mismatch between class_weights size and num labels
+        class_weights_5_classes = [1.,1.,1.,1.,1.]
+        config = self.config_class(**self.inputs_dict, num_labels=5, class_weights=class_weights_5_classes)
+        self.parent.assertEqual(len(config.id2label), 5)
+        self.parent.assertEqual(len(config.label2id), 5)
+        self.parent.assertEqual(len(config.class_weights), 5)
+        # Check mismatch between class_weights size and num labels
+        class_weights_3_classes = [1.,1.,1.]
+        with self.assertRaises(ValueError) as context:
+            self.config_class(**self.inputs_dict, num_labels=5, class_weights=class_weights_3_classes)
+        self.assertTrue('mismatched' in str(context.exception))
+
     def check_config_can_be_init_without_params(self):
         if self.config_class.is_composition:
             return
@@ -190,6 +204,10 @@ class ConfigTester(object):
         self.create_and_test_config_with_num_labels()
         self.check_config_can_be_init_without_params()
         self.check_config_arguments_init()
+
+    # TODO This test can be merged with the previous one
+    def run_tests_with_class_weights(self):
+        self.create_and_test_config_with_class_weights()
 
 
 class FakeConfig(PretrainedConfig):

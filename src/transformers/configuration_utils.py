@@ -192,6 +192,9 @@ class PretrainedConfig(PushToHubMixin):
         label2id (`Dict[str, int]`, *optional*): A map from label to index for the model.
         num_labels (`int`, *optional*):
             Number of labels to use in the last layer added to the model, typically for a classification task.
+        class_weights (`List[float]`, *optional*):
+            Class weights for labels used in the last layer of the model, typically in a classification task. It has to
+            be the same size than the number of labels.
         task_specific_params (`Dict[str, Any]`, *optional*):
             Additional keyword arguments to store for the current task.
         problem_type (`str`, *optional*):
@@ -304,6 +307,11 @@ class PretrainedConfig(PushToHubMixin):
             # Keys are always strings in JSON so convert ids to int here.
         else:
             self.num_labels = kwargs.pop("num_labels", 2)
+        self.class_weights = kwargs.pop("class_weights", None)
+
+        if self.class_weights:
+            if len(self.class_weights) != self.num_labels:
+                raise ValueError(f"Class weights length {self.class_weights} and num labels {self.num_labels} mismatched")
 
         if self.torch_dtype is not None and isinstance(self.torch_dtype, str):
             # we will start using self.torch_dtype in v5, but to be consistent with

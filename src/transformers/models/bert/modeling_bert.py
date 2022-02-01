@@ -1511,6 +1511,13 @@ class BertForSequenceClassification(BertPreTrainedModel):
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
+        self.class_weights = None
+        if config.class_weights:
+            if len(config.class_weights) != self.num_labels:  # It's already done in configuration but we re-check it here
+                raise ValueError(f"Class weights length {self.class_weights} and num labels {self.num_labels} mismatched")
+            logger.info("Class weights will be used in training")
+            self.class_weights = torch.tensor(config.class_weights, dtype=torch.float32)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1569,6 +1576,10 @@ class BertForSequenceClassification(BertPreTrainedModel):
                 else:
                     self.config.problem_type = "multi_label_classification"
 
+            class_weights = None  # Class weights
+            if self.training and self.class_weights is not None:
+                class_weights = self.class_weights.to(self.device)
+
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
                 if self.num_labels == 1:
@@ -1576,10 +1587,10 @@ class BertForSequenceClassification(BertPreTrainedModel):
                 else:
                     loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
+                loss_fct = CrossEntropyLoss(weight=class_weights)
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
+                loss_fct = BCEWithLogitsLoss(pos_weight=class_weights)
                 loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[2:]
