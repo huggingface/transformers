@@ -1393,10 +1393,10 @@ INIT_TOKENIZER_DOCSTRING = r"""
             value stored for the associated model in `max_model_input_sizes` (see above). If no value is provided, will
             default to VERY_LARGE_INTEGER (`int(1e30)`).
         padding_side: (`str`, *optional*):
-            The side on which the model should have truncation applied. Should be selected between ['right', 'left'].
+            The side on which the model should have padding applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
         truncation_side: (`str`, *optional*):
-            The side on which the model should have padding applied. Should be selected between ['right', 'left'].
+            The side on which the model should have truncation applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
         model_input_names (`List[string]`, *optional*):
             The list of inputs accepted by the forward pass of the model (like `"token_type_ids"` or
