@@ -210,7 +210,7 @@ class Wav2Vec2ModelTester:
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
+            result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
         )
 
     def create_and_check_model_with_adapter_proj_dim(self, config, input_values, attention_mask):
