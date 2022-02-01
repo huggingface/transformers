@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import copy
 import inspect
 import itertools
 import json
@@ -1370,6 +1371,7 @@ class TokenizerTesterMixin:
     def test_padding_side_in_kwargs(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                kwargs = copy.deepcopy(kwargs)
                 padding_side = "right"
                 kwargs.update({"padding_side": padding_side})
 
