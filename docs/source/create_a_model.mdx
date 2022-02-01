@@ -1,0 +1,99 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Create a manual instance of a model
+
+In the `AutoClass` [tutorial](autoclass_tutorial), you loaded a model by allowing the `AutoClass` to automatically infer the architecture and download the pretrained configuration and weights. While we generally recommend using an `AutoClass` to produce checkpoint-agnostic code, users who want more flexibility are able to manually create their own instance of a 🤗 Transformers model. This could be particularly useful for anyone who is interested in studying or experimenting with a 🤗 Transformers model. This guide will dive deeper into creating and using a model, and you will learn to:
+
+- Load and customize a model configuration.
+- Create a tokenizer and model.
+
+## Configuration
+
+A configuration file stores model specific attributes. Each model configuration has attributes that are specific to it, but all models will have the `hidden_size`, `num_attention_heads`, `num_hidden_layers` and `vocab_size` (if it is a text model) attributes. Attributes are used to build a model. For example, access [`DistilBertConfig`] to inspect the attributes used to build it:
+
+```py
+>>> from transformers import DistilBertConfig
+
+>>> config = DistilBertConfig()
+>>> print(config)
+DistilBertConfig {
+  "activation": "gelu",
+  "attention_dropout": 0.1,
+  "dim": 768,
+  "dropout": 0.1,
+  "hidden_dim": 3072,
+  "initializer_range": 0.02,
+  "max_position_embeddings": 512,
+  "model_type": "distilbert",
+  "n_heads": 12,
+  "n_layers": 6,
+  "pad_token_id": 0,
+  "qa_dropout": 0.1,
+  "seq_classif_dropout": 0.2,
+  "sinusoidal_pos_embds": false,
+  "transformers_version": "4.16.2",
+  "vocab_size": 30522
+}
+```
+
+This displays all the attributes used to build [`DistilBert`]. These attributes are also customizable if you'd like. For example, if you want to use a different activation function, and change the dropout ratio for the attention probabilities, then:
+
+```py
+>>> my_config = DistilBertConfig(activation="relu", attention_dropout=0.4)
+>>> print(my_config)
+DistilBertConfig {
+  "activation": "relu",
+  "attention_dropout": 0.4,
+  "dim": 768,
+  "dropout": 0.1,
+  "hidden_dim": 3072,
+  "initializer_range": 0.02,
+  "max_position_embeddings": 512,
+  "model_type": "distilbert",
+  "n_heads": 12,
+  "n_layers": 6,
+  "pad_token_id": 0,
+  "qa_dropout": 0.1,
+  "seq_classif_dropout": 0.2,
+  "sinusoidal_pos_embds": false,
+  "transformers_version": "4.16.2",
+  "vocab_size": 30522
+}
+```
+
+When you initialize a model with [`DistilBertConfig`], it creates a random instance of the model that needs to be trained first. It is much faster to use a pretrained model, and then customize it's attributes:
+
+```py
+>>> my_config = DistilBertConfig.from_pretrained("distilbert-base-uncased", activation="relu", attention_dropout=0.4)
+```
+
+Once you are satisfied with your model configuration, you can save it with [`~transformers.PretrainedConfig.save_pretrained`]. This will save your configuration file as a JSON file in the specified directory:
+
+```py
+>>> my_config.save_pretrained(save_directory="./your_model_save_path")
+```
+
+To reuse the configuration file, load it with [`~transformers.PretrainedConfig.from_pretrained`]:
+
+```py
+>>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path")
+```
+
+<Tip>
+
+You can also save your configuration file as a dictionary or even only save the difference between your custom configuration attributes, and the default configuration attributes! See [here](configuration) for more details.
+
+</Tip>
+
+## Model
+
