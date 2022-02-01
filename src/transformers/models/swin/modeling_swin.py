@@ -502,7 +502,6 @@ class SwinLayer(nn.Module):
 
     def forward(self, hidden_states, head_mask=None, output_attentions=False, output_hidden_states=False):
         all_hidden_states = () if output_hidden_states else None
-
         for i, block_module in enumerate(self.blocks):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
