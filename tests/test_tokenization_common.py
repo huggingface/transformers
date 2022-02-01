@@ -1371,37 +1371,43 @@ class TokenizerTesterMixin:
     def test_padding_side_in_kwargs(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                kwargs = copy.deepcopy(kwargs)
-                padding_side = "right"
-                kwargs.update({"padding_side": padding_side})
-
                 if self.test_rust_tokenizer:
-                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                    self.assertEqual(tokenizer_r.padding_side, padding_side)
+                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, padding_side="left", **kwargs
+                    )
+                    self.assertEqual(tokenizer_r.padding_side, "left")
+
+                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, padding_side="right", **kwargs
+                    )
+                    self.assertEqual(tokenizer_r.padding_side, "right")
+
+                    self.assertRaises(
+                        ValueError,
+                        self.rust_tokenizer_class.from_pretrained,
+                        pretrained_name,
+                        padding_side="unauthorized",
+                        **kwargs,
+                    )
 
                 if self.test_slow_tokenizer:
-                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                    self.assertEqual(tokenizer_p.padding_side, padding_side)
+                    tokenizer_p = self.tokenizer_class.from_pretrained(
+                        pretrained_name, padding_side="left", **kwargs
+                    )
+                    self.assertEqual(tokenizer_p.padding_side, "left")
 
-                padding_side = "left"
-                kwargs.update({"padding_side": padding_side})
+                    tokenizer_p = self.tokenizer_class.from_pretrained(
+                        pretrained_name, padding_side="right", **kwargs
+                    )
+                    self.assertEqual(tokenizer_p.padding_side, "right")
 
-                if self.test_rust_tokenizer:
-                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                    self.assertEqual(tokenizer_r.padding_side, padding_side)
-
-                if self.test_slow_tokenizer:
-                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                    self.assertEqual(tokenizer_p.padding_side, padding_side)
-
-                padding_side = "unauthorized"
-                kwargs.update({"padding_side": padding_side})
-
-                if self.test_rust_tokenizer:
-                    self.assertRaises(ValueError, self.rust_tokenizer_class.from_pretrained, pretrained_name, **kwargs)
-
-                if self.test_slow_tokenizer:
-                    self.assertRaises(ValueError, self.tokenizer_class.from_pretrained, pretrained_name, **kwargs)
+                    self.assertRaises(
+                        ValueError,
+                        self.tokenizer_class.from_pretrained,
+                        pretrained_name,
+                        padding_side="unauthorized",
+                        **kwargs,
+                    )
 
     def test_right_and_left_padding(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
