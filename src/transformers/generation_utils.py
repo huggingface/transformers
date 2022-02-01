@@ -2170,14 +2170,12 @@ class GenerationMixin:
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `nn.functional.log_softmax` operation.
             next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
-
-            next_token_scores_processed = logits_processor(input_ids, next_token_logits)
-
-            next_token_scores_processed = nn.functional.log_softmax(
-                next_token_scores_processed, dim=-1
+            next_token_scores = nn.functional.log_softmax(
+                next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
 
-            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores_processed)
+            next_token_scores_processed = logits_processor(input_ids, next_token_scores)
+            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -2490,14 +2488,12 @@ class GenerationMixin:
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `nn.functional.log_softmax` operation.
             next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
-
-            next_token_scores_processed = logits_processor(input_ids, next_token_logits)
-
-            next_token_scores_processed = nn.functional.log_softmax(
-                next_token_scores_processed, dim=-1
+            next_token_scores = nn.functional.log_softmax(
+                next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
 
-            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores_processed)
+            next_token_scores_processed = logits_processor(input_ids, next_token_scores)
+            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
             next_token_scores = logits_warper(input_ids, next_token_scores)
 
             # Store scores, attentions and hidden_states when required
@@ -2844,19 +2840,16 @@ class GenerationMixin:
                 # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
                 # cannot be generated both before and after the `nn.functional.log_softmax` operation.
                 next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
+                next_token_scores = nn.functional.log_softmax(
+                    next_token_logits, dim=-1
+                )  # (batch_size * group_size, vocab_size)
+                vocab_size = next_token_scores.shape[-1]
 
                 next_token_scores_processed = logits_processor(
-                    group_input_ids, next_token_logits, current_tokens=current_tokens, beam_group_idx=beam_group_idx
+                    group_input_ids, next_token_scores, current_tokens=current_tokens, beam_group_idx=beam_group_idx
                 )
-
-                next_token_scores_processed = nn.functional.log_softmax(
-                    next_token_scores_processed, dim=-1
-                )  # (batch_size * group_size, vocab_size)
-                vocab_size = next_token_scores_processed.shape[-1]
-
-                next_token_scores = next_token_scores_processed + beam_scores[batch_group_indices].unsqueeze(-1).expand_as(
-                    next_token_scores_processed
-                )
+                next_token_scores = next_token_scores_processed + beam_scores[batch_group_indices].unsqueeze(-1)
+                next_token_scores = next_token_scores.expand_as(next_token_scores_processed)
 
                 if output_scores:
                     processed_score[batch_group_indices] = next_token_scores_processed
