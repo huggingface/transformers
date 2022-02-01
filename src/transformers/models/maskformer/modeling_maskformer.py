@@ -492,7 +492,8 @@ class SwinTransformerBackbone(nn.Module):
         # we need to reshape the hidden state to their original spatial dimensions
         # skipping the embeddings
         hidden_states: Tuple[Tuple[Tensor]] = output.hidden_states[1:]
-        for i, (hidden_state, (h, w)) in enumerate(zip(hidden_states, self.input_resolutions)):
+        spatial_dimensions: Tuple[Tuple[int, int]] = output.hidden_states_original_spatial_dimensions
+        for i, (hidden_state, (h, w)) in enumerate(zip(hidden_states, spatial_dimensions)):
             norm = self.hidden_states_norms[i]
             # the last element corespond to the layer's last block output but before patch merging
             hidden_state_unpolled: Tensor = hidden_state[-1]
@@ -554,12 +555,12 @@ class FPNLayer(nn.Module):
 class FPNModel(nn.Module):
     def __init__(self, in_features: int, lateral_widths: List[int], feature_size: int = 256):
         """Feature Pyramid Network, given an input tensor and a set of features map of different feature/spatial size, it creates
-a list of features map with different the same feature size.
+        a list of features map with different the same feature size.
 
-        Args:
-            in_features (int): The number of input features (channels)
-            lateral_widths (List[int]): A list with the features (channels) size of each lateral connection
-            feature_size (int, optional): The features (channels) of the resulting feature maps. Defaults to 256.
+                Args:
+                    in_features (int): The number of input features (channels)
+                    lateral_widths (List[int]): A list with the features (channels) size of each lateral connection
+                    feature_size (int, optional): The features (channels) of the resulting feature maps. Defaults to 256.
         """
         super().__init__()
         self.stem = ConvLayer(in_features, feature_size)
@@ -578,13 +579,13 @@ a list of features map with different the same feature size.
 class MaskFormerPixelDecoder(nn.Module):
     def __init__(self, *args, feature_size: int = 256, mask_feature_size: int = 256, **kwargs):
         """Pixel Decoder Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
-Segmentation](https://arxiv.org/abs/2107.06278). It first run the backbone's feature into a Feature Pyramid Network
-creating a list of features map. Then, it projects the last one to the correct `mask_size`
+        Segmentation](https://arxiv.org/abs/2107.06278). It first run the backbone's feature into a Feature Pyramid Network
+        creating a list of features map. Then, it projects the last one to the correct `mask_size`
 
-        Args:
-            feature_size (int, optional): The features (channels) of FPN feature maps. Defaults to 256.
-            mask_feature_size (int, optional):
-                The features (channels) of the target masks size $C_{\epsilon}$ in the paper. Defaults to 256.
+                Args:
+                    feature_size (int, optional): The features (channels) of FPN feature maps. Defaults to 256.
+                    mask_feature_size (int, optional):
+                        The features (channels) of the target masks size $C_{\epsilon}$ in the paper. Defaults to 256.
         """
         super().__init__()
         self.fpn = FPNModel(*args, feature_size=feature_size, **kwargs)
@@ -664,8 +665,8 @@ class MaskformerMLPPredictionHead(nn.Sequential):
 class MaskFormerPixelLevelModule(nn.Module):
     def __init__(self, config: MaskFormerConfig):
         """Pixel Level Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
-Segmentation](https://arxiv.org/abs/2107.06278). It runs the input image trough a backbone and a pixel decoder,
-generating a image features and pixel embeddings."""
+        Segmentation](https://arxiv.org/abs/2107.06278). It runs the input image trough a backbone and a pixel decoder,
+        generating a image features and pixel embeddings."""
         super().__init__()
         self.backbone = SwinTransformerBackbone(
             SwinConfig(**{k.replace("swin_", ""): v for k, v in config.__dict__.items() if k.startswith("swin_")})

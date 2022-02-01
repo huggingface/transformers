@@ -15,7 +15,9 @@
 """ PyTorch Swin Transformer model."""
 
 
+from typing import Tuple
 import collections.abc
+from dataclasses import dataclass
 import math
 
 import torch
@@ -29,7 +31,6 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Seq
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_swin import SwinConfig
-import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -41,6 +42,16 @@ SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/swin-tiny-patch4-window7-224",
     # See all Swin models at https://huggingface.co/models?filter=swin
 ]
+
+
+@dataclass
+class SwinModelOutputWithPooling(BaseModelOutputWithPooling):
+    hidden_states_original_spatial_dimensions: Tuple[Tuple[int, int]] = None
+
+
+@dataclass
+class SwinBaseModelOutput(BaseModelOutput):
+    hidden_states_original_spatial_dimensions: Tuple[Tuple[int, int]] = None
 
 
 # to_2tuple, drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
@@ -149,10 +160,10 @@ class SwinPatchEmbeddings(nn.Module):
 
         if width % self.patch_size[1] != 0:
             pad_value = (0, self.patch_size[1] - width % self.patch_size[1])
-            pixel_values = F.pad(pixel_values, pad_value)
+            pixel_values = nn.functional.pad(pixel_values, pad_value)
         if height % self.patch_size[0] != 0:
             pad_value = (0, 0, 0, self.patch_size[0] - height % self.patch_size[0])
-            pixel_values = F.pad(pixel_values, pad_value)
+            pixel_values = nn.functional.pad(pixel_values, pad_value)
 
         embeddings = self.projection(pixel_values)
         _, _, height, width = embeddings.shape
@@ -192,7 +203,7 @@ class SwinPatchMerging(nn.Module):
         should_pad = (height % 2 == 1) or (width % 2 == 1)
         if should_pad:
             pad_value = (0, 0, 0, width % 2, 0, height % 2)
-            input_feature = F.pad(input_feature, pad_value)
+            input_feature = nn.functional.pad(input_feature, pad_value)
 
         input_feature_0 = input_feature[:, 0::2, 0::2, :]  # batch_size height/2 width/2 num_channels
         input_feature_1 = input_feature[:, 1::2, 0::2, :]  # batch_size height/2 width/2 num_channels
@@ -451,7 +462,7 @@ class SwinBlock(nn.Module):
         pad_r = (self.window_size - width % self.window_size) % self.window_size
         pad_b = (self.window_size - height % self.window_size) % self.window_size
         pad_value = (0, 0, pad_l, pad_r, pad_t, pad_b)
-        hidden_states = F.pad(hidden_states, pad_value)
+        hidden_states = nn.functional.pad(hidden_states, pad_value)
 
         _, height_pad, width_pad, _ = hidden_states.shape
         # cyclic shift
@@ -599,6 +610,7 @@ class SwinEncoder(nn.Module):
         return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
+        all_input_dimensions = ()
         all_self_attentions = () if output_attentions else None
         # add the embebeddings
         if output_hidden_states:
@@ -628,7 +640,7 @@ class SwinEncoder(nn.Module):
                 )
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
-
+            all_input_dimensions += (input_dimensions,)
             if output_hidden_states:
                 all_hidden_states += (layer_outputs,)
 
@@ -640,8 +652,11 @@ class SwinEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions
+        return SwinBaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            hidden_states_original_spatial_dimensions=all_input_dimensions,
+            attentions=all_self_attentions,
         )
 
 
@@ -806,10 +821,15 @@ class SwinModel(SwinPreTrainedModel):
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        hidden_states_original_spatial_dimensions = (
+            input_dimensions,
+        ) + encoder_outputs.hidden_states_original_spatial_dimensions
+
+        return SwinModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
+            hidden_states_original_spatial_dimensions=hidden_states_original_spatial_dimensions,
             attentions=encoder_outputs.attentions,
         )
 
