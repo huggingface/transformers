@@ -35,6 +35,8 @@ from transformers import (
     AutoTokenizer,
     BertTokenizer,
     BertTokenizerFast,
+    GPT2Tokenizer,
+    GPT2TokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
@@ -3732,6 +3734,21 @@ class TokenizerPushToHubTester(unittest.TestCase):
         )
         # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
         self.assertEqual(tokenizer.__class__.__name__, "FakeTokenizer")
+
+
+class FromPretrainedOverrideTest(unittest.TestCase):
+    def test_override_from_pretrained(self):
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2", padding_side="left")
+        self.assertEqual(tokenizer.padding_side, "left")
+
+        tokenizer = GPT2TokenizerFast.from_pretrained("hf-internal-testing/tiny-random-gpt2", padding_side="left")
+        self.assertEqual(tokenizer.padding_side, "left")
+
+        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2", truncation_side="left")
+        self.assertEqual(tokenizer.truncation_side, "left")
+
+        tokenizer = GPT2TokenizerFast.from_pretrained("hf-internal-testing/tiny-random-gpt2", truncation_side="left")
+        self.assertEqual(tokenizer.truncation_side, "left")
 
 
 class TrieTest(unittest.TestCase):
