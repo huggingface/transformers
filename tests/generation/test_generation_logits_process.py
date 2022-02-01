@@ -542,8 +542,9 @@ class LogitsProcessorTest(unittest.TestCase):
     def test_normalization_warper(self):
         input_ids = None
 
-        scores = torch.tensor([[-23.18, -29.96, -43.54, 47.77], [-33.58, -26.87, -32.96, 22.51]], device=torch_device,
-                              dtype=torch.float)
+        scores = torch.tensor(
+            [[-23.18, -29.96, -43.54, 47.77], [-33.58, -26.87, -32.96, 22.51]], device=torch_device, dtype=torch.float
+        )
 
         normalization_warper = NormalizationLogitsWarper()
         normalized_scores = normalization_warper(input_ids, scores).exp()
