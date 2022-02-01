@@ -313,7 +313,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             final_logits = []
             for outputs in model_outputs:
                 logits = outputs["logits"].numpy()
-                stride = outputs.get("stride", None)
+                stride = outputs.pop("stride", None)
                 if stride is not None:
                     total_n, left, right = stride
                     # Total_n might be < logits.shape[1]
