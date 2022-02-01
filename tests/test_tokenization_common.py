@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import copy
 import inspect
 import itertools
 import json
@@ -1419,7 +1418,6 @@ class TokenizerTesterMixin:
     def test_truncation_side_in_kwargs(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                kwargs = copy.deepcopy(kwargs)
                 truncation_side = "right"
                 kwargs.update({"truncation_side": truncation_side})
 
