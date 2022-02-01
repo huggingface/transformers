@@ -25,7 +25,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, InstanceSegmentationModelOutput, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput, SemanticSegmentationModelOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_segformer import SegformerConfig
@@ -703,7 +703,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=InstanceSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=SemanticSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -772,7 +772,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
                 output = (upsampled_logits, logits) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return InstanceSegmentationModelOutput(
+        return SemanticSegmentationModelOutput(
             loss=loss,
             logits=upsampled_logits,
             legacy_logits=logits,

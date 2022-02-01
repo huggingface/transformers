@@ -29,8 +29,8 @@ from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_fo
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    InstanceSegmentationModelOutput,
     MaskedLMOutput,
+    SemanticSegmentationModelOutput,
     SequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
@@ -1151,7 +1151,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         return loss
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=InstanceSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=SemanticSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -1239,7 +1239,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
                 output = (upsampled_logits, logits) + outputs[3:]
             return ((loss,) + output) if loss is not None else output
 
-        return InstanceSegmentationModelOutput(
+        return SemanticSegmentationModelOutput(
             loss=loss,
             logits=upsampled_logits,
             legacy_logits=logits,
