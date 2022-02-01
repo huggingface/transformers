@@ -721,7 +721,7 @@ class TFGenerationMixin:
         )
         # prepares text-based inputs
         if len(shape_list(input_ids)) == 2:
-            input_ids = tf.gather(input_ids, expanded_batch_idxs, axis=0),
+            input_ids = (tf.gather(input_ids, expanded_batch_idxs, axis=0),)
         if accepts_attention_mask:
             attention_mask = tf.gather(attention_mask, expanded_batch_idxs, axis=0)
 
@@ -863,7 +863,6 @@ class TFGenerationMixin:
                 past=past,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
-                encoder_outputs=encoder_outputs,
                 **kwargs,
             )
             outputs = self(
@@ -1124,12 +1123,12 @@ class TFGenerationMixin:
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
+            # import pdb; pdb.set_trace()
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids,
                 past=past,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
-                encoder_outputs=encoder_outputs,
                 **kwargs,
             )
             outputs = self(

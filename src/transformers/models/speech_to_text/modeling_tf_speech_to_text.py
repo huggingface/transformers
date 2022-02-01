@@ -1110,7 +1110,7 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
+        next_cache = (inputs["encoder_hidden_states"], next_decoder_cache) if use_cache else None
 
         if not inputs["return_dict"]:
             return hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attns
@@ -1501,7 +1501,7 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
             training=inputs["training"],
         )
         lm_logits = self.lm_head(outputs[0])
-        masked_lm_loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], lm_logits)
+        masked_lm_loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], lm_logits)
 
         if not inputs["return_dict"]:
             output = (lm_logits,) + outputs[1:]
@@ -1547,19 +1547,25 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         decoder_head_mask=None,
         cross_attn_head_mask=None,
         use_cache=None,
-        encoder_outputs=None,
         **kwargs
     ):
-        # This will happen after the first iteration of the generation loop
-        if isinstance(past[0], tuple):
-            past_key_values = past
-            decoder_input_ids = decoder_input_ids[:, -1:]
+        if past is not None and len(past) <= 2:
+            if not isinstance(past[0], tf.Tensor):
+                raise ValueError(f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}")
+            encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
+            if len(past) == 1:
+                past_key_values = None
+            else:
+                past_key_values = past[1]
+                if not past_key_values:
+                    raise ValueError(f"decoder cached states must be truthy, got {past_key_values}")
+                decoder_input_ids = decoder_input_ids[:, -1:]
         else:
-            past_key_values = None
+            raise ValueError(f"`past` must be an iterable with length 1 or 2, got {past}")
 
         return {
             "input_ids": None,  # needs to be passed to make Keras.layer.__call__ happy
-            "encoder_outputs": TFBaseModelOutput(last_hidden_state=encoder_outputs[0]),
+            "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
@@ -1571,7 +1577,15 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
+        if len(past) == 1:
+            return past
+
+        past_key_values = past[1]
+
         reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(tf.gather(past_state, beam_idx) for past_state in layer_past),)
-        return reordered_past
+        for layer_past_key_values in past_key_values:
+            reordered_past += (
+                tuple(tf.gather(layer_past_key_value, beam_idx) for layer_past_key_value in layer_past_key_values[:2])
+                + layer_past_key_values[2:],
+            )
+        return (past[0], reordered_past)
