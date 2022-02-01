@@ -1390,14 +1390,10 @@ class TokenizerTesterMixin:
                     )
 
                 if self.test_slow_tokenizer:
-                    tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, padding_side="left", **kwargs
-                    )
+                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, padding_side="left", **kwargs)
                     self.assertEqual(tokenizer_p.padding_side, "left")
 
-                    tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, padding_side="right", **kwargs
-                    )
+                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, padding_side="right", **kwargs)
                     self.assertEqual(tokenizer_p.padding_side, "right")
 
                     self.assertRaises(
