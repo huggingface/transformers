@@ -60,6 +60,9 @@ class DeformableDetrModelTester:
         max_size=200,
         n_targets=8,
         num_labels=91,
+        num_feature_levels=4,
+        encoder_n_points=2,
+        decoder_n_points=6,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -78,9 +81,12 @@ class DeformableDetrModelTester:
         self.max_size = max_size
         self.n_targets = n_targets
         self.num_labels = num_labels
+        self.num_feature_levels = num_feature_levels
+        self.encoder_n_points = encoder_n_points
+        self.decoder_n_points = decoder_n_points
 
         # we also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(self.max_size / 32)
+        self.encoder_seq_length = self.num_feature_levels
         self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
@@ -117,6 +123,9 @@ class DeformableDetrModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             num_queries=self.num_queries,
             num_labels=self.num_labels,
+            num_feature_levels=self.num_feature_levels,
+            encoder_n_points=self.encoder_n_points,
+            decoder_n_points=self.decoder_n_points,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -133,7 +142,7 @@ class DeformableDetrModelTester:
         result = model(pixel_values)
 
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size)
+            result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.hidden_size)
         )
 
     def create_and_check_deformable_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
@@ -228,14 +237,13 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_resize_tokens_embeddings(self):
         pass
 
+    @unittest.skip(reason="Feed forward chunking is not implemented")
+    def test_feed_forward_chunking(self):
+        pass
+    
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
-
-        decoder_seq_length = self.model_tester.decoder_seq_length
-        encoder_seq_length = self.model_tester.encoder_seq_length
-        decoder_key_length = self.model_tester.decoder_seq_length
-        encoder_key_length = self.model_tester.encoder_seq_length
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -246,7 +254,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = outputs.encoder_attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -257,50 +265,47 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = outputs.encoder_attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [self.model_tester.num_attention_heads, self.model_tester.num_feature_levels, self.model_tester.encoder_n_points],
             )
             out_len = len(outputs)
 
-            if self.is_encoder_decoder:
-                correct_outlen = 5
+            correct_outlen = 8
 
-                # loss is at first position
-                if "labels" in inputs_dict:
-                    correct_outlen += 1  # loss is added to beginning
-                # Object Detection model returns pred_logits and pred_boxes
-                if model_class.__name__ == "DeformableDetrForObjectDetection":
-                    correct_outlen += 2
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+            # loss is at first position
+            if "labels" in inputs_dict:
+                correct_outlen += 1  # loss is added to beginning
+            # Object Detection model returns pred_logits and pred_boxes
+            if model_class.__name__ == "DeformableDetrForObjectDetection":
+                correct_outlen += 2
 
-                self.assertEqual(out_len, correct_outlen)
+            self.assertEqual(out_len, correct_outlen)
 
-                # decoder attentions
-                decoder_attentions = outputs.decoder_attentions
-                self.assertIsInstance(decoder_attentions, (list, tuple))
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
-                )
+            # decoder attentions
+            decoder_attentions = outputs.decoder_attentions
+            self.assertIsInstance(decoder_attentions, (list, tuple))
+            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(decoder_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, self.model_tester.num_queries, self.model_tester.num_queries],
+            )
 
-                # cross attentions
-                cross_attentions = outputs.cross_attentions
-                self.assertIsInstance(cross_attentions, (list, tuple))
-                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(cross_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        decoder_seq_length,
-                        encoder_key_length,
-                    ],
-                )
+            # cross attentions
+            cross_attentions = outputs.cross_attentions
+            self.assertIsInstance(cross_attentions, (list, tuple))
+            self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(cross_attentions[0].shape[-3:]),
+                [
+                    self.model_tester.num_attention_heads,
+                    self.model_tester.num_feature_levels,
+                    self.model_tester.decoder_n_points,
+                ],
+            )
 
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
@@ -319,14 +324,14 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = outputs.encoder_attentions
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [self.model_tester.num_attention_heads, self.model_tester.num_feature_levels, self.model_tester.encoder_n_points],
             )
-
+    
     def test_retain_grad_hidden_states_attentions(self):
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
 

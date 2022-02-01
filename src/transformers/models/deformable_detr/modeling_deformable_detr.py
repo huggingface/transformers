@@ -239,6 +239,16 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights of the encoder, after the attention softmax, used to compute the
             weighted average in the self-attention heads.
+        stacked_intermediate_hidden_states
+            ...
+        init_reference_out
+            ...
+        inter_references_out
+            ...
+        enc_outputs_class
+            ...
+        enc_outputs_coord_unact
+            ...
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -253,6 +263,11 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    stacked_intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    init_reference_out: Optional[torch.FloatTensor] = None
+    inter_references_out: Optional[torch.FloatTensor] = None
+    enc_outputs_class: Optional = None
+    enc_outputs_coord_unact: Optional = None
 
 
 def _get_clones(module, N):
@@ -486,13 +501,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        n_levels: int,
-        n_points: int,
-    ):
+    def __init__(self, embed_dim: int, num_heads: int, n_levels: int, n_points: int):
         super().__init__()
         if embed_dim % num_heads != 0:
             raise ValueError(
@@ -577,6 +586,9 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
             self.im2col_step,
         )
         output = self.output_proj(output)
+
+        print("Shape of attention_weights:", attention_weights.shape)
+
         return output, attention_weights
 
 
@@ -744,7 +756,7 @@ class DeformableDetrEncoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        print("Hidden states after self-attention:", hidden_states[0, :3, :3])
+        #print("Hidden states after self-attention:", hidden_states[0, :3, :3])
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -828,7 +840,7 @@ class DeformableDetrDecoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        print("Hidden states before self-attention:", hidden_states[0, :3, :3])
+        #print("Hidden states before self-attention:", hidden_states[0, :3, :3])
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
@@ -837,16 +849,16 @@ class DeformableDetrDecoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        print("Hidden states after self-attention:", hidden_states[0, :3, :3])
+        #print("Hidden states after self-attention:", hidden_states[0, :3, :3])
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        print("Hidden states after residual:", hidden_states[0, :3, :3])
+        #print("Hidden states after residual:", hidden_states[0, :3, :3])
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         second_residual = hidden_states
 
-        print("Hidden states before cross-attention:", hidden_states[0, :3, :3])
+        #print("Hidden states before cross-attention:", hidden_states[0, :3, :3])
 
         # Cross-Attention
         cross_attn_weights = None
@@ -861,16 +873,16 @@ class DeformableDetrDecoderLayer(nn.Module):
             level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
-        print("Hidden states after cross-attention:", hidden_states[0, :3, :3])
+        #print("Hidden states after cross-attention:", hidden_states[0, :3, :3])
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = second_residual + hidden_states
 
-        print("Hidden states after residual:", hidden_states[0, :3, :3])
+        #print("Hidden states after residual:", hidden_states[0, :3, :3])
 
         hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-        print("Hidden states after layernorm:", hidden_states[0, :3, :3])
+        #print("Hidden states after layernorm:", hidden_states[0, :3, :3])
 
         # Fully Connected
         residual = hidden_states
@@ -881,7 +893,7 @@ class DeformableDetrDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        print("Hidden states after ffn:", hidden_states[0, :3, :3])
+        #print("Hidden states after ffn:", hidden_states[0, :3, :3])
 
         outputs = (hidden_states,)
 
@@ -1526,21 +1538,23 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
+        print("Spatial shapes:", spatial_shapes)
+        
         # revert valid_ratios
         valid_ratios = ~valid_ratios.bool()
         valid_ratios = valid_ratios.float()
 
-        print("----ENCODER INPUTS-----")
-        print("Shape of src_flatten:", src_flatten.shape)
-        print("First values of src_flatten:", src_flatten[0, :3, :3])
-        print("Shape of spatial_shapes:", spatial_shapes.shape)
-        print("Spatial shapes:", spatial_shapes)
-        print("Shape of level_start_index:", level_start_index.shape)
-        print("Level_start_index:", level_start_index)
-        print("Shape of valid_ratios:", valid_ratios.shape)
-        print("Valid ratios:", valid_ratios)
-        print("First values of lvl_pos_embed_flatten:", lvl_pos_embed_flatten[0, :3, :3])
-        print("First values of mask_flatten:", mask_flatten[0, :3])
+        # print("----ENCODER INPUTS-----")
+        # print("Shape of src_flatten:", src_flatten.shape)
+        # print("First values of src_flatten:", src_flatten[0, :3, :3])
+        # print("Shape of spatial_shapes:", spatial_shapes.shape)
+        # print("Spatial shapes:", spatial_shapes)
+        # print("Shape of level_start_index:", level_start_index.shape)
+        # print("Level_start_index:", level_start_index)
+        # print("Shape of valid_ratios:", valid_ratios.shape)
+        # print("Valid ratios:", valid_ratios)
+        # print("First values of lvl_pos_embed_flatten:", lvl_pos_embed_flatten[0, :3, :3])
+        # print("First values of mask_flatten:", mask_flatten[0, :3])
 
         # Fourth, sent src_flatten + mask_flatten + lvl_pos_embed_flatten through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
@@ -1564,29 +1578,29 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        print("Shape of encoder outputs:", encoder_outputs[0].shape)
-        print("First values of encoder outputs:", encoder_outputs[0][0, :3, :3])
+        # print("Shape of encoder outputs:", encoder_outputs[0].shape)
+        # print("First values of encoder outputs:", encoder_outputs[0][0, :3, :3])
 
         # Fifth, prepare decoder inputs
         bs, _, c = encoder_outputs[0].shape
         enc_outputs_class = None
         enc_outputs_coord_unact = None
         if self.config.two_stage:
-            print("First values of memory:", encoder_outputs[0][0, :3, :3])
-            print("Last values of memory:", encoder_outputs[0][0, -3:, -3:])
-            print("Mean of memory:", encoder_outputs[0].mean())
+            # print("First values of memory:", encoder_outputs[0][0, :3, :3])
+            # print("Last values of memory:", encoder_outputs[0][0, -3:, -3:])
+            # print("Mean of memory:", encoder_outputs[0].mean())
 
-            print("Mask flatten:", mask_flatten)
+            # print("Mask flatten:", mask_flatten)
 
             output_memory, output_proposals = self.gen_encoder_output_proposals(
                 encoder_outputs[0], ~mask_flatten, spatial_shapes
             )
 
-            print("First values of output memory:", output_memory[0, :3, :3])
-            print("Mean of output memory:", output_memory.mean())
-            print("Last values of output memory:", output_memory[0, -3:, -3:])
-            print("First values of output proposals:", output_proposals[0, :3, :3])
-            print("Mean of output_proposals:", output_proposals.mean())
+            # print("First values of output memory:", output_memory[0, :3, :3])
+            # print("Mean of output memory:", output_memory.mean())
+            # print("Last values of output memory:", output_memory[0, -3:, -3:])
+            # print("First values of output proposals:", output_proposals[0, :3, :3])
+            # print("Mean of output_proposals:", output_proposals.mean())
 
             # hack implementation for two-stage Deformable DETR
             enc_outputs_class = self.decoder.class_embed[self.config.decoder_layers](output_memory)
@@ -1594,25 +1608,19 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
                 self.decoder.bbox_embed[self.config.decoder_layers](output_memory) + output_proposals
             )
 
-            print("Shape of enc_outputs_class:", enc_outputs_class.shape)
-            print("First values of enc_outputs_class:", enc_outputs_class[0, :3, :3])
-            print("Last values of enc_outputs_class:", enc_outputs_class[0, -3:, -3:])
-            print("Mean of enc_outputs_class:", enc_outputs_class.mean())
-            print("First values of enc_outputs_coord_unact:", enc_outputs_coord_unact[0, :3, :3])
+            # print("Shape of enc_outputs_class:", enc_outputs_class.shape)
+            # print("First values of enc_outputs_class:", enc_outputs_class[0, :3, :3])
+            # print("Last values of enc_outputs_class:", enc_outputs_class[0, -3:, -3:])
+            # print("Mean of enc_outputs_class:", enc_outputs_class.mean())
+            # print("First values of enc_outputs_coord_unact:", enc_outputs_coord_unact[0, :3, :3])
 
             topk = self.config.two_stage_num_proposals
-            print("Topk:", topk)
             topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
-            print("First values of topk proposals:", topk_proposals[0, :3])
             topk_coords_unact = torch.gather(enc_outputs_coord_unact, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4))
-            print("First values of topk_coords_unact:", topk_coords_unact[0, :3, :3])
             topk_coords_unact = topk_coords_unact.detach()
             reference_points = topk_coords_unact.sigmoid()
             init_reference_out = reference_points
             pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact)))
-
-            print("First values of pos_trans_out:", pos_trans_out[0, :3, :3])
-
             query_embed, tgt = torch.split(pos_trans_out, c, dim=2)
         else:
             query_embed, tgt = torch.split(query_embeds, c, dim=1)
@@ -1623,14 +1631,14 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             # query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
             # queries = torch.zeros_like(query_position_embeddings)
 
-        print("----DECODER INPUTS-----")
-        print("First values of tgt:", tgt[0, :3, :3])
-        print("First values of query_embed:", query_embed[0, :3, :3])
-        print("First values of mask_flatten:", mask_flatten[0, :3])
-        print("First values of reference_points:", reference_points[0, :3, :3])
-        print("Spatial shapes:", spatial_shapes)
-        print("Level_start_index:", level_start_index)
-        print("Valid_ratios:", valid_ratios)
+        # print("----DECODER INPUTS-----")
+        # print("First values of tgt:", tgt[0, :3, :3])
+        # print("First values of query_embed:", query_embed[0, :3, :3])
+        # print("First values of mask_flatten:", mask_flatten[0, :3])
+        # print("First values of reference_points:", reference_points[0, :3, :3])
+        # print("Spatial shapes:", spatial_shapes)
+        # print("Level_start_index:", level_start_index)
+        # print("Valid_ratios:", valid_ratios)
 
         decoder_outputs = self.decoder(
             inputs_embeds=tgt,
@@ -1850,9 +1858,6 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             # Fourth: compute total loss, as a weighted sum of the various losses
             weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
             weight_dict["loss_giou"] = self.config.giou_loss_coefficient
-            print("LOSS KEYS")
-            for k,v in loss_dict.items():
-                print(k, v.shape)
             if self.config.auxiliary_loss:
                 aux_weight_dict = {}
                 for i in range(self.config.decoder_layers - 1):
@@ -1880,6 +1885,11 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+            stacked_intermediate_hidden_states=outputs.stacked_intermediate_hidden_states,
+            init_reference_out=outputs.init_reference_out,
+            inter_references_out=outputs.inter_references_out,
+            enc_outputs_class=outputs.enc_outputs_class,
+            enc_outputs_coord_unact=outputs.enc_outputs_coord_unact,
         )
 
 
