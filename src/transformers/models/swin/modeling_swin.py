@@ -29,6 +29,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Seq
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_swin import SwinConfig
+import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -114,7 +115,7 @@ class SwinEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, pixel_values):
-        embeddings = self.patch_embeddings(pixel_values)
+        embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
 
         if self.position_embeddings is not None:
@@ -122,7 +123,7 @@ class SwinEmbeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
-        return embeddings
+        return embeddings, output_dimensions
 
 
 class SwinPatchEmbeddings(nn.Module):
@@ -143,8 +144,22 @@ class SwinPatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values):
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
-        return embeddings
+        # padding
+        _, _, height, width = pixel_values.shape
+
+        if width % self.patch_size[1] != 0:
+            pad_value = (0, self.patch_size[1] - width % self.patch_size[1])
+            pixel_values = F.pad(pixel_values, pad_value)
+        if height % self.patch_size[0] != 0:
+            pad_value = (0, 0, 0, self.patch_size[0] - height % self.patch_size[0])
+            pixel_values = F.pad(pixel_values, pad_value)
+
+        embeddings = self.projection(pixel_values)
+        _, _, height, width = embeddings.shape
+        output_dimensions = (height, width)
+        embeddings_flat = embeddings.flatten(2).transpose(1, 2)
+
+        return embeddings_flat, output_dimensions
 
 
 class SwinPatchMerging(nn.Module):
@@ -167,12 +182,17 @@ class SwinPatchMerging(nn.Module):
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
-    def forward(self, input_feature):
-        height, width = self.input_resolution
+    def forward(self, input_feature, height, width):
+        # height, width = self.input_resolution
         # `dim` is height * width
         batch_size, dim, num_channels = input_feature.shape
 
         input_feature = input_feature.view(batch_size, height, width, num_channels)
+        # padding
+        should_pad = (height % 2 == 1) or (width % 2 == 1)
+        if should_pad:
+            pad_value = (0, 0, 0, width % 2, 0, height % 2)
+            input_feature = F.pad(input_feature, pad_value)
 
         input_feature_0 = input_feature[:, 0::2, 0::2, :]  # batch_size height/2 width/2 num_channels
         input_feature_1 = input_feature[:, 1::2, 0::2, :]  # batch_size height/2 width/2 num_channels
@@ -390,9 +410,10 @@ class SwinBlock(nn.Module):
         self.intermediate = SwinIntermediate(config, dim)
         self.output = SwinOutput(config, dim)
 
+    def get_attn_mask(self, input_resolution):
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
-            height, width = self.input_resolution
+            height, width = input_resolution
             img_mask = torch.zeros((1, height, width, 1))
             height_slices = (
                 slice(0, -self.window_size),
@@ -416,17 +437,23 @@ class SwinBlock(nn.Module):
             attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
         else:
             attn_mask = None
+        return attn_mask
 
-        self.attn_mask = attn_mask
-
-    def forward(self, hidden_states, head_mask=None, output_attentions=False):
-        height, width = self.input_resolution
+    def forward(self, hidden_states, input_dimensions, head_mask=None, output_attentions=False):
+        height, width = input_dimensions
         batch_size, dim, channels = hidden_states.size()
         shortcut = hidden_states
 
         hidden_states = self.layernorm_before(hidden_states)
         hidden_states = hidden_states.view(batch_size, height, width, channels)
+        # pad feature maps to multiples of window size
+        pad_l = pad_t = 0
+        pad_r = (self.window_size - width % self.window_size) % self.window_size
+        pad_b = (self.window_size - height % self.window_size) % self.window_size
+        pad_value = (0, 0, pad_l, pad_r, pad_t, pad_b)
+        hidden_states = F.pad(hidden_states, pad_value)
 
+        _, height_pad, width_pad, _ = hidden_states.shape
         # cyclic shift
         if self.shift_size > 0:
             shifted_hidden_states = torch.roll(hidden_states, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
@@ -436,13 +463,13 @@ class SwinBlock(nn.Module):
         # partition windows
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
-
-        if self.attn_mask is not None:
-            self.attn_mask = self.attn_mask.to(hidden_states_windows.device)
+        attn_mask = self.get_attn_mask((height_pad, width_pad))
+        if attn_mask is not None:
+            attn_mask = attn_mask.to(hidden_states_windows.device)
 
         self_attention_outputs = self.attention(
             hidden_states_windows,
-            self.attn_mask,
+            attn_mask,
             head_mask,
             output_attentions=output_attentions,
         )
@@ -452,13 +479,16 @@ class SwinBlock(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
-        shifted_windows = window_reverse(attention_windows, self.window_size, height, width)  # B H' W' C
+        shifted_windows = window_reverse(attention_windows, self.window_size, height_pad, width_pad)  # B H' W' C
 
         # reverse cyclic shift
         if self.shift_size > 0:
             attention_windows = torch.roll(shifted_windows, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
         else:
             attention_windows = shifted_windows
+
+        if pad_r > 0 or pad_b > 0:
+            attention_windows = attention_windows[:, :height, :width, :].contiguous()
 
         attention_windows = attention_windows.view(batch_size, height * width, channels)
 
@@ -500,9 +530,12 @@ class SwinLayer(nn.Module):
 
         self.pointing = False
 
-    def forward(self, hidden_states, head_mask=None, output_attentions=False, output_hidden_states=False):
+    def forward(
+        self, hidden_states, input_dimensions, head_mask=None, output_attentions=False, output_hidden_states=False
+    ):
         all_hidden_states = () if output_hidden_states else None
         layer_hidden_states = ()
+        height, width = input_dimensions
         for i, block_module in enumerate(self.blocks):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -511,6 +544,7 @@ class SwinLayer(nn.Module):
 
             layer_outputs = block_module(
                 hidden_states,
+                input_dimensions,
                 layer_head_mask,
                 output_attentions,
             )
@@ -521,9 +555,15 @@ class SwinLayer(nn.Module):
                 layer_hidden_states += (hidden_states,)
 
         if self.downsample is not None:
-            layer_hidden_states = (self.downsample(layer_outputs[0]),) + layer_hidden_states
 
-        return layer_hidden_states
+            height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
+            output_dimensions = (height, width, height_downsampled, width_downsampled)
+            layer_hidden_states = (self.downsample(layer_outputs[0], height, width),) + layer_hidden_states
+        else:
+            output_dimensions = (height, width, height, width)
+            layer_hidden_states = (hidden_states,) + layer_hidden_states
+
+        return layer_hidden_states, output_dimensions
 
 
 class SwinEncoder(nn.Module):
@@ -552,6 +592,7 @@ class SwinEncoder(nn.Module):
     def forward(
         self,
         hidden_states,
+        input_dimensions,
         head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
@@ -574,11 +615,19 @@ class SwinEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                layer_outputs, output_dimensions = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module), hidden_states, layer_head_mask
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, output_hidden_states)
+                layer_outputs, output_dimensions = layer_module(
+                    hidden_states,
+                    input_dimensions,
+                    layer_head_mask,
+                    output_attentions,
+                    output_hidden_states,
+                )
+
+            input_dimensions = (output_dimensions[-2], output_dimensions[-1])
 
             if output_hidden_states:
                 all_hidden_states += (layer_outputs,)
@@ -735,10 +784,11 @@ class SwinModel(SwinPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output, input_dimensions = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
             embedding_output,
+            input_dimensions,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
