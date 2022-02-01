@@ -644,7 +644,7 @@ def test(src, dst):
         dst_features = dst.pixel_level_module.backbone(x.clone())
 
         for src_feature, dst_feature in zip(src_features.values(), dst_features):
-            assert torch.allclose(src_feature, dst_feature)
+            assert torch.allclose(src_feature, dst_feature, atol=1e-5)
 
         src_pixel_out = src.sem_seg_head.pixel_decoder.forward_features(src_features)
         dst_pixel_out = dst.pixel_level_module(x)
@@ -772,16 +772,16 @@ if __name__ == "__main__":
 
     to_model = MaskFormerModel(config=config).eval()
 
-    MaskFormerCheckpointConverter(original_model, to_model)()
-    to_model_out = to_model.pixel_level_module.backbone(x.clone())
-    original_model_out = original_model.backbone(x.clone())
+    # MaskFormerCheckpointConverter(original_model, to_model)()
+    # to_model_out = to_model.pixel_level_module.backbone(x.clone())
+    # original_model_out = original_model.backbone(x.clone())
 
-    tracer = Tracker(to_model.pixel_level_module.backbone)
-    # tracer = Tracker(original_model.backbone)
-    for (name, module) in tracer(x).traced:
-        print(name)
-        for (name, param) in module.named_parameters():
-            print(f"\t{name}-{param.shape}")
+    # tracer = Tracker(to_model.pixel_level_module.backbone)
+    # # tracer = Tracker(original_model.backbone)
+    # for (name, module) in tracer(x).traced:
+    #     print(name)
+    #     for (name, param) in module.named_parameters():
+    #         print(f"\t{name}-{param.shape}")
 
     # tracer = Tracker(to_model.pixel_level_module.backbone)
     # for name, param in to_model.pixel_level_module.na
@@ -792,5 +792,5 @@ if __name__ == "__main__":
     #     to_model.state_dict(), original_model.state_dict(), to_model.config
     # )
 
-    # test(original_model, MaskFormerCheckpointConverter(original_model, to_model)())
+    test(original_model, MaskFormerCheckpointConverter(original_model, to_model)())
     # converted.save_pretrained(save_directory=save_directory)

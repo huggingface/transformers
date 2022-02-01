@@ -494,9 +494,13 @@ class SwinTransformerBackbone(BackboneMixin):
         output = self.model(*args, **kwargs, output_hidden_states=True)
         hidden_states_permuted: List[Tensor] = []
         # we need to reshape the hidden state to their original spatial dimensions
-        for i, (hidden_state, (h, w)) in enumerate(zip(output.hidden_states, self.input_resolutions)):
+        # skipping the embeddings
+        hidden_states: Tuple[Tuple[Tensor]] = output.hidden_states[1:]
+        for i, (hidden_state, (h, w)) in enumerate(zip(hidden_states, self.input_resolutions)):
             norm = self.hidden_states_norms[i]
-            hidden_state_norm = norm(hidden_state)
+            # the last element corespond to the layer's last block output but before patch merging
+            hidden_state_unpolled: Tensor = hidden_state[-1]
+            hidden_state_norm = norm(hidden_state_unpolled)
             # our pixel decoder (FPN) expect 3D tensors (features)
             hidden_state_permuted = rearrange(hidden_state_norm, "b (h w) d -> b d h w", h=h, w=w).contiguous()
             hidden_states_permuted.append(hidden_state_permuted)

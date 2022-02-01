@@ -502,6 +502,7 @@ class SwinLayer(nn.Module):
 
     def forward(self, hidden_states, head_mask=None, output_attentions=False, output_hidden_states=False):
         all_hidden_states = () if output_hidden_states else None
+        layer_hidden_states = ()
         for i, block_module in enumerate(self.blocks):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -516,12 +517,13 @@ class SwinLayer(nn.Module):
 
             hidden_states = layer_outputs[0]
 
-        if self.downsample is not None:
-            layer_outputs_list = list(layer_outputs)
-            layer_outputs_list[0] = self.downsample(layer_outputs[0])
-            layer_outputs = tuple(layer_outputs_list)
+            if output_hidden_states:
+                layer_hidden_states += (hidden_states,)
 
-        return layer_outputs
+        if self.downsample is not None:
+            layer_hidden_states = (self.downsample(layer_outputs[0]),) + layer_hidden_states
+
+        return layer_hidden_states
 
 
 class SwinEncoder(nn.Module):
@@ -557,11 +559,11 @@ class SwinEncoder(nn.Module):
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+        # add the embebeddings
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
         for i, layer_module in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
@@ -576,14 +578,15 @@ class SwinEncoder(nn.Module):
                     create_custom_forward(layer_module), hidden_states, layer_head_mask
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions, output_hidden_states)
+
+            if output_hidden_states:
+                all_hidden_states += (layer_outputs,)
 
             hidden_states = layer_outputs[0]
+
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
