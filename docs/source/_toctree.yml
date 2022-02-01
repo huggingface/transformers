@@ -22,7 +22,7 @@
   - local: accelerate
     title: Distributed training with 🤗 Accelerate
   - local: model_sharing
-    title: Model sharing and uploading
+    title: Share a model
   - local: tokenizer_summary
     title: Summary of the tokenizers
   - local: multilingual
@@ -304,12 +304,16 @@
       title: Wav2Vec2Phoneme
     - local: model_doc/wavlm
       title: WavLM
+    - local: model_doc/xglm
+      title: XGLM
     - local: model_doc/xlm
       title: XLM
     - local: model_doc/xlm-prophetnet
       title: XLM-ProphetNet
     - local: model_doc/xlm-roberta
       title: XLM-RoBERTa
+    - local: model_doc/xlm-roberta-xl
+      title: XLM-RoBERTa-XL
     - local: model_doc/xlnet
       title: XLNet
     - local: model_doc/xlsr_wav2vec2

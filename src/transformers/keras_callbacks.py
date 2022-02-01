@@ -63,7 +63,7 @@ class KerasMetricCallback(Callback):
             supplied.
         batch_size (`int`, *optional*):
             Batch size. Only used when the data is not a pre-batched `tf.data.Dataset`.
-        predict_with_generate: (`bool`, *optional*, defaults to `False`):
+        predict_with_generate (`bool`, *optional*, defaults to `False`):
             Whether we should use `model.generate()` to get outputs for the model.
 
     """
@@ -240,6 +240,52 @@ class KerasMetricCallback(Callback):
 
 
 class PushToHubCallback(Callback):
+    """
+    Callback that will save and push the model to the Hub regularly. By default, it pushes once per epoch, but this can
+    be changed with the `save_strategy` argument. Pushed models can be accessed like any other model on the hub, such
+    as with the `from_pretrained` method.
+
+    ```py
+    from transformers.keras_callbacks import PushToHubCallback
+
+    push_to_hub_callback = PushToHubCallback(
+        output_dir="./model_save",
+        tokenizer=tokenizer,
+        hub_model_id="gpt5-7xlarge",
+    )
+
+    model.fit(train_dataset, callbacks=[push_to_hub_callback])
+    ```
+
+    Args:
+        output_dir (`str`):
+            The output directory where the model predictions and checkpoints will be written and synced with the
+            repository on the Hub.
+        save_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"epoch"`):
+            The checkpoint save strategy to adopt during training. Possible values are:
+
+                - `"no"`: No save is done during training.
+                - `"epoch"`: Save is done at the end of each epoch.
+                - `"steps"`: Save is done every `save_steps`
+        save_steps (`int`, *optional*):
+            The number of steps between saves when using the "steps" `save_strategy`.
+        tokenizer (`PreTrainedTokenizerBase`, *optional*):
+            The tokenizer used by the model. If supplied, will be uploaded to the repo alongside the weights.
+        hub_model_id (`str`, *optional*):
+            The name of the repository to keep in sync with the local `output_dir`. It can be a simple model ID in
+            which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,
+            for instance `"user_name/model"`, which allows you to push to an organization you are a member of with
+            `"organization_name/model"`.
+
+            Will default to to the name of `output_dir`.
+        hub_token (`str`, *optional*):
+            The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
+            `huggingface-cli login`.
+        checkpoint (`bool`, *optional*, defaults to `False`):
+            Whether to save full training checkpoints (including epoch and optimizer state) to allow training to be
+            resumed. Only usable when `save_strategy` is `"epoch"`.
+    """
+
     def __init__(
         self,
         output_dir: Union[str, Path],
@@ -251,34 +297,6 @@ class PushToHubCallback(Callback):
         checkpoint: bool = False,
         **model_card_args
     ):
-        """
-        output_dir (`str`):
-            The output directory where the model predictions and checkpoints will be written and synced with the
-            repository on the Hub.
-        save_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"epoch"`):
-            The checkpoint save strategy to adopt during training. Possible values are:
-
-                - `"no"`: No save is done during training.
-                - `"epoch"`: Save is done at the end of each epoch.
-                - `"steps"`: Save is done every `save_steps`
-        save_steps (`int`, *optional*):
-            The number of steps between saves when using the "steps" save_strategy.
-        tokenizer (`PreTrainedTokenizerBase`, *optional*):
-            The tokenizer used by the model. If supplied, will be uploaded to the repo alongside the weights.
-        hub_model_id (`str`, *optional*):
-            The name of the repository to keep in sync with the local *output_dir*. It can be a simple model ID in
-            which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,
-            for instance `"user_name/model"`, which allows you to push to an organization you are a member of with
-            `"organization_name/model"`.
-
-            Will default to to the name of `output_dir`.
-        hub_token (`str`, *optional*):
-            The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
-            `huggingface-cli login`.
-        checkpoint (`bool`, *optional*, defaults to `False`):
-            Whether to save full training checkpoints (including epoch and optimizer state) to allow training to be
-            resumed. Only usable when *save_strategy* is *epoch*.
-        """
         super().__init__()
         if checkpoint and save_strategy != "epoch":
             raise ValueError("Cannot save checkpoints when save_strategy is not 'epoch'!")
@@ -324,6 +342,7 @@ class PushToHubCallback(Callback):
             )
 
     def on_epoch_end(self, epoch, logs=None):
+        logs = logs.copy()  # Don't accidentally write things that Keras will read later
         if "epoch" not in logs:
             logs["epoch"] = epoch
         self.training_history.append(logs)

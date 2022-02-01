@@ -180,6 +180,6 @@ class RealmRetrieverTest(TestCase):
             mock_hf_hub_download.return_value = os.path.join(
                 os.path.join(self.tmpdirname, "realm_block_records"), _REALM_BLOCK_RECORDS_FILENAME
             )
-            retriever = RealmRetriever.from_pretrained("qqaatw/realm-cc-news-pretrained-openqa")
+            retriever = RealmRetriever.from_pretrained("google/realm-cc-news-pretrained-openqa")
 
         self.assertEqual(retriever.block_records[0], b"This is the first record")

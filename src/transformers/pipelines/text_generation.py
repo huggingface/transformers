@@ -2,8 +2,12 @@ import enum
 
 from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
-from ..file_utils import add_end_docstrings
+from ..file_utils import add_end_docstrings, is_tf_available
 from .base import PIPELINE_INIT_ARGS, Pipeline
+
+
+if is_tf_available():
+    import tensorflow as tf
 
 
 class ReturnType(enum.Enum):
@@ -202,23 +206,29 @@ class TextGenerationPipeline(Pipeline):
         # Allow empty prompts
         if input_ids.shape[1] == 0:
             input_ids = None
+            in_b = 1
+        else:
+            in_b = input_ids.shape[0]
         prompt_text = model_inputs.pop("prompt_text")
         generated_sequence = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
+        out_b = generated_sequence.shape[0]
+        if self.framework == "pt":
+            generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
+        elif self.framework == "tf":
+            generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
         return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text}
 
     def postprocess(self, model_outputs, return_type=ReturnType.FULL_TEXT, clean_up_tokenization_spaces=True):
-        generated_sequence = model_outputs["generated_sequence"]
+        generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
         prompt_text = model_outputs["prompt_text"]
-        if self.framework == "pt" and generated_sequence is not None:
-            generated_sequence = generated_sequence.cpu()
         generated_sequence = generated_sequence.numpy().tolist()
-        if return_type == ReturnType.TENSORS:
-            record = {"generated_token_ids": generated_sequence}
-        elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
-            # Decode text
-            record = []
-            for sequence in generated_sequence:
+        records = []
+        for sequence in generated_sequence:
+            if return_type == ReturnType.TENSORS:
+                record = {"generated_token_ids": generated_sequence}
+            elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
+                # Decode text
                 text = self.tokenizer.decode(
                     sequence,
                     skip_special_tokens=True,
@@ -242,7 +252,7 @@ class TextGenerationPipeline(Pipeline):
                 else:
                     all_text = text[prompt_length:]
 
-                item = {"generated_text": all_text}
-                record.append(item)
+                record = {"generated_text": all_text}
+            records.append(record)
 
-        return record
+        return records

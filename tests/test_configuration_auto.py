@@ -102,3 +102,7 @@ class AutoConfigTest(unittest.TestCase):
             "hf-internal-testing/no-config-test-repo does not appear to have a file named config.json.",
         ):
             _ = AutoConfig.from_pretrained("hf-internal-testing/no-config-test-repo")
+
+    def test_from_pretrained_dynamic_config(self):
+        config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+        self.assertEqual(config.__class__.__name__, "NewModelConfig")
