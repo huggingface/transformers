@@ -200,8 +200,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 import torch
                 from torchaudio import functional as F
 
-                print("RESAMPLING")
-
                 inputs = F.resample(
                     torch.from_numpy(inputs), in_sampling_rate, self.feature_extractor.sampling_rate
                 ).numpy()
