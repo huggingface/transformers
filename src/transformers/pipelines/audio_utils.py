@@ -45,6 +45,9 @@ def ffmpeg_microphone(
     chunk_length_s: float,
     format_for_conversion: str = "f32le",
 ):
+    """
+    Helper function ro read raw microphone data.
+    """
     ar = f"{sampling_rate}"
     ac = "1"
     if format_for_conversion == "s16le":
@@ -98,7 +101,10 @@ def ffmpeg_microphone_live(
     format_for_conversion: str = "f32le",
 ):
     """
-    Helper function to read an audio file through ffmpeg.
+    Helper function to read audio from the microphone file through ffmpeg.
+    This will output repeating/increasing chunks until `chunk_length_s`.
+    It will make use of striding to avoid errors on the "sides" of the
+    various chunks.
     """
     if stream_chunk_s is not None:
         chunk_s = stream_chunk_s
@@ -171,7 +177,7 @@ def chunk_bytes_iter(iterator, chunk_len: int, stride: Tuple[int, int], stream: 
 
 def _ffmpeg_stream(ffmpeg_command, buflen: int):
     """
-    `bufout` is used to enable streaming partial
+    Internal function to create the generator of data through ffmpeg
     """
     bufsize = 2 ** 24  # 16Mo
     try:
