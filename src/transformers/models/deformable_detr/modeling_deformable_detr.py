@@ -116,6 +116,10 @@ class DeformableDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
+        stacked_intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            ...
+        stacked_intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            ...
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
@@ -128,15 +132,15 @@ class DeformableDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
             used to compute the weighted average in the cross-attention heads.
-        stacked_intermediate_hidden_states
-            ...
-        stacked_intermediate_reference_points
-            ...
     """
 
-    stacked_intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    stacked_intermediate_reference_points: Optional[torch.FloatTensor] = None
-
+    last_hidden_state: torch.FloatTensor = None
+    stacked_intermediate_hidden_states: torch.FloatTensor = None
+    stacked_intermediate_reference_points: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    
 
 @dataclass
 class DeformableDetrModelOutput(Seq2SeqModelOutput):
@@ -1125,7 +1129,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
     Some tweaks for Deformable DETR:
 
     - `position_embeddings`, `reference_points`, `spatial_shapes` and `valid_ratios` are added to the forward pass.
-    - if `config.return_intermediate` is set to `True`, also returns a stack of activations from all decoding layers.
+    - it also returns a stack of intermediate outputs and reference points from all decoding layers.
 
     Args:
         config: DeformableDetrConfig
@@ -1137,7 +1141,6 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         self.dropout = config.dropout
         self.layers = nn.ModuleList([DeformableDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.gradient_checkpointing = False
-        self.return_intermediate = config.return_intermediate
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
         self.bbox_embed = None
@@ -1175,8 +1178,8 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                , *optional*): Position embeddings that are added to the queries and keys in each self-attention layer.
+            position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+                Position embeddings that are added to the queries and keys in each self-attention layer.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1195,14 +1198,12 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
 
-        # optional intermediate hidden states
-        intermediate = () if self.return_intermediate else None
-        intermediate_reference_points = () if self.return_intermediate else None
-
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        intermediate = ()
+        intermediate_reference_points = ()
 
         for idx, decoder_layer in enumerate(self.layers):
             if reference_points.shape[-1] == 4:
@@ -1258,9 +1259,8 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                     new_reference_points = new_reference_points.sigmoid()
                 reference_points = new_reference_points.detach()
 
-            if self.return_intermediate:
-                intermediate += (hidden_states,)
-                intermediate_reference_points += (reference_points,)
+            intermediate += (hidden_states,)
+            intermediate_reference_points += (reference_points,)
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -1268,13 +1268,12 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
+        intermediate = torch.stack(intermediate)
+        intermediate_reference_points = torch.stack(intermediate_reference_points)
+
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-
-        if self.return_intermediate:
-            intermediate = torch.stack(intermediate)
-            intermediate_reference_points = torch.stack(intermediate_reference_points)
 
         if not return_dict:
             return tuple(
@@ -1659,7 +1658,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
 
         print("Last hidden states of decoder:", decoder_outputs[0][0, :3, :3])
 
-        inter_references_out = decoder_outputs.stacked_intermediate_reference_points
+        inter_references_out = decoder_outputs.stacked_intermediate_reference_points if return_dict else decoder_outputs[2]
 
         if not return_dict:
             return decoder_outputs + encoder_outputs
