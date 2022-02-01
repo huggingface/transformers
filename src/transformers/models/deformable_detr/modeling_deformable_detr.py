@@ -756,7 +756,7 @@ class DeformableDetrEncoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        #print("Hidden states after self-attention:", hidden_states[0, :3, :3])
+        # print("Hidden states after self-attention:", hidden_states[0, :3, :3])
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -840,7 +840,7 @@ class DeformableDetrDecoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        #print("Hidden states before self-attention:", hidden_states[0, :3, :3])
+        # print("Hidden states before self-attention:", hidden_states[0, :3, :3])
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
@@ -849,16 +849,16 @@ class DeformableDetrDecoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        #print("Hidden states after self-attention:", hidden_states[0, :3, :3])
+        # print("Hidden states after self-attention:", hidden_states[0, :3, :3])
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        #print("Hidden states after residual:", hidden_states[0, :3, :3])
+        # print("Hidden states after residual:", hidden_states[0, :3, :3])
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         second_residual = hidden_states
 
-        #print("Hidden states before cross-attention:", hidden_states[0, :3, :3])
+        # print("Hidden states before cross-attention:", hidden_states[0, :3, :3])
 
         # Cross-Attention
         cross_attn_weights = None
@@ -873,16 +873,16 @@ class DeformableDetrDecoderLayer(nn.Module):
             level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
-        #print("Hidden states after cross-attention:", hidden_states[0, :3, :3])
+        # print("Hidden states after cross-attention:", hidden_states[0, :3, :3])
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = second_residual + hidden_states
 
-        #print("Hidden states after residual:", hidden_states[0, :3, :3])
+        # print("Hidden states after residual:", hidden_states[0, :3, :3])
 
         hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-        #print("Hidden states after layernorm:", hidden_states[0, :3, :3])
+        # print("Hidden states after layernorm:", hidden_states[0, :3, :3])
 
         # Fully Connected
         residual = hidden_states
@@ -893,7 +893,7 @@ class DeformableDetrDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        #print("Hidden states after ffn:", hidden_states[0, :3, :3])
+        # print("Hidden states after ffn:", hidden_states[0, :3, :3])
 
         outputs = (hidden_states,)
 
@@ -1487,9 +1487,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         # which is a list of tuples
         features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
 
-        print("Shapes of features:")
-        for (src, mask) in features:
-            print(src.shape)
+        print("Shape of pixel values:", pixel_values.shape)
 
         srcs = []
         masks = []
@@ -1502,6 +1500,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             for l in range(_len_srcs, self.config.num_feature_levels):
                 if l == _len_srcs:
                     src = self.input_proj[l](features[-1][0])
+                    print("Shape of src:", src.shape)
                 else:
                     src = self.input_proj[l](srcs[-1])
                 mask = nn.functional.interpolate(pixel_mask[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
@@ -1514,6 +1513,10 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         query_embeds = None
         if not self.config.two_stage:
             query_embeds = self.query_position_embeddings.weight
+
+        print("Shapes of features:")
+        for (src, mask) in features:
+            print(src.shape)
 
         # Prepare encoder inputs (by flattening)
         src_flatten = []
@@ -1531,6 +1534,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             lvl_pos_embed_flatten.append(lvl_pos_embed)
             src_flatten.append(src)
             mask_flatten.append(mask)
+        for src in src_flatten:
+            print("Shape of src in src_flatten:", src.shape)
         src_flatten = torch.cat(src_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
@@ -1539,13 +1544,13 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
         print("Spatial shapes:", spatial_shapes)
-        
+
         # revert valid_ratios
         valid_ratios = ~valid_ratios.bool()
         valid_ratios = valid_ratios.float()
 
-        # print("----ENCODER INPUTS-----")
-        # print("Shape of src_flatten:", src_flatten.shape)
+        print("----ENCODER INPUTS-----")
+        print("Shape of src_flatten:", src_flatten.shape)
         # print("First values of src_flatten:", src_flatten[0, :3, :3])
         # print("Shape of spatial_shapes:", spatial_shapes.shape)
         # print("Spatial shapes:", spatial_shapes)
@@ -1975,27 +1980,6 @@ class DeformableDetrLoss(nn.Module):
         self.losses = losses
         self.focal_alpha = focal_alpha
 
-    # # removed logging parameter, which was part of the original implementation
-    # def loss_labels(self, outputs, targets, indices, num_boxes):
-    #     """
-    #     Classification loss (NLL) targets dicts must contain the key "class_labels" containing a tensor of dim
-    #     [nb_target_boxes]
-    #     """
-    #     assert "logits" in outputs, "No logits were found in the outputs"
-    #     src_logits = outputs["logits"]
-
-    #     idx = self._get_src_permutation_idx(indices)
-    #     target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
-    #     target_classes = torch.full(
-    #         src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
-    #     )
-    #     target_classes[idx] = target_classes_o
-
-    #     loss_ce = nn.functional.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
-    #     losses = {"loss_ce": loss_ce}
-
-    #     return losses
-
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
         """Classification loss (NLL)
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
@@ -2005,17 +1989,25 @@ class DeformableDetrLoss(nn.Module):
 
         idx = self._get_src_permutation_idx(indices)
         target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(src_logits.shape[:2], self.num_classes,
-                                    dtype=torch.int64, device=src_logits.device)
+        target_classes = torch.full(
+            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+        )
         target_classes[idx] = target_classes_o
 
-        target_classes_onehot = torch.zeros([src_logits.shape[0], src_logits.shape[1], src_logits.shape[2] + 1],
-                                            dtype=src_logits.dtype, layout=src_logits.layout, device=src_logits.device)
+        target_classes_onehot = torch.zeros(
+            [src_logits.shape[0], src_logits.shape[1], src_logits.shape[2] + 1],
+            dtype=src_logits.dtype,
+            layout=src_logits.layout,
+            device=src_logits.device,
+        )
         target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
 
-        target_classes_onehot = target_classes_onehot[:,:,:-1]
-        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2) * src_logits.shape[1]
-        losses = {'loss_ce': loss_ce}
+        target_classes_onehot = target_classes_onehot[:, :, :-1]
+        loss_ce = (
+            sigmoid_focal_loss(src_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2)
+            * src_logits.shape[1]
+        )
+        losses = {"loss_ce": loss_ce}
 
         return losses
 
