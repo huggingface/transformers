@@ -469,7 +469,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         >>> # initialize a model from pretrained ViT and BERT models. Note that the projection layers will be randomly initialized.
         >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-        ...     "google/vit-base-patch16-224", "bert-base-uncased"
+        ...     "bert-base-uncased", "google/vit-base-patch16-224"
         ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./vit-bert")

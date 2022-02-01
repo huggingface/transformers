@@ -219,7 +219,7 @@ class TFTokenClassificationLoss:
         # make sure only labels that are not equal to -100
         # are taken into account as loss
         if tf.math.reduce_any(labels == -1):
-            tf.print("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
+            warnings.warn("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
             active_loss = tf.reshape(labels, (-1,)) != -1
         else:
             active_loss = tf.reshape(labels, (-1,)) != -100
@@ -325,6 +325,16 @@ def booleans_processing(config, **kwargs):
                 kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
             )
     else:
+        if (
+            kwargs["output_attentions"] not in (None, config.output_attentions)
+            or kwargs["output_hidden_states"] not in (None, config.output_hidden_states)
+            or ("use_cache" in kwargs and kwargs["use_cache"] not in (None, config.use_cache))
+        ):
+            tf_logger.warning(
+                "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model. "
+                "They have to be set to True/False in the config object (i.e.: `config=XConfig.from_pretrained('name', output_attentions=True)`)."
+            )
+
         final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = config.output_hidden_states
 

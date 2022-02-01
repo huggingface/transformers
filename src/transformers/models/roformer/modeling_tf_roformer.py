@@ -1035,9 +1035,9 @@ class TFRoFormerForCausalLM(TFRoFormerPreTrainedModel, TFCausalLanguageModelingL
 
         if inputs["labels"] is not None:
             # shift labels to the left and cut last logit token
-            shifted_logits = logits[:, :-1]
+            logits = logits[:, :-1]
             labels = inputs["labels"][:, 1:]
-            loss = self.hf_compute_loss(labels=labels, logits=shifted_logits)
+            loss = self.hf_compute_loss(labels=labels, logits=logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]

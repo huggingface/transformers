@@ -656,9 +656,9 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
         loss = None
         if inputs["labels"] is not None:
             # shift labels to the left and cut last logit token
-            shifted_logits = logits[:, :-1]
+            logits = logits[:, :-1]
             labels = inputs["labels"][:, 1:]
-            loss = self.hf_compute_loss(labels, shifted_logits)
+            loss = self.hf_compute_loss(labels, logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + transformer_outputs[1:]

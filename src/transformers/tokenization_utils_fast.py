@@ -46,6 +46,7 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
+
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 TOKENIZER_FILE = "tokenizer.json"
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
@@ -70,8 +71,6 @@ MODEL_TO_TRAINER_MAPPING = {
     "WordPiece": WordPieceTrainer,
 }
 
-VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE}
-
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
@@ -87,7 +86,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
 
-    vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class: PreTrainedTokenizer = None
     can_save_slow_tokenizer: bool = True
 
