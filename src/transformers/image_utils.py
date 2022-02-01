@@ -221,8 +221,7 @@ class ImageFeatureExtractionMixin:
 
         if isinstance(size, int) or len(size) == 1:
             if default_to_square:
-                if isinstance(size, int):
-                    size = (size, size)
+                size = (size, size) if isinstance(size, int) else (size[0], size[0])
             else:
                 width, height = image.size
                 # specified size only for the smallest edge
