@@ -1367,6 +1367,43 @@ class TokenizerTesterMixin:
                 filtered_sequence = [x for x in filtered_sequence if x is not None]
                 self.assertEqual(encoded_sequence, filtered_sequence)
 
+    def test_padding_side_in_kwargs(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                if self.test_rust_tokenizer:
+                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, padding_side="left", **kwargs
+                    )
+                    self.assertEqual(tokenizer_r.padding_side, "left")
+
+                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, padding_side="right", **kwargs
+                    )
+                    self.assertEqual(tokenizer_r.padding_side, "right")
+
+                    self.assertRaises(
+                        ValueError,
+                        self.rust_tokenizer_class.from_pretrained,
+                        pretrained_name,
+                        padding_side="unauthorized",
+                        **kwargs,
+                    )
+
+                if self.test_slow_tokenizer:
+                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, padding_side="left", **kwargs)
+                    self.assertEqual(tokenizer_p.padding_side, "left")
+
+                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, padding_side="right", **kwargs)
+                    self.assertEqual(tokenizer_p.padding_side, "right")
+
+                    self.assertRaises(
+                        ValueError,
+                        self.tokenizer_class.from_pretrained,
+                        pretrained_name,
+                        padding_side="unauthorized",
+                        **kwargs,
+                    )
+
     def test_right_and_left_padding(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
