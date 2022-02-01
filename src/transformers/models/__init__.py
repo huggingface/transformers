@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    maskformer,
     albert,
     auto,
     bart,
@@ -69,6 +68,7 @@ from . import (
     lxmert,
     m2m_100,
     marian,
+    maskformer,
     mbart,
     mbart50,
     megatron_bert,

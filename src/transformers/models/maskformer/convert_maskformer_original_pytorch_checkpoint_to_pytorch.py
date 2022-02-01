@@ -1,12 +1,12 @@
 from __future__ import annotations
-import enum
 
+import enum
 import logging
 from argparse import ArgumentParser
 from ast import Tuple
 from dataclasses import dataclass
 from pathlib import Path
-from pprint import pformat
+from pprint import pformat, pprint
 from typing import Any, Dict, Iterator, List, Set
 
 import pytorch_lightning as pl
@@ -20,13 +20,6 @@ from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import MetadataCatalog
 from detectron2.projects.deeplab import add_deeplab_config
-from transformers.models.maskformer.MaskFormer.mask_former import add_mask_former_config
-from transformers.models.maskformer.MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
-
-
-from transformers.models.maskformer.configuration_maskformer import ClassSpec, DatasetMetadata
-from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
-
 from transformers.models.maskformer import (
     MaskFormerConfig,
     MaskFormerForPanopticSegmentation,
@@ -35,8 +28,11 @@ from transformers.models.maskformer import (
     MaskFormerForSemanticSegmentationOutput,
     MaskFormerModel,
 )
+from transformers.models.maskformer.configuration_maskformer import ClassSpec, DatasetMetadata
+from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
+from transformers.models.maskformer.MaskFormer.mask_former import add_mask_former_config
+from transformers.models.maskformer.MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
 
-from pprint import pprint
 
 StateDict = Dict[str, Tensor]
 # easier to use pythong logging instead of going trough the hf utility logging file
@@ -44,8 +40,9 @@ StateDict = Dict[str, Tensor]
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler())
-from torch import Tensor
 from dataclasses import dataclass, field
+
+from torch import Tensor
 
 
 class TrackedStateDict:

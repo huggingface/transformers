@@ -46,8 +46,9 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ..detr import DetrConfig
 from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput
-from .configuration_maskformer import ClassSpec, MaskFormerConfig
 from ..swin import SwinConfig, SwinModel
+from .configuration_maskformer import ClassSpec, MaskFormerConfig
+
 
 logger = logging.get_logger(__name__)
 import torch.distributed as dist
@@ -109,8 +110,7 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: float) -> Tensor:
     $$
         \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x \cap y }{x \cup y + 1}}
 
-    $$
-    In practice, since `labels` is a binary mask, (only 0s and 1s), dice can be computed as follow
+    $$ In practice, since `labels` is a binary mask, (only 0s and 1s), dice can be computed as follow
 
     $$
         \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x * y }{x + y + 1}}
@@ -118,7 +118,9 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: float) -> Tensor:
 
     Args:
         inputs (Tensor): A tensor representing a mask
-        labels (Tensor): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
+        labels (Tensor):
+            A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
+            (0 for the negative class and 1 for the positive class).
 
 
     Returns:
@@ -137,7 +139,8 @@ def sigmoid_focal_loss(
     inputs: Tensor, labels: Tensor, num_masks: int, alpha: float = 0.25, gamma: float = 2
 ) -> Tensor:
     r"""
-       Focal loss proposed in [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002) originally used in RetinaNet. The loss is computed as follows
+       Focal loss proposed in [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002) originally used
+       in RetinaNet. The loss is computed as follows
 
     $$
          \mathcal{L}_{\text{focal loss} = -(1 - p_t)^{\gamma}\log{(p_t)}
@@ -151,7 +154,9 @@ def sigmoid_focal_loss(
     Args:
         inputs (Tensor): A float tensor of arbitrary shape.
                 The predictions for each example.
-        labels (Tensor,): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
+        labels (Tensor,):
+            A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
+            (0 for the negative class and 1 for the positive class).
         alpha (float, optional): Weighting factor in range (0,1) to balance
                 positive vs negative examples. Default = -1 (no weighting).
         gamma (float, optional): Exponent of the modulating factor (1 - p_t) to
@@ -178,7 +183,9 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
 
     Args:
         inputs (Tensor): A tensor representing a mask
-        labels (Tensor): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
+        labels (Tensor):
+            A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
+            (0 for the negative class and 1 for the positive class).
 
 
     Returns:
@@ -201,7 +208,9 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 
 
     Args:
         inputs (Tensor): A tensor representing a mask
-        labels (Tensor): A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs (0 for the negative class and 1 for the positive class).
+        labels (Tensor):
+            A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
+            (0 for the negative class and 1 for the positive class).
 
 
     Returns:
@@ -231,9 +240,9 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 
 class MaskFormerHungarianMatcher(nn.Module):
     """This class computes an assignment between the labels and the predictions of the network
 
-    For efficiency reasons, the labels don't include the no_object. Because of this, in general,
-    there are more predictions than labels. In this case, we do a 1-to-1 matching of the best predictions,
-    while the others are un-matched (and thus treated as non-objects).
+    For efficiency reasons, the labels don't include the no_object. Because of this, in general, there are more
+    predictions than labels. In this case, we do a 1-to-1 matching of the best predictions, while the others are
+    un-matched (and thus treated as non-objects).
     """
 
     def __init__(self, cost_class: float = 1.0, cost_mask: float = 1.0, cost_dice: float = 1.0):
@@ -332,12 +341,13 @@ class MaskFormerLoss(nn.Module):
         losses: List[str],
     ):
         """The MaskFormer Loss. The loss is computed very similar to DETR. The process happens in two steps:
-        1) we compute hungarian assignment between ground truth masks and the outputs of the model
-        2) we supervise each pair of matched ground-truth / prediction (supervise class and mask)
+        1) we compute hungarian assignment between ground truth masks and the outputs of the model 2) we supervise each
+        pair of matched ground-truth / prediction (supervise class and mask)
 
         Args:
             num_classes (int): The number of classes
-            matcher (MaskFormerHungarianMatcher): A torch module that computes the assigments between the predictions and labels
+            matcher (MaskFormerHungarianMatcher):
+                A torch module that computes the assigments between the predictions and labels
             weight_dict (Dict[str, float]): A dictionary of weights to be applied to the different losses
             eos_coef (float): TODO no idea
             losses (List[str]): A list of losses to be used TODO probably remove it
@@ -358,8 +368,8 @@ class MaskFormerLoss(nn.Module):
         self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor], indices: Tuple[np.array], num_masks: float
     ) -> Dict[str, Tensor]:
         """Classification loss (NLL)
-        # TODO this doc was copied by the authors
-        labels dicts must contain the key "labels" containing a tensor of dim [nb_target_masks]
+        # TODO this doc was copied by the authors labels dicts must contain the key "labels" containing a tensor of dim
+        [nb_target_masks]
         """
 
         pred_logits: Tensor = outputs[PREDICTIONS_LOGITS_KEY]
@@ -503,7 +513,7 @@ class SwinTransformerBackbone(nn.Module):
 
 class ConvLayer(nn.Sequential):
     def __init__(self, in_features: int, out_features: int, kernel_size: int = 3, padding: int = 1):
-        """A basic module that executs conv - norm -  in sequence used in MaskFormer.
+        """A basic module that executs conv - norm - in sequence used in MaskFormer.
 
         Args:
             in_features (int): The number of input features (channels)
@@ -543,7 +553,8 @@ class FPNLayer(nn.Module):
 
 class FPNModel(nn.Module):
     def __init__(self, in_features: int, lateral_widths: List[int], feature_size: int = 256):
-        """Feature Pyramid Network, given an input tensor and a set of features map of different feature/spatial size, it creates a list of features map with different the same feature size.
+        """Feature Pyramid Network, given an input tensor and a set of features map of different feature/spatial size, it creates
+a list of features map with different the same feature size.
 
         Args:
             in_features (int): The number of input features (channels)
@@ -566,11 +577,14 @@ class FPNModel(nn.Module):
 
 class MaskFormerPixelDecoder(nn.Module):
     def __init__(self, *args, feature_size: int = 256, mask_feature_size: int = 256, **kwargs):
-        """Pixel Decoder Module proposed in [Per-Pixel Classification is Not All You Need for Semantic Segmentation](https://arxiv.org/abs/2107.06278). It first run the backbone's feature into a Feature Pyramid Network creating a list of features map. Then, it projects the last one to the correct `mask_size`
+        """Pixel Decoder Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
+Segmentation](https://arxiv.org/abs/2107.06278). It first run the backbone's feature into a Feature Pyramid Network
+creating a list of features map. Then, it projects the last one to the correct `mask_size`
 
         Args:
             feature_size (int, optional): The features (channels) of FPN feature maps. Defaults to 256.
-            mask_feature_size (int, optional): The features (channels) of the target masks size $C_{\epsilon}$ in the paper. Defaults to 256.
+            mask_feature_size (int, optional):
+                The features (channels) of the target masks size $C_{\epsilon}$ in the paper. Defaults to 256.
         """
         super().__init__()
         self.fpn = FPNModel(*args, feature_size=feature_size, **kwargs)
@@ -586,8 +600,8 @@ class MaskFormerPixelDecoder(nn.Module):
 # copied from original implementation, also practically equal to DetrSinePositionEmbedding
 class PositionEmbeddingSine(nn.Module):
     """
-    This is a more standard version of the position embedding, very similar to the one
-    used by the Attention is all you need paper, generalized to work on images.
+    This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
+    need paper, generalized to work on images.
     """
 
     def __init__(
@@ -649,7 +663,9 @@ class MaskformerMLPPredictionHead(nn.Sequential):
 
 class MaskFormerPixelLevelModule(nn.Module):
     def __init__(self, config: MaskFormerConfig):
-        """Pixel Level Module proposed in [Per-Pixel Classification is Not All You Need for Semantic Segmentation](https://arxiv.org/abs/2107.06278). It runs the input image trough a backbone and a pixel decoder, generating a image features and pixel embeddings."""
+        """Pixel Level Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
+Segmentation](https://arxiv.org/abs/2107.06278). It runs the input image trough a backbone and a pixel decoder,
+generating a image features and pixel embeddings."""
         super().__init__()
         self.backbone = SwinTransformerBackbone(
             SwinConfig(**{k.replace("swin_", ""): v for k, v in config.__dict__.items() if k.startswith("swin_")})

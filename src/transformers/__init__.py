@@ -149,7 +149,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.maskformer": ["MASK_FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -245,6 +244,7 @@ _import_structure = {
     "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
     "models.marian": ["MarianConfig"],
+    "models.maskformer": ["MASK_FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerTokenizer"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
@@ -639,17 +639,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.maskformer"].extend(
-        [
-            "MASK_FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MaskFormerLayer",
-            "MaskFormerModel",
-            "MaskFormerPreTrainedModel",
-            "MaskFormerForSemanticSegmentation",
-            "MaskFormerForPanopticSegmentation",
-            "load_tf_weights_in_maskformer",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1111,6 +1100,17 @@ if is_torch_available():
         ]
     )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
+    _import_structure["models.maskformer"].extend(
+        [
+            "MASK_FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MaskFormerForPanopticSegmentation",
+            "MaskFormerForSemanticSegmentation",
+            "MaskFormerLayer",
+            "MaskFormerModel",
+            "MaskFormerPreTrainedModel",
+            "load_tf_weights_in_maskformer",
+        ]
+    )
     _import_structure["models.mbart"].extend(
         [
             "MBartForCausalLM",
@@ -2360,7 +2360,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.maskformer import MASK_FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2447,6 +2446,7 @@ if TYPE_CHECKING:
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
     from .models.marian import MarianConfig
+    from .models.maskformer import MASK_FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerTokenizer
     from .models.mbart import MBartConfig
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
@@ -2600,7 +2600,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.maskformer import MaskFormerTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2625,6 +2624,7 @@ if TYPE_CHECKING:
         from .models.led import LEDTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
+        from .models.maskformer import MaskFormerTokenizerFast
         from .models.mbart import MBartTokenizerFast
         from .models.mbart50 import MBart50TokenizerFast
         from .models.mobilebert import MobileBertTokenizerFast
@@ -2724,16 +2724,6 @@ if TYPE_CHECKING:
         from .utils.dummy_pytorch_quantization_and_torch_objects import *
 
     if is_torch_available():
-
-        from .models.maskformer import (
-            MASK_FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MaskFormerLayer,
-            MaskFormerModel,
-            MaskFormerPreTrainedModel,
-            MaskFormerForSemanticSegmentation,
-            MaskFormerForPanopticSegmentation,
-            load_tf_weights_in_maskformer,
-        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -3162,6 +3152,15 @@ if TYPE_CHECKING:
             M2M100PreTrainedModel,
         )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
+        from .models.maskformer import (
+            MASK_FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MaskFormerForPanopticSegmentation,
+            MaskFormerForSemanticSegmentation,
+            MaskFormerLayer,
+            MaskFormerModel,
+            MaskFormerPreTrainedModel,
+            load_tf_weights_in_maskformer,
+        )
         from .models.mbart import (
             MBartForCausalLM,
             MBartForConditionalGeneration,

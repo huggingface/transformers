@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 
 from ...file_utils import _LazyModule, is_torch_available, is_vision_available
 
+
 _import_structure = {
     "configuration_maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
 }
@@ -28,9 +29,9 @@ if is_torch_available():
     _import_structure["modeling_maskformer"] = [
         "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MaskFormerForPanopticSegmentation",
+        "MaskFormerForPanopticSegmentationOutput",
         "MaskFormerForSemanticSegmentation",
         "MaskFormerForSemanticSegmentationOutput",
-        "MaskFormerForPanopticSegmentationOutput",
         "MaskFormerModel",
     ]
 
@@ -45,9 +46,9 @@ if TYPE_CHECKING:
         from .modeling_maskformer import (
             MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
             MaskFormerForPanopticSegmentation,
+            MaskFormerForPanopticSegmentationOutput,
             MaskFormerForSemanticSegmentation,
             MaskFormerForSemanticSegmentationOutput,
-            MaskFormerForPanopticSegmentationOutput,
             MaskFormerModel,
         )
 

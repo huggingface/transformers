@@ -16,11 +16,11 @@
 
 import io
 import pathlib
-import PIL
 from collections import defaultdict
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+import PIL
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
@@ -178,7 +178,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 number of channels, H and W are image height and width.
 
             annotations (`Dict`, `List[Dict]`, *optional*):
-                The corresponding annotations in the following format: { "masks" : the target mask, with shape [C,H,W], "labels" : the target labels, with shape [C]}
+                The corresponding annotations in the following format: { "masks" : the target mask, with shape [C,H,W],
+                "labels" : the target labels, with shape [C]}
 
             TODO explain we pad and return a padding mask
 
