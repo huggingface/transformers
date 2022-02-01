@@ -873,6 +873,11 @@ class PretrainedConfig(PushToHubMixin):
         if not isinstance(auto_class, str):
             auto_class = auto_class.__name__
 
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
         cls._auto_class = auto_class
 
 

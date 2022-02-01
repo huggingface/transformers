@@ -46,8 +46,9 @@ from transformers import PretrainedConfig
 class AwesomeConfig(PretrainedConfig):
     model_type = "awesome"
 
-    def __init__(self, attribute=1, **kwargs):
+    def __init__(self, attribute=1, hidden_size=42, **kwargs):
         self.attribute = attribute
+        self.hidden_size = hidden_size
         super().__init__(**kwargs)
 ```
 
@@ -76,6 +77,13 @@ class AwesomeModel(PreTrainedModel):
 `AwesomeModel` should subclass [`PreTrainedModel`] and `AwesomeConfig` should subclass [`PretrainedConfig`]. The
 easiest way to achieve this is to copy the modeling and configuration files of the model closest to the one you're
 coding, and then tweaking them.
+
+<Tip warning={true}>
+
+If copying a modeling files from the library, you will need to replace all the relative imports at the top of the file
+to import from the `transformers` package.
+
+</Tip>
 
 Note that you can re-use (or subclass) an existing configuration/model.
 
@@ -151,3 +159,11 @@ model = AutoModel.from_pretrained("model-checkpoint", trust_remote_code=True)
 
 It is also strongly encouraged to pass a commit hash as a `revision` to make sure the author of the models did not
 update the code with some malicious new lines (unless you fully trust the authors of the models).
+
+```py
+commit_hash = "b731e5fae6d80a4a775461251c4388886fb7a249"
+model = AutoModel.from_pretrained("model-checkpoint", trust_remote_code=True, revision=commit_hash)
+```
+
+Note that when browsing the commit history of the model repo on the Hub, there is a button to easily copy the commit
+hash of any commit.
