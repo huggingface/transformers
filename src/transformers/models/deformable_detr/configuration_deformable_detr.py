@@ -193,7 +193,6 @@ class DeformableDetrConfig(PretrainedConfig):
         self.init_xavier_std = init_xavier_std
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
-        self.num_hidden_layers = encoder_layers
         self.return_intermediate = return_intermediate
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
