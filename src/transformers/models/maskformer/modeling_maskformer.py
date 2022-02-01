@@ -492,6 +492,7 @@ class SwinTransformerBackbone(nn.Module):
         # we need to reshape the hidden state to their original spatial dimensions
         # skipping the embeddings
         hidden_states: Tuple[Tuple[Tensor]] = output.hidden_states[1:]
+        # spatial dimensions contains all the heights and widths of each stage, including after the embeddings
         spatial_dimensions: Tuple[Tuple[int, int]] = output.hidden_states_original_spatial_dimensions
         for i, (hidden_state, (h, w)) in enumerate(zip(hidden_states, spatial_dimensions)):
             norm = self.hidden_states_norms[i]
@@ -914,7 +915,7 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
         preds_masks: Tensor = outputs.preds_masks
 
         _, _, h, w = preds_masks.shape
-
+        # TODO we need to do this for each element in the batch!
         # for each query, the best scores and their indeces
         pred_scores, pred_labels = F.softmax(preds_logits, dim=-1).max(-1)
         # pred_scores and pred_labels shape = [BATH,NUM_QUERIES]
@@ -943,8 +944,8 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                 for k in range(pred_labels.shape[0]):
                     pred_class: int = pred_labels[k].item()
                     # check if pred_class is not a "thing", so it can be merged with other instance. For example, class "sky" cannot have more then one instance
-                    class_spec: ClassSpec = self.model.config.dataset_metadata.classes[pred_class]
-                    is_stuff = not class_spec.is_thing
+                    class_spec: ClassSpec = self.model.config.dataset_metadata["classes"][pred_class]
+                    is_stuff = not class_spec["is_thing"]
                     # get the mask associated with the k class
                     mask_k: Tensor = mask_labels == k
                     # create the area, since bool we just need to sum :)
@@ -973,7 +974,7 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                                     "id": current_segment_id,
                                     "category_id": pred_class,
                                     "is_thing": not is_stuff,
-                                    "label": class_spec.label,
+                                    "label": class_spec["label"],
                                 }
                             )
                             if is_stuff:

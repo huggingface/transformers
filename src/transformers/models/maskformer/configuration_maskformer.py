@@ -15,7 +15,7 @@
 """ MaskFormer model configuration"""
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -29,16 +29,14 @@ MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 logger = logging.get_logger(__name__)
 
 
-@dataclass
-class ClassSpec:
+class ClassSpec(TypedDict):
     is_thing: bool
     label: str
     color: Tuple[int, int, int]
 
 
-@dataclass
-class DatasetMetadata:
-    classes: List[ClassSpec] = field(default_factory=list)
+class DatasetMetadata(TypedDict):
+    classes: List[ClassSpec]
 
 
 class MaskFormerConfig(PretrainedConfig):
@@ -138,7 +136,7 @@ class MaskFormerConfig(PretrainedConfig):
         self.detr_auxiliary_loss = detr_auxiliary_loss
         self.detr_dilation = detr_dilation
 
-        super().__init__(is_encoder_decoder=True, **kwargs)
+        super().__init__(**kwargs)
 
     @property
     def hidden_size(self) -> int:

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from cmath import log
 
 import enum
 import logging
@@ -116,12 +117,13 @@ class OriginalMaskFormerConfigToOursConverter:
         else:
             thing_ids = list(range(0, len(labels)))
 
-        dataset_metadata = DatasetMetadata()
-        dataset_metadata.classes = [None] * len(labels)
+        dataset_metadata: DatasetMetadata = {}
+        dataset_metadata["classes"] = [None] * len(labels)
         for class_id, label, color in zip(range(len(labels)), labels, colors):
-            dataset_metadata.classes[class_id] = ClassSpec(class_id in thing_ids, label, color)
+            class_spec: ClassSpec = {"is_thing": class_id in thing_ids, "label": label, "color": tuple(color)}
+            dataset_metadata["classes"][class_id] = class_spec
 
-        assert None not in dataset_metadata.classes
+        assert None not in dataset_metadata["classes"]
         return dataset_metadata
 
     def __call__(self, original_config: object) -> MaskFormerConfig:
@@ -171,8 +173,8 @@ class OriginalMaskFormerConfigToOursConverter:
             detr_auxiliary_loss=False,
             detr_dilation=False,
             # default pretrained config values
-            id2label={k: c.label for k, c in enumerate(dataset_metadata.classes)},
-            label2id={c.label: k for k, c in enumerate(dataset_metadata.classes)},
+            id2label={k: c["label"] for k, c in enumerate(dataset_metadata["classes"])},
+            label2id={c["label"]: k for k, c in enumerate(dataset_metadata["classes"])},
         )
 
         return config
@@ -184,8 +186,8 @@ class OriginalMaskFormerConfigToFeatureExtractorConverter:
         model_input = original_config.INPUT
 
         return MaskFormerFeatureExtractor(
-            image_mean=torch.tensor(model.PIXEL_MEAN) / 255,
-            image_std=torch.tensor(model.PIXEL_STD) / 255,
+            image_mean=(torch.tensor(model.PIXEL_MEAN) / 255).tolist(),
+            image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
             max_size=model_input.MAX_SIZE_TEST,
         )
@@ -721,12 +723,19 @@ if __name__ == "__main__":
     for converter, config_file, checkpoint_file in MaskFormerCheckpointConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
+
         feature_extractor = OriginalMaskFormerConfigToFeatureExtractorConverter()(
             setup_cfg(Args(config_file=config_file))
         )
 
         converted: MaskFormerModel = converter()
-        test(converter.original_model, converted)
+
+        model_name: str = f"hub/{checkpoint_file.parents[0].stem}-{checkpoint_file.stem}"
+
+        # test(converter.original_model, converted)
+
+        feature_extractor.save_pretrained(model_name)
+        converted.save_pretrained(model_name)
 
     # pl.seed_everything(42)
     # original_config = setup_cfg(
