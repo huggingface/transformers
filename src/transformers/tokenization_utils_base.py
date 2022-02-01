@@ -1459,10 +1459,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Padding and truncation side are right by default and overridden in subclasses. If specified in the kwargs, it
         # is changed.
         self.padding_side = kwargs.pop("padding_side", self.padding_side)
-        if self.padding_side not in ["right", "left"]:
-            raise ValueError(
-                f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
-            )
+        assert self.padding_side in [
+            "right",
+            "left",
+        ], f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
 
         self.truncation_side = kwargs.pop("truncation_side", self.truncation_side)
         if self.truncation_side not in ["right", "left"]:
