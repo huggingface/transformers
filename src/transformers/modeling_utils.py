@@ -1815,8 +1815,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoModel"):
         """
-        Register this class with a given auto class. This should only be used for custom models as the ones in
-        the library are already mapped with an auto class.
+        Register this class with a given auto class. This should only be used for custom models as the ones in the
+        library are already mapped with an auto class.
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoModel"`):
