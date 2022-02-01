@@ -117,9 +117,11 @@ from . import (
     wav2vec2_phoneme,
     wav2vec2_with_lm,
     wavlm,
+    xglm,
     xlm,
     xlm_prophetnet,
     xlm_roberta,
+    xlm_roberta_xl,
     xlnet,
     yoso,
 )

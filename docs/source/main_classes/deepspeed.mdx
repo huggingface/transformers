@@ -1708,7 +1708,7 @@ Work is being done to enable estimating how much memory is needed for a specific
 ## Non-Trainer Deepspeed Integration
 
 The [`~deepspeed.HfDeepSpeedConfig`] is used to integrate Deepspeed into the 🤗 Transformers core
-functionality, when [`Trainer`] is not used.
+functionality, when [`Trainer`] is not used. The only thing that it does is handling Deepspeed ZeRO 3 param gathering and automatically splitting the model onto multiple gpus during `from_pretrained` call. Everything else you have to do by yourself.
 
 When using [`Trainer`] everything is automatically taken care of.
 
@@ -1719,10 +1719,11 @@ For example for a pretrained model:
 
 ```python
 from transformers.deepspeed import HfDeepSpeedConfig
-from transformers import AutoModel, deepspeed
+from transformers import AutoModel
+import deepspeed
 
 ds_config = {...}  # deepspeed config object or path to the file
-# must run before instantiating the model
+# must run before instantiating the model to detect zero 3
 dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 model = AutoModel.from_pretrained("gpt2")
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
@@ -1732,15 +1733,18 @@ or for non-pretrained model:
 
 ```python
 from transformers.deepspeed import HfDeepSpeedConfig
-from transformers import AutoModel, AutoConfig, deepspeed
+from transformers import AutoModel, AutoConfig
+import deepspeed
 
 ds_config = {...}  # deepspeed config object or path to the file
-# must run before instantiating the model
+# must run before instantiating the model to detect zero 3
 dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 config = AutoConfig.from_pretrained("gpt2")
 model = AutoModel.from_config(config)
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```
+
+Please note that if you're not using the [`Trainer`] integration, you're completely on your own. Basically follow the documentation on the [Deepspeed](https://www.deepspeed.ai/) website. Also you have to configure explicitly the config file - you can't use `"auto"` values and you will have to put real values instead.
 
 ## HfDeepSpeedConfig
 
