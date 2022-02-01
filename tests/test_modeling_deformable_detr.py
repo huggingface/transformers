@@ -56,8 +56,7 @@ class DeformableDetrModelTester:
         attention_probs_dropout_prob=0.1,
         num_queries=12,
         num_channels=3,
-        min_size=200,
-        max_size=200,
+        image_size=196,
         n_targets=8,
         num_labels=91,
         num_feature_levels=4,
@@ -77,8 +76,7 @@ class DeformableDetrModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.num_queries = num_queries
         self.num_channels = num_channels
-        self.min_size = min_size
-        self.max_size = max_size
+        self.image_size = image_size
         self.n_targets = n_targets
         self.num_labels = num_labels
         self.num_feature_levels = num_feature_levels
@@ -86,13 +84,18 @@ class DeformableDetrModelTester:
         self.decoder_n_points = decoder_n_points
 
         # we also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = self.num_feature_levels
+        self.encoder_seq_length = (
+            math.ceil(self.image_size / 8) ** 2
+            + math.ceil(self.image_size / 16) ** 2
+            + math.ceil(self.image_size / 32) ** 2
+            + math.ceil(self.image_size / 64) ** 2
+        )
         self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-        pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
+        pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
 
         labels = None
         if self.use_labels:
@@ -104,7 +107,7 @@ class DeformableDetrModelTester:
                     high=self.num_labels, size=(self.n_targets,), device=torch_device
                 )
                 target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
-                target["masks"] = torch.rand(self.n_targets, self.min_size, self.max_size, device=torch_device)
+                target["masks"] = torch.rand(self.n_targets, self.image_size, self.image_size, device=torch_device)
                 labels.append(target)
 
         config = self.get_config()
@@ -141,9 +144,7 @@ class DeformableDetrModelTester:
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.hidden_size))
 
     def create_and_check_deformable_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
         model = DeformableDetrForObjectDetection(config=config)
@@ -196,8 +197,8 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                     )
                     target["masks"] = torch.ones(
                         self.model_tester.n_targets,
-                        self.model_tester.min_size,
-                        self.model_tester.max_size,
+                        self.model_tester.image_size,
+                        self.model_tester.image_size,
                         device=torch_device,
                         dtype=torch.float,
                     )
@@ -211,7 +212,12 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         self.config_tester = ConfigTester(self, config_class=DeformableDetrConfig, has_text_modality=False)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # we don't test common_properties and arguments_init as these don't apply for Deformable DETR
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
 
     def test_deformable_detr_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -240,7 +246,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
-    
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -270,7 +276,11 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, self.model_tester.num_feature_levels, self.model_tester.encoder_n_points],
+                [
+                    self.model_tester.num_attention_heads,
+                    self.model_tester.num_feature_levels,
+                    self.model_tester.encoder_n_points,
+                ],
             )
             out_len = len(outputs)
 
@@ -329,9 +339,13 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, self.model_tester.num_feature_levels, self.model_tester.encoder_n_points],
+                [
+                    self.model_tester.num_attention_heads,
+                    self.model_tester.num_feature_levels,
+                    self.model_tester.encoder_n_points,
+                ],
             )
-    
+
     def test_retain_grad_hidden_states_attentions(self):
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
 
@@ -451,27 +465,12 @@ def prepare_img():
 class DeformableDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
+        # TODO upload feature extractor files to deformable-detr repos
         return AutoFeatureExtractor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
 
-    def test_inference_no_head(self):
-        model = DeformableDetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)
-
-        feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(**encoding)
-
-        expected_shape = torch.Size((1, 100, 256))
-        assert outputs.last_hidden_state.shape == expected_shape
-        expected_slice = torch.tensor(
-            [[0.0616, -0.5146, -0.4032], [-0.7629, -0.4934, -1.7153], [-0.4768, -0.6403, -0.7826]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
-
     def test_inference_object_detection_head(self):
-        model = DeformableDetrForObjectDetection.from_pretrained("facebook/detr-resnet-50").to(torch_device)
+        # TODO replace nielsr by sensetime
+        model = DeformableDetrForObjectDetection.from_pretrained("nielsr/deformable-detr").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -482,16 +481,49 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             outputs = model(pixel_values, pixel_mask)
 
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels + 1))
+        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        expected_slice_logits = torch.tensor(
-            [[-19.1194, -0.0893, -11.0154], [-17.3640, -1.8035, -14.0219], [-20.0461, -0.5837, -11.1060]]
+
+        expected_logits = torch.tensor(
+            [[-9.6645, -4.3449, -5.8705], [-9.7035, -3.8504, -5.0724], [-10.5634, -5.3379, -7.5116]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
+        expected_boxes = torch.tensor(
+            [[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        expected_slice_boxes = torch.tensor(
-            [[0.4433, 0.5302, 0.8853], [0.5494, 0.2517, 0.0529], [0.4998, 0.5360, 0.9956]]
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
+
+    def test_inference_object_detection_head_with_box_refine_two_stage(self):
+        # TODO replace nielsr by sensetime
+        model = DeformableDetrForObjectDetection.from_pretrained(
+            "nielsr/deformable-detr-with-box-refine-two-stage"
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        pixel_values = encoding["pixel_values"].to(torch_device)
+        pixel_mask = encoding["pixel_mask"].to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values, pixel_mask)
+
+        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
+
+        expected_logits = torch.tensor(
+            [[-6.7108, -4.3213, -6.3777], [-8.9014, -6.1799, -6.7240], [-6.9315, -4.4735, -6.2298]]
+        ).to(torch_device)
+        expected_boxes = torch.tensor(
+            [[0.2583, 0.5499, 0.4683], [0.7652, 0.9068, 0.4882], [0.5490, 0.2763, 0.0564]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
+
+        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
+        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))

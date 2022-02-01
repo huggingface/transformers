@@ -183,6 +183,15 @@ def convert_deformable_detr_checkpoint(
     model.save_pretrained(pytorch_dump_folder_path)
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
+    # Push to hub
+    model_name = "deformable-detr"
+    model_name += "-single-scale" if single_scale else ""
+    model_name += "-dc5" if dilation else ""
+    model_name += "-with-box-refine" if with_box_refine else ""
+    model_name += "-two-stage" if two_stage else ""
+    print("Pushing model to hub...")
+    model.push_to_hub(repo_path_or_name=model_name, organization="nielsr", commit_message="Add model")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
