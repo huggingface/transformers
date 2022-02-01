@@ -1427,8 +1427,8 @@ class TokenizerTesterMixin:
                     tokenizer_r = self.rust_tokenizer_class.from_pretrained(
                         pretrained_name, truncation_side="right", **kwargs
                     )
-
                     self.assertEqual(tokenizer_r.truncation_side, "right")
+                    
                     self.assertRaises(
                         ValueError,
                         self.rust_tokenizer_class.from_pretrained,
