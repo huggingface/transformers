@@ -778,7 +778,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
                 device=device,
                 dtype=bbox.dtype,
             ),
-            self.config.image_feature_pool_shape[1]
+            self.config.image_feature_pool_shape[1],
         )
         visual_bbox_y = torch_int_div(
             torch.arange(
@@ -788,7 +788,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
                 device=device,
                 dtype=bbox.dtype,
             ),
-            self.config.image_feature_pool_shape[0]
+            self.config.image_feature_pool_shape[0],
         )
         visual_bbox = torch.stack(
             [
