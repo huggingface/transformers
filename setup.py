@@ -114,6 +114,7 @@ _deps = [
     "jax>=0.2.8",
     "jaxlib>=0.1.65",
     "jieba",
+    "memory-efficient-attention",
     "nltk",
     "numpy>=1.17",
     "onnxconverter-common",

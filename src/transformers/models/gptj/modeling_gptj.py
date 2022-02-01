@@ -15,7 +15,6 @@
 """ PyTorch GPT-J model."""
 
 from typing import Tuple
-import os
 
 import torch
 import torch.utils.checkpoint
