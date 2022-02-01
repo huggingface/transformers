@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import copy
 import inspect
 import itertools
 import json
