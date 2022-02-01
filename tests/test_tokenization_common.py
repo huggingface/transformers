@@ -1423,24 +1423,12 @@ class TokenizerTesterMixin:
                         pretrained_name, truncation_side="left", **kwargs
                     )
                     self.assertEqual(tokenizer_r.truncation_side, "left")
-                if self.test_slow_tokenizer:
-                    tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, truncation_side="left", **kwargs
-                    )
-                    self.assertEqual(tokenizer_p.truncation_side, "left")
 
-                if self.test_rust_tokenizer:
                     tokenizer_r = self.rust_tokenizer_class.from_pretrained(
                         pretrained_name, truncation_side="right", **kwargs
                     )
-                    self.assertEqual(tokenizer_r.truncation_side, "right")
-                if self.test_slow_tokenizer:
-                    tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, truncation_side="right", **kwargs
-                    )
-                    self.assertEqual(tokenizer_p.truncation_side, "right")
 
-                if self.test_rust_tokenizer:
+                    self.assertEqual(tokenizer_r.truncation_side, "right")
                     self.assertRaises(
                         ValueError,
                         self.rust_tokenizer_class.from_pretrained,
@@ -1448,7 +1436,18 @@ class TokenizerTesterMixin:
                         truncation_side="unauthorized",
                         **kwargs,
                     )
+                
                 if self.test_slow_tokenizer:
+                    tokenizer_p = self.tokenizer_class.from_pretrained(
+                        pretrained_name, truncation_side="left", **kwargs
+                    )
+                    self.assertEqual(tokenizer_p.truncation_side, "left")
+
+                    tokenizer_p = self.tokenizer_class.from_pretrained(
+                        pretrained_name, truncation_side="right", **kwargs
+                    )
+                    self.assertEqual(tokenizer_p.truncation_side, "right")
+
                     self.assertRaises(
                         ValueError,
                         self.tokenizer_class.from_pretrained,
