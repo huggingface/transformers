@@ -246,18 +246,8 @@ class ImageFeatureExtractionTester(unittest.TestCase):
             (35, 29),
         ]
 
-        sizes = [
-            # single integer
-            22,
-            27,
-            28,
-            36,
-            # single integer in tuple/list
-            [
-                22,
-            ],
-            (27,),
-        ]
+        # single integer or single integer in tuple/list
+        sizes = [22, 27, 28, 36, [22], (27,)]
 
         for (height, width), size in zip(heights_widths, sizes):
             for max_size in (None, 37, 1000):

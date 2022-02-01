@@ -201,7 +201,8 @@ class ImageFeatureExtractionMixin:
             resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
                 The filter to user for resampling.
             default_to_square (`bool`, *optional*, defaults to `True`):
-                If set to `False`, will replicate
+                How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a
+                square (`size`,`size`). If set to `False`, will replicate
                 [`torchvision.transforms.Resize`](https://pytorch.org/vision/stable/transforms.html#torchvision.transforms.Resize)
                 with support for resizing only the smallest edge and providing an optional `max_size`.
             max_size (`int`, *optional*, defaults to `None`):
