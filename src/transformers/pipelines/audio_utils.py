@@ -101,10 +101,8 @@ def ffmpeg_microphone_live(
     format_for_conversion: str = "f32le",
 ):
     """
-    Helper function to read audio from the microphone file through ffmpeg.
-    This will output repeating/increasing chunks until `chunk_length_s`.
-    It will make use of striding to avoid errors on the "sides" of the
-    various chunks.
+    Helper function to read audio from the microphone file through ffmpeg. This will output repeating/increasing chunks
+    until `chunk_length_s`. It will make use of striding to avoid errors on the "sides" of the various chunks.
     """
     if stream_chunk_s is not None:
         chunk_s = stream_chunk_s
