@@ -468,21 +468,7 @@ class MaskFormerLoss(nn.Module):
         return num_masks_clamped
 
 
-class BackboneMixin(nn.Module):
-    """This mixin defines a clear way to acces intermediate representation in the subclassing model.
-    A list of representations must be returned in the `forward` method, while their sizes in the `outputs_shapes`.
-    NOTE This should be add in a different PR, SwinTransformerBackbone will also work as it is without inherit from BackboneMixin
-    """
-
-    def forward(self, *args, **kwargs) -> List[Tensor]:
-        raise NotImplemented
-
-    @property
-    def outputs_shapes(self) -> List[int]:
-        raise NotImplemented
-
-
-class SwinTransformerBackbone(BackboneMixin):
+class SwinTransformerBackbone(nn.Module):
     def __init__(self, config: SwinConfig):
         super().__init__()
         self.model = SwinModel(config)
