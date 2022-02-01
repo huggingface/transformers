@@ -184,7 +184,7 @@ class ImageFeatureExtractionMixin:
         else:
             return (image - mean) / std
 
-    def resize(self, image, size, resample=PIL.Image.BILINEAR, torch_resize=False, max_size=None):
+    def resize(self, image, size, resample=PIL.Image.BILINEAR, default_to_square=True, max_size=None):
         """
         Resizes `image`. Note that this will trigger a conversion of `image` to a PIL Image.
 
@@ -195,19 +195,20 @@ class ImageFeatureExtractionMixin:
                 The size to use for resizing the image. If `size` is a sequence like (h, w), output size will be
                 matched to this.
 
-                If `size` is an int and `torch_resize` is `False`, then image will be resized to (size, size). If
-                `size` is an int and `torch_resize` is `True`, then smaller edge of the image will be matched to this
-                number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
+                If `size` is an int and `default_to_square` is `True`, then image will be resized to (size, size). If
+                `size` is an int and `default_to_square` is `False`, then smaller edge of the image will be matched to
+                this number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
             resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
                 The filter to user for resampling.
-            torch_resize (`bool`, *optional*, defaults to `False`):
-                Whether or not to replicate `torchvision.transforms.Resize` with support for resizing only the smallest
-                edge and providing an optional `max_size`.
+            default_to_square (`bool`, *optional*, defaults to `True`):
+                If set to `False`, will replicate
+                [`torchvision.transforms.Resize`](https://pytorch.org/vision/stable/transforms.html#torchvision.transforms.Resize)
+                with support for resizing only the smallest edge and providing an optional `max_size`.
             max_size (`int`, *optional*, defaults to `None`):
                 The maximum allowed for the longer edge of the resized image: if the longer edge of the image is
                 greater than `max_size` after being resized according to `size`, then the image is resized again so
                 that the longer edge is equal to `max_size`. As a result, `size` might be overruled, i.e the smaller
-                edge may be shorter than `size`. Only used if `torch_resize` is `True`.
+                edge may be shorter than `size`. Only used if `default_to_square` is `False`.
         """
         self._ensure_format_supported(image)
 
@@ -217,10 +218,14 @@ class ImageFeatureExtractionMixin:
         if isinstance(size, list):
             size = tuple(size)
 
-        if torch_resize:
-            w, h = image.size
-            if isinstance(size, int) or len(size) == 1:  # specified size only for the smallest edge
-                short, long = (w, h) if w <= h else (h, w)
+        if isinstance(size, int) or len(size) == 1:
+            if default_to_square:
+                if isinstance(size, int):
+                    size = (size, size)
+            else:
+                width, height = image.size
+                # specified size only for the smallest edge
+                short, long = (width, height) if width <= height else (height, width)
                 requested_new_short = size if isinstance(size, int) else size[0]
 
                 if short == requested_new_short:
@@ -237,10 +242,7 @@ class ImageFeatureExtractionMixin:
                     if new_long > max_size:
                         new_short, new_long = int(max_size * new_short / new_long), max_size
 
-                size = (new_short, new_long) if w <= h else (new_long, new_short)
-        else:
-            if isinstance(size, int):
-                size = (size, size)
+                size = (new_short, new_long) if width <= height else (new_long, new_short)
 
         return image.resize(size, resample=resample)
 
