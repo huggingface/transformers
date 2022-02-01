@@ -28,8 +28,53 @@ long as all the files are in the same directory (we don't support submodules for
 let's say you have a `modeling.py` file and a `configuration.py` file in a folder of the current working directory
 named `awesome_model`, and that the modeling file defines an `AwesomeModel`, the configuration file a `AwesomeConfig`.
 
+```
+.
+└── awesome_model
+    ├── __init__.py
+    ├── configuration.py
+    └── modeling.py
+```
+
+The `__init__.py` can be empty, it's just there so that Python detects `awesome_model` can be use as a module.
+Here is an example of what the configuration file could look like:
+
+```py
+from transformers import PretrainedConfig
+
+
+class AwesomeConfig(PretrainedConfig):
+    model_type = "awesome"
+
+    def __init__(self, attribute=1, **kwargs):
+        self.attribute = attribute
+        super().__init__(**kwargs)
+```
+
+and the modeling file could have content like this:
+
+```py
+import torch
+
+from transformers import PreTrainedModel
+
+from .configuration import AwesomeConfig
+
+
+class AwesomeModel(PreTrainedModel):
+    config_class = AwesomeConfig
+    base_model_prefix = "base"
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
+
+    def forward(self, x):
+        return self.linear(x)
+```
+
 `AwesomeModel` should subclass [`PreTrainedModel`] and `AwesomeConfig` should subclass [`PretrainedConfig`]. The
-easiest way to achieve this is to copy the modeling and configuration files of the model closests to the one you're
+easiest way to achieve this is to copy the modeling and configuration files of the model closest to the one you're
 coding, and then tweaking them.
 
 
@@ -69,7 +114,7 @@ model.save_pretrained("save_dir")
 ```
 
 which will not only save the model weights and the configuration in json format, but also copy the modeling and
-configuration `.py` files in this folder, so you can directly uplaod the result to the Hub.
+configuration `.py` files in this folder, so you can directly upload the result to the Hub.
 
 If you have already logged in to Hugging face with
 
