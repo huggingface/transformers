@@ -1649,34 +1649,36 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             vocab_files[file_id] = pretrained_model_name_or_path
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
-
-            # Try to get the tokenizer config to see if there are versioned tokenizer files.
-            fast_tokenizer_file = FULL_TOKENIZER_FILE
-            resolved_config_file = get_file_from_repo(
-                pretrained_model_name_or_path,
-                TOKENIZER_CONFIG_FILE,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                resume_download=resume_download,
-                proxies=proxies,
-                use_auth_token=use_auth_token,
-                revision=revision,
-                local_files_only=local_files_only,
-            )
-            if resolved_config_file is not None:
-                with open(resolved_config_file, encoding="utf-8") as reader:
-                    tokenizer_config = json.load(reader)
-                    if "fast_tokenizer_files" in tokenizer_config:
-                        fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-
             additional_files_names = {
                 "added_tokens_file": ADDED_TOKENS_FILE,
                 "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
                 "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                "tokenizer_file": fast_tokenizer_file,
             }
+            vocab_files_target = {**cls.vocab_files_names, **additional_files_names}
+
+            if "tokenizer_file" in vocab_files_target:
+                # Try to get the tokenizer config to see if there are versioned tokenizer files.
+                fast_tokenizer_file = FULL_TOKENIZER_FILE
+                resolved_config_file = get_file_from_repo(
+                    pretrained_model_name_or_path,
+                    TOKENIZER_CONFIG_FILE,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    use_auth_token=use_auth_token,
+                    revision=revision,
+                    local_files_only=local_files_only,
+                )
+                if resolved_config_file is not None:
+                    with open(resolved_config_file, encoding="utf-8") as reader:
+                        tokenizer_config = json.load(reader)
+                        if "fast_tokenizer_files" in tokenizer_config:
+                            fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+                vocab_files_target["tokenizer_file"] = fast_tokenizer_file
+
             # Look for the tokenizer files
-            for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
+            for file_id, file_name in vocab_files_target.items():
                 if os.path.isdir(pretrained_model_name_or_path):
                     if subfolder is not None:
                         full_file_name = os.path.join(pretrained_model_name_or_path, subfolder, file_name)
@@ -1758,7 +1760,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
                 "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
                 f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                f"containing all relevant tokenizer files."
+                f"containing all relevant files for a {cls.__name__} tokenizer."
             )
 
         for file_id, file_path in vocab_files.items():
