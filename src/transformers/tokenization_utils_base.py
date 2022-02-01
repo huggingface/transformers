@@ -1389,7 +1389,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
             loaded with [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], this will be set to the
             value stored for the associated model in `max_model_input_sizes` (see above). If no value is provided, will
             default to VERY_LARGE_INTEGER (`int(1e30)`).
-        padding_side: (`str`, *optional*):
+        padding_side (`str`, *optional*):
             The side on which the model should have padding applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
         model_input_names (`List[string]`, *optional*):
@@ -1456,10 +1456,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Padding side is right by default and overridden in subclasses. If specified in the kwargs, it is changed.
         self.padding_side = kwargs.pop("padding_side", self.padding_side)
-        assert self.padding_side in [
-            "right",
-            "left",
-        ], f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
+        if self.padding_side not in ["right", "left"]:
+            raise ValueError(
+                f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
+            )
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
         self.deprecation_warnings = (
