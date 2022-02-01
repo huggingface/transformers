@@ -101,4 +101,4 @@ Easily reuse the same checkpoint to load an architecture for a different task:
 >>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Generally, we recommend using an `AutoClass` to load pretrained instances of models and tokenizers to ensure you load the correct architecture every time. In the next [tutorial](preprocessing), learn how to use your newly loaded tokenizer, feature extractor and processor to preprocess a dataset for fine-tuning.
+Generally, we recommend using the `AutoTokenizer` class and the `AutoModelFor` class to load pretrained instances of models. This will ensure you load the correct architecture every time. In the next [tutorial](preprocessing), learn how to use your newly loaded tokenizer, feature extractor and processor to preprocess a dataset for fine-tuning.
