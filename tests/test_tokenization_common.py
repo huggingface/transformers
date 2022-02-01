@@ -1428,7 +1428,7 @@ class TokenizerTesterMixin:
                         pretrained_name, truncation_side="right", **kwargs
                     )
                     self.assertEqual(tokenizer_r.truncation_side, "right")
-                    
+
                     self.assertRaises(
                         ValueError,
                         self.rust_tokenizer_class.from_pretrained,
@@ -1436,7 +1436,7 @@ class TokenizerTesterMixin:
                         truncation_side="unauthorized",
                         **kwargs,
                     )
-                
+
                 if self.test_slow_tokenizer:
                     tokenizer_p = self.tokenizer_class.from_pretrained(
                         pretrained_name, truncation_side="left", **kwargs
