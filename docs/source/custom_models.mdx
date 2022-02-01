@@ -154,6 +154,8 @@ the `from_pretrained` method. The only thing is that you have to add an extra ar
 online code and trust the author of that model, to avoid executing malicious code on your machine:
 
 ```py
+from transformers import AutoModel
+
 model = AutoModel.from_pretrained("model-checkpoint", trust_remote_code=True)
 ```
 
