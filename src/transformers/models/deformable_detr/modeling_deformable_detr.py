@@ -45,6 +45,7 @@ from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
 
 
+# Move this to not compile only when importing, this needs to happen later, like in __init__.
 MSDA = load_cuda_kernels()
 
 
@@ -102,9 +103,6 @@ DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sensetime/deformable-detr",
     # See all Deformable DETR models at https://huggingface.co/models?filter=deformable-detr
 ]
-
-# Move this to not compile only when importing, this needs to happen later, like in __init__.
-MSDA = load_cuda_kernels()
 
 
 @dataclass
@@ -1124,10 +1122,10 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
 
     The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
 
-    Some small tweaks for Deformable DETR:
+    Some tweaks for Deformable DETR:
 
-    - position_embeddings are added to the forward pass.
-    - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
+    - `position_embeddings`, `reference_points`, `spatial_shapes` and `valid_ratios` are added to the forward pass.
+    - if `config.return_intermediate` is set to `True`, also returns a stack of activations from all decoding layers.
 
     Args:
         config: DeformableDetrConfig
@@ -1717,18 +1715,9 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             self.model.decoder.bbox_embed = None
         if config.two_stage:
             # hack implementation for two-stage
-            # TODO define class_embed in Transformer decoder (?)
             self.model.decoder.class_embed = self.class_embed
             for box_embed in self.bbox_embed:
                 nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
-
-        # # Object detection heads (original DETR)
-        # self.class_embed = nn.Linear(
-        #     config.d_model, config.num_labels + 1
-        # )  # We add one for the "no object" class
-        # self.bbox_predictor = DeformableDetrMLPPredictionHead(
-        #     input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-        # )
 
         # Initialize weights and apply final processing
         self.post_init()
