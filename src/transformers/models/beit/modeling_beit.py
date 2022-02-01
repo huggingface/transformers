@@ -26,7 +26,13 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    InstanceSegmentationModelOutput,
+    MaskedLMOutput,
+    SequenceClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_beit import BeitConfig
@@ -1130,11 +1136,8 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def compute_loss(self, logits, auxiliary_logits, labels):
+    def compute_loss(self, upsampled_logits, auxiliary_logits, labels):
         # upsample logits to the images' original size
-        upsampled_logits = nn.functional.interpolate(
-            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-        )
         if auxiliary_logits is not None:
             upsampled_auxiliary_logits = nn.functional.interpolate(
                 auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
@@ -1148,7 +1151,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         return loss
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=InstanceSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -1180,7 +1183,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> # logits are of shape (batch_size, num_labels, height/4, width/4)
+        >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1213,6 +1216,11 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
             features[i] = ops[i](features[i])
 
         logits = self.decode_head(features)
+
+        upsampled_logits = nn.functional.interpolate(
+            logits, size=pixel_values.shape[-2:], mode="bilinear", align_corners=False
+        )
+
         auxiliary_logits = None
         if self.auxiliary_head is not None:
             auxiliary_logits = self.auxiliary_head(features)
@@ -1222,18 +1230,19 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
             if self.config.num_labels == 1:
                 raise ValueError("The number of labels should be greater than one")
             else:
-                loss = self.compute_loss(logits, auxiliary_logits, labels)
+                loss = self.compute_loss(upsampled_logits, auxiliary_logits, labels)
 
         if not return_dict:
             if output_hidden_states:
-                output = (logits,) + outputs[2:]
+                output = (upsampled_logits, logits) + outputs[2:]
             else:
-                output = (logits,) + outputs[3:]
+                output = (upsampled_logits, logits) + outputs[3:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return InstanceSegmentationModelOutput(
             loss=loss,
-            logits=logits,
+            logits=upsampled_logits,
+            legacy_logits=logits,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )

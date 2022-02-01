@@ -25,7 +25,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput, InstanceSegmentationModelOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_segformer import SegformerConfig
@@ -703,7 +703,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=InstanceSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -734,7 +734,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> logits = outputs.logits  # shape (batch_size, num_labels, height/4, width/4)
+        >>> logits = outputs.logits  # shape (batch_size, num_labels, height, width)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
@@ -752,28 +752,30 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
 
         logits = self.decode_head(encoder_hidden_states)
 
+        upsampled_logits = nn.functional.interpolate(
+            logits, size=pixel_values.shape[-2:], mode="bilinear", align_corners=False
+        )
+
         loss = None
         if labels is not None:
             if self.config.num_labels == 1:
                 raise ValueError("The number of labels should be greater than one")
             else:
                 # upsample logits to the images' original size
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                )
                 loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
                 loss = loss_fct(upsampled_logits, labels)
 
         if not return_dict:
             if output_hidden_states:
-                output = (logits,) + outputs[1:]
+                output = (upsampled_logits, logits) + outputs[1:]
             else:
-                output = (logits,) + outputs[2:]
+                output = (upsampled_logits, logits) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return InstanceSegmentationModelOutput(
             loss=loss,
-            logits=logits,
+            logits=upsampled_logits,
+            legacy_logits=logits,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
