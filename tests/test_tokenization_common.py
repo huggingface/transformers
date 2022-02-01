@@ -1419,31 +1419,43 @@ class TokenizerTesterMixin:
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 if self.test_rust_tokenizer:
-                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, truncation_side="left", **kwargs)
+                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, truncation_side="left", **kwargs
+                    )
                     self.assertEqual(tokenizer_r.truncation_side, "left")
                 if self.test_slow_tokenizer:
-                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                    self.assertEqual(tokenizer_p.truncation_side, truncation_side)
-
-                truncation_side = "left"
-                kwargs.update({"truncation_side": truncation_side})
-
-                if self.test_rust_tokenizer:
-                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                    self.assertEqual(tokenizer_r.truncation_side, truncation_side)
-
-                if self.test_slow_tokenizer:
-                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                    self.assertEqual(tokenizer_p.truncation_side, truncation_side)
-
-                truncation_side = "unauthorized"
-                kwargs.update({"truncation_side": truncation_side})
+                    tokenizer_p = self.tokenizer_class.from_pretrained(
+                        pretrained_name, truncation_side="left", **kwargs
+                    )
+                    self.assertEqual(tokenizer_p.truncation_side, "left")
 
                 if self.test_rust_tokenizer:
-                    self.assertRaises(ValueError, self.rust_tokenizer_class.from_pretrained, pretrained_name, **kwargs)
-
+                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, truncation_side="right", **kwargs
+                    )
+                    self.assertEqual(tokenizer_r.truncation_side, "right")
                 if self.test_slow_tokenizer:
-                    self.assertRaises(ValueError, self.tokenizer_class.from_pretrained, pretrained_name, **kwargs)
+                    tokenizer_p = self.tokenizer_class.from_pretrained(
+                        pretrained_name, truncation_side="right", **kwargs
+                    )
+                    self.assertEqual(tokenizer_p.truncation_side, "right")
+
+                if self.test_rust_tokenizer:
+                    self.assertRaises(
+                        ValueError,
+                        self.rust_tokenizer_class.from_pretrained,
+                        pretrained_name,
+                        truncation_side="unauthorized",
+                        **kwargs,
+                    )
+                if self.test_slow_tokenizer:
+                    self.assertRaises(
+                        ValueError,
+                        self.tokenizer_class.from_pretrained,
+                        pretrained_name,
+                        truncation_side="unauthorized",
+                        **kwargs,
+                    )
 
     def test_right_and_left_padding(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
