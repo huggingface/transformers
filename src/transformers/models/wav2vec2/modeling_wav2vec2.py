@@ -1807,7 +1807,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        if config.add_adapter:
+        if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
                 "Sequence classification does not support the use of Wav2Vec2 adapters (config.add_adapter=True)"
             )
@@ -1930,7 +1930,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        if config.add_adapter:
+        if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
                 "Audio frame classification does not support the use of Wav2Vec2 adapters (config.add_adapter=True)"
             )

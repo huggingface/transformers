@@ -1087,7 +1087,7 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        if config.add_adapter:
+        if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
                 "Sequence classification does not support the use of SEW adapters (config.add_adapter=True)"
             )

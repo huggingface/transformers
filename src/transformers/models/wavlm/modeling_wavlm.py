@@ -1458,7 +1458,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        if config.add_adapter:
+        if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
                 "Sequence classification does not support the use of WavLM adapters (config.add_adapter=True)"
             )
@@ -1582,7 +1582,7 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        if config.add_adapter:
+        if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
                 "Audio frame classification does not support the use of WavLM adapters (config.add_adapter=True)"
             )
