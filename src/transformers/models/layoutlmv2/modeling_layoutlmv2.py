@@ -37,7 +37,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
+from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward, torch_int_div
 from ...utils import logging
 from .configuration_layoutlmv2 import LayoutLMv2Config
 
@@ -768,7 +768,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         return embeddings
 
     def _calc_visual_bbox(self, image_feature_pool_shape, bbox, device, final_shape):
-        visual_bbox_x = torch.div(
+        visual_bbox_x = torch_int_div(
             torch.arange(
                 0,
                 1000 * (image_feature_pool_shape[1] + 1),
@@ -777,9 +777,8 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
                 dtype=bbox.dtype,
             ),
             self.config.image_feature_pool_shape[1],
-            rounding_mode="floor",
         )
-        visual_bbox_y = torch.div(
+        visual_bbox_y = torch_int_div(
             torch.arange(
                 0,
                 1000 * (self.config.image_feature_pool_shape[0] + 1),
@@ -788,7 +787,6 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
                 dtype=bbox.dtype,
             ),
             self.config.image_feature_pool_shape[0],
-            rounding_mode="floor",
         )
         visual_bbox = torch.stack(
             [
