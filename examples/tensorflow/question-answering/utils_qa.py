@@ -137,7 +137,9 @@ def postprocess_qa_predictions(
                         start_index >= len(offset_mapping)
                         or end_index >= len(offset_mapping)
                         or offset_mapping[start_index] is None
+                        or len(offset_mapping[start_index]) < 2
                         or offset_mapping[end_index] is None
+                        or len(offset_mapping[end_index]) < 2
                     ):
                         continue
                     # Don't consider answers with a length that is either < 0 or > max_answer_length.
@@ -148,16 +150,9 @@ def postprocess_qa_predictions(
                     if token_is_max_context is not None and not token_is_max_context.get(str(start_index), False):
                         continue
 
-                    # We shouldn't get index errors now because of all the cehcks above, but for some reason, some
-                    # are still there, see https://github.com/huggingface/transformers/issues/15401#issuecomment-1024845936
-                    try:
-                        example_offsets = (offset_mapping[start_index][0], offset_mapping[end_index][1])
-                    except IndexError:
-                        continue
-
                     prelim_predictions.append(
                         {
-                            "offsets": example_offsets,
+                            "offsets": (offset_mapping[start_index][0], offset_mapping[end_index][1]),
                             "score": start_logits[start_index] + end_logits[end_index],
                             "start_logit": start_logits[start_index],
                             "end_logit": end_logits[end_index],
