@@ -1418,13 +1418,9 @@ class TokenizerTesterMixin:
     def test_truncation_side_in_kwargs(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                truncation_side = "right"
-                kwargs.update({"truncation_side": truncation_side})
-
                 if self.test_rust_tokenizer:
-                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                    self.assertEqual(tokenizer_r.truncation_side, truncation_side)
-
+                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, truncation_side="left", **kwargs)
+                    self.assertEqual(tokenizer_r.truncation_side, "left")
                 if self.test_slow_tokenizer:
                     tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                     self.assertEqual(tokenizer_p.truncation_side, truncation_side)
