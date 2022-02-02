@@ -60,6 +60,7 @@ from transformers.testing_utils import (
     require_torch_non_multi_gpu,
     require_torch_tf32,
     require_torch_up_to_2_gpus,
+    require_wandb,
     slow,
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
@@ -1810,3 +1811,59 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         with patch.dict("sys.modules", {"apex.optimizers": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
+
+
+@require_torch
+@require_wandb
+class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        args = TrainingArguments(".")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
+
+    def test_hyperparameter_search(self):
+        class MyTrialShortNamer(TrialShortNamer):
+            DEFAULTS = {"a": 0, "b": 0}
+
+        def hp_space(trial):
+
+            return {
+                "method": "random",
+                "metric": {},
+                "parameters": {
+                    "a": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
+                    "b": {"distribution": "int_uniform", "min": 1, "max": 6},
+                },
+            }
+
+        def model_init(config):
+            if config is None:
+                a = 0
+                b = 0
+            else:
+                a = config["a"]
+                b = config["b"]
+            model_config = RegressionModelConfig(a=a, b=b, double_output=False)
+
+            return RegressionPreTrainedModel(model_config)
+
+        def hp_name(params):
+            return MyTrialShortNamer.shortname(params)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                learning_rate=0.1,
+                logging_steps=1,
+                evaluation_strategy=IntervalStrategy.EPOCH,
+                save_strategy=IntervalStrategy.EPOCH,
+                num_train_epochs=4,
+                disable_tqdm=True,
+                load_best_model_at_end=True,
+                logging_dir="runs",
+                run_name="test",
+                model_init=model_init,
+            )
+            trainer.hyperparameter_search(
+                direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="wandb", n_trials=4, anonymous="must"
+            )

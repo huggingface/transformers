@@ -43,9 +43,11 @@ from .integrations import (  # isort: split
     is_optuna_available,
     is_ray_tune_available,
     is_sigopt_available,
+    is_wandb_available,
     run_hp_search_optuna,
     run_hp_search_ray,
     run_hp_search_sigopt,
+    run_hp_search_wandb,
 )
 
 import numpy as np
@@ -937,6 +939,8 @@ class Trainer:
             params.pop("wandb", None)
         elif self.hp_search_backend == HPSearchBackend.SIGOPT:
             params = {k: int(v) if isinstance(v, str) else v for k, v in trial.assignments.items()}
+        elif self.hp_search_backend == HPSearchBackend.WANDB:
+            params = trial
 
         for key, value in params.items():
             if not hasattr(self.args, key):
@@ -953,6 +957,8 @@ class Trainer:
             logger.info("Trial:", trial.params)
         if self.hp_search_backend == HPSearchBackend.SIGOPT:
             logger.info(f"SigOpt Assignments: {trial.assignments}")
+        if self.hp_search_backend == HPSearchBackend.WANDB:
+            logger.info(f"W&B Sweep parameters: {trial}")
         if self.args.deepspeed:
             # Rebuild the deepspeed config to reflect the updated training parameters
             from transformers.deepspeed import HfDeepSpeedConfig
@@ -1646,6 +1652,10 @@ class Trainer:
                 run_id = tune.get_trial_id()
             elif self.hp_search_backend == HPSearchBackend.SIGOPT:
                 run_id = trial.id
+            elif self.hp_search_backend == HPSearchBackend.WANDB:
+                import wandb
+
+                run_id = wandb.run.id
             run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
             run_dir = os.path.join(self.args.output_dir, run_name)
         else:
@@ -1848,6 +1858,8 @@ class Trainer:
             )
         if backend == HPSearchBackend.SIGOPT and not is_sigopt_available():
             raise RuntimeError("You picked the sigopt backend, but it is not installed. Use `pip install sigopt`.")
+        if backend == HPSearchBackend.WANDB and not is_wandb_available():
+            raise RuntimeError("You picked the wandb backend, but it is not installed. Use `pip install wandb`.")
         self.hp_search_backend = backend
         if self.model_init is None:
             raise RuntimeError(
@@ -1862,6 +1874,7 @@ class Trainer:
             HPSearchBackend.OPTUNA: run_hp_search_optuna,
             HPSearchBackend.RAY: run_hp_search_ray,
             HPSearchBackend.SIGOPT: run_hp_search_sigopt,
+            HPSearchBackend.WANDB: run_hp_search_wandb,
         }
         best_run = backend_dict[backend](self, n_trials, direction, **kwargs)
 
