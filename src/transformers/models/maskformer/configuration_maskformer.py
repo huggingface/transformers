@@ -43,7 +43,7 @@ class MaskFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormer`]. It is used to instantiate a
     MaskFormer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the "askformer-swin-base-640"
+    configuration with the defaults will yield a similar configuration to that of the "maskformer-swin-base-ade-640"
     architecture trained on ade20k-150
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

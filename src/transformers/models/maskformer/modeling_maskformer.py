@@ -50,6 +50,12 @@ import torch.distributed as dist
 
 
 _CONFIG_FOR_DOC = "MaskFormerConfig"
+_CHECKPOINT_FOR_DOC = "facebook/maskformer-swin-base-ade-640"
+
+DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/maskformer-swin-base-ade-640",
+    # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
+]
 
 PREDICTIONS_MASKS_KEY = "preds_masks"
 PREDICTIONS_LOGITS_KEY = "preds_logits"
