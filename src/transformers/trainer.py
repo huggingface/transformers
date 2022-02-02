@@ -256,6 +256,8 @@ class Trainer:
             tensors, the logits and the labels, and return the logits once processed as desired. The modifications made
             by this function will be reflected in the predictions received by `compute_metrics`.
 
+            Note that the labels (second parameter) will be None if the dataset does not have them.
+
     Important attributes:
 
         - **model** -- Always points to the core model. If using a transformers model, it will be a [`PreTrainedModel`]
