@@ -17,10 +17,9 @@
 from __future__ import annotations
 
 import logging
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from numbers import Number
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 import numpy as np
 import torch
@@ -30,15 +29,11 @@ from torch.nn import functional as F
 
 from einops import rearrange
 from einops.einops import repeat
-from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_scipy_available,
-    is_timm_available,
-    is_vision_available,
     replace_return_docstrings,
     requires_backends,
 )

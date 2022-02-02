@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -348,7 +348,12 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 pixel_mask.append(mask)
 
         # return as BatchFeature
-        data = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
+        data = {
+            "pixel_values": pixel_values,
+            "pixel_mask": pixel_mask,
+            # "pixel_labels": pixel_labels,
+            # "class_labels": class_labels,
+        }
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
         if annotations:
