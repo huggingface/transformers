@@ -113,7 +113,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         # randomly initialized parameters
         if abstract_init:
-            init_fn = partial(self.init_weights, input_shape=input_shape)
+            init_fn = jax.jit(self.init_weights, static_argnums=(1,))
+            init_fn = partial(init_fn, input_shape=input_shape)
             random_params = jax.eval_shape(init_fn, self.key)
         else:
             random_params = self.init_weights(self.key, input_shape)
