@@ -316,6 +316,7 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
 
     config_class = PoolFormerConfig
     base_model_prefix = "poolformer"
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
