@@ -92,7 +92,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     to support multiple audio formats
     """
 
-    def __init__(self, model, tokenizer, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
+    def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
         """
         Arguments:
             model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
@@ -122,7 +122,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 model on the associated CUDA device id.
         """
 
-        if model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
+        super().__init__(feature_extractor, *args, **kwargs)
+        self.feature_extractor = feature_extractor
+
+        if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
             self.type = "seq2seq"
         elif (
             feature_extractor._processor_class
@@ -133,8 +136,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.type = "ctc_with_lm"
         else:
             self.type = "ctc"
-
-        super().__init__(model, tokenizer, feature_extractor, *args, **kwargs)
 
         if self.framework == "tf":
             raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
@@ -173,12 +174,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if "stride_length_s" in kwargs:
             preprocess_params["stride_length_s"] = kwargs["stride_length_s"]
 
-        postprocess_params = {}
-        if "raw_ctc" in kwargs:
-            if self.type != "ctc":
-                raise ValueError("`raw_ctc` cannot be used on non CTC models")
-            postprocess_params["raw_ctc"] = kwargs["raw_ctc"]
-        return preprocess_params, {}, postprocess_params
+        return preprocess_params, {}, {}
 
     def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None):
         if isinstance(inputs, str):
@@ -308,7 +304,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         extra = model_inputs
         return {"is_last": is_last, **out, **extra}
 
-    def postprocess(self, model_outputs, raw_ctc=False):
+    def postprocess(self, model_outputs):
         if self.type == "ctc_with_lm":
             final_logits = []
             for outputs in model_outputs:
@@ -340,6 +336,4 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 if k == "is_last":
                     continue
                 extra[k].append(v)
-        if raw_ctc:
-            return {"tokens": tokens, **extra}
         return {"text": text, **extra}
