@@ -434,11 +434,22 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 question_first = bool(self.tokenizer.padding_side == "right")
                 enc = output["encoding"]
 
+                # Encoding was *not* padded, input_ids *might*.
+                # It doesn't make a difference unless we're padding on
+                # the left hand side, since now we have different offsets
+                # everywhere.
+                if self.tokenizer.padding_side == "left":
+                    offset = (output["input_ids"] == self.tokenizer.pad_token_id).numpy().sum()
+                else:
+                    offset = 0
+
                 # Sometimes the max probability token is in the middle of a word so:
                 # - we start by finding the right word containing the token with `token_to_word`
                 # - then we convert this word in a character span with `word_to_chars`
                 sequence_index = 1 if question_first else 0
                 for s, e, score in zip(starts, ends, scores):
+                    s = s - offset
+                    e = e - offset
                     try:
                         start_word = enc.token_to_word(s)
                         end_word = enc.token_to_word(e)

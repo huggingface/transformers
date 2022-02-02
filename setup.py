@@ -98,7 +98,7 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.5.7",
+    "deepspeed>=0.5.9",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
@@ -114,7 +114,6 @@ _deps = [
     "jax>=0.2.8",
     "jaxlib>=0.1.65",
     "jieba",
-    "keras2onnx",
     "nltk",
     "numpy>=1.17",
     "onnxconverter-common",
@@ -147,12 +146,13 @@ _deps = [
     "starlette",
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
+    "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.10.1",
+    "tokenizers>=0.10.1,!=0.11.3",
     "torch>=1.0",
     "torchaudio",
-    "pyctcdecode>=0.2.0",
+    "pyctcdecode>=0.3.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -229,8 +229,8 @@ extras = {}
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "keras2onnx")
-extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "keras2onnx")
+extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx")
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx")
 
 extras["torch"] = deps_list("torch")
 
@@ -243,7 +243,7 @@ else:
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
-extras["onnx"] = deps_list("onnxconverter-common", "keras2onnx") + extras["onnxruntime"]
+extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
@@ -351,7 +351,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.16.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.17.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

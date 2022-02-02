@@ -35,7 +35,6 @@ from .file_utils import (
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
-    is_keras2onnx_available,
     is_librosa_available,
     is_onnx_available,
     is_pandas_available,
@@ -49,6 +48,7 @@ from .file_utils import (
     is_soundfile_availble,
     is_spacy_available,
     is_tensorflow_probability_available,
+    is_tf2onnx_available,
     is_tf_available,
     is_timm_available,
     is_tokenizers_available,
@@ -246,9 +246,9 @@ def require_rjieba(test_case):
         return test_case
 
 
-def require_keras2onnx(test_case):
-    if not is_keras2onnx_available():
-        return unittest.skip("test requires keras2onnx")(test_case)
+def require_tf2onnx(test_case):
+    if not is_tf2onnx_available():
+        return unittest.skip("test requires tf2onnx")(test_case)
     else:
         return test_case
 

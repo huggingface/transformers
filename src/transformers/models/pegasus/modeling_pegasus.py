@@ -1537,7 +1537,7 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
         self.model.decoder.resize_position_embeddings(new_num_position_embeddings)
 
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.bart.modeling_bart.BartForCausalLM.forward with Bart->Pegasus
+    # Copied from transformers.models.bart.modeling_bart.BartForCausalLM.forward with Bart->Pegasus, facebook/bart-large->google/pegasus-large
     def forward(
         self,
         input_ids=None,
@@ -1627,8 +1627,8 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
         ```python
         >>> from transformers import PegasusTokenizer, PegasusForCausalLM
 
-        >>> tokenizer = PegasusTokenizer.from_pretrained("facebook/bart-large")
-        >>> model = PegasusForCausalLM.from_pretrained("facebook/bart-large", add_cross_attention=False)
+        >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
+        >>> model = PegasusForCausalLM.from_pretrained("google/pegasus-large", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
