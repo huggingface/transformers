@@ -1383,6 +1383,8 @@ INIT_TOKENIZER_DOCSTRING = r"""
         - **model_input_names** (`List[str]`) -- A list of inputs expected in the forward pass of the model.
         - **padding_side** (`str`) -- The default value for the side on which the model should have padding applied.
           Should be `'right'` or `'left'`.
+        - **truncation_side** (`str`) -- The default value for the side on which the model should have truncation
+          applied. Should be `'right'` or `'left'`.
 
     Args:
         model_max_length (`int`, *optional*):
@@ -1392,6 +1394,9 @@ INIT_TOKENIZER_DOCSTRING = r"""
             default to VERY_LARGE_INTEGER (`int(1e30)`).
         padding_side (`str`, *optional*):
             The side on which the model should have padding applied. Should be selected between ['right', 'left'].
+            Default value is picked from the class attribute of the same name.
+        truncation_side (`str`, *optional*):
+            The side on which the model should have truncation applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
         model_input_names (`List[string]`, *optional*):
             The list of inputs accepted by the forward pass of the model (like `"token_type_ids"` or
@@ -1456,12 +1461,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
 
-        # Padding side is right by default and overridden in subclasses. If specified in the kwargs, it is changed.
+        # Padding and truncation side are right by default and overridden in subclasses. If specified in the kwargs, it
+        # is changed.
         self.padding_side = kwargs.pop("padding_side", self.padding_side)
         if self.padding_side not in ["right", "left"]:
             raise ValueError(
                 f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
             )
+
+        self.truncation_side = kwargs.pop("truncation_side", self.truncation_side)
+        if self.truncation_side not in ["right", "left"]:
+            raise ValueError(
+                f"Padding side should be selected between 'right' and 'left', current value: {self.truncation_side}"
+            )
+
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
         self.deprecation_warnings = (
