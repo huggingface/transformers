@@ -32,6 +32,7 @@ from requests import HTTPError
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
+from .dynamic_module_utils import custom_object_save
 from .file_utils import (
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
@@ -446,6 +447,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     config_class = None
     base_model_prefix = ""
     main_input_name = "input_ids"
+    _auto_class = None
 
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
@@ -1052,6 +1054,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
+
+        # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self._auto_class is not None:
+            custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
         if save_config:
@@ -1804,6 +1811,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 setattr(submodule, param_name, new_val)
 
         del state_dict
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="AutoModel"):
+        """
+        Register this class with a given auto class. This should only be used for custom models as the ones in the
+        library are already mapped with an auto class.
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"AutoModel"`):
+                The auto class to register this new model with.
+        """
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
+        cls._auto_class = auto_class
 
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
