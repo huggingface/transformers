@@ -522,9 +522,9 @@ class ApplyStrideTest(unittest.TestCase):
 
 def require_ffmpeg(test_case):
     """
-    Decorator marking a test that requires PyTorch.
+    Decorator marking a test that requires FFmpeg.
 
-    These tests are skipped when PyTorch isn't installed.
+    These tests are skipped when FFmpeg isn't installed.
 
     """
     import subprocess
