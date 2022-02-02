@@ -95,6 +95,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         input_shape: Tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        abstract_init: bool = False,
     ):
         if config is None:
             raise ValueError("config cannot be None")
@@ -111,7 +112,11 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         self.dtype = dtype
 
         # randomly initialized parameters
-        random_params = self.init_weights(self.key, input_shape)
+        if abstract_init:
+            init_fn = partial(self.init_weights, input_shape=input_shape)
+            random_params = jax.eval_shape(init_fn, self.key)
+        else:
+            random_params = self.init_weights(self.key, input_shape)
 
         # save required_params as set
         self._required_params = set(flatten_dict(unfreeze(random_params)).keys())
@@ -589,10 +594,21 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # flatten dicts
         state = flatten_dict(state)
 
-        random_state = flatten_dict(unfreeze(model.params))
+        # random_state = flatten_dict(unfreeze(model.params))
 
         missing_keys = model.required_params - set(state.keys())
         unexpected_keys = set(state.keys()) - model.required_params
+
+        # Assuming that if we have missing keys then that means that we are loading a model with a head.
+        # This won't work if other weights from the base model are missing.
+        # Here we only initialize the head weights.
+
+        # TODO: It's not starightforward to init other missing weights, maybe just raise an error
+        #  when we have other missing keys and abstract_init is True
+        if len(missing_keys) > 0 and kwargs.get("abstract_init", False):
+            random_state = flatten_dict(unfreeze(model.init_head(model.key)))
+        else:
+            random_state = flatten_dict(unfreeze(model.params))
 
         # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
         # matching the weights in the model.

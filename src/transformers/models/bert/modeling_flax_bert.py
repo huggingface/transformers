@@ -619,8 +619,8 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
     ):
-        module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        module = self.module_class(config=config, dtype=dtype)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, **kwargs)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
@@ -1288,6 +1288,17 @@ class FlaxBertForQuestionAnsweringModule(nn.Module):
 )
 class FlaxBertForQuestionAnswering(FlaxBertPreTrainedModel):
     module_class = FlaxBertForQuestionAnsweringModule
+
+    def init_head(self, rng):
+        def _init(module, inputs):
+            return module.qa_outputs(inputs)
+        
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        hidden_states = jax.random.uniform(rng, (1, 1, self.config.hidden_size))
+        params = self.module.init(rngs, hidden_states, method=_init)["params"]
+        return params
 
 
 append_call_sample_docstring(
