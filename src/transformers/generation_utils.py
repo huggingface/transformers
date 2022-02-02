@@ -620,7 +620,7 @@ class GenerationMixin:
         )
 
     def _get_logits_warper(
-            self, top_k: int = None, top_p: float = None, typical: float = None, temperature: float = None, num_beams: int = None
+            self, top_k: int = None, top_p: float = None, typical_p: float = None, temperature: float = None, num_beams: int = None
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsWarper`] instances
@@ -630,6 +630,7 @@ class GenerationMixin:
         # init warp parameters
         top_k = top_k if top_k is not None else self.config.top_k
         top_p = top_p if top_p is not None else self.config.top_p
+        typical_p = typical_p if typical_p is not None else self.config.typical_p
         temperature = temperature if temperature is not None else self.config.temperature
         # instantiate warpers list
         warpers = LogitsProcessorList()
@@ -642,7 +643,7 @@ class GenerationMixin:
             warpers.append(TopKLogitsWarper(top_k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         if top_p is not None and top_p < 1.0:
             warpers.append(TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
-        if typical is not None and typical < 1.0:
+        if typical_p is not None and typical_p < 1.0:
             warpers.append(TypicalLogitsWarper(mass=typical, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         return warpers
 
@@ -813,7 +814,7 @@ class GenerationMixin:
         temperature: Optional[float] = None,
         top_k: Optional[int] = None,
         top_p: Optional[float] = None,
-        typical: Optional[float] = None,
+        typical_p: Optional[float] = None,
         repetition_penalty: Optional[float] = None,
         bad_words_ids: Optional[Iterable[int]] = None,
         bos_token_id: Optional[int] = None,
@@ -1192,7 +1193,7 @@ class GenerationMixin:
         elif is_sample_gen_mode:
             # 10. prepare logits warper
             logits_warper = self._get_logits_warper(
-                top_k=top_k, top_p=top_p, typical=typical, temperature=temperature, num_beams=num_beams
+                top_k=top_k, top_p=top_p, typical_p=typical_p, temperature=temperature, num_beams=num_beams
             )
 
             # 11. expand input_ids with `num_return_sequences` additional sequences per batch
@@ -1254,7 +1255,7 @@ class GenerationMixin:
         elif is_beam_sample_gen_mode:
             # 10. prepare logits warper
             logits_warper = self._get_logits_warper(
-                top_k=top_k, top_p=top_p, typical=typical, temperature=temperature, num_beams=num_beams
+                top_k=top_k, top_p=top_p, typical_p=typical_p, temperature=temperature, num_beams=num_beams
             )
 
             if stopping_criteria.max_length is None:
@@ -2822,6 +2823,6 @@ def top_k_top_p_filtering(
     if 0 <= top_p <= 1.0:
         logits = TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
     
-    if 0 <= typical <= 1.0:
-        logits = TopPLogitsWarper(mass=typical,filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
+    if 0 <= typical_p <= 1.0:
+        logits = TopPLogitsWarper(mass=typical_p,filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
     return logits
