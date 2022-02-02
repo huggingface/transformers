@@ -51,20 +51,20 @@ def get_convnext_config(checkpoint_url):
         depths = [3, 3, 27, 3]
         hidden_sizes = [256, 512, 1024, 2048]
 
-    if "22k" in checkpoint_url:
-        num_labels = 21841
-        filename = "imagenet-22k-id2label.json"
-        expected_shape = (1, 21841)
     if "1k" in checkpoint_url:
         num_labels = 1000
         filename = "imagenet-1k-id2label.json"
         expected_shape = (1, 1000)
+    else:
+        num_labels = 21841
+        filename = "imagenet-22k-id2label.json"
+        expected_shape = (1, 21841)
 
     repo_id = "datasets/huggingface/label-files"
     config.num_labels = num_labels
     id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
-    if "22k" in checkpoint_url:
+    if "1k" not in checkpoint_url:
         # this dataset contains 21843 labels but the model only has 21841
         # we delete the classes as mentioned in https://github.com/google-research/big_transfer/issues/18
         del id2label[9205]
@@ -115,22 +115,26 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         state_dict[key] = val
 
     # load HuggingFace model
-    model = ConvNextForImageClassification(config).eval()
+    model = ConvNextForImageClassification(config)
     model.load_state_dict(state_dict)
+    model.eval()
 
     # Check outputs on an image, prepared by ConvNextFeatureExtractor
     size = 224 if "224" in checkpoint_url else 384
+    print("Size:", size)
     feature_extractor = ConvNextFeatureExtractor(size=size)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
 
-    outputs = model(pixel_values)
-    logits = outputs.logits
+    print(encoding.pixel_values)
 
-    # TODO assert values
-    print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
-    print("Shape of logits:", logits.shape)
-    assert outputs.logits.shape == torch.Size(expected_shape)
+    logits = model(**encoding).logits
+
+    expected_logits = torch.tensor([-0.1235, -0.6594, 0.1908])
+
+    print("Logits:", logits[0, :3])
+
+    assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
+    assert logits.shape == expected_shape
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
@@ -146,6 +150,8 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         model_name += "-small"
     elif "base" in checkpoint_url:
         model_name += "-base"
+    elif "xlarge" in checkpoint_url:
+        model_name += "-xlarge"
     elif "large" in checkpoint_url:
         model_name += "-large"
     if "224" in checkpoint_url:
@@ -156,7 +162,9 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         model_name += "-22k"
 
     model.push_to_hub(
-        repo_path_or_name=Path(pytorch_dump_folder_path, model_name), organization="nielsr", commit_message="Add model"
+        repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
+        organization="nielsr",
+        commit_message="Add model",
     )
 
 
@@ -167,7 +175,7 @@ if __name__ == "__main__":
         "--checkpoint_url",
         default="https://dl.fbaipublicfiles.com/convnext/convnext_tiny_1k_224_ema.pth",
         type=str,
-        help="URL of the ConvNext original checkpoint you'd like to convert.",
+        help="URL of the original ConvNeXT checkpoint you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",

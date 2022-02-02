@@ -144,7 +144,7 @@ class ConvNextLayerNorm(nn.Module):
 
 
 class ConvNextLayer(nn.Module):
-    """This corresponds to the Block class in the original implementation.
+    """This corresponds to the `Block` class in the original implementation.
 
     There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
     H, W) (2) [DwConv, Permute to (N, H, W, C), LayerNorm (channels_last), Linear, GELU, Linear]; Permute back
@@ -185,6 +185,43 @@ class ConvNextLayer(nn.Module):
 
         x = input + self.drop_path(x)
         return x
+
+
+class ConvNextStage(nn.Module):
+    """ConvNeXt stage, consisting of a downsampling layer + multiple residual blocks.
+
+    Args:
+        config ([`ConvNextConfig`]): Model configuration class.
+        in_channels (`int`): Number of input channels.
+        out_channels (`int`): Number of output channels.
+        depth (`int`): Number of residual blocks.
+        drop_path _rates(`List[float]`): Stochastic depth rates for each layer.
+    """
+
+    def __init__(self, config, in_channels, out_channels, kernel_size=2, stride=2, depth=2, drop_path_rates=None):
+        super().__init__()
+        print("Number of input channels", in_channels)
+        print("Number of output channels:", out_channels)
+        
+        if in_channels != out_channels or stride > 1:
+            self.downsampling_layer = nn.Sequential(
+                ConvNextLayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
+                nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
+            )
+        else:
+            self.downsampling_layer = nn.Identity()
+        drop_path_rates = drop_path_rates or [0.0] * depth
+        self.layers = nn.Sequential(
+            *[ConvNextLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
+        )
+
+    def forward(self, hidden_states):
+        print("Shape of hidden states before downsampling:", hidden_states.shape)
+        hidden_states = self.downsampling_layer(hidden_states)
+        print("Shape of hidden states after downsampling:", hidden_states.shape)
+        hidden_states = self.layers(hidden_states)
+        print("Shape of hidden states after layers:", hidden_states.shape)
+        return hidden_states
 
 
 class ConvNextPreTrainedModel(PreTrainedModel):
@@ -249,36 +286,36 @@ class ConvNextModel(ConvNextPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        # stem and intermediate downsampling conv layers
-        self.downsample_layers = nn.ModuleList()
-        stem = nn.Sequential(
+        # stem
+        self.stem = nn.Sequential(
             nn.Conv2d(config.num_channels, config.hidden_sizes[0], kernel_size=4, stride=4),
             ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first"),
         )
-        self.downsample_layers.append(stem)
-        for i in range(config.num_stages - 1):
-            downsample_layer = nn.Sequential(
-                ConvNextLayerNorm(config.hidden_sizes[i], eps=1e-6, data_format="channels_first"),
-                nn.Conv2d(config.hidden_sizes[i], config.hidden_sizes[i + 1], kernel_size=2, stride=2),
-            )
-            self.downsample_layers.append(downsample_layer)
 
-        # feature resolution stages, each consisting of multiple residual blocks
+        # stages
         self.stages = nn.ModuleList()
-        dp_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         cur = 0
+        prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
-            stage = nn.Sequential(
-                *[
-                    ConvNextLayer(config, dim=config.hidden_sizes[i], drop_path=dp_rates[cur + j])
-                    for j in range(config.depths[i])
-                ]
+            stride = 2 if i > 0 else 1
+            out_chs = config.hidden_sizes[i]
+            print("Stage", i, ":", prev_chs, "->", out_chs)
+            stage = ConvNextStage(
+                config,
+                in_channels=prev_chs,
+                out_channels=out_chs,
+                stride= 2 if i > 0 else 1,
+                depth=config.depths[i],
+                drop_path_rates=drop_path_rates[cur],
             )
             self.stages.append(stage)
             cur += config.depths[i]
+            stride = 2 if i > 0 else 1
+            prev_chs = out_chs
 
-        # final norm layer
-        self.norm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
+        # final layernorm layer
+        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -314,17 +351,19 @@ class ConvNextModel(ConvNextPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        hidden_states = self.stem(pixel_values)
+
+        print("Hidden states after stem:", hidden_states.shape)
+
         all_hidden_states = () if output_hidden_states else None
         for i in range(self.config.num_stages):
-            if i == 0:
-                hidden_states = pixel_values
-            hidden_states = self.downsample_layers[i](hidden_states)
+            print("Layer {}:".format(i))
             hidden_states = self.stages[i](hidden_states)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         # global average pooling, (N, C, H, W) -> (N, C)
-        pooled_output = self.norm(hidden_states.mean([-2, -1]))
+        pooled_output = self.layernorm(hidden_states.mean([-2, -1]))
 
         if not return_dict:
             output = (hidden_states, pooled_output)
