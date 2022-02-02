@@ -10,16 +10,19 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Create a manual instance of a model
+# Create a model manually
 
-In the `AutoClass` [tutorial](autoclass_tutorial), you loaded a model by allowing the `AutoClass` to automatically infer the architecture and download the pretrained configuration and weights. While we generally recommend using an `AutoClass` to produce checkpoint-agnostic code, users who want more flexibility are able to manually create their own instance of a 🤗 Transformers model. This could be particularly useful for anyone who is interested in studying or experimenting with a 🤗 Transformers model. This guide will dive deeper into creating and using a model, and you will learn to:
+In the `AutoClass` [tutorial](autoclass_tutorial), you loaded a model by allowing the `AutoClass` to automatically infer the architecture and download the pretrained configuration and weights. While we generally recommend using an `AutoClass` to produce checkpoint-agnostic code, users who want more flexibility are able to manually create an instance of a 🤗 Transformers model. This could be particularly useful for anyone who is interested in studying or experimenting with a 🤗 Transformers model. In this guide, you will dive deeper into creating a model without a `AutoClass`. You will learn to:
 
 - Load and customize a model configuration.
-- Create a tokenizer and model.
+- Create a model.
+- Create a slow and fast tokenizer.
 
 ## Configuration
 
-A configuration file stores model specific attributes. Each model configuration has attributes that are specific to it, but all models will have the `hidden_size`, `num_attention_heads`, `num_hidden_layers` and `vocab_size` (if it is a text model) attributes. Attributes are used to build a model. For example, access [`DistilBertConfig`] to inspect the attributes used to build it:
+A [configuration](main_classes/configuration) file stores model specific attributes. Each model configuration has attributes that are specific to it, but all models have the `hidden_size`, `num_attention_heads`, `num_hidden_layers` and `vocab_size` (if it is a text model) attributes in common. Attributes are used to build a model. 
+
+For example, access [`DistilBertConfig`] to inspect the attributes used to build it:
 
 ```py
 >>> from transformers import DistilBertConfig
@@ -46,7 +49,7 @@ DistilBertConfig {
 }
 ```
 
-This displays all the attributes used to build [`DistilBert`]. These attributes are also customizable if you'd like. For example, if you want to use a different activation function, and change the dropout ratio for the attention probabilities, then:
+This displays all the attributes used to build [`DistilBert`]. These attributes are also customizable, creating space for experimentation. For example, if you want to use a different activation function and change the dropout ratio for the attention probabilities, then:
 
 ```py
 >>> my_config = DistilBertConfig(activation="relu", attention_dropout=0.4)
@@ -86,14 +89,120 @@ Once you are satisfied with your model configuration, you can save it with [`~tr
 To reuse the configuration file, load it with [`~transformers.PretrainedConfig.from_pretrained`]:
 
 ```py
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path")
+>>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
 ```
 
 <Tip>
 
-You can also save your configuration file as a dictionary or even only save the difference between your custom configuration attributes, and the default configuration attributes! See [here](configuration) for more details.
+You can also save your configuration file as a dictionary or even only save the difference between your custom configuration attributes and the default configuration attributes! See [here](main_classes/configuration) for more details.
 
 </Tip>
 
 ## Model
 
+The next step is to create a [model](main_classes/models). The model - also loosely referred to as the architecture - defines what each layer is doing and what operations are happening. Each model will be different, but they all share the base class [`PreTrainedModel`] and a few common methods such as resizing input embeddings and pruning self-attention heads. All models are either a [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html), [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) or [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/flax.linen.html#module) subclass. This means models are also compatible with each of their respective general framework usage.
+
+Load the configuration attributes into the model:
+
+```py
+>>> from transformers import DistilBertModel
+
+>>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
+>>> model = DistilBertModel(config)
+===PT-TF-SPLIT===
+>>> from transformers import TFDistilBertModel
+
+>>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
+>>> tf_model = TFDistilBertModel(config)
+```
+
+This creates a model with random values instead of pretrained weights. You won't be able to use this model for anything useful until you train it. Training is a costly and time-consuming process and it is generally better to use a pretrained model. With a pretrained model, you can get better results faster while only using a fraction of the resources required for training.
+
+Create a pretrained model with [`~transformers.PreTrainedModel.from_pretrained`]:
+
+```py
+>>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
+===PT-TF-SPLIT===
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
+```
+
+When you load pretrained weights, the configuration is automatically loaded if the model is provided by 🤗 Transformers. However, if you are really attached to your custom configuration, you can still use it with the pretrained model:
+
+```py
+>>> model = DistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+===PT-TF-SPLIT===
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+```
+
+### Model heads
+
+At this point, you've only created a base DistilBert model that outputs some *hidden states*. To make sense of these values, the hidden states are passed as inputs to a model head. The model head produces the final output. 🤗 Transformers provides a different model head for each task, as long as your model supports it (i.e., you can't use DistilBert for a sequence-to-sequence task like translation).
+
+Create a model head by instantiating it with your task. For example, let's use [`DistilBertForSequenceClassification`] for a sequence classification task. The sequence classification head is a linear layer on top of the pooled outputs.
+
+```py
+>>> from transformers import DistilBertForSequenceClassification
+
+>>> model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+===PT-TF-SPLIT===
+>>> from transformers import TFDistilBertForSequenceClassification
+
+>>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+```
+
+You can easily reuse the checkpoint for another task by using a different model head. If you are interested in a question answering task, load [`DistilBertForQuestionAnswering`]. The question answering head is similar to the sequence classification head except it is a linear layer on top of the hidden states output.
+
+```py
+>>> from transformers import DistilBertForQuestionAnswering
+
+>>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+===PT-TF-SPLIT===
+>>> from transformers import TFDistilBertForQuestionAnswering
+
+>>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+```
+
+## Tokenizer
+
+The last class you need before you use a model is the [tokenizer](main_classes/tokenizer). A tokenizer prepares the model input by converting raw text to tensors. There are two types of tokenizers you can use with 🤗 Transformers:
+
+- [`PreTrainedTokenizer`]: a Python implementation of a tokenizer.
+- [`PreTrainedTokenizerFast`]: a tokenizer from our Rust-based [🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/) library. This tokenizer type is significantly faster - especially during batch tokenization - due to it's Rust implementation. The fast tokenizer also offers additional methods like *offset mapping* which can map the original words to it's generated tokens and even map each character to it's token.
+
+Both tokenizers support common methods such as encoding and decoding, adding new tokens, and managing special tokens.
+
+<Tip warning={true}>
+
+Not every model supports a fast tokenizer. Take a look at this [table](index#supported-frameworks) to check if the model you're using supports a fast tokenizer.
+
+</Tip>
+
+If you trained your own tokenizer, you can create a tokenizer from your *vocabulary* file:
+
+```py
+>>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained(vocab_file="my_vocab_file.txt")
+```
+
+However, as with a model, it is generally better and faster to use a pretrained model's vocabulary. Create a [`PreTrainedTokenizer`] with:
+
+```py
+>>> from transformers import DistilBertTokenizer
+
+>>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+```
+
+Create a [`PreTrainedTokenizerFast`] with:
+
+```py
+>>> from transformers import DistilBertTokenizerFast
+
+>>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+```
+
+<Tip>
+
+An [`AutoTokenizer`] will try to load a fast tokenizer by default!
+
+</Tip>
+
+With these three basic classes - two if you use a pretrained model - you can use any 🤗 Transformers model whether you are training one from scratch or fine-tuning one for your task.

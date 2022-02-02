@@ -29,6 +29,8 @@
     title: Multi-lingual models
   title: "Using 🤗 Transformers"
 - sections:
+  - local: create_a_model
+    title: Create a model manually
   - local: examples
     title: Examples
   - local: troubleshooting
