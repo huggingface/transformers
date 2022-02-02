@@ -50,7 +50,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
-check_min_version("4.16.0.dev0")
+check_min_version("4.17.0.dev0")
 
 require_version("datasets>=1.18.2", "To fix: pip install 'datasets>=1.18.2'")
 
