@@ -420,7 +420,7 @@ class Trainer:
         if args.max_steps > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
 
-        if train_dataset is not None and not isinstance(train_dataset, collections.abc.Sized) and args.max_steps <= 0:
+        if train_dataset is not None and not has_length(train_dataset) and args.max_steps <= 0:
             raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
 
         self._signature_columns = None
@@ -565,7 +565,7 @@ class Trainer:
             return dataset.remove_columns(ignored_columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
-        if not isinstance(self.train_dataset, collections.abc.Sized):
+        if not has_length(self.train_dataset):
             return None
 
         generator = None
@@ -1158,7 +1158,7 @@ class Trainer:
             self.model_wrapped = self.model
 
         # Keeping track whether we can can len() on the dataset or not
-        train_dataset_is_sized = isinstance(self.train_dataset, collections.abc.Sized)
+        train_dataset_is_sized = has_length(self.train_dataset)
 
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
@@ -2811,7 +2811,7 @@ class Trainer:
         """
         args = self.args
 
-        if not isinstance(dataloader.dataset, collections.abc.Sized):
+        if not has_length(dataloader.dataset):
             raise ValueError("dataset must implement __len__")
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
