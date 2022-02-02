@@ -721,7 +721,7 @@ class TFGenerationMixin:
         )
         # prepares text-based inputs
         if len(shape_list(input_ids)) == 2:
-            input_ids = (tf.gather(input_ids, expanded_batch_idxs, axis=0),)
+            input_ids = tf.gather(input_ids, expanded_batch_idxs, axis=0)
         if accepts_attention_mask:
             attention_mask = tf.gather(attention_mask, expanded_batch_idxs, axis=0)
 
@@ -839,7 +839,7 @@ class TFGenerationMixin:
         sent_lengths = tf.ones_like(input_ids[:, 0]) * max_length
 
         # defined for encoder-decoder models, None for decoder-only models
-        past = encoder_outputs  # TODO: remove this line and change models that depend on this to use `encoder_outputs`
+        past = encoder_outputs
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and kwargs["output_scores"]) else None
@@ -859,11 +859,7 @@ class TFGenerationMixin:
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids,
-                past=past,
-                attention_mask=attention_mask,
-                use_cache=use_cache,
-                **kwargs,
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs,
             )
             outputs = self(
                 **model_inputs,
@@ -1100,7 +1096,7 @@ class TFGenerationMixin:
         beam_scores = tf.reshape(beam_scores, (batch_size * num_beams,))
 
         # cache compute states
-        past = encoder_outputs  # TODO: remove this line and change models that depend on this to use `encoder_outputs`
+        past = encoder_outputs
         # to stay similar to torch : past = (encoder_outputs, None) if encoder_outputs is not None else None
 
         # init attention / hidden states / scores tuples
@@ -1125,11 +1121,7 @@ class TFGenerationMixin:
         while cur_len < max_length:
             # import pdb; pdb.set_trace()
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids,
-                past=past,
-                attention_mask=attention_mask,
-                use_cache=use_cache,
-                **kwargs,
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs,
             )
             outputs = self(
                 **model_inputs,

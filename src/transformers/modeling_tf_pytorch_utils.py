@@ -196,7 +196,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
                 # authorized missing keys don't have to be loaded
                 if any(re.search(pat, name) is not None for pat in tf_model._keys_to_ignore_on_load_missing):
                     continue
-
             raise AttributeError(f"{name} not found in PyTorch model")
 
         array = pt_state_dict[name].numpy()
@@ -362,7 +361,6 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
     all_tf_weights = set(list(tf_weights_map.keys()))
     loaded_pt_weights_data_ptr = {}
     missing_keys_pt = []
-
     for pt_weight_name, pt_weight in current_pt_params_dict.items():
         # Handle PyTorch shared weight ()not duplicated in TF 2.0
         if pt_weight.data_ptr() in loaded_pt_weights_data_ptr:

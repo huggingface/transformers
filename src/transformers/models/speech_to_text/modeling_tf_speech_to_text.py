@@ -164,6 +164,7 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         self.offset = 2
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
+        # self.embeddings = tf.Variable(self.get_embedding(num_positions + self.offset, embedding_dim, padding_idx), name="weights")
         self.embeddings = self.get_embedding(num_positions + self.offset, embedding_dim, padding_idx)
 
     @staticmethod
@@ -539,6 +540,7 @@ class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
 class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
     config_class = Speech2TextConfig
     base_model_prefix = "model"
+    main_input_name = "input_features"
 
     # Overwritten property due to different expected input shape and type
     @property
@@ -549,7 +551,10 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        return {"input_ids": tf.random.normal([1, 32, 80]), "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int32)}
+        return {
+            self.main_input_name: tf.random.normal([1, 7, 80]),
+            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int32)
+        }
 
     def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
         """
@@ -616,13 +621,12 @@ SPEECH_TO_TEXT_START_DOCSTRING = r"""
 
 SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`tf.Tensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`Speech2TextTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
+        input_features (`tf.Tensor` of shape `(batch_size, sequence_length, feature_size)`):
+            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
+            by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
+            via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+            [`Speech2TextTokenizer`] should be used for extracting the fbank features, padding and conversion into a
+            tensor of floats. See [`~Speech2TextTokenizer.__call__`]
         attention_mask (`tf.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -718,7 +722,7 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
             num_positions=config.max_source_positions,
             embedding_dim=embed_dim,
             padding_idx=self.padding_idx,
-            name="embed_sinusoidal_positions",
+            name="embed_positions",
         )
         self.layers = [TFSpeech2TextEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
@@ -754,7 +758,7 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
 
     def call(
         self,
-        input_ids=None,
+        input_features=None,
         attention_mask=None,
         head_mask=None,
         output_attentions=None,
@@ -765,14 +769,12 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
     ):
         """
         Args:
-            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using [`Speech2TextTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
+            input_features (`tf.Tensor` of shape `(batch_size, sequence_length, feature_size)`):
+                Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                `input_features`, the [`Speech2TextTokenizer`] should be used for extracting the fbank features,
+                padding and conversion into a tensor of floats. See [`~Speech2TextTokenizer.__call__`]
             attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -798,7 +800,7 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
         inputs = input_processing(
             func=self.call,
             config=self.config,
-            input_ids=input_ids,
+            input_ids=input_features,
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -807,11 +809,13 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
+        if "input_ids" in inputs:
+            inputs["input_features"] = inputs.pop("input_ids")
 
-        if inputs["input_ids"] is None:
-            raise ValueError("You have to specify input_ids")
+        if inputs["input_features"] is None:
+            raise ValueError("You have to specify input_features")
 
-        inputs_embeds = self.conv(inputs["input_ids"])
+        inputs_embeds = self.conv(inputs["input_features"])
         inputs_embeds = self.embed_scale * inputs_embeds
 
         # subsample attention mask if necessary
@@ -898,7 +902,7 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
             num_positions=config.max_target_positions,
             embedding_dim=config.d_model,
             padding_idx=self.padding_idx,
-            name="embed_sinusoidal_positions",
+            name="embed_positions",
         )
 
         self.layers = [TFSpeech2TextDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
@@ -1143,7 +1147,7 @@ class TFSpeech2TextMainLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        input_ids=None,
+        input_features=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
@@ -1163,7 +1167,7 @@ class TFSpeech2TextMainLayer(tf.keras.layers.Layer):
         inputs = input_processing(
             func=self.call,
             config=self.config,
-            input_ids=input_ids,
+            input_ids=input_features,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
@@ -1180,6 +1184,8 @@ class TFSpeech2TextMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
+        if "input_ids" in inputs:
+            inputs["input_features"] = inputs.pop("input_ids")
 
         # if the attribute is not set, fetch it from the config
         for attr in ("output_attentions", "output_hidden_states", "use_cache"):
@@ -1191,7 +1197,7 @@ class TFSpeech2TextMainLayer(tf.keras.layers.Layer):
 
         if inputs["encoder_outputs"] is None:
             inputs["encoder_outputs"] = self.encoder(
-                input_ids=inputs["input_ids"],
+                input_features=inputs["input_features"],
                 attention_mask=inputs["attention_mask"],
                 head_mask=inputs["head_mask"],
                 output_attentions=inputs["output_attentions"],
@@ -1275,7 +1281,7 @@ class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
+        input_features=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
@@ -1295,7 +1301,7 @@ class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
         inputs = input_processing(
             func=self.call,
             config=self.config,
-            input_ids=input_ids,
+            input_ids=input_features,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
@@ -1312,9 +1318,11 @@ class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
+        if "input_ids" in inputs:
+            inputs["input_features"] = inputs.pop("input_ids")
 
         outputs = self.model(
-            input_ids=inputs["input_ids"],
+            input_features=inputs["input_features"],
             attention_mask=inputs["attention_mask"],
             decoder_input_ids=inputs["decoder_input_ids"],
             decoder_attention_mask=inputs["decoder_attention_mask"],
@@ -1394,7 +1402,7 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
+        input_features=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
@@ -1454,7 +1462,7 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         inputs = input_processing(
             func=self.call,
             config=self.config,
-            input_ids=input_ids,
+            input_ids=input_features,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
@@ -1472,6 +1480,8 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
             training=training,
             kwargs_call=kwargs,
         )
+        if "input_ids" in inputs:
+            inputs["input_features"] = inputs.pop("input_ids")
 
         inputs["return_dict"] = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
@@ -1484,7 +1494,7 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
                 )
 
         outputs = self.model(
-            input_ids=inputs["input_ids"],
+            input_features=inputs["input_features"],
             attention_mask=inputs["attention_mask"],
             decoder_input_ids=inputs["decoder_input_ids"],
             encoder_outputs=inputs["encoder_outputs"],
@@ -1564,7 +1574,7 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
             raise ValueError(f"`past` must be an iterable with length 1 or 2, got {past}")
 
         return {
-            "input_ids": None,  # needs to be passed to make Keras.layer.__call__ happy
+            "input_features": None,  # needs to be passed to make Keras.layer.__call__ happy
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
