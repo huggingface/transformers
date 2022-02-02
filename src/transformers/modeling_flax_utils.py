@@ -29,6 +29,7 @@ from jax.random import PRNGKey
 from requests import HTTPError
 
 from .configuration_utils import PretrainedConfig
+from .dynamic_module_utils import custom_object_save
 from .file_utils import (
     FLAX_WEIGHTS_NAME,
     WEIGHTS_NAME,
@@ -87,6 +88,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     config_class = None
     base_model_prefix = ""
     main_input_name = "input_ids"
+    _auto_class = None
 
     def __init__(
         self,
@@ -696,6 +698,12 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         save_directory = os.path.abspath(save_directory)
         # save config as well
         self.config.architectures = [self.__class__.__name__[4:]]
+
+        # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self._auto_class is not None:
+            custom_object_save(self, save_directory, config=self.config)
+
         self.config.save_pretrained(save_directory)
 
         # save model
@@ -710,6 +718,26 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if push_to_hub:
             url = self._push_to_hub(repo, commit_message=commit_message)
             logger.info(f"Model pushed to the hub in this commit: {url}")
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="FlaxAutoModel"):
+        """
+        Register this class with a given auto class. This should only be used for custom models as the ones in the
+        library are already mapped with an auto class.
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"FlaxAutoModel"`):
+                The auto class to register this new model with.
+        """
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
+        cls._auto_class = auto_class
 
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.

@@ -67,6 +67,8 @@
     title: Debugging
   - local: serialization
     title: Exporting 🤗 Transformers models
+  - local: custom_models
+    title: Sharing custom models
   - local: pr_checks
     title: Checks on a Pull Request
   title: Advanced guides
