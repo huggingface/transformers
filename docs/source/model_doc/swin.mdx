@@ -1,0 +1,60 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Swin Transformer
+
+## Overview
+
+The Swin Transformer was proposed in [Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/abs/2103.14030)  
+by Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, Baining Guo. 
+
+The abstract from the paper is the following:
+
+*This paper presents a new vision Transformer, called Swin Transformer, that capably serves as a general-purpose backbone 
+for computer vision. Challenges in adapting Transformer from language to vision arise from differences between the two domains, 
+such as large variations in the scale of visual entities and the high resolution of pixels in images compared to words in text. 
+To address these differences, we propose a hierarchical Transformer whose representation is computed with \bold{S}hifted 
+\bold{win}dows. The shifted windowing scheme brings greater efficiency by limiting self-attention computation to non-overlapping 
+local windows while also allowing for cross-window connection. This hierarchical architecture has the flexibility to model at 
+various scales and has linear computational complexity with respect to image size. These qualities of Swin Transformer make it 
+compatible with a broad range of vision tasks, including image classification (87.3 top-1 accuracy on ImageNet-1K) and dense 
+prediction tasks such as object detection (58.7 box AP and 51.1 mask AP on COCO test-dev) and semantic segmentation 
+(53.5 mIoU on ADE20K val). Its performance surpasses the previous state-of-the-art by a large margin of +2.7 box AP and 
++2.6 mask AP on COCO, and +3.2 mIoU on ADE20K, demonstrating the potential of Transformer-based models as vision backbones. 
+The hierarchical design and the shifted window approach also prove beneficial for all-MLP architectures.*
+
+Tips:
+- One can use the [`AutoFeatureExtractor`] API to prepare images for the model.
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/swin_transformer_architecture.png"
+alt="drawing" width="600"/> 
+
+<small> Swin Transformer architecture. Taken from the <a href="https://arxiv.org/abs/2102.03334">original paper</a>.</small>
+
+This model was contributed by [novice03](https://huggingface.co/novice03>). The original code can be found [here](https://github.com/microsoft/Swin-Transformer).
+
+
+## SwinConfig
+
+[[autodoc]] SwinConfig
+
+
+## SwinModel
+
+[[autodoc]] SwinModel
+    - forward
+
+
+## SwinForImageClassification
+
+[[autodoc]] transformers.SwinForImageClassification
+    - forward

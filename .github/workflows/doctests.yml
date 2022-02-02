@@ -19,7 +19,7 @@ env:
 
 jobs:
   run_doctests:
-    runs-on: [self-hosted, docker-gpu, single-gpu]
+    runs-on: [self-hosted, docker-gpu-test, single-gpu]
     container:
       image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -35,8 +35,16 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[dev]
+          pip install .[testing,torch-speech]
+
+      - name: Prepare files for doctests
+        run: |
+          python utils/prepare_for_doc_test.py src docs
 
       - name: Run doctests
         run: |
-          pytest --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure
+          pytest --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
+
+      - name: Clean files after doctests
+        run: |
+          python utils/prepare_for_doc_test.py src docs --remove_new_line

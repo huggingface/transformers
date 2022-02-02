@@ -35,21 +35,33 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, torch_int_div
 from ...utils import logging
 from .configuration_unispeech import UniSpeechConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "UniSpeechConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
-_CHECKPOINT_FOR_DOC = "microsoft/unispeech-large-1500h-cv"
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-
-_SEQ_CLASS_CHECKPOINT = "microsoft/unispeech-large-1500h-cv"
 
 _HIDDEN_STATES_START_POSITION = 2
+
+# General docstring
+_CONFIG_FOR_DOC = "UniSpeechConfig"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "patrickvonplaten/unispeech-large-1500h-cv-timit"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 1024]
+
+# CTC docstring
+_CTC_EXPECTED_OUTPUT = "'mister quilter is the apposl of the midle classes and weare glad to welcom his gosepl'"
+_CTC_EXPECTED_LOSS = 17.17
+
+# Audio class docstring
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_SEQ_CLASS_CHECKPOINT = "hf-internal-testing/tiny-random-unispeech"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
+_SEQ_CLASS_EXPECTED_LOSS = 0.66  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
 
 UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/unispeech-large-1500h-cv",
@@ -167,9 +179,13 @@ def _compute_mask_indices(
         num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
         num_masked_span = max(num_masked_span, min_masks)
 
-        # make sure num masked indices <= sequence_length
+        # make sure num masked span <= sequence_length
         if num_masked_span * mask_length > sequence_length:
             num_masked_span = sequence_length // mask_length
+
+        # make sure num_masked span is also <= input_length - (mask_length - 1)
+        if input_length - (mask_length - 1) < num_masked_span:
+            num_masked_span = max(input_length - (mask_length - 1), 0)
 
         return num_masked_span
 
@@ -201,7 +217,13 @@ def _compute_mask_indices(
         # pick first sampled index that will serve as a dummy index to pad vector
         # to ensure same dimension for all batches due to probabilistic rounding
         # Picking first sample just pads those vectors twice.
-        dummy_mask_idx = spec_aug_mask_idx[0]
+        if len(spec_aug_mask_idx) == 0:
+            # this case can only happen if `input_length` is strictly smaller then
+            # `sequence_length` in which case the last token has to be a padding
+            # token which we can use as a dummy mask id
+            dummy_mask_idx = sequence_length - 1
+        else:
+            dummy_mask_idx = spec_aug_mask_idx[0]
 
         spec_aug_mask_idx = np.concatenate(
             [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
@@ -222,6 +244,10 @@ def _compute_mask_indices(
         batch_size, max_num_masked_span * mask_length
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
+
+    # ensure that we cannot have indices larger than sequence_length
+    if spec_aug_mask_idxs.max() > sequence_length - 1:
+        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
 
     # scatter indices to mask
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
@@ -969,7 +995,7 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return (input_length - kernel_size) // stride + 1
+            return torch_int_div(input_length - kernel_size, stride) + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
@@ -1129,6 +1155,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         output_type=UniSpeechBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1266,44 +1293,14 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForPreTraining
-        >>> from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
-        >>> from datasets import load_dataset
-        >>> import soundfile as sf
+        >>> from transformers import Wav2Vec2FeatureExtractor, UniSpeechForPreTraining
+        >>> from transformers.models.unispeech.modeling_unispeech import _compute_mask_indices
 
-        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/wav2vec2-base")
-        >>> model = Wav2Vec2ForPreTraining.from_pretrained("patrickvonplaten/wav2vec2-base")
-
-
-        >>> def map_to_array(batch):
-        ...     speech, _ = sf.read(batch["file"])
-        ...     batch["speech"] = speech
-        ...     return batch
-
-
-        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.map(map_to_array)
-
-        >>> input_values = feature_extractor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-
-        >>> # compute masked indices
-        >>> batch_size, raw_sequence_length = input_values.shape
-        >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
-        >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
-        >>> mask_time_indices = torch.tensor(mask_time_indices, device=input_values.device, dtype=torch.long)
-
-        >>> with torch.no_grad():
-        ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
-
-        >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
-        >>> cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
-
-        >>> # show that cosine similarity is much higher than random
-        >>> assert cosine_sim[mask_time_indices].mean() > 0.5
-
-        >>> # for contrastive loss training model should be put into train mode
-        >>> model.train()
-        >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
+        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+        ...     "hf-internal-testing/tiny-random-unispeech-sat"
+        ... )
+        >>> model = UniSpeechForPreTraining.from_pretrained("microsoft/unispeech-large-1500h-cv")
+        >>> # TODO: Add full pretraining example
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1406,6 +1403,8 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1536,6 +1535,8 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,

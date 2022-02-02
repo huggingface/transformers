@@ -339,7 +339,10 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 )
 
             if "config" not in kwargs_encoder:
-                encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
+                encoder_config, kwargs_encoder = AutoConfig.from_pretrained(
+                    encoder_pretrained_model_name_or_path, **kwargs_encoder, return_unused_kwargs=True
+                )
+
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
@@ -361,7 +364,10 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 )
 
             if "config" not in kwargs_decoder:
-                decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
+                decoder_config, kwargs_decoder = AutoConfig.from_pretrained(
+                    decoder_pretrained_model_name_or_path, **kwargs_decoder, return_unused_kwargs=True
+                )
+
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
                         f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
@@ -497,7 +503,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         # Compute loss independent from decoder (as some shift the logits inside them)
         loss = None
         if labels is not None:
-            logits = decoder_outputs.logits if return_dict else decoder_outputs[1]
+            logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
 

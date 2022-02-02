@@ -18,18 +18,10 @@ import importlib
 import json
 import os
 from collections import OrderedDict
-from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import (
-    cached_path,
-    get_list_of_files,
-    hf_bucket_url,
-    is_offline_mode,
-    is_sentencepiece_available,
-    is_tokenizers_available,
-)
+from ...file_utils import get_file_from_repo, is_sentencepiece_available, is_tokenizers_available
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -233,6 +225,13 @@ else:
                     None,
                 ),
             ),
+            (
+                "xglm",
+                (
+                    "XGLMTokenizer" if is_sentencepiece_available() else None,
+                    "XGLMTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
         ]
     )
 
@@ -329,41 +328,18 @@ def get_tokenizer_config(
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
-    if is_offline_mode() and not local_files_only:
-        logger.info("Offline mode: forcing local_files_only=True")
-        local_files_only = True
-
-    # Will raise a ValueError if `pretrained_model_name_or_path` is not a valid path or model identifier
-    repo_files = get_list_of_files(
+    resolved_config_file = get_file_from_repo(
         pretrained_model_name_or_path,
-        revision=revision,
+        TOKENIZER_CONFIG_FILE,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        resume_download=resume_download,
+        proxies=proxies,
         use_auth_token=use_auth_token,
+        revision=revision,
         local_files_only=local_files_only,
     )
-    if TOKENIZER_CONFIG_FILE not in [Path(f).name for f in repo_files]:
-        return {}
-
-    pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-    if os.path.isdir(pretrained_model_name_or_path):
-        config_file = os.path.join(pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE)
-    else:
-        config_file = hf_bucket_url(
-            pretrained_model_name_or_path, filename=TOKENIZER_CONFIG_FILE, revision=revision, mirror=None
-        )
-
-    try:
-        # Load from URL or cache if already cached
-        resolved_config_file = cached_path(
-            config_file,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            proxies=proxies,
-            resume_download=resume_download,
-            local_files_only=local_files_only,
-            use_auth_token=use_auth_token,
-        )
-
-    except EnvironmentError:
+    if resolved_config_file is None:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
 

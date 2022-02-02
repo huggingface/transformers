@@ -96,7 +96,7 @@ class FlaubertTokenizer(XLMTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, do_lowercase=False, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(do_lowercase=do_lowercase, **kwargs)
         self.do_lowercase = do_lowercase
         self.do_lowercase_and_remove_accent = False
 

@@ -50,6 +50,8 @@ _CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
 _TOKENIZER_FOR_DOC = "LongformerTokenizer"
 
+LARGE_NEGATIVE = -1e8
+
 TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "allenai/longformer-base-4096",
     "allenai/longformer-large-4096",
@@ -755,10 +757,15 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             query_vectors, key_vectors, self.one_sided_attn_window_size
         )
 
+        # values to pad for attention probs
+        remove_from_windowed_attention_mask = attention_mask != 0
+        # cast to fp32/fp16 then replace 1's with -inf
+        float_mask = tf.cast(remove_from_windowed_attention_mask, dtype=query_vectors.dtype) * LARGE_NEGATIVE
+
         # diagonal mask with zeros everywhere and -inf inplace of padding
         diagonal_mask = self._sliding_chunks_query_key_matmul(
             tf.ones(shape_list(attention_mask)),
-            attention_mask,
+            float_mask,
             self.one_sided_attn_window_size,
         )
 
@@ -2161,7 +2168,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output, training=inputs["training"])
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], prediction_scores)
 
         if not inputs["return_dict"]:
             output = (prediction_scores,) + outputs[2:]
@@ -2303,7 +2310,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
             labels = {"start_position": inputs["start_positions"]}
             labels["end_position"] = inputs["end_positions"]
-            loss = self.compute_loss(labels, (start_logits, end_logits))
+            loss = self.hf_compute_loss(labels, (start_logits, end_logits))
 
         if not inputs["return_dict"]:
             output = (start_logits, end_logits) + outputs[2:]
@@ -2450,7 +2457,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
 
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
@@ -2596,7 +2603,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
 
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], reshaped_logits)
 
         if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[2:]
@@ -2715,7 +2722,7 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         sequence_output = outputs[0]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]

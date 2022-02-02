@@ -605,6 +605,10 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertEqual(logits.shape, (4, 1498, 32))
 
+    @unittest.skip(reason="Feed forward chunking is not implemented")
+    def test_feed_forward_chunking(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
@@ -790,10 +794,10 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = Wav2Vec2ForPreTraining(config).to(torch_device)
 
-        features_shape = (
-            inputs_dict["input_values"].shape[0],
-            model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]),
-        )
+        batch_size = inputs_dict["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+
+        features_shape = (batch_size, feature_seq_length)
 
         mask_time_indices = _compute_mask_indices(
             features_shape,
@@ -901,6 +905,10 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertEqual(logits.shape, (1, 1498, 32))
 
+    @unittest.skip(reason="Feed forward chunking is not implemented")
+    def test_feed_forward_chunking(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
@@ -981,6 +989,23 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
             self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
 
         self.assertTrue(mask[:2, sequence_length // 2 :].sum() == 0)
+
+    def test_compute_mask_indices_short_audio(self):
+        batch_size = 4
+        sequence_length = 100
+        mask_prob = 0.05
+        mask_length = 10
+
+        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
+        # force one example to be heavily padded
+        attention_mask[0, 5:] = 0
+
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask, min_masks=2
+        )
+
+        # make sure that non-padded examples cannot be padded
+        self.assertFalse(mask[0][attention_mask[0].to(torch.bool).cpu()].any())
 
     def test_compute_perplexity(self):
         probs = torch.arange(100, device=torch_device).reshape(2, 5, 10) / 100
@@ -1150,10 +1175,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
 
-        features_shape = (
-            inputs_dict["input_values"].shape[0],
-            model._get_feat_extract_output_lengths(torch.tensor(inputs_dict["input_values"].shape[1])),
-        )
+        batch_size = inputs_dict["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+
+        features_shape = (batch_size, feature_seq_length)
 
         np.random.seed(4)
         mask_time_indices = _compute_mask_indices(
@@ -1200,10 +1225,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
 
-        features_shape = (
-            inputs_dict["input_values"].shape[0],
-            model._get_feat_extract_output_lengths(torch.tensor(inputs_dict["input_values"].shape[1])),
-        )
+        batch_size = inputs_dict["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+
+        features_shape = (batch_size, feature_seq_length)
 
         torch.manual_seed(0)
         mask_time_indices = _compute_mask_indices(
@@ -1271,10 +1296,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
 
-        features_shape = (
-            inputs_dict["input_values"].shape[0],
-            model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]),
-        )
+        batch_size = inputs_dict["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+
+        features_shape = (batch_size, feature_seq_length)
 
         torch.manual_seed(0)
         np.random.seed(0)
