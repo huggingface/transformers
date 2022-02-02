@@ -253,6 +253,10 @@ class Wav2Vec2ProcessorWithLM:
         token_min_logp: Optional[float] = None,
         hotwords: Optional[Iterable[str]] = None,
         hotword_weight: Optional[float] = None,
+        alpha: Optional[float] = None,
+        beta: Optional[float] = None,
+        unk_score_offset: Optional[float] = None,
+        lm_score_boundary: Optional[bool] = None,
     ):
         """
         Batch decode output logits to audio transcription with language model support.
@@ -280,6 +284,14 @@ class Wav2Vec2ProcessorWithLM:
                 List of words with extra importance, can be OOV for LM
             hotword_weight (`int`, *optional*):
                 Weight factor for hotword importance Defaults to pyctcdecode's DEFAULT_HOTWORD_WEIGHT.
+            alpha (`float`, *optional*):
+                Weight for language model during shallow fusion
+            beta (`float`, *optional*):
+                Weight for length score adjustment of during scoring
+            unk_score_offset (`float`, *optional*):
+                Amount of log score offset for unknown tokens
+            lm_score_boundary (`bool`, *optional*):
+                Whether to have kenlm respect boundaries when scoring
 
         Returns:
             [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`] or `tuple`.
@@ -297,6 +309,11 @@ class Wav2Vec2ProcessorWithLM:
         beam_prune_logp = beam_prune_logp if beam_prune_logp is not None else DEFAULT_PRUNE_LOGP
         token_min_logp = token_min_logp if token_min_logp is not None else DEFAULT_MIN_TOKEN_LOGP
         hotword_weight = hotword_weight if hotword_weight is not None else DEFAULT_HOTWORD_WEIGHT
+
+        # reset params at every forward call. It's just a `set` method in pyctcdecode
+        self.decoder.reset_params(
+            alpha=alpha, beta=beta, unk_score_offset=unk_score_offset, lm_score_boundary=lm_score_boundary
+        )
 
         # create multiprocessing pool and list numpy arrays
         logits_list = [array for array in logits]
@@ -330,6 +347,10 @@ class Wav2Vec2ProcessorWithLM:
         token_min_logp: Optional[float] = None,
         hotwords: Optional[Iterable[str]] = None,
         hotword_weight: Optional[float] = None,
+        alpha: Optional[float] = None,
+        beta: Optional[float] = None,
+        unk_score_offset: Optional[float] = None,
+        lm_score_boundary: Optional[bool] = None,
     ):
         """
         Decode output logits to audio transcription with language model support.
@@ -349,6 +370,14 @@ class Wav2Vec2ProcessorWithLM:
                 List of words with extra importance which can be missing from the LM's vocabulary, e.g. ["huggingface"]
             hotword_weight (`int`, *optional*):
                 Weight multiplier that boosts hotword scores. Defaults to pyctcdecode's DEFAULT_HOTWORD_WEIGHT.
+            alpha (`float`, *optional*):
+                Weight for language model during shallow fusion
+            beta (`float`, *optional*):
+                Weight for length score adjustment of during scoring
+            unk_score_offset (`float`, *optional*):
+                Amount of log score offset for unknown tokens
+            lm_score_boundary (`bool`, *optional*):
+                Whether to have kenlm respect boundaries when scoring
 
         Returns:
             [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`] or `tuple`.
@@ -366,6 +395,11 @@ class Wav2Vec2ProcessorWithLM:
         beam_prune_logp = beam_prune_logp if beam_prune_logp is not None else DEFAULT_PRUNE_LOGP
         token_min_logp = token_min_logp if token_min_logp is not None else DEFAULT_MIN_TOKEN_LOGP
         hotword_weight = hotword_weight if hotword_weight is not None else DEFAULT_HOTWORD_WEIGHT
+
+        # reset params at every forward call. It's just a `set` method in pyctcdecode
+        self.decoder.reset_params(
+            alpha=alpha, beta=beta, unk_score_offset=unk_score_offset, lm_score_boundary=lm_score_boundary
+        )
 
         # pyctcdecode
         decoded_beams = self.decoder.decode_beams(
