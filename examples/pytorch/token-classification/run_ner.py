@@ -370,6 +370,10 @@ def main():
     model.config.label2id = label_to_id
     model.config.id2label = {i: l for l, i in label_to_id.items()}
 
+    print(label_list, label_keys)
+    print(model.config.label2id, model.config.id2label)
+    return
+
     # Map that sends B-Xxx label to its I-Xxx counterpart
     b_to_i_label = []
     for idx, label in enumerate(label_list):
