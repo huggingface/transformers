@@ -122,7 +122,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 model on the associated CUDA device id.
         """
 
-        super().__init__(feature_extractor, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.feature_extractor = feature_extractor
 
         if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
