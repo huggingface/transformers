@@ -12,15 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for DETR."""
+"""Feature extractor class for MaskFormer."""
 
-import io
-import pathlib
-from collections import defaultdict
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-import PIL
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
@@ -84,7 +80,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
     def _resize(self, image, size, target=None, max_size=None):
         """
-        Resize the image to the given size. Size can be min_size (scalar) or (w, h) tuple. If size is an int, smaller
+        Resize the image to the given size. Size can be min_size (scalar) or (width, height) tuple. If size is an int, smaller
         edge of the image will be matched to this number.
 
         If given, also resize the target accordingly.
@@ -93,22 +89,22 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             image = self.to_pil_image(image)
 
         def get_size_with_aspect_ratio(image_size, size, max_size=None):
-            w, h = image_size
+            width, height = image_size
             if max_size is not None:
-                min_original_size = float(min((w, h)))
-                max_original_size = float(max((w, h)))
+                min_original_size = float(min((width, height)))
+                max_original_size = float(max((width, height)))
                 if max_original_size / min_original_size * size > max_size:
                     size = int(round(max_size * min_original_size / max_original_size))
 
-            if (w <= h and w == size) or (h <= w and h == size):
-                return (h, w)
+            if (width <= height and width == size) or (height <= width and height == size):
+                return (height, width)
 
-            if w < h:
+            if width < height:
                 ow = size
-                oh = int(size * h / w)
+                oh = int(size * height / width)
             else:
                 oh = size
-                ow = int(size * w / h)
+                ow = int(size * width / height)
 
             return (oh, ow)
 
@@ -116,14 +112,14 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             if isinstance(size, (list, tuple)):
                 return size
             else:
-                # size returned must be (w, h) since we use PIL to resize images
+                # size returned must be (width, height) since we use PIL to resize images
                 # so we revert the tuple
                 return get_size_with_aspect_ratio(image_size, size, max_size)[::-1]
 
         size = get_size(image.size, size, max_size)
         rescaled_image = self.resize(image, size=size)
-        # pil image have inverted w, h
-        w, h = size
+        # pil image have inverted width, height
+        width, height = size
 
         has_target = target is not None
 
@@ -135,7 +131,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 #           use PyTorch as current workaround
                 # TODO replace by self.resize
                 masks = torch.from_numpy(target["masks"][:, None]).float()
-                interpolated_masks = nn.functional.interpolate(masks, size=(h, w), mode="nearest")[:, 0] > 0.5
+                interpolated_masks = nn.functional.interpolate(masks, size=(height, width), mode="nearest")[:, 0] > 0.5
                 target["masks"] = interpolated_masks.numpy()
 
         return rescaled_image, target
@@ -322,7 +318,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         """
 
         max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
-        c, h, w = max_size
+        c, height, width = max_size
         pixel_values = []
         pixel_mask = []
         pixel_labels = []
@@ -331,7 +327,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         for idx, image in enumerate(pixel_values_list):
             # create padded image
             if should_pad:
-                padded_image = np.zeros((c, h, w), dtype=np.float32)
+                padded_image = np.zeros((c, height, width), dtype=np.float32)
                 padded_image[: image.shape[0], : image.shape[1], : image.shape[2]] = np.copy(image)
                 image = padded_image
             pixel_values.append(image)
@@ -340,14 +336,14 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 annotation = annotations[idx]
                 masks = annotation["masks"]
                 if should_pad:
-                    padded_masks = np.zeros((masks.shape[0], h, w), dtype=masks.dtype)
+                    padded_masks = np.zeros((masks.shape[0], height, width), dtype=masks.dtype)
                     padded_masks[:, : padded_masks.shape[1], : padded_masks.shape[2]] = np.copy(padded_masks)
                     masks = padded_masks
                 pixel_labels.append(masks)
                 class_labels.append(annotation["labels"])
             if should_pad:
                 # create pixel mask
-                mask = np.zeros((h, w), dtype=np.int64)
+                mask = np.zeros((height, width), dtype=np.int64)
                 mask[: image.shape[1], : image.shape[2]] = True
                 pixel_mask.append(mask)
 

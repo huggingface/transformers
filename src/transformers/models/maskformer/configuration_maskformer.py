@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Facebook AI Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Facebook AI Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -65,12 +65,12 @@ class MaskFormerConfig(PretrainedConfig):
         swin_in_channels: Optional[int] = 3,
         swin_patch_size: Optional[int] = 4,
         swin_embed_dim: Optional[int] = 128,
-        swin_depths: Optional[List[int]] = None,
-        swin_num_heads: Optional[List[int]] = None,
+        swin_depths: Optional[List[int]] = [2, 2, 18, 2],
+        swin_num_heads: Optional[List[int]] = [4, 8, 16, 32],
         swin_window_size: Optional[int] = 12,
         swin_drop_path_rate: Optional[float] = 0.3,
         dice_weight: Optional[float] = 1.0,
-        ce_weight: Optional[float] = 1.0,
+        cross_entropy_weight: Optional[float] = 1.0,
         mask_weight: Optional[float] = 20.0,
         mask_classification: Optional[bool] = True,
         detr_max_position_embeddings: Optional[int] = 1024,
@@ -105,12 +105,12 @@ class MaskFormerConfig(PretrainedConfig):
         self.swin_in_channels = swin_in_channels
         self.swin_patch_size = swin_patch_size
         self.swin_embed_dim = swin_embed_dim
-        self.swin_depths = swin_depths or [2, 2, 18, 2]
-        self.swin_num_heads = swin_num_heads or [4, 8, 16, 32]
+        self.swin_depths = swin_depths
+        self.swin_num_heads = swin_num_heads
         self.swin_window_size = swin_window_size
         self.swin_drop_path_rate = swin_drop_path_rate
         # Hungarian matcher && loss
-        self.ce_weight = ce_weight
+        self.cross_entropy_weight = cross_entropy_weight
         self.dice_weight = dice_weight
         self.mask_weight = mask_weight
 

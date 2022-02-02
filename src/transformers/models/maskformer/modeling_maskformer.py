@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Facebook AI Research The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Facebook AI Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -90,7 +90,7 @@ class MaskFormerForPanopticSegmentationOutput(ModelOutput):
     preds_masks: torch.FloatTensor = None
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
-    segments: List[PanopticSegmentationSegment] = None
+    segments: List[List[PanopticSegmentationSegment]] = None
 
 
 # copied from original implementation
@@ -561,7 +561,8 @@ class FPNModel(nn.Module):
                 Args:
                     in_features (int): The number of input features (channels)
                     lateral_widths (List[int]): A list with the features (channels) size of each lateral connection
-                    feature_size (int, optional): The features (channels) of the resulting feature maps. Defaults to 256.
+                    feature_size (int, optional):
+                        The features (channels) of the resulting feature maps. Defaults to 256.
         """
         super().__init__()
         self.stem = ConvLayer(in_features, feature_size)
@@ -580,8 +581,8 @@ class FPNModel(nn.Module):
 class MaskFormerPixelDecoder(nn.Module):
     def __init__(self, *args, feature_size: int = 256, mask_feature_size: int = 256, **kwargs):
         """Pixel Decoder Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
-        Segmentation](https://arxiv.org/abs/2107.06278). It first run the backbone's feature into a Feature Pyramid Network
-        creating a list of features map. Then, it projects the last one to the correct `mask_size`
+        Segmentation](https://arxiv.org/abs/2107.06278). It first run the backbone's feature into a Feature Pyramid
+        Network creating a list of features map. Then, it projects the last one to the correct `mask_size`
 
                 Args:
                     feature_size (int, optional): The features (channels) of FPN feature maps. Defaults to 256.
@@ -782,10 +783,10 @@ def upsample_like(x: Tensor, like: Tensor, mode: str = "bilinear") -> Tensor:
     Returns:
         Tensor: The upsampled tensor
     """
-    _, _, h, w = like.shape
+    _, _, height, width = like.shape
     upsampled: Tensor = F.interpolate(
         x,
-        size=(h, w),
+        size=(height, width),
         mode=mode,
         align_corners=False,
     )
@@ -811,7 +812,7 @@ class MaskFormerModel(PreTrainedModel):
         losses = ["labels", "masks"]
 
         self.weight_dict: Dict[str, float] = {
-            "loss_cross_entropy": config.ce_weight,
+            "loss_cross_entropy": config.cross_entropy_weight,
             "loss_mask": config.mask_weight,
             "loss_dice": config.dice_weight,
         }
@@ -909,12 +910,17 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
 
         return masks[to_keep], scores[to_keep], labels[to_keep]
 
+    def get_panoptic_segmentation(
+        self, mask_probs: Tensor, pred_scores: Tensor, pred_labels: Tensor
+    ) -> Tuple[Tensor, List[PanopticSegmentationSegment]]:
+        pass
+
     def forward(self, *args, **kwargs):
         outputs: MaskFormerOutput = self.model(*args, **kwargs)
         preds_logits: Tensor = outputs.preds_logits
         preds_masks: Tensor = outputs.preds_masks
 
-        _, _, h, w = preds_masks.shape
+        _, _, height, width = preds_masks.shape
         # TODO we need to do this for each element in the batch!
         # for each query, the best scores and their indeces
         pred_scores, pred_labels = F.softmax(preds_logits, dim=-1).max(-1)
@@ -927,7 +933,7 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
             mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(mask_probs, pred_scores, pred_labels)
             we_detect_something: bool = mask_probs.shape[0] > 0
 
-            segmentation: Tensor = torch.zeros((h, w), dtype=torch.int32, device=mask_probs.device)
+            segmentation: Tensor = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
 
             segments: List[PanopticSegmentationSegment] = []
 

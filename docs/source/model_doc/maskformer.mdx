@@ -10,13 +10,11 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-1. **[MaskFormer](https://huggingface.co/docs/transformers/model_doc/maskformer)** (from Meta and UIUC) released with the paper [Per-Pixel Classification is Not All You Need for Semantic Segmentation](https://arxiv.org/abs/2107.06278) by Bowen Cheng, Alexander G. Schwing, Alexander Kirillov
-
 # MaskFormer
 
 ## Overview
 
-The MaskFormer model was proposed in [Per-Pixel Classification is Not All You Need for Semantic Segmentation>(https://arxiv.org/abs/2107.06278) by <INSERT AUTHORS HERE>. Bowen Cheng, Alexander G. Schwing, Alexander Kirillov
+The MaskFormer model was proposed in [Per-Pixel Classification is Not All You Need for Semantic Segmentation>(https://arxiv.org/abs/2107.06278) by Bowen Cheng, Alexander G. Schwing, Alexander Kirillov
 
 The abstract from the paper is the following:
 
@@ -26,19 +24,13 @@ Tips:
 
 - One can use the [`AutoFeatureExtractor`] API to prepare images for the model.
 
-This model was contributed by [francesco](<https://huggingface.co/francesco)`. The original code can be found [here](https://github.com/facebookresearch/MaskFormer).
+This model was contributed by [francesco](<https://huggingface.co/francesco). The original code can be found [here](https://github.com/facebookresearch/MaskFormer).
 
 ## MaskFormer specific outputs
 
-### Base
-
 [[autodoc]] models.maskformer.modeling_maskformer.MaskFormerOutput
 
-### Segmentation
-
 [[autodoc]] models.maskformer.modeling_maskformer.MaskFormerForSemanticSegmentationOutput
-
-### Panoptic Segmentation
 
 [[autodoc]] models.maskformer.modeling_maskformer.MaskFormerForPanopticSegmentationOutput
 
@@ -48,12 +40,15 @@ This model was contributed by [francesco](<https://huggingface.co/francesco)`. T
 
 ## MaskFormerModel
 
-[[autodoc]] MaskFormerModel - forward
+[[autodoc]] MaskFormerModel
+    - forward
 
 ## MaskFormerForSemanticSegmentation
 
-[[autodoc]] MaskFormerForSemanticSegmentation - forward
+[[autodoc]] MaskFormerForSemanticSegmentation
+    - forward
 
 ## MaskFormerForPanopticSegmentation
 
-[[autodoc]] MaskFormerForPanopticSegmentation - forward
+[[autodoc]] MaskFormerForPanopticSegmentation
+    - forward

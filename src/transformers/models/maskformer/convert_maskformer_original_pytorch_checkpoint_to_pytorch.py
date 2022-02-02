@@ -1,16 +1,12 @@
 from __future__ import annotations
-from cmath import log
 
-import enum
 import logging
 from argparse import ArgumentParser
-from ast import Tuple
 from dataclasses import dataclass
 from pathlib import Path
-from pprint import pformat, pprint
-from typing import Any, Dict, Iterator, List, Set
+from pprint import pformat
+from typing import Any, Dict, Iterator, List, Set, Tuple
 
-import pytorch_lightning as pl
 import torch
 import torchvision.transforms as T
 from PIL import Image
@@ -36,14 +32,11 @@ from transformers.models.maskformer.MaskFormer.mask_former.mask_former_model imp
 
 
 StateDict = Dict[str, Tensor]
-# easier to use pythong logging instead of going trough the hf utility logging file
-# main issue there is the polluted namespace so I can't call `logging` directly
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-logger.addHandler(logging.StreamHandler())
-from dataclasses import dataclass, field
+from transformers.utils import logging
 
-from torch import Tensor
+
+logging.set_verbosity_info()
+logger = logging.get_logger(__name__)
 
 
 class TrackedStateDict:
@@ -105,7 +98,7 @@ def setup_cfg(args: Args):
 class OriginalMaskFormerConfigToOursConverter:
     def get_dataset_metadata(self, original_config: object) -> DatasetMetadata:
         ds_name: str = original_config.DATASETS.TEST[0]
-        logging.info(f"Getting metadata from {ds_name}")
+        logger.info(f"Getting metadata from {ds_name}")
         metadata = MetadataCatalog.get(ds_name)
         # thing_classes and stuff_classes are equal
         labels = metadata.stuff_classes
@@ -683,7 +676,7 @@ def test(src, dst):
                 assert src_segment["category_id"] == dst_segment["category_id"]
                 assert src_segment["isthing"] == dst_segment["is_thing"]
 
-        logging.info("✅ Test passed!")
+        logger.info("✅ Test passed!")
 
 
 if __name__ == "__main__":
@@ -717,9 +710,6 @@ if __name__ == "__main__":
     if not save_directory.exists():
         save_directory.mkdir(parents=True)
 
-    checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
-    config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs")
-
     for converter, config_file, checkpoint_file in MaskFormerCheckpointConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
@@ -730,48 +720,9 @@ if __name__ == "__main__":
 
         converted: MaskFormerModel = converter()
 
-        model_name: str = f"hub/{checkpoint_file.parents[0].stem}-{checkpoint_file.stem}"
+        model_name: str = f"{checkpoint_file.parents[0].stem}-{checkpoint_file.stem}"
 
         # test(converter.original_model, converted)
 
-        feature_extractor.save_pretrained(model_name)
-        converted.save_pretrained(model_name)
-
-    # pl.seed_everything(42)
-    # original_config = setup_cfg(
-    #     Args(
-    #         config_file="/home/zuppif/Documents/Work/hugging_face/transformers/src/transformers/models/maskformer/MaskFormer/configs/ade20k-150/swin/maskformer_swin_base_IN21k_384_bs16_160k_res640.yaml"
-    #     )
-    # )
-    # mask_former_kwargs = OriginalMaskFormer.from_config(original_config)
-
-    # original_model = OriginalMaskFormer(**mask_former_kwargs).eval()
-    # # DetectionCheckpointer(original_model).load(original_checkpoint_file)
-    # x = torch.zeros((1, 3, 384, 384))
-
-    # config: MaskFormerConfig = OriginalMaskFormerConfigToOursConverter()(original_config)
-
-    # to_model = MaskFormerModel(config=config).eval()
-
-    # MaskFormerCheckpointConverter(original_model, to_model)()
-    # to_model_out = to_model.pixel_level_module.backbone(x.clone())
-    # original_model_out = original_model.backbone(x.clone())
-
-    # tracer = Tracker(to_model.pixel_level_module.backbone)
-    # # tracer = Tracker(original_model.backbone)
-    # for (name, module) in tracer(x).traced:
-    #     print(name)
-    #     for (name, param) in module.named_parameters():
-    #         print(f"\t{name}-{param.shape}")
-
-    # tracer = Tracker(to_model.pixel_level_module.backbone)
-    # for name, param in to_model.pixel_level_module.na
-    # for name, param in to_model.pixel_level_module.named_parameters():
-    #     print(name, param.shape)
-
-    # MaskFormerCheckpointConverter(original_model, to_model).replace_backbone(
-    #     to_model.state_dict(), original_model.state_dict(), to_model.config
-    # )
-
-    # test(original_model, MaskFormerCheckpointConverter(original_model, to_model)())
-    # converted.save_pretrained(save_directory=save_directory)
+        feature_extractor.save_pretrained(save_directory / model_name)
+        converted.save_pretrained(save_directory / model_name)

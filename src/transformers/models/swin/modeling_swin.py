@@ -15,10 +15,10 @@
 """ PyTorch Swin Transformer model."""
 
 
-from typing import Tuple
 import collections.abc
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -26,7 +26,12 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
@@ -45,13 +50,75 @@ SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-class SwinModelOutputWithPooling(BaseModelOutputWithPooling):
+class SwinModelOutputWithPooling(ModelOutput):
+    """
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
     hidden_states_original_spatial_dimensions: Tuple[Tuple[int, int]] = None
+    last_hidden_state: torch.FloatTensor = None
+    pooler_output: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class SwinBaseModelOutput(BaseModelOutput):
+class SwinBaseModelOutput(ModelOutput):
+    """
+    Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+
+            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            hidden_size)` is output.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
+            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+            input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
     hidden_states_original_spatial_dimensions: Tuple[Tuple[int, int]] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # to_2tuple, drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
@@ -154,17 +221,19 @@ class SwinPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values):
-        # padding
-        _, _, height, width = pixel_values.shape
-
+    def maybe_pad(self, pixel_values, width, height):
         if width % self.patch_size[1] != 0:
-            pad_value = (0, self.patch_size[1] - width % self.patch_size[1])
-            pixel_values = nn.functional.pad(pixel_values, pad_value)
+            pad_values = (0, self.patch_size[1] - width % self.patch_size[1])
+            pixel_values = nn.functional.pad(pixel_values, pad_values)
         if height % self.patch_size[0] != 0:
-            pad_value = (0, 0, 0, self.patch_size[0] - height % self.patch_size[0])
-            pixel_values = nn.functional.pad(pixel_values, pad_value)
+            pad_values = (0, 0, 0, self.patch_size[0] - height % self.patch_size[0])
+            pixel_values = nn.functional.pad(pixel_values, pad_values)
+        return pixel_values
 
+    def forward(self, pixel_values):
+        _, _, height, width = pixel_values.shape
+        # pad the input to be divisible by self.patch_size, if needed
+        pixel_values = self.maybe_pad(pixel_values)
         embeddings = self.projection(pixel_values)
         _, _, height, width = embeddings.shape
         output_dimensions = (height, width)
@@ -188,22 +257,26 @@ class SwinPatchMerging(nn.Module):
 
     def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
         super().__init__()
-        self.input_resolution = input_resolution
         self.dim = dim
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
-    def forward(self, input_feature, height, width):
-        # height, width = self.input_resolution
+    def maybe_pad(self, input_feature, width, height):
+        should_pad = (height % 2 == 1) or (width % 2 == 1)
+        if should_pad:
+            pad_values = (0, 0, 0, width % 2, 0, height % 2)
+            input_feature = nn.functional.pad(input_feature, pad_values)
+
+        return input_feature
+
+    def forward(self, input_feature, input_dimensions):
+        height, width = input_dimensions
         # `dim` is height * width
         batch_size, dim, num_channels = input_feature.shape
 
         input_feature = input_feature.view(batch_size, height, width, num_channels)
-        # padding
-        should_pad = (height % 2 == 1) or (width % 2 == 1)
-        if should_pad:
-            pad_value = (0, 0, 0, width % 2, 0, height % 2)
-            input_feature = nn.functional.pad(input_feature, pad_value)
+        # pad input to be disible by width and height, if needed
+        input_feature = self.maybe_pad(input_feature, height, width)
 
         input_feature_0 = input_feature[:, 0::2, 0::2, :]  # batch_size height/2 width/2 num_channels
         input_feature_1 = input_feature[:, 1::2, 0::2, :]  # batch_size height/2 width/2 num_channels
@@ -408,7 +481,7 @@ class SwinBlock(nn.Module):
         self.shift_size = shift_size
         self.window_size = config.window_size
         self.input_resolution = input_resolution
-
+        # TODO check this in the original implementation
         if min(self.input_resolution) <= self.window_size:
             # if window size is larger than input resolution, we don't partition windows
             self.shift_size = 0
@@ -450,6 +523,14 @@ class SwinBlock(nn.Module):
             attn_mask = None
         return attn_mask
 
+    def maybe_pad(self, hidden_states, height, width):
+        pad_left = pad_top = 0
+        pad_rigth = (self.window_size - width % self.window_size) % self.window_size
+        pad_bottom = (self.window_size - height % self.window_size) % self.window_size
+        pad_values = (0, 0, pad_left, pad_rigth, pad_top, pad_bottom)
+        hidden_states = nn.functional.pad(hidden_states, pad_values)
+        return hidden_states, pad_values
+
     def forward(self, hidden_states, input_dimensions, head_mask=None, output_attentions=False):
         height, width = input_dimensions
         batch_size, dim, channels = hidden_states.size()
@@ -457,12 +538,8 @@ class SwinBlock(nn.Module):
 
         hidden_states = self.layernorm_before(hidden_states)
         hidden_states = hidden_states.view(batch_size, height, width, channels)
-        # pad feature maps to multiples of window size
-        pad_l = pad_t = 0
-        pad_r = (self.window_size - width % self.window_size) % self.window_size
-        pad_b = (self.window_size - height % self.window_size) % self.window_size
-        pad_value = (0, 0, pad_l, pad_r, pad_t, pad_b)
-        hidden_states = nn.functional.pad(hidden_states, pad_value)
+        # pad hidden_states to multiples of window size
+        hidden_states, pad_values = self.maybe_pad(hidden_states)
 
         _, height_pad, width_pad, _ = hidden_states.shape
         # cyclic shift
@@ -498,7 +575,8 @@ class SwinBlock(nn.Module):
         else:
             attention_windows = shifted_windows
 
-        if pad_r > 0 or pad_b > 0:
+        was_padded = pad_values[2] > 0 or pad_values[3]
+        if was_padded:
             attention_windows = attention_windows[:, :height, :width, :].contiguous()
 
         attention_windows = attention_windows.view(batch_size, height * width, channels)
@@ -519,7 +597,6 @@ class SwinLayer(nn.Module):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.input_resolution = input_resolution
         self.blocks = nn.ModuleList(
             [
                 SwinBlock(
@@ -569,7 +646,7 @@ class SwinLayer(nn.Module):
 
             height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
             output_dimensions = (height, width, height_downsampled, width_downsampled)
-            layer_hidden_states = (self.downsample(layer_outputs[0], height, width),) + layer_hidden_states
+            layer_hidden_states = (self.downsample(layer_outputs[0], input_dimensions),) + layer_hidden_states
         else:
             output_dimensions = (height, width, height, width)
             layer_hidden_states = (hidden_states,) + layer_hidden_states

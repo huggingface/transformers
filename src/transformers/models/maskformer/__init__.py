@@ -24,6 +24,9 @@ _import_structure = {
     "configuration_maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
 }
 
+if is_vision_available():
+    _import_structure["feature_extraction_maskformer"] = ["MaskFormerFeatureExtractor"]
+
 
 if is_torch_available():
     _import_structure["modeling_maskformer"] = [
@@ -39,9 +42,7 @@ if TYPE_CHECKING:
     from .configuration_maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
 
     if is_vision_available():
-        # TODO code it!
-        # from .feature_extraction_maskformer import MaskFormerFeatureExtractor
-        pass
+        from .feature_extraction_maskformer import MaskFormerFeatureExtractor
     if is_torch_available():
         from .modeling_maskformer import (
             MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
