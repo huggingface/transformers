@@ -1049,6 +1049,8 @@ class GenerationMixin:
 
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        if eos_token_id is None and hasattr(self.config, "decoder"):
+            eos_token_id = self.config.decoder.eos_token_id
 
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
