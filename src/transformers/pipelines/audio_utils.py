@@ -101,9 +101,9 @@ def ffmpeg_microphone_live(
     format_for_conversion: str = "f32le",
 ):
     """
-    Helper function to read audio from the microphone file through ffmpeg. This will output `partial` overlapping chunks
-    starting from `stream_chunk_s` (if it is defined) until `chunk_length_s` is reached. It will make use of striding to avoid
-    errors on the "sides" of the various chunks.
+    Helper function to read audio from the microphone file through ffmpeg. This will output `partial` overlapping
+    chunks starting from `stream_chunk_s` (if it is defined) until `chunk_length_s` is reached. It will make use of
+    striding to avoid errors on the "sides" of the various chunks.
 
     Arguments:
         sampling_rate (`int`):
