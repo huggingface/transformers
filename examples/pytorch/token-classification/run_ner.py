@@ -373,7 +373,7 @@ def main():
                 f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
                 "\nIgnoring the model labels as a result.",
             )
-    
+
     # Set the correspondences label/ID inside the model config
     model.config.label2id = {l: i for i, l in enumerate(label_list)}
     model.config.id2label = {i: l for i, l in enumerate(label_list)}
