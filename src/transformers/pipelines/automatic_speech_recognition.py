@@ -154,24 +154,21 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         Args:
             inputs (`np.ndarray` or `bytes` or `str` or `dict`):
                 The inputs is either :
-                    - `str` that is the filename of the
-                    audio file, the file will be read at the correct sampling rate to get the waveform using *ffmpeg*.
-                    This
-                requires *ffmpeg* to be installed on the system.
-                    - `bytes` it is supposed to be the
-                content of an audio file and is interpreted by *ffmpeg* in the same way.
+                    - `str` that is the filename of the audio file, the file will be read at the correct sampling rate
+                      to get the waveform using *ffmpeg*. This requires *ffmpeg* to be installed on the system.
+                    - `bytes` it is supposed to be the content of an audio file and is interpreted by *ffmpeg* in the
+                      same way.
                     - (`np.ndarray` of shape (n, ) of type `np.float32` or `np.float64`)
                         Raw audio at the correct sampling rate (no further check will be done)
-                    - `dict` form can be used to pass raw audio sampled at arbirary `sampling_rate` and let
-                this pipeline do the resampling. The dict must be in the fomat `{"sampling_rate": int, "raw":
-                np.array}` with optionally a `"stride": (left: int, right: int)` than can ask the pipeline to treat the
-                first `left` samples and last `right` samples to be ignored in decoding (but used at inference to
-                provide more context to the model). Only use `stride` with CTC models.
+                    - `dict` form can be used to pass raw audio sampled at arbitrary `sampling_rate` and let this
+                      pipeline do the resampling. The dict must be in the format `{"sampling_rate": int, "raw":
+                      np.array}` with optionally a `"stride": (left: int, right: int)` than can ask the pipeline to
+                      treat the first `left` samples and last `right` samples to be ignored in decoding (but used at
+                      inference to provide more context to the model). Only use `stride` with CTC models.
 
         Return:
-            A `dict` with the following keys:
-
-            - **text** (`str`) -- The recognized text.
+            `Dict`: A dictionary with the following keys:
+                - **text** (`str`) -- The recognized text.
         """
         return super().__call__(inputs, **kwargs)
 
