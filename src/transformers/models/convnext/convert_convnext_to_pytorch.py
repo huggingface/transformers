@@ -24,7 +24,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import ConvNextConfig, ConvNextForImageClassification, ViTFeatureExtractor
+from transformers import ConvNextConfig, ConvNextFeatureExtractor, ConvNextForImageClassification
 from transformers.utils import logging
 
 
@@ -55,7 +55,7 @@ def get_convnext_config(checkpoint_url):
         num_labels = 21841
         filename = "imagenet-22k-id2label.json"
         expected_shape = (1, 21841)
-    else:
+    if "1k" in checkpoint_url:
         num_labels = 1000
         filename = "imagenet-1k-id2label.json"
         expected_shape = (1, 1000)
@@ -103,10 +103,11 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     config, expected_shape = get_convnext_config(checkpoint_url)
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
+    # rename keys
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
-    # add prefix
+    # add prefix to all keys expect classifier head
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
         if not key.startswith("classifier"):
@@ -117,8 +118,9 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     model = ConvNextForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image, prepared by ViTFeatureExtractor
-    feature_extractor = ViTFeatureExtractor()
+    # Check outputs on an image, prepared by ConvNextFeatureExtractor
+    size = 224 if "224" in checkpoint_url else 384
+    feature_extractor = ConvNextFeatureExtractor(size=size)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
@@ -135,6 +137,27 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     model.save_pretrained(pytorch_dump_folder_path)
     print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
+
+    print("Pushing model to the hub...")
+    model_name = "convnext"
+    if "tiny" in checkpoint_url:
+        model_name += "-tiny"
+    elif "small" in checkpoint_url:
+        model_name += "-small"
+    elif "base" in checkpoint_url:
+        model_name += "-base"
+    elif "large" in checkpoint_url:
+        model_name += "-large"
+    if "224" in checkpoint_url:
+        model_name += "-224"
+    elif "384" in checkpoint_url:
+        model_name += "-384"
+    if "22k" in checkpoint_url and "1k" not in checkpoint_url:
+        model_name += "-22k"
+
+    model.push_to_hub(
+        repo_path_or_name=Path(pytorch_dump_folder_path, model_name), organization="nielsr", commit_message="Add model"
+    )
 
 
 if __name__ == "__main__":

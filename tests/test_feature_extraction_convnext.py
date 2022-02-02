@@ -43,7 +43,8 @@ class ConvNextFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=18,
+        size=384,
+        crop_pct=0.875,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
@@ -56,6 +57,7 @@ class ConvNextFeatureExtractionTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
+        self.crop_pct = crop_pct
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -67,6 +69,7 @@ class ConvNextFeatureExtractionTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
             "do_resize": self.do_resize,
             "size": self.size,
+            "crop_pct": self.crop_pct,
         }
 
 
@@ -85,11 +88,12 @@ class ConvNextFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
 
     def test_feat_extract_properties(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        self.assertTrue(hasattr(feature_extractor, "image_mean"))
-        self.assertTrue(hasattr(feature_extractor, "image_std"))
-        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
         self.assertTrue(hasattr(feature_extractor, "size"))
+        self.assertTrue(hasattr(feature_extractor, "crop_pct"))
+        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
+        self.assertTrue(hasattr(feature_extractor, "image_mean"))
+        self.assertTrue(hasattr(feature_extractor, "image_std"))
 
     def test_batch_feature(self):
         pass

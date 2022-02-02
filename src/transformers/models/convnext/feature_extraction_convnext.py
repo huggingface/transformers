@@ -53,7 +53,8 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
             if `do_resize` is set to `True`.
         crop_pct (`float`, *optional*):
-            The percentage of the image to crop. If `None`, then a cropping percentage of 224 / 256 is used.
+            The percentage of the image to crop. If `None`, then a cropping percentage of 224 / 256 is used. Only has
+            an effect if `do_resize` is set to `True` and `size` < 384.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
         image_mean (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
@@ -83,42 +84,6 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-
-    def _resize(self, image, size, resample=Image.BILINEAR):
-        """
-        Resize the image to the given size. Size can be min_size (scalar) or (w, h) tuple. If size is an int, smaller
-        edge of the image will be matched to this number.
-        """
-        if not isinstance(image, Image.Image):
-            image = self.to_pil_image(image)
-
-        def get_size_with_aspect_ratio(image_size, size):
-            w, h = image_size
-
-            if (w <= h and w == size) or (h <= w and h == size):
-                return (h, w)
-
-            if w < h:
-                ow = size
-                oh = int(size * h / w)
-            else:
-                oh = size
-                ow = int(size * w / h)
-
-            return (oh, ow)
-
-        def get_size(image_size, size):
-            if isinstance(size, (list, tuple)):
-                return size
-            else:
-                # size returned must be (w, h) since we use PIL to resize images
-                # so we revert the tuple
-                return get_size_with_aspect_ratio(image_size, size)[::-1]
-
-        size = get_size(image.size, size)
-        rescaled_image = self.resize(image, size=size, resample=resample)
-
-        return rescaled_image
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
@@ -177,7 +142,7 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         if not is_batched:
             images = [images]
 
-        # transformations (resizing + center cropping + normalization)
+        # transformations (resizing and optional center cropping + normalization)
         if self.do_resize and self.size is not None:
             if self.size >= 384:
                 # warping (no cropping) when evaluated at 384 or larger
@@ -187,8 +152,11 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
                     self.crop_pct = 224 / 256
                 size = int(self.size / self.crop_pct)
                 # to maintain same ratio w.r.t. 224 images
-                images = [self._resize(image=image, size=size, resample=self.resample) for image in images]
-                images = [self.center_crop(image=image, size=self.size) for image in images]
+                images = [
+                    self.resize(image=image, size=size, default_to_square=False, resample=self.resample)
+                    for image in images
+                ]
+
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 

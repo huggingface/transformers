@@ -48,7 +48,7 @@ CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class ConvNextModelOutput(ModelOutput):
     """
-    Class for [`ConvNextModel`]'s outputs, with potential hidden states.
+    Class for [`ConvNextModel`]'s outputs, with potential hidden states (feature maps).
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -68,7 +68,7 @@ class ConvNextModelOutput(ModelOutput):
 @dataclass
 class ConvNextClassifierOutput(ModelOutput):
     """
-    Base class for outputs of sentence classification models.
+    Class for [`ConvNextForImageClassification`]'s outputs, with potential hidden states (feature maps).
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -129,7 +129,7 @@ class ConvNextLayerNorm(nn.Module):
         self.eps = eps
         self.data_format = data_format
         if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError
+            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
         self.normalized_shape = (normalized_shape,)
 
     def forward(self, x):
