@@ -27,6 +27,8 @@ from huggingface_hub import cached_download, hf_hub_url
 from transformers import ConvNextConfig, ConvNextFeatureExtractor, ConvNextForImageClassification
 from transformers.utils import logging
 
+import torchvision.transforms as transforms
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -78,9 +80,30 @@ def get_convnext_config(checkpoint_url):
 
 
 def rename_key(name):
+    if "downsample_layers.0.0" in name:
+        name = name.replace("downsample_layers.0.0", "stem.projection")
+    if "downsample_layers.0.1" in name:
+        name = name.replace("downsample_layers.0.1", "stem.norm")  # we rename to layernorm later on
+    if "downsample_layers.1.0" in name:
+        name = name.replace("downsample_layers.1.0", "stages.1.downsampling_layer.0")
+    if "downsample_layers.1.1" in name:
+        name = name.replace("downsample_layers.1.1", "stages.1.downsampling_layer.1")
+    if "downsample_layers.2.0" in name:
+        name = name.replace("downsample_layers.2.0", "stages.2.downsampling_layer.0")
+    if "downsample_layers.2.1" in name:
+        name = name.replace("downsample_layers.2.1", "stages.2.downsampling_layer.1")
+    if "downsample_layers.3.0" in name:
+        name = name.replace("downsample_layers.3.0", "stages.3.downsampling_layer.0")
+    if "downsample_layers.3.1" in name:
+        name = name.replace("downsample_layers.3.1", "stages.3.downsampling_layer.1")
+    if "stages" in name and "downsampling_layer" not in name:
+        # stages.0.0. for instance should be renamed to stages.0.layers.0.
+        name = name[: len("stages.0")] + ".layers" + name[len("stages.0") :]
+    if "norm" in name:
+        name = name.replace("norm", "layernorm")
     if "gamma" in name:
         name = name.replace("gamma", "gamma_parameter")
-    elif "head" in name:
+    if "head" in name:
         name = name.replace("head", "classifier")
 
     return name
@@ -121,17 +144,25 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Check outputs on an image, prepared by ConvNextFeatureExtractor
     size = 224 if "224" in checkpoint_url else 384
-    print("Size:", size)
     feature_extractor = ConvNextFeatureExtractor(size=size)
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
 
-    print(encoding.pixel_values)
+    transformations = transforms.Compose(
+        [transforms.Resize((size, size)),
+         transforms.ToTensor(),
+         transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
+        ]
+    )
+    
+    pixel_values = transformations(prepare_img()).unsqueeze(0)
 
-    logits = model(**encoding).logits
+    logits = model(pixel_values).logits
 
     expected_logits = torch.tensor([-0.1235, -0.6594, 0.1908])
 
+    print("Predicted class:", model.config.id2label[torch.argmax(logits, dim=-1).item()])
     print("Logits:", logits[0, :3])
+    print("904 class:", model.config.id2label[429])
 
     assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
     assert logits.shape == expected_shape

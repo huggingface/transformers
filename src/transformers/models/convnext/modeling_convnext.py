@@ -143,6 +143,22 @@ class ConvNextLayerNorm(nn.Module):
         return x
 
 
+class ConvNextStem(nn.Module):
+    """This class is comparable to (and inspired by) the SwinPatchEmbeddings class
+    found in src/transformers/models/swin/modeling_swin.py.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.projection = nn.Conv2d(config.num_channels, config.hidden_sizes[0], kernel_size=4, stride=4)
+        self.layernorm = ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
+
+    def forward(self, pixel_values):
+        hidden_states = self.projection(pixel_values)
+        hidden_states = self.layernorm(hidden_states)
+        return hidden_states
+
+
 class ConvNextLayer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 
@@ -160,7 +176,7 @@ class ConvNextLayer(nn.Module):
     def __init__(self, config, dim, drop_path=0):
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
-        self.norm = ConvNextLayerNorm(dim, eps=1e-6)
+        self.layernorm = ConvNextLayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = ACT2FN[config.hidden_act]
         self.pwconv2 = nn.Linear(4 * dim, dim)
@@ -175,7 +191,7 @@ class ConvNextLayer(nn.Module):
         input = hidden_states
         x = self.dwconv(hidden_states)
         x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
-        x = self.norm(x)
+        x = self.layernorm(x)
         x = self.pwconv1(x)
         x = self.act(x)
         x = self.pwconv2(x)
@@ -188,21 +204,19 @@ class ConvNextLayer(nn.Module):
 
 
 class ConvNextStage(nn.Module):
-    """ConvNeXt stage, consisting of a downsampling layer + multiple residual blocks.
+    """ConvNeXT stage, consisting of an optional downsampling layer + multiple residual blocks.
 
     Args:
         config ([`ConvNextConfig`]): Model configuration class.
         in_channels (`int`): Number of input channels.
         out_channels (`int`): Number of output channels.
         depth (`int`): Number of residual blocks.
-        drop_path _rates(`List[float]`): Stochastic depth rates for each layer.
+        drop_path_rates(`List[float]`): Stochastic depth rates for each layer.
     """
 
     def __init__(self, config, in_channels, out_channels, kernel_size=2, stride=2, depth=2, drop_path_rates=None):
         super().__init__()
-        print("Number of input channels", in_channels)
-        print("Number of output channels:", out_channels)
-        
+
         if in_channels != out_channels or stride > 1:
             self.downsampling_layer = nn.Sequential(
                 ConvNextLayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
@@ -216,11 +230,8 @@ class ConvNextStage(nn.Module):
         )
 
     def forward(self, hidden_states):
-        print("Shape of hidden states before downsampling:", hidden_states.shape)
         hidden_states = self.downsampling_layer(hidden_states)
-        print("Shape of hidden states after downsampling:", hidden_states.shape)
         hidden_states = self.layers(hidden_states)
-        print("Shape of hidden states after layers:", hidden_states.shape)
         return hidden_states
 
 
@@ -286,32 +297,24 @@ class ConvNextModel(ConvNextPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        # stem
-        self.stem = nn.Sequential(
-            nn.Conv2d(config.num_channels, config.hidden_sizes[0], kernel_size=4, stride=4),
-            ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first"),
-        )
+        self.stem = ConvNextStem(config)
 
-        # stages
         self.stages = nn.ModuleList()
         drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         cur = 0
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
-            stride = 2 if i > 0 else 1
             out_chs = config.hidden_sizes[i]
-            print("Stage", i, ":", prev_chs, "->", out_chs)
             stage = ConvNextStage(
                 config,
                 in_channels=prev_chs,
                 out_channels=out_chs,
-                stride= 2 if i > 0 else 1,
+                stride=2 if i > 0 else 1,
                 depth=config.depths[i],
                 drop_path_rates=drop_path_rates[cur],
             )
             self.stages.append(stage)
             cur += config.depths[i]
-            stride = 2 if i > 0 else 1
             prev_chs = out_chs
 
         # final layernorm layer
@@ -353,11 +356,8 @@ class ConvNextModel(ConvNextPreTrainedModel):
 
         hidden_states = self.stem(pixel_values)
 
-        print("Hidden states after stem:", hidden_states.shape)
-
         all_hidden_states = () if output_hidden_states else None
         for i in range(self.config.num_stages):
-            print("Layer {}:".format(i))
             hidden_states = self.stages[i](hidden_states)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
