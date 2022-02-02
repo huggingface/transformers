@@ -54,12 +54,6 @@ def replace_key_with_offset(key, offset, original_name, new_name):
     )
     return key
 
-def calc_crop_size(original_size, crop_pct):
-    """
-    Calculates the new crop size
-    """
-    return int(math.floor(original_size[0] / crop_pct))
-
 def rename_keys(state_dict):
     new_state_dict = OrderedDict()
     total_embed_found, patch_emb_offset = 0, 0

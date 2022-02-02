@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import math
 import unittest
 
 import numpy as np
@@ -32,6 +32,11 @@ if is_vision_available():
 
     from transformers import PoolFormerFeatureExtractor
 
+def calc_crop_size(original_size, crop_pct):
+    """
+    Calculates the new crop size
+    """
+    return int(math.floor(original_size[0] / crop_pct))
 
 class PoolFormerFeatureExtractionTester(unittest.TestCase):
     def __init__(
@@ -39,7 +44,6 @@ class PoolFormerFeatureExtractionTester(unittest.TestCase):
         parent,
         batch_size=7,
         num_channels=3,
-        image_size=18,
         min_resolution=30,
         max_resolution=400,
         do_resize_and_center_crop=True,
@@ -52,7 +56,6 @@ class PoolFormerFeatureExtractionTester(unittest.TestCase):
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
-        self.image_size = image_size
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize_and_center_crop = do_resize_and_center_crop
@@ -61,6 +64,7 @@ class PoolFormerFeatureExtractionTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.expected_size = calc_crop_size((size, size), crop_pct)
 
     def prepare_feat_extract_dict(self):
         return {
@@ -108,13 +112,14 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
+
         self.assertEqual(
             encoded_images.shape,
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.expected_size,
+                self.feature_extract_tester.expected_size,
             ),
         )
 
@@ -125,8 +130,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.expected_size,
+                self.feature_extract_tester.expected_size,
             ),
         )
 
@@ -145,8 +150,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.expected_size,
+                self.feature_extract_tester.expected_size,
             ),
         )
 
@@ -157,8 +162,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.expected_size,
+                self.feature_extract_tester.expected_size,
             ),
         )
 
@@ -177,8 +182,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.expected_size,
+                self.feature_extract_tester.expected_size,
             ),
         )
 
@@ -189,7 +194,7 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.expected_size,
+                self.feature_extract_tester.expected_size,
             ),
         )
