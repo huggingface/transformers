@@ -394,6 +394,33 @@ class TokenizerTesterMixin:
         self.assertEqual(tokenizer_new.sp_model_kwargs, sp_model_kwargs)
         self.check_subword_sampling(tokenizer_new)
 
+    def test_save_sentencepiece_tokenizer(self) -> None:
+        if not self.test_sentencepiece or not self.test_slow_tokenizer:
+            return
+        # We want to verify that we will be able to save the tokenizer even if the original files that were used to
+        # build the tokenizer have been deleted in the meantime.
+        text = "This is text to test the tokenizer."
+
+        tokenizer_slow_1 = self.get_tokenizer()
+        encoding_tokenizer_slow_1 = tokenizer_slow_1(text)
+
+        tmpdirname_1 = tempfile.mkdtemp()
+        tmpdirname_2 = tempfile.mkdtemp()
+
+        tokenizer_slow_1.save_pretrained(tmpdirname_1)
+        tokenizer_slow_2 = self.tokenizer_class.from_pretrained(tmpdirname_1)
+        encoding_tokenizer_slow_2 = tokenizer_slow_2(text)
+
+        shutil.rmtree(tmpdirname_1)
+        tokenizer_slow_2.save_pretrained(tmpdirname_2)
+
+        tokenizer_slow_3 = self.tokenizer_class.from_pretrained(tmpdirname_2)
+        encoding_tokenizer_slow_3 = tokenizer_slow_3(text)
+        shutil.rmtree(tmpdirname_2)
+
+        self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_2)
+        self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_3)
+
     def test_model_input_names_signature(self):
         accepted_model_main_input_names = [
             "input_ids",  # nlp models
@@ -1339,6 +1366,43 @@ class TokenizerTesterMixin:
                 ]
                 filtered_sequence = [x for x in filtered_sequence if x is not None]
                 self.assertEqual(encoded_sequence, filtered_sequence)
+
+    def test_padding_side_in_kwargs(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                if self.test_rust_tokenizer:
+                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, padding_side="left", **kwargs
+                    )
+                    self.assertEqual(tokenizer_r.padding_side, "left")
+
+                    tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, padding_side="right", **kwargs
+                    )
+                    self.assertEqual(tokenizer_r.padding_side, "right")
+
+                    self.assertRaises(
+                        ValueError,
+                        self.rust_tokenizer_class.from_pretrained,
+                        pretrained_name,
+                        padding_side="unauthorized",
+                        **kwargs,
+                    )
+
+                if self.test_slow_tokenizer:
+                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, padding_side="left", **kwargs)
+                    self.assertEqual(tokenizer_p.padding_side, "left")
+
+                    tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, padding_side="right", **kwargs)
+                    self.assertEqual(tokenizer_p.padding_side, "right")
+
+                    self.assertRaises(
+                        ValueError,
+                        self.tokenizer_class.from_pretrained,
+                        pretrained_name,
+                        padding_side="unauthorized",
+                        **kwargs,
+                    )
 
     def test_right_and_left_padding(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -3540,15 +3604,24 @@ class TokenizerTesterMixin:
                             AlbertTokenizer.from_pretrained(pretrained_name)
                         else:
                             BertTokenizer.from_pretrained(pretrained_name)
+                    except EnvironmentError as e:
+                        # Some tokenizer will raised an error before reaching the logged warning because there are no
+                        # corresponding files to load
+                        error_message = str(e)
                     except (TypeError, AttributeError):
                         # Some tokenizers cannot be loaded into the target tokenizer at all and errors are returned,
                         # here we just check that the warning has been logged before the error is raised
                         pass
                     finally:
+                        logged_msg_target = (
+                            "The tokenizer class you load from this checkpoint is not the same type as the class "
+                            "this function is called from."
+                        )
+                        raised_error_msg_target = "Can't load tokenizer for"
                         self.assertTrue(
-                            cm.records[0].message.startswith(
-                                "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from."
-                            )
+                            cm.records[0].message.startswith(logged_msg_target)
+                            if len(cm.records) > 0
+                            else False or raised_error_msg_target in error_message
                         )
                     try:
                         if self.rust_tokenizer_class == BertTokenizerFast:
@@ -3586,6 +3659,35 @@ class TokenizerTesterMixin:
                     # Should not raise an error
                     trainer.save_model(os.path.join(tmp_dir, "checkpoint"))
                     self.assertIn("tokenizer.json", os.listdir(os.path.join(tmp_dir, "checkpoint")))
+
+    def test_save_slow_from_fast_and_reload_fast(self):
+        if not self.test_slow_tokenizer or not self.test_rust_tokenizer:
+            # we need both slow and fast versions
+            return
+
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                with tempfile.TemporaryDirectory() as tmp_dir_1:
+                    # Here we check that even if we have initialized a fast tokenizer with a tokenizer_file we can
+                    # still save only the slow version and use these saved files to rebuild a tokenizer
+                    tokenizer_fast_old_1 = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, **kwargs, use_fast=True
+                    )
+                    tokenizer_file = os.path.join(tmp_dir_1, "tokenizer.json")
+                    tokenizer_fast_old_1.backend_tokenizer.save(tokenizer_file)
+
+                    tokenizer_fast_old_2 = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, **kwargs, use_fast=True, tokenizer_file=tokenizer_file
+                    )
+
+                    tokenizer_fast_old_2.save_pretrained(tmp_dir_1, legacy_format=True)  # save only slow version
+
+                    tokenizer_slow = self.tokenizer_class.from_pretrained(tmp_dir_1)
+                with tempfile.TemporaryDirectory() as tmp_dir_2:
+                    tokenizer_slow.save_pretrained(tmp_dir_2)
+
+                    # Should not raise an error
+                    self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
 
 
 class FakeTokenizer(BertTokenizer):

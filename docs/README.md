@@ -176,7 +176,7 @@ provide its path. For instance: \[\`file_utils.ModelOutput\`\]. This will be con
 `file_utils.ModelOutput` in the description. To get rid of the path and only keep the name of the object you are
 linking to in the description, add a ~: \[\`~file_utils.ModelOutput\`\] will generate a link with `ModelOutput` in the description.
 
-The same wroks for methods so you can either use \[\`XXXClass.method\`\] or \[~\`XXXClass.method\`\].
+The same works for methods so you can either use \[\`XXXClass.method\`\] or \[~\`XXXClass.method\`\].
 
 #### Defining arguments in a method
 

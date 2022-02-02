@@ -37,14 +37,27 @@ from .configuration_sew_d import SEWDConfig
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "SEWDConfig"
-_CHECKPOINT_FOR_DOC = "asapp/sew-d-tiny-100k"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-
-_SEQ_CLASS_CHECKPOINT = "asapp/sew-d-tiny-100k"
 
 _HIDDEN_STATES_START_POSITION = 1
+
+
+# General docstring
+_CONFIG_FOR_DOC = "SEWDConfig"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "asapp/sew-d-tiny-100k-ft-ls100h"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 384]
+
+# CTC docstring
+_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTIL OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
+_CTC_EXPECTED_LOSS = 0.21
+
+# Audio class docstring
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_SEQ_CLASS_CHECKPOINT = "anton-l/sew-d-mid-400k-ft-keyword-spotting"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
+_SEQ_CLASS_EXPECTED_LOSS = 3.16
 
 SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "asapp/sew-d-tiny-100k",
@@ -104,9 +117,13 @@ def _compute_mask_indices(
         num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
         num_masked_span = max(num_masked_span, min_masks)
 
-        # make sure num masked indices <= sequence_length
+        # make sure num masked span <= sequence_length
         if num_masked_span * mask_length > sequence_length:
             num_masked_span = sequence_length // mask_length
+
+        # make sure num_masked span is also <= input_length - (mask_length - 1)
+        if input_length - (mask_length - 1) < num_masked_span:
+            num_masked_span = max(input_length - (mask_length - 1), 0)
 
         return num_masked_span
 
@@ -138,7 +155,13 @@ def _compute_mask_indices(
         # pick first sampled index that will serve as a dummy index to pad vector
         # to ensure same dimension for all batches due to probabilistic rounding
         # Picking first sample just pads those vectors twice.
-        dummy_mask_idx = spec_aug_mask_idx[0]
+        if len(spec_aug_mask_idx) == 0:
+            # this case can only happen if `input_length` is strictly smaller then
+            # `sequence_length` in which case the last token has to be a padding
+            # token which we can use as a dummy mask id
+            dummy_mask_idx = sequence_length - 1
+        else:
+            dummy_mask_idx = spec_aug_mask_idx[0]
 
         spec_aug_mask_idx = np.concatenate(
             [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
@@ -159,6 +182,10 @@ def _compute_mask_indices(
         batch_size, max_num_masked_span * mask_length
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
+
+    # ensure that we cannot have indices larger than sequence_length
+    if spec_aug_mask_idxs.max() > sequence_length - 1:
+        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
 
     # scatter indices to mask
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
@@ -1415,6 +1442,7 @@ class SEWDModel(SEWDPreTrainedModel):
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1514,6 +1542,8 @@ class SEWDForCTC(SEWDPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1644,6 +1674,8 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,

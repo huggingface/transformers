@@ -43,21 +43,21 @@ from .configuration_realm import RealmConfig
 
 
 logger = logging.get_logger(__name__)
-_EMBEDDER_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-embedder"
-_ENCODER_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-encoder"
-_SCORER_CHECKPOINT_FOR_DOC = "qqaatw/realm-cc-news-pretrained-scorer"
+_EMBEDDER_CHECKPOINT_FOR_DOC = "google/realm-cc-news-pretrained-embedder"
+_ENCODER_CHECKPOINT_FOR_DOC = "google/realm-cc-news-pretrained-encoder"
+_SCORER_CHECKPOINT_FOR_DOC = "google/realm-cc-news-pretrained-scorer"
 _CONFIG_FOR_DOC = "RealmConfig"
 _TOKENIZER_FOR_DOC = "RealmTokenizer"
 
 REALM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "qqaatw/realm-cc-news-pretrained-embedder",
-    "qqaatw/realm-cc-news-pretrained-encoder",
-    "qqaatw/realm-cc-news-pretrained-scorer",
-    "qqaatw/realm-cc-news-pretrained-openqa",
-    "qqaatw/realm-orqa-nq-openqa",
-    "qqaatw/realm-orqa-nq-reader",
-    "qqaatw/realm-orqa-wq-openqa",
-    "qqaatw/realm-orqa-wq-reader",
+    "google/realm-cc-news-pretrained-embedder",
+    "google/realm-cc-news-pretrained-encoder",
+    "google/realm-cc-news-pretrained-scorer",
+    "google/realm-cc-news-pretrained-openqa",
+    "google/realm-orqa-nq-openqa",
+    "google/realm-orqa-nq-reader",
+    "google/realm-orqa-wq-openqa",
+    "google/realm-orqa-wq-reader",
     # See all REALM models at https://huggingface.co/models?filter=realm
 ]
 
@@ -1180,8 +1180,8 @@ class RealmEmbedder(RealmPreTrainedModel):
         >>> from transformers import RealmTokenizer, RealmEmbedder
         >>> import torch
 
-        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-embedder")
-        >>> model = RealmEmbedder.from_pretrained("qqaatw/realm-cc-news-pretrained-embedder")
+        >>> tokenizer = RealmTokenizer.from_pretrained("google/realm-cc-news-pretrained-embedder")
+        >>> model = RealmEmbedder.from_pretrained("google/realm-cc-news-pretrained-embedder")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1293,8 +1293,8 @@ class RealmScorer(RealmPreTrainedModel):
         >>> import torch
         >>> from transformers import RealmTokenizer, RealmScorer
 
-        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-scorer")
-        >>> model = RealmScorer.from_pretrained("qqaatw/realm-cc-news-pretrained-scorer", num_candidates=2)
+        >>> tokenizer = RealmTokenizer.from_pretrained("google/realm-cc-news-pretrained-scorer")
+        >>> model = RealmScorer.from_pretrained("google/realm-cc-news-pretrained-scorer", num_candidates=2)
 
         >>> # batch_size = 2, num_candidates = 2
         >>> input_texts = ["How are you?", "What is the item in the picture?"]
@@ -1433,9 +1433,9 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
         >>> import torch
         >>> from transformers import RealmTokenizer, RealmKnowledgeAugEncoder
 
-        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-cc-news-pretrained-encoder")
+        >>> tokenizer = RealmTokenizer.from_pretrained("google/realm-cc-news-pretrained-encoder")
         >>> model = RealmKnowledgeAugEncoder.from_pretrained(
-        ...     "qqaatw/realm-cc-news-pretrained-encoder", num_candidates=2
+        ...     "google/realm-cc-news-pretrained-encoder", num_candidates=2
         ... )
 
         >>> # batch_size = 2, num_candidates = 2
@@ -1761,9 +1761,9 @@ class RealmForOpenQA(RealmPreTrainedModel):
         >>> import torch
         >>> from transformers import RealmForOpenQA, RealmRetriever, RealmTokenizer
 
-        >>> retriever = RealmRetriever.from_pretrained("qqaatw/realm-orqa-nq-openqa")
-        >>> tokenizer = RealmTokenizer.from_pretrained("qqaatw/realm-orqa-nq-openqa")
-        >>> model = RealmForOpenQA.from_pretrained("qqaatw/realm-orqa-nq-openqa", retriever=retriever)
+        >>> retriever = RealmRetriever.from_pretrained("google/realm-orqa-nq-openqa")
+        >>> tokenizer = RealmTokenizer.from_pretrained("google/realm-orqa-nq-openqa")
+        >>> model = RealmForOpenQA.from_pretrained("google/realm-orqa-nq-openqa", retriever=retriever)
 
         >>> question = "Who is the pioneer in modern computer science?"
         >>> question_ids = tokenizer([question], return_tensors="pt")
