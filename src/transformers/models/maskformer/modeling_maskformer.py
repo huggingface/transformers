@@ -809,8 +809,8 @@ MASKFORMER_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
             [`AutoFeatureExtractor.__call__`] for details.
-        # TODO add the others but first we need to decide on their names/format
 """
+# TODO add the others but first we need to decide on their names/format
 
 
 @add_start_docstrings(
@@ -848,8 +848,9 @@ class MaskFormerModel(PreTrainedModel):
             eos_coef=config.no_object_weight,
             losses=losses,
         )
+        
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskFormerOutput, config_class=_CONFIG_FOR_DOC)
+    # @replace_return_docstrings(output_type=MaskFormerOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Tensor,
@@ -898,7 +899,7 @@ class MaskFormerForSemanticSegmentation(nn.Module):
         self.model = MaskFormerModel(config)
 
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskFormerForSemanticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    # @replace_return_docstrings(output_type=MaskFormerForSemanticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(self, *args, **kwargs):
         outputs: MaskFormerOutput = self.model(*args, **kwargs)
         # mask classes has shape [BATCH, QUERIES, CLASSES + 1]
@@ -950,7 +951,7 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
         return masks[to_keep], scores[to_keep], labels[to_keep]
 
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskFormerForPanopticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    # @replace_return_docstrings(output_type=MaskFormerForPanopticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(self, *args, **kwargs):
         outputs: MaskFormerOutput = self.model(*args, **kwargs)
         preds_logits: Tensor = outputs.preds_logits
