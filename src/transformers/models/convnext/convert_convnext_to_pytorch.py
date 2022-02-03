@@ -40,16 +40,16 @@ def get_convnext_config(checkpoint_url):
     if "tiny" in checkpoint_url:
         depths = [3, 3, 9, 3]
         hidden_sizes = [96, 192, 384, 768]
-    elif "small" in checkpoint_url:
+    if "small" in checkpoint_url:
         depths = [3, 3, 27, 3]
         hidden_sizes = [96, 192, 384, 768]
-    elif "base" in checkpoint_url:
+    if "base" in checkpoint_url:
         depths = [3, 3, 27, 3]
         hidden_sizes = [128, 256, 512, 1024]
-    elif "large" in checkpoint_url:
+    if "large" in checkpoint_url:
         depths = [3, 3, 27, 3]
         hidden_sizes = [192, 384, 768, 1536]
-    elif "xlarge" in checkpoint_url:
+    if "xlarge" in checkpoint_url:
         depths = [3, 3, 27, 3]
         hidden_sizes = [256, 512, 1024, 2048]
 
@@ -147,22 +147,38 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     feature_extractor = ConvNextFeatureExtractor(size=size)
     pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
 
-    transformations = transforms.Compose(
-        [transforms.Resize((size, size)),
-         transforms.ToTensor(),
-         transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
-        ]
-    )
+    # transformations = transforms.Compose(
+    #     [transforms.Resize((size, size)),
+    #      transforms.ToTensor(),
+    #      transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
+    #     ]
+    # )
     
-    pixel_values = transformations(prepare_img()).unsqueeze(0)
+    # pixel_values = transformations(prepare_img()).unsqueeze(0)
 
     logits = model(pixel_values).logits
 
-    expected_logits = torch.tensor([-0.1235, -0.6594, 0.1908])
+    if checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_tiny_1k_224_ema.pth":
+        expected_logits = torch.tensor([-0.1210, -0.6605,  0.1918])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_small_1k_224_ema.pth":
+        expected_logits = torch.tensor([-0.4473, -0.1847, -0.6365])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_base_1k_224_ema.pth":
+        expected_logits = torch.tensor([0.4525, 0.7539, 0.0308])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_base_1k_384.pth":
+        expected_logits = torch.tensor([ 0.3561,  0.6350, -0.0384])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_large_1k_224_ema.pth":
+        expected_logits = torch.tensor([ 0.4174, -0.0989,  0.1489])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_large_1k_384.pth":
+        expected_logits = torch.tensor([ 0.2513, -0.1349, -0.1613])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_base_22k_224.pth":
+        expected_logits = torch.tensor([ 1.2980,  0.3631, -0.1198])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_large_22k_224.pth":
+        expected_logits = torch.tensor([1.2963, 0.1227, 0.1723])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_xlarge_22k_224.pth":
+        expected_logits = torch.tensor([])
 
     print("Predicted class:", model.config.id2label[torch.argmax(logits, dim=-1).item()])
     print("Logits:", logits[0, :3])
-    print("904 class:", model.config.id2label[429])
 
     assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
     assert logits.shape == expected_shape
@@ -196,6 +212,11 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
         organization="nielsr",
         commit_message="Add model",
+    )
+    feature_extractor.push_to_hub(
+        repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
+        organization="nielsr",
+        commit_message="Add feature extractor",
     )
 
 

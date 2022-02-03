@@ -143,20 +143,20 @@ class ConvNextLayerNorm(nn.Module):
         return x
 
 
-class ConvNextStem(nn.Module):
+class ConvNextEmbeddings(nn.Module):
     """This class is comparable to (and inspired by) the SwinPatchEmbeddings class
     found in src/transformers/models/swin/modeling_swin.py.
     """
 
     def __init__(self, config):
         super().__init__()
-        self.projection = nn.Conv2d(config.num_channels, config.hidden_sizes[0], kernel_size=4, stride=4)
+        self.patch_embeddings = nn.Conv2d(config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size)
         self.layernorm = ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
 
     def forward(self, pixel_values):
-        hidden_states = self.projection(pixel_values)
-        hidden_states = self.layernorm(hidden_states)
-        return hidden_states
+        embeddings = self.patch_embeddings(pixel_values)
+        embeddings = self.layernorm(embeddings)
+        return embeddings
 
 
 class ConvNextLayer(nn.Module):
@@ -235,6 +235,18 @@ class ConvNextStage(nn.Module):
         return hidden_states
 
 
+class ConvNextEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.patch_embeddings = nn.Conv2d(config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size)
+        self.layernorm = ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
+
+    def forward(self, pixel_values):
+        embeddings = self.patch_embeddings(pixel_values)
+        embeddings = self.layernorm(embeddings)
+        return embeddings
+
+
 class ConvNextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -297,7 +309,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.stem = ConvNextStem(config)
+        self.embeddings = ConvNextEmbeddings(config)
 
         self.stages = nn.ModuleList()
         drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]

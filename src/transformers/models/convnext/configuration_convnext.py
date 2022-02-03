@@ -39,6 +39,8 @@ class ConvNextConfig(PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
+        patch_size (`int`, optional, defaults to 4):
+            Patch size to use in the stem layer.
         num_stages (`int`, optional, defaults to 4):
             The number of stages in the model.
         hidden_sizes (`List[int]`, *optional*, defaults to [96, 192, 384, 768]):
@@ -73,6 +75,7 @@ class ConvNextConfig(PretrainedConfig):
     def __init__(
         self,
         num_channels=3,
+        patch_size=4,
         num_stages=4,
         hidden_sizes=None,
         depths=None,
@@ -87,6 +90,7 @@ class ConvNextConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.num_channels = num_channels
+        self.patch_size = patch_size
         self.num_stages = num_stages
         self.hidden_sizes = [96, 192, 384, 768] if hidden_sizes is None else hidden_sizes
         self.depths = [3, 3, 9, 3] if depths is None else depths
