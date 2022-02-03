@@ -793,7 +793,30 @@ def upsample_like(x: Tensor, like: Tensor, mode: str = "bilinear") -> Tensor:
     )
     return upsampled
 
+MASKFORMER_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
+    Parameters:
+        config ([`MaskFormerConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+MASKFORMER_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
+            [`AutoFeatureExtractor.__call__`] for details.
+        # TODO add the others but first we need to decide on their names/format
+"""
+
+
+@add_start_docstrings(
+    "The bare MaskFormer Model outputting raw hidden-states without any specific head on top.",
+    MASKFORMER_START_DOCSTRING,
+)
 class MaskFormerModel(PreTrainedModel):
     config_class = MaskFormerConfig
     base_model_prefix = "model"
@@ -825,13 +848,16 @@ class MaskFormerModel(PreTrainedModel):
             eos_coef=config.no_object_weight,
             losses=losses,
         )
-
+    @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=MaskFormerOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Tensor,
         pixel_mask: Optional[Tensor] = None,
         labels: Optional[Dict[str, Tensor]] = None,
     ) -> MaskFormerOutput:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
         image_features, pixel_embeddings = self.pixel_level_module(pixel_values)
         queries = self.transformer_module(image_features)
         outputs: Dict[str, Tensor] = self.segmentation_module(queries, pixel_embeddings, self.config.use_auxilary_loss)
@@ -860,12 +886,19 @@ class MaskFormerModel(PreTrainedModel):
         # probably an awkward way to reduce it
         return torch.tensor(list(loss_dict.values()), dtype=torch.float).sum()
 
-
+@add_start_docstrings(
+    """
+    MaskFormer for semantic segmentation
+    """,
+    MASKFORMER_START_DOCSTRING,
+)
 class MaskFormerForSemanticSegmentation(nn.Module):
     def __init__(self, config: MaskFormerConfig):
         super().__init__()
         self.model = MaskFormerModel(config)
 
+    @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=MaskFormerForSemanticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(self, *args, **kwargs):
         outputs: MaskFormerOutput = self.model(*args, **kwargs)
         # mask classes has shape [BATCH, QUERIES, CLASSES + 1]
@@ -889,7 +922,12 @@ class PanopticSegmentationSegment(TypedDict):
     is_thing: bool
     label: str
 
-
+@add_start_docstrings(
+    """
+    MaskFormer for panoptic segmentation
+    """,
+    MASKFORMER_START_DOCSTRING,
+)
 class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
     def __init__(
         self,
@@ -911,6 +949,8 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
 
         return masks[to_keep], scores[to_keep], labels[to_keep]
 
+    @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=MaskFormerForPanopticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(self, *args, **kwargs):
         outputs: MaskFormerOutput = self.model(*args, **kwargs)
         preds_logits: Tensor = outputs.preds_logits
