@@ -1752,6 +1752,16 @@ if is_torch_available():
             },
         ),
     ]
+    if is_apex_available():
+        import apex
+
+        optim_test_params.append(
+            (
+                OptimizerNames.ADAMW_APEX_FUSED,
+                apex.optimizers.FusedAdam,
+                default_adam_kwargs,
+            )
+        )
     if is_bnb_available():
         import bnb
 
