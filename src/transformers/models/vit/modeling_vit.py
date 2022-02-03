@@ -43,7 +43,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "google/vit-base-patch16-224"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 
 VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -518,26 +518,6 @@ class ViTModel(ViTPreTrainedModel):
         interpolate_pos_encoding=None,
         return_dict=None,
     ):
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import ViTFeatureExtractor, ViTModel
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
-        >>> model = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
-        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -619,7 +599,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
     def forward(
         self,
@@ -636,29 +616,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import ViTFeatureExtractor, ViTForImageClassification
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
-        >>> model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = logits.argmax(-1).item()
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        ```"""
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.vit(
