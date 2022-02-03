@@ -757,7 +757,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 if completes_constraint:
                     beam_hyp.add(final_tokens, final_score)
                     ids_collect.append(beam_id)
-            
+
             # due to overly complex constraints or other factors, sometimes we can't gaurantee a successful
             # generation. In these cases we simply return the highest scoring outputs.
             if len(ids_collect) < self.num_beam_hyps_to_keep:
@@ -769,7 +769,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                         beam_hyp.add(final_tokens, final_score)
                     if len(ids_collect) >= self.num_beam_hyps_to_keep:
                         break
-                        
+
         # select the best hypotheses
         sent_lengths = input_ids.new(batch_size * self.num_beam_hyps_to_keep)
         best = []
