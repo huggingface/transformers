@@ -20,7 +20,7 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import PushToHubMixin, TensorType
+from ...file_utils import TensorType
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -34,7 +34,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin, PushToHubMixin):
+class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a ConvNeXT feature extractor.
 
@@ -156,6 +156,7 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
                     self.resize(image=image, size=size, default_to_square=False, resample=self.resample)
                     for image in images
                 ]
+                images = [self.center_crop(image=image, size=self.size) for image in images]
 
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
