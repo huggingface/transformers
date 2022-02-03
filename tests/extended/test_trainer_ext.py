@@ -20,7 +20,7 @@ import unittest
 from unittest.mock import patch
 
 from parameterized import parameterized
-from transformers.file_utils import is_apex_available
+from transformers.file_utils import is_apex_available, is_bnb_available
 from transformers.integrations import is_fairscale_available
 from transformers.testing_utils import (
     CaptureStderr,
@@ -67,6 +67,17 @@ def require_apex(test_case):
     """
     if not is_apex_available():
         return unittest.skip("test requires apex")(test_case)
+    else:
+        return test_case
+
+
+# a candidate for testing_utils
+def require_bnb(test_case):
+    """
+    Decorator for bits and bytes (bnb) dependency
+    """
+    if not is_bnb_available():
+        return unittest.skip("test requires bnb")(test_case)
     else:
         return test_case
 
