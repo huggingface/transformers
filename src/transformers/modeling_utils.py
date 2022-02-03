@@ -23,7 +23,6 @@ from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
-from packaging import version
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
@@ -2463,13 +2462,3 @@ def apply_chunking_to_forward(
         return torch.cat(output_chunks, dim=chunk_dim)
 
     return forward_fn(*input_tensors)
-
-
-def torch_int_div(tensor1, tensor2):
-    """
-    A function that performs integer division across different versions of PyTorch.
-    """
-    if version.parse(torch.__version__) < version.parse("1.8.0"):
-        return tensor1 // tensor2
-    else:
-        return torch.div(tensor1, tensor2, rounding_mode="floor")

@@ -41,7 +41,8 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, torch_int_div
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_int_div
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
 
