@@ -562,7 +562,7 @@ VISION_TEXT_DUAL_ENCODER_MODEL_DOCSTRING = r"""
     ...     attention_mask=inputs.attention_mask,
     ...     pixel_values=inputs.pixel_values,
     ... )
-    >>> logits_per_image = outputs.loss, outputs.logits_per_imag  # this is the image-text similarity score
+    >>> logits_per_image = outputs.logits_per_imag  # this is the image-text similarity score
 
     >>> # save and load from pretrained
     >>> model.save_pretrained("vit-bert")
