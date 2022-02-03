@@ -27,8 +27,6 @@ from huggingface_hub import cached_download, hf_hub_url
 from transformers import ConvNextConfig, ConvNextFeatureExtractor, ConvNextForImageClassification
 from transformers.utils import logging
 
-import torchvision.transforms as transforms
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -81,9 +79,9 @@ def get_convnext_config(checkpoint_url):
 
 def rename_key(name):
     if "downsample_layers.0.0" in name:
-        name = name.replace("downsample_layers.0.0", "stem.projection")
+        name = name.replace("downsample_layers.0.0", "embeddings.patch_embeddings")
     if "downsample_layers.0.1" in name:
-        name = name.replace("downsample_layers.0.1", "stem.norm")  # we rename to layernorm later on
+        name = name.replace("downsample_layers.0.1", "embeddings.norm")  # we rename to layernorm later on
     if "downsample_layers.1.0" in name:
         name = name.replace("downsample_layers.1.0", "stages.1.downsampling_layer.0")
     if "downsample_layers.1.1" in name:
@@ -99,6 +97,8 @@ def rename_key(name):
     if "stages" in name and "downsampling_layer" not in name:
         # stages.0.0. for instance should be renamed to stages.0.layers.0.
         name = name[: len("stages.0")] + ".layers" + name[len("stages.0") :]
+    if "stages" in name:
+        name = name.replace("stages", "encoder.stages")
     if "norm" in name:
         name = name.replace("norm", "layernorm")
     if "gamma" in name:
@@ -153,25 +153,25 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     #      transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
     #     ]
     # )
-    
+
     # pixel_values = transformations(prepare_img()).unsqueeze(0)
 
     logits = model(pixel_values).logits
 
     if checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_tiny_1k_224_ema.pth":
-        expected_logits = torch.tensor([-0.1210, -0.6605,  0.1918])
+        expected_logits = torch.tensor([-0.1210, -0.6605, 0.1918])
     elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_small_1k_224_ema.pth":
         expected_logits = torch.tensor([-0.4473, -0.1847, -0.6365])
     elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_base_1k_224_ema.pth":
         expected_logits = torch.tensor([0.4525, 0.7539, 0.0308])
     elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_base_1k_384.pth":
-        expected_logits = torch.tensor([ 0.3561,  0.6350, -0.0384])
+        expected_logits = torch.tensor([0.3561, 0.6350, -0.0384])
     elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_large_1k_224_ema.pth":
-        expected_logits = torch.tensor([ 0.4174, -0.0989,  0.1489])
+        expected_logits = torch.tensor([0.4174, -0.0989, 0.1489])
     elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_large_1k_384.pth":
-        expected_logits = torch.tensor([ 0.2513, -0.1349, -0.1613])
+        expected_logits = torch.tensor([0.2513, -0.1349, -0.1613])
     elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_base_22k_224.pth":
-        expected_logits = torch.tensor([ 1.2980,  0.3631, -0.1198])
+        expected_logits = torch.tensor([1.2980, 0.3631, -0.1198])
     elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_large_22k_224.pth":
         expected_logits = torch.tensor([1.2963, 0.1227, 0.1723])
     elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnext_xlarge_22k_224.pth":

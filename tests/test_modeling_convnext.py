@@ -198,8 +198,8 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
-            expected_num_stages = getattr(self.model_tester, "expected_num_stages", self.model_tester.num_stages)
-            self.assertEqual(len(hidden_states), expected_num_stages)
+            expected_num_stages = self.model_tester.num_stages
+            self.assertEqual(len(hidden_states), expected_num_stages + 1)
 
             # ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
@@ -334,6 +334,9 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
+
+        print("Predicted class:", model.config.id2label[torch.argmax(outputs.logits, dim=-1).item()])
+        print("Logits:", outputs.logits[0, :3])
 
         expected_slice = torch.tensor([-0.0750, 0.2478, 0.5982]).to(torch_device)
 

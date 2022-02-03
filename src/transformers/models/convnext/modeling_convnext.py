@@ -46,6 +46,24 @@ CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
+class ConvNextEncoderOutput(ModelOutput):
+    """
+    Class for [`ConvNextEncoder`]'s outputs, with potential hidden states (feature maps).
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Last hidden states (final feature map) of the last stage of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
+            the output of each stage.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
 class ConvNextModelOutput(ModelOutput):
     """
     Class for [`ConvNextModel`]'s outputs, with potential hidden states (feature maps).
@@ -56,8 +74,9 @@ class ConvNextModelOutput(ModelOutput):
         pooler_output (`torch.FloatTensor` of shape `(batch_size, config.dim[-1])`):
             Global average pooling of the last feature map followed by a layernorm.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, num_channels,
-            height, width)`. Hidden-states (also called feature maps) of the model at the output of each stage.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
+            the output of each stage.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -76,8 +95,9 @@ class ConvNextClassifierOutput(ModelOutput):
         logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, num_channels,
-            height, width)`. Hidden-states (also called feature maps) of the model at the output of each stage.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
+            the output of each stage.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -150,7 +170,9 @@ class ConvNextEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.patch_embeddings = nn.Conv2d(config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size)
+        self.patch_embeddings = nn.Conv2d(
+            config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size
+        )
         self.layernorm = ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
 
     def forward(self, pixel_values):
@@ -238,13 +260,43 @@ class ConvNextStage(nn.Module):
 class ConvNextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.patch_embeddings = nn.Conv2d(config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size)
-        self.layernorm = ConvNextLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
+        self.stages = nn.ModuleList()
+        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        cur = 0
+        prev_chs = config.hidden_sizes[0]
+        for i in range(config.num_stages):
+            out_chs = config.hidden_sizes[i]
+            stage = ConvNextStage(
+                config,
+                in_channels=prev_chs,
+                out_channels=out_chs,
+                stride=2 if i > 0 else 1,
+                depth=config.depths[i],
+                drop_path_rates=drop_path_rates[cur],
+            )
+            self.stages.append(stage)
+            cur += config.depths[i]
+            prev_chs = out_chs
 
-    def forward(self, pixel_values):
-        embeddings = self.patch_embeddings(pixel_values)
-        embeddings = self.layernorm(embeddings)
-        return embeddings
+    def forward(self, hidden_states, output_hidden_states=False, return_dict=True):
+        all_hidden_states = () if output_hidden_states else None
+
+        for i, layer_module in enumerate(self.stages):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            hidden_states = layer_module(hidden_states)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
+
+        return ConvNextEncoderOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+        )
 
 
 class ConvNextPreTrainedModel(PreTrainedModel):
@@ -310,24 +362,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
         self.config = config
 
         self.embeddings = ConvNextEmbeddings(config)
-
-        self.stages = nn.ModuleList()
-        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        cur = 0
-        prev_chs = config.hidden_sizes[0]
-        for i in range(config.num_stages):
-            out_chs = config.hidden_sizes[i]
-            stage = ConvNextStage(
-                config,
-                in_channels=prev_chs,
-                out_channels=out_chs,
-                stride=2 if i > 0 else 1,
-                depth=config.depths[i],
-                drop_path_rates=drop_path_rates[cur],
-            )
-            self.stages.append(stage)
-            cur += config.depths[i]
-            prev_chs = out_chs
+        self.encoder = ConvNextEncoder(config)
 
         # final layernorm layer
         self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
@@ -366,25 +401,26 @@ class ConvNextModel(ConvNextPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.stem(pixel_values)
+        embedding_output = self.embeddings(pixel_values)
 
-        all_hidden_states = () if output_hidden_states else None
-        for i in range(self.config.num_stages):
-            hidden_states = self.stages[i](hidden_states)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+        encoder_outputs = self.encoder(
+            embedding_output,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = encoder_outputs[0]
 
         # global average pooling, (N, C, H, W) -> (N, C)
-        pooled_output = self.layernorm(hidden_states.mean([-2, -1]))
+        pooled_output = self.layernorm(last_hidden_state.mean([-2, -1]))
 
         if not return_dict:
-            output = (hidden_states, pooled_output)
-            return output + (all_hidden_states,) if all_hidden_states is not None else output
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return ConvNextModelOutput(
-            last_hidden_state=hidden_states,
+            last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=all_hidden_states,
+            hidden_states=encoder_outputs.hidden_states,
         )
 
 
