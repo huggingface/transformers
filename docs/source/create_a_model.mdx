@@ -141,7 +141,7 @@ When you load pretrained weights, the default model configuration is automatical
 
 ### Model heads
 
-At this point, you have a base DistilBERT model which outputs some *hidden states*. To make sense of the hidden states, they are passed as inputs to a model head which produces the final output. 🤗 Transformers provides a different model head for each task as long as your model supports the task (i.e., you can't use DistilBERT for a sequence-to-sequence task like translation).
+At this point, you have a base DistilBERT model which outputs some *hidden states*. To make sense of the hidden states, they are passed as inputs to a model head to produce the final output. 🤗 Transformers provides a different model head for each task as long as your model supports the task (i.e., you can't use DistilBERT for a sequence-to-sequence task like translation).
 
 For example, [`DistilBertForSequenceClassification`] is a base DistilBERT model with a sequence classification head. The sequence classification head is a linear layer on top of the pooled outputs.
 
@@ -296,7 +296,7 @@ The [`Wav2Vec2FeatureExtractor`] parameters can also be modified just like the [
 
 ## Processor
 
-For models that support multimodal tasks, 🤗 Transformers offers a processor class that conveniently wraps a feature extractor and tokenizer into a single object. For example, let's use the [`Wav2Vec2Processor`] for an automatic speech recognition task (ASR). ASR transcribes audio to text, so you will need a tokenizer and a feature extractor.
+For models that support multimodal tasks, 🤗 Transformers offers a processor class that conveniently wraps a feature extractor and tokenizer into a single object. For example, let's use the [`Wav2Vec2Processor`] for an automatic speech recognition task (ASR). ASR transcribes audio to text, so you will need a feature extractor and a tokenizer.
 
 Create a feature extractor to handle the audio inputs:
 
@@ -322,4 +322,4 @@ Combine the tokenizer and feature extractor in [`Wav2Vec2Processor`]:
 >>> processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 ```
 
-With two basic classes - configuration and model - and an additional preprocessing class (tokenizer, feature extractor, or processor), you can create any 🤗 Transformers model. Each of these base classes are configurable, allowing you to create a model with the attributes you want. As a result, you can easily setup a model to train from scratch or modify an existing pretrained model to fine-tune.
+With two basic classes - configuration and model - and an additional preprocessing class (tokenizer, feature extractor, or processor), you can create any of the models supported by 🤗 Transformers. Each of these base classes are configurable, allowing you to create a model with the attributes you want. You can easily setup a model to train from scratch or modify an existing pretrained model to fine-tune.
