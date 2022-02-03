@@ -824,9 +824,6 @@ class SemanticSegmentationModelOutput(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, height, width)`):
             Classification scores for each pixel.
-        legacy_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, height/4, width/4)`):
-            For backward compatibility, old logits returned by `BeitForSemanticSegmentation` and
-            `SegformerForSemanticSegmentation`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, patch_size, hidden_size)`.
@@ -842,6 +839,5 @@ class SemanticSegmentationModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    legacy_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
