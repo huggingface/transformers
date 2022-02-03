@@ -897,7 +897,7 @@ class Trainer:
                 optimizer_kwargs.update(adam_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate apex FusedAdam but apex is not installed!")
-        elif args.optim == OptimizerNames.ADAM_BNB_8BIT:
+        elif args.optim == OptimizerNames.ADAMW_BNB:
             try:
                 from bnb.optim import Adam8bit
 

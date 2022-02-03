@@ -1767,7 +1767,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                OptimizerNames.ADAM_BNB_8BIT,
+                OptimizerNames.ADAMW_BNB,
                 bnb.optim.Adam8bit,
                 default_adam_kwargs,
             )
@@ -1835,13 +1835,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         }
         with patch.dict("sys.modules", modules):
             self.check_optim_and_kwargs(
-                OptimizerNames.ADAM_BNB_8BIT,
+                OptimizerNames.ADAMW_BNB,
                 default_adam_kwargs,
                 mock.optim.Adam8bit,
             )
 
     def test_bnb_adam8bit_no_bnb(self):
-        args = TrainingArguments(optim=OptimizerNames.ADAM_BNB_8BIT, output_dir="None")
+        args = TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
         # bnb will fail even if bnb is installed.
