@@ -80,6 +80,7 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_TORCH_XLA = "adamw_torch_xla"
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
+    ADAM_BNB_8BIT = "adam_bnb_8bit"
 
 
 @dataclass
