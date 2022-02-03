@@ -203,6 +203,7 @@ _import_structure = {
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
+    "models.data2vec": ["DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecConfig"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
@@ -844,6 +845,19 @@ if is_torch_available():
             "CTRLLMHeadModel",
             "CTRLModel",
             "CTRLPreTrainedModel",
+        ]
+    )
+    _import_structure["models.data2vec"].extend(
+        [
+            "DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Data2VecForCausalLM",
+            "Data2VecForMaskedLM",
+            "Data2VecForMultipleChoice",
+            "Data2VecForQuestionAnswering",
+            "Data2VecForSequenceClassification",
+            "Data2VecForTokenClassification",
+            "Data2VecModel",
+            "Data2VecPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -1695,6 +1709,20 @@ if is_tf_available():
             "TFCTRLPreTrainedModel",
         ]
     )
+    _import_structure["models.data2vec"].extend(
+        [
+            "TF_DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFData2VecForCausalLM",
+            "TFData2VecForMaskedLM",
+            "TFData2VecForMultipleChoice",
+            "TFData2VecForQuestionAnswering",
+            "TFData2VecForSequenceClassification",
+            "TFData2VecForTokenClassification",
+            "TFData2VecMainLayer",
+            "TFData2VecModel",
+            "TFData2VecPreTrainedModel",
+        ]
+    )
     _import_structure["models.deberta"].extend(
         [
             "TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2147,6 +2175,17 @@ if is_flax_available():
             "FlaxCLIPVisionPreTrainedModel",
         ]
     )
+    _import_structure["models.data2vec"].extend(
+        [
+            "FlaxData2VecForMaskedLM",
+            "FlaxData2VecForMultipleChoice",
+            "FlaxData2VecForQuestionAnswering",
+            "FlaxData2VecForSequenceClassification",
+            "FlaxData2VecForTokenClassification",
+            "FlaxData2VecModel",
+            "FlaxData2VecPreTrainedModel",
+        ]
+    )
     _import_structure["models.distilbert"].extend(
         [
             "FlaxDistilBertForMaskedLM",
@@ -2393,6 +2432,7 @@ if TYPE_CHECKING:
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
+    from .models.data2vec import DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecConfig
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
@@ -2927,6 +2967,17 @@ if TYPE_CHECKING:
             CTRLLMHeadModel,
             CTRLModel,
             CTRLPreTrainedModel,
+        )
+        from .models.data2vec import (
+            DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Data2VecForCausalLM,
+            Data2VecForMaskedLM,
+            Data2VecForMultipleChoice,
+            Data2VecForQuestionAnswering,
+            Data2VecForSequenceClassification,
+            Data2VecForTokenClassification,
+            Data2VecModel,
+            Data2VecPreTrainedModel,
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,

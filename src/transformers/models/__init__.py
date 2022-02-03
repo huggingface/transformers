@@ -39,6 +39,7 @@ from . import (
     convbert,
     cpm,
     ctrl,
+    data2vec,
     deberta,
     deberta_v2,
     deit,
