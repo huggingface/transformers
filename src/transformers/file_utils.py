@@ -1308,7 +1308,7 @@ PT_VISION_BASE_MODEL_SAMPLE = r"""
     ...     outputs = model(**inputs)
 
     >>> last_hidden_states = outputs.last_hidden_state
-    >>> print(last_hidden_states.shape)
+    >>> list(last_hidden_states.shape)
     {expected_output}
     ```
 """
