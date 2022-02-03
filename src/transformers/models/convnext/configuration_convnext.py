@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Facebook AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ class ConvNextConfig(PretrainedConfig):
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         patch_size (`int`, optional, defaults to 4):
-            Patch size to use in the stem layer.
+            Patch size to use in the patch embedding layer.
         num_stages (`int`, optional, defaults to 4):
             The number of stages in the model.
         hidden_sizes (`List[int]`, *optional*, defaults to [96, 192, 384, 768]):

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Facebook AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -164,7 +164,7 @@ class ConvNextLayerNorm(nn.Module):
 
 
 class ConvNextEmbeddings(nn.Module):
-    """This class is comparable to (and inspired by) the SwinPatchEmbeddings class
+    """This class is comparable to (and inspired by) the SwinEmbeddings class
     found in src/transformers/models/swin/modeling_swin.py.
     """
 
@@ -202,7 +202,7 @@ class ConvNextLayer(nn.Module):
         self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = ACT2FN[config.hidden_act]
         self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.gamma_parameter = (
+        self.layer_scale_parameter = (
             nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
             if config.layer_scale_init_value > 0
             else None
@@ -217,8 +217,8 @@ class ConvNextLayer(nn.Module):
         x = self.pwconv1(x)
         x = self.act(x)
         x = self.pwconv2(x)
-        if self.gamma_parameter is not None:
-            x = self.gamma_parameter * x
+        if self.layer_scale_parameter is not None:
+            x = self.layer_scale_parameter * x
         x = x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
 
         x = input + self.drop_path(x)

@@ -102,7 +102,7 @@ def rename_key(name):
     if "norm" in name:
         name = name.replace("norm", "layernorm")
     if "gamma" in name:
-        name = name.replace("gamma", "gamma_parameter")
+        name = name.replace("gamma", "layer_scale_parameter")
     if "head" in name:
         name = name.replace("head", "classifier")
 
