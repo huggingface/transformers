@@ -1189,6 +1189,13 @@ def create_new_model_like(
             if "tokenization" not in str(f) and "processor" not in str(f) and "feature_extraction" not in str(f)
         ]
 
+    def disable_fx_test(filename: Path):
+        with open(filename) as fp:
+            content = fp.read()
+        with open(filename, "w") as fp:
+            new_content = re.sub(r"fx_ready\s*=\s*True", "fx_ready = False", content)
+            fp.write(new_content)
+
     for test_file in files_to_adapt:
         new_test_file_name = test_file.name.replace(
             old_model_patterns.model_lower_cased, new_model_patterns.model_lower_cased
@@ -1200,6 +1207,11 @@ def create_new_model_like(
             new_model_patterns,
             dest_file=dest_file,
             add_copied_from=False,
+        )
+        disable_fx_test(dest_file)
+        print(
+            "The tests for symbolic tracing with torch.fx were disabled, you can add those once symbolic tracing works "
+            "for your new model."
         )
 
     # 4. Add model to auto classes
