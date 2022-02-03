@@ -952,13 +952,13 @@ class Data2VecForCausalLM(Data2VecPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import Data2VecTokenizer, Data2VecForCausalLM, Data2VecConfig
+        >>> from transformers import RobertaTokenizer, Data2VecForSequenceClassification, Data2VecConfig
         >>> import torch
 
-        >>> tokenizer = Data2VecTokenizer.from_pretrained("data2vec-base")
-        >>> config = Data2VecConfig.from_pretrained("data2vec-base")
-        >>> config.is_decoder = True
-        >>> model = Data2VecForCausalLM.from_pretrained("data2vec-base", config=config)
+        >>> tokenizer = RobertaTokenizer.from_pretrained("roberta-large")
+        >>> config = Data2VecConfig.from_pretrained("edugp/data2vec-nlp-base")
+        >>> model = Data2VecForSequenceClassification.from_pretrained("edugp/data2vec-nlp-base", config=config)
+        >>> # Fine-tune this model
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
