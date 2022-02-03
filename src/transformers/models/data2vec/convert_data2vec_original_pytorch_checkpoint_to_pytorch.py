@@ -16,11 +16,11 @@
 
 
 import argparse
+import os
 import pathlib
 
 import fairseq
 import torch
-from fairseq.models.data2vec import Data2VecModel as FairseqData2VecModel
 from fairseq.modules import TransformerSentenceEncoderLayer
 from packaging import version
 
@@ -33,6 +33,7 @@ from transformers.models.bert.modeling_bert import (
     BertSelfOutput,
 )
 from transformers.utils import logging
+from .data2vec_text import Data2VecTextModel
 
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):
@@ -51,15 +52,17 @@ def convert_data2vec_checkpoint_to_pytorch(
     """
     Copy/paste/tweak data2vec's weights to our BERT structure.
     """
-    data2vec = FairseqData2VecModel.from_pretrained(data2vec_checkpoint_path)
+    data2vec_checkpoint_dir, data2vec_checkpoint_file_name = os.path.split(data2vec_checkpoint_path)
+    data2vec = Data2VecTextModel.from_pretrained(data2vec_checkpoint_dir, checkpoint_file=data2vec_checkpoint_file_name)
     data2vec.eval()  # disable dropout
-    data2vec_sent_encoder = data2vec.model.encoder.sentence_encoder
+    data2vec_model = data2vec.models[0]
+    data2vec_sent_encoder = data2vec_model.encoder.sentence_encoder
     config = Data2VecConfig(
         vocab_size=data2vec_sent_encoder.embed_tokens.num_embeddings,
-        hidden_size=data2vec.args.encoder_embed_dim,
-        num_hidden_layers=data2vec.args.encoder_layers,
-        num_attention_heads=data2vec.args.encoder_attention_heads,
-        intermediate_size=data2vec.args.encoder_ffn_embed_dim,
+        hidden_size=data2vec_model.args.encoder_embed_dim,
+        num_hidden_layers=data2vec_model.args.encoder_layers,
+        num_attention_heads=data2vec_model.args.encoder_attention_heads,
+        intermediate_size=data2vec_model.args.encoder_ffn_embed_dim,
         max_position_embeddings=514,
         type_vocab_size=1,
         layer_norm_eps=1e-5,  # PyTorch default used in fairseq
@@ -78,8 +81,8 @@ def convert_data2vec_checkpoint_to_pytorch(
     model.data2vec.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
         model.data2vec.embeddings.token_type_embeddings.weight
     )  # just zero them out b/c data2vec doesn't use them.
-    model.data2vec.embeddings.LayerNorm.weight = data2vec_sent_encoder.emb_layer_norm.weight
-    model.data2vec.embeddings.LayerNorm.bias = data2vec_sent_encoder.emb_layer_norm.bias
+    model.data2vec.embeddings.LayerNorm.weight = data2vec_sent_encoder.layernorm_embedding.weight
+    model.data2vec.embeddings.LayerNorm.bias = data2vec_sent_encoder.layernorm_embedding.bias
 
     for i in range(config.num_hidden_layers):
         # Encoder: start of layer
@@ -132,12 +135,12 @@ def convert_data2vec_checkpoint_to_pytorch(
         model.classifier.out_proj.bias = data2vec.model.classification_heads["mnli"].out_proj.bias
     else:
         # LM Head
-        model.lm_head.dense.weight = data2vec.model.encoder.lm_head.dense.weight
-        model.lm_head.dense.bias = data2vec.model.encoder.lm_head.dense.bias
-        model.lm_head.layer_norm.weight = data2vec.model.encoder.lm_head.layer_norm.weight
-        model.lm_head.layer_norm.bias = data2vec.model.encoder.lm_head.layer_norm.bias
-        model.lm_head.decoder.weight = data2vec.model.encoder.lm_head.weight
-        model.lm_head.decoder.bias = data2vec.model.encoder.lm_head.bias
+        model.lm_head.dense.weight = data2vec_model.encoder.lm_head.dense.weight
+        model.lm_head.dense.bias = data2vec_model.encoder.lm_head.dense.bias
+        model.lm_head.layer_norm.weight = data2vec_model.encoder.lm_head.layer_norm.weight
+        model.lm_head.layer_norm.bias = data2vec_model.encoder.lm_head.layer_norm.bias
+        model.lm_head.decoder.weight = data2vec_model.encoder.lm_head.weight
+        model.lm_head.decoder.bias = data2vec_model.encoder.lm_head.bias
 
     # Let's check that we get the same results.
     input_ids: torch.Tensor = data2vec.encode(SAMPLE_TEXT).unsqueeze(0)  # batch of size 1
@@ -146,7 +149,7 @@ def convert_data2vec_checkpoint_to_pytorch(
     if classification_head:
         their_output = data2vec.model.classification_heads["mnli"](data2vec.extract_features(input_ids))
     else:
-        their_output = data2vec.model(input_ids)[0]
+        their_output = data2vec_model(input_ids)[0]
     print(our_output.shape, their_output.shape)
     max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
     print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-7
