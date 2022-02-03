@@ -817,7 +817,7 @@ class Seq2SeqQuestionAnsweringModelOutput(ModelOutput):
 @dataclass
 class SemanticSegmentationModelOutput(ModelOutput):
     """
-    Base class for outputs of instance segmentation models.
+    Base class for outputs of semantic segmentation models.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
