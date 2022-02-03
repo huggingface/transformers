@@ -805,10 +805,6 @@ class GenerationTesterMixin:
                 logits_processor=logits_processor,
             )
 
-            print("input_ids", input_ids)
-            print("output_generate", output_generate)
-            assert False
-
             self.assertListEqual(output_generate.tolist(), output_beam_search.tolist())
 
             # check `generate()` and `beam_search()` are equal for `num_return_sequences`
