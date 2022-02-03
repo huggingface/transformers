@@ -973,7 +973,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         with CaptureStderr() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
-        assert "Detected DeepSpeed ZeRO-3" in cs.err
+        self.assertIn("Detected DeepSpeed ZeRO-3", cs.err)
 
     @parameterized.expand(stages)
     def test_load_best_model(self, stage):
@@ -1019,4 +1019,4 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         with CaptureStd() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
         # enough to test it didn't fail
-        assert "DeepSpeed info:" in cs.out
+        self.assertIn("DeepSpeed info", cs.out)
