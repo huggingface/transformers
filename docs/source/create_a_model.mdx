@@ -10,21 +10,21 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Create a model manually
+# Create a custom model
 
-In the `AutoClass` [tutorial](autoclass_tutorial), you loaded a model by allowing the `AutoClass` to automatically infer the architecture and download pretrained configuration and weights. While we generally recommend using an `AutoClass` to produce checkpoint-agnostic code, users who want more control specific model parameters can manually create a 🤗 Transformers model. This could be particularly useful for anyone who is interested in studying, training or experimenting with a 🤗 Transformers model. In this guide, dive deeper into creating a model without an `AutoClass`. Learn how to:
+In the `AutoClass` [tutorial](autoclass_tutorial), you loaded a model by allowing an `AutoClass` to automatically infer the architecture and download pretrained configuration and weights. Generally, we recommend using an `AutoClass` to produce checkpoint-agnostic code. But users who want more control over specific parameters can create a custom 🤗 Transformers model from just a few base classes. This could be particularly useful for anyone who is interested in studying, training or experimenting with a 🤗 Transformers model. In this guide, dive deeper into creating a custom model without an `AutoClass`. Learn how to:
 
 - Load and customize a model configuration.
-- Create a model.
-- Create a slow and fast tokenizer.
-- Create a feature extractor.
-- Create a processor.
+- Create a model with a custom configuration.
+- Create a slow and fast tokenizer for text.
+- Create a feature extractor for audio or image tasks.
+- Create a processor for multimodal tasks.
 
 ## Configuration
 
-A [configuration](main_classes/configuration) refers to a model's specific attributes. Each model configuration has different attributes, but all models have the `hidden_size`, `num_attention_heads`, `num_hidden_layers` and `vocab_size` (if it is a text model) attributes in common. These attributes specify the number of attention heads or hidden layers a model should be constructed with.
+A [configuration](main_classes/configuration) refers to a model's specific attributes. Each model configuration has different attributes; for instance, all NLP models have the `hidden_size`, `num_attention_heads`, `num_hidden_layers` and `vocab_size` attributes in common. These attributes specify the number of attention heads or hidden layers to construct a model with.
 
-Get a closer look at [DistilBert](model_doc/distilbert) by accessing [`DistilBertConfig`] to inspect it's attributes:
+Get a closer look at [DistilBERT](model_doc/distilbert) by accessing [`DistilBertConfig`] to inspect it's attributes:
 
 ```py
 >>> from transformers import DistilBertConfig
@@ -51,10 +51,10 @@ DistilBertConfig {
 }
 ```
 
-This displays all the default attributes used to build a [`DistilBertModel`]. All the attributes are customizable, creating room for experimentation. For example, if you want to:
+[`DistilBertConfig`] displays all the default attributes used to build a [`DistilBertModel`]. All attributes are customizable, creating space for experimentation. For example, you can customize a default model and:
 
-- Try a different activation function.
-- Change the dropout ratio for the attention probabilities.
+- Try a different activation function with the `activation` parameter.
+- Change the dropout ratio for the attention probabilities with the `attention_dropout` parameter.
 
 ```py
 >>> my_config = DistilBertConfig(activation="relu", attention_dropout=0.4)
@@ -79,13 +79,19 @@ DistilBertConfig {
 }
 ```
 
-Once you are satisfied with your model configuration, you can save it with [`~transformers.PretrainedConfig.save_pretrained`]. This saves your configuration file as a JSON file in the specified directory:
+Attributes from a pretrained model can be modified in the [`~PretrainedConfig.from_pretrained`] function:
+
+```py
+>>> my_config = DistilBertConfig.from_pretrained("distilbert-base-uncased", activation="relu", attention_dropout=0.4)
+```
+
+Once you are satisfied with your model configuration, you can save it with [`~PretrainedConfig.save_pretrained`]. Your configuration file is saved as a JSON file in the specified directory:
 
 ```py
 >>> my_config.save_pretrained(save_directory="./your_model_save_path")
 ```
 
-To reuse the configuration file, load it with [`~transformers.PretrainedConfig.from_pretrained`]:
+To reuse the configuration file, load it with [`~PretrainedConfig.from_pretrained`]:
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
@@ -93,13 +99,13 @@ To reuse the configuration file, load it with [`~transformers.PretrainedConfig.f
 
 <Tip>
 
-You can also save your configuration file as a dictionary or even only save the difference between your custom configuration attributes and the default configuration attributes! See [here](main_classes/configuration) for more details.
+You can also save your configuration file as a dictionary or even just the difference between your custom configuration attributes and the default configuration attributes! See [here](main_classes/configuration) for more details.
 
 </Tip>
 
 ## Model
 
-The next step is to create a [model](main_classes/models). The model - also loosely referred to as the architecture - defines what each layer is doing and what operations are happening. Attributes like `num_hidden_layers` from the configuration are used to define the architecture. Every model shares the base class [`PreTrainedModel`] and a few common methods such as, resizing input embeddings and pruning self-attention heads. All models are either a [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html), [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) or [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/flax.linen.html#module) subclass. This means models are also compatible with each of their respective framework's usage.
+The next step is to create a [model](main_classes/models). The model - also loosely referred to as the architecture - defines what each layer is doing and what operations are happening. Attributes like `num_hidden_layers` from the configuration are used to define the architecture. Every model shares the base class [`PreTrainedModel`] and a few common methods like resizing input embeddings and pruning self-attention heads. In addition, all models are either a [`torch.nn.Module`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html), [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) or [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/flax.linen.html#module) subclass. This means models are also compatible with each of their respective framework's usage.
 
 Load your custom configuration attributes into the model:
 
@@ -115,9 +121,9 @@ Load your custom configuration attributes into the model:
 >>> tf_model = TFDistilBertModel(my_config)
 ```
 
-This creates a model with random values instead of pretrained weights. You won't be able to use this model for anything useful yet until you train it. Training is a costly and time-consuming process and it is generally better to use a pretrained model. With a pretrained model, you can get better results faster while only using a fraction of the resources required for training.
+This creates a model with random values instead of pretrained weights. You won't be able to use this model for anything useful yet until you train it. Training is a costly and time-consuming process. It is generally better to use a pretrained model to obtain better results faster, while using only a fraction of the resources required for training.
 
-Create a pretrained model with [`~transformers.PreTrainedModel.from_pretrained`]:
+Create a pretrained model with [`~PreTrainedModel.from_pretrained`]:
 
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
@@ -135,9 +141,9 @@ When you load pretrained weights, the default model configuration is automatical
 
 ### Model heads
 
-At this point, you have a base DistilBert model which outputs some *hidden states*. To make sense of these values, the hidden states are passed as inputs to a model head which produces the final output. 🤗 Transformers provides a different model head for each task as long as your model supports the task (i.e., you can't use DistilBert for a sequence-to-sequence task like translation).
+At this point, you have a base DistilBERT model which outputs some *hidden states*. To make sense of the hidden states, they are passed as inputs to a model head which produces the final output. 🤗 Transformers provides a different model head for each task as long as your model supports the task (i.e., you can't use DistilBERT for a sequence-to-sequence task like translation).
 
-For example, [DistilBertForSequenceClassification] is a base DistilBert model with a sequence classification head. The sequence classification head is a linear layer on top of the pooled outputs.
+For example, [`DistilBertForSequenceClassification`] is a base DistilBERT model with a sequence classification head. The sequence classification head is a linear layer on top of the pooled outputs.
 
 ```py
 >>> from transformers import DistilBertForSequenceClassification
@@ -149,7 +155,7 @@ For example, [DistilBertForSequenceClassification] is a base DistilBert model wi
 >>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-You can easily reuse the checkpoint for another task by switching to another model head. To handle a question answering task, you would load [`DistilBertForQuestionAnswering`]. The question answering head is similar to the sequence classification head, except it is a linear layer on top of the hidden states output.
+Easily reuse this checkpoint for another task by switching to a different model head. To handle a question answering task, you would use [`DistilBertForQuestionAnswering`]. The question answering head is similar to the sequence classification head, except it is a linear layer on top of the hidden states output.
 
 ```py
 >>> from transformers import DistilBertForQuestionAnswering
@@ -163,10 +169,10 @@ You can easily reuse the checkpoint for another task by switching to another mod
 
 ## Tokenizer
 
-The last class you need before you use a model for textual data is the [tokenizer](main_classes/tokenizer). A tokenizer prepares the model input by converting raw text to tensors. There are two types of tokenizers you can use with 🤗 Transformers:
+The last class you need before using a model for textual data is a [tokenizer](main_classes/tokenizer) to convert raw text to tensors. There are two types of tokenizers you can use with 🤗 Transformers:
 
 - [`PreTrainedTokenizer`]: a Python implementation of a tokenizer.
-- [`PreTrainedTokenizerFast`]: a tokenizer from our Rust-based [🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/) library. This tokenizer type is significantly faster - especially during batch tokenization - due to it's Rust implementation. The fast tokenizer also offers additional methods like *offset mapping* which maps the original words or characters to their tokens.
+- [`PreTrainedTokenizerFast`]: a tokenizer from our Rust-based [🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/) library. This tokenizer type is significantly faster - especially during batch tokenization - due to it's Rust implementation. The fast tokenizer also offers additional methods like *offset mapping* which maps tokens to their original words or characters.
 
 Both tokenizers support common methods such as encoding and decoding, adding new tokens, and managing special tokens.
 
@@ -176,15 +182,15 @@ Not every model supports a fast tokenizer. Take a look at this [table](index#sup
 
 </Tip>
 
-If you trained your own tokenizer, you can create a tokenizer from your *vocabulary* file:
+If you trained your own tokenizer, you can create one from your *vocabulary* file:
 
 ```py
->>> from transformers import DistilBertTokenizerFast
+>>> from transformers import DistilBertTokenizer
 
->>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained(vocab_file="my_vocab_file.txt")
+>>> my_tokenizer = DistilBertTokenizer(vocab_file="my_vocab_file.txt", do_lower_case=False, padding_side="left")
 ```
 
-As with a model, it is generally better and faster to use a pretrained model's vocabulary. Create a [`~transformers.PreTrainedTokenizer.from_pretrained`]:
+It is important to remember the vocabulary from a custom tokenizer will be different from the vocabulary generated by a pretrained model's tokenizer. You need to use a pretrained model's vocabulary if you are using a pretrained model, otherwise the inputs won't make sense. Create a tokenizer with a pretrained model's vocabulary with the [`~PreTrainedTokenizer.from_pretrained`] method:
 
 ```py
 >>> from transformers import DistilBertTokenizer
@@ -192,7 +198,7 @@ As with a model, it is generally better and faster to use a pretrained model's v
 >>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 ```
 
-Create a [`~transformers.PreTrainedTokenizerFast.from_pretrained`]:
+Create a fast tokenizer with the [`~PreTrainedTokenizerFast.from_pretrained`] method:
 
 ```py
 >>> from transformers import DistilBertTokenizerFast
@@ -202,13 +208,13 @@ Create a [`~transformers.PreTrainedTokenizerFast.from_pretrained`]:
 
 <Tip>
 
-An [`AutoTokenizer`] will try to load a fast tokenizer by default.
+By default, [`AutoTokenizer`] will try to load a fast tokenizer. You can disable this behavior by setting `use_fast=False` in `from_pretrained`.
 
 </Tip>
 
 ## Feature Extractor
 
-A feature extractor processes audio or image inputs. It can inherit from a base [`FeatureExtractionMixin`] class, an [`ImageFeatureExtractionMixin`] class for processing image features, or a [`SequenceFeatureExtractor`] class for processing audio inputs.
+A feature extractor processes audio or image inputs. It inherits from the base [`~feature_extraction_utils.FeatureExtractionMixin`] class, and may inherit from the [`ImageFeatureExtractionMixin`] class for processing image features, or the [`SequenceFeatureExtractor`] class for processing audio inputs.
 
 Depending on whether you are working on an audio or vision task, create a feature extractor associated with the model you're using. For example, create a default [`ViTFeatureExtractor`] if you are using [ViT](model_doc/vit) for image classification:
 
@@ -242,7 +248,7 @@ If you aren't looking for any customization, just use the `from_pretrained` meth
 
 </Tip>
 
-Customize any of the [`ViTFeatureExtractor`] parameters:
+Modify any of the [`ViTFeatureExtractor`] parameters to create your custom feature extractor:
 
 ```py
 >>> from transformers import ViTFeatureExtractor
@@ -268,7 +274,7 @@ ViTFeatureExtractor {
 }
 ```
 
-For processing audio inputs, you can create a [`Wav2Vec2FeatureExtractor`]:
+For audio inputs, you can create a [`Wav2Vec2FeatureExtractor`]:
 
 ```py
 >>> from transformers import Wav2Vec2FeatureExtractor
@@ -286,11 +292,19 @@ Wav2Vec2FeatureExtractor {
 }
 ```
 
-Just like the parameters in [`ViTFeatureExtractor`], the parameters in [`Wav2Vec2FeatureExtractor`] are also customizable.
+The [`Wav2Vec2FeatureExtractor`] parameters can also be modified just like the [`ViTFeatureExtractor`].
 
 ## Processor
 
-For models that support multimodal tasks, 🤗 Transformers offers a processor class that conveniently wraps a feature extractor and tokenize into a single object. For example, let's use the [`Wav2Vec2Processor`] for an automatic speech recognition task (ASR). ASR transcribes audio to text, so you will need a feature extractor and tokenizer.
+For models that support multimodal tasks, 🤗 Transformers offers a processor class that conveniently wraps a feature extractor and tokenizer into a single object. For example, let's use the [`Wav2Vec2Processor`] for an automatic speech recognition task (ASR). ASR transcribes audio to text, so you will need a tokenizer and a feature extractor.
+
+Create a feature extractor to handle the audio inputs:
+
+```py
+>>> from transformers import Wav2Vec2FeatureExtractor
+
+>>> feature_extractor = Wav2Vec2FeatureExtractor(padding_value=1.0, do_normalize=True)
+```
 
 Create a tokenizer to handle the text inputs:
 
@@ -300,15 +314,7 @@ Create a tokenizer to handle the text inputs:
 >>> tokenizer = Wav2Vec2CTCTokenizer(vocab_file="my_vocab_file.txt")
 ```
 
-Next create a feature extractor to handle the audio inputs:
-
-```py
->>> from transformers import Wav2Vec2FeatureExtractor
-
->>> feature_extractor = Wav2Vec2FeatureExtractor(padding_value=1.0, do_normalize=True)
-```
-
-Put the tokenizer and feature extractor together in [`Wav2Vec2Processor`]:
+Combine the tokenizer and feature extractor in [`Wav2Vec2Processor`]:
 
 ```py
 >>> from transformers import Wav2Vec2Processor
@@ -316,4 +322,4 @@ Put the tokenizer and feature extractor together in [`Wav2Vec2Processor`]:
 >>> processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 ```
 
-With two basic classes - configuration and model - and an additional preprocessing class (tokenizer, feature extractor, or processor), you can create any 🤗 Transformers model. Each of these base classes are configurable to create a model with the attributes you want. As a result, you can easily setup a model to train from scratch or modify an existing pretrained model to fine-tune.
+With two basic classes - configuration and model - and an additional preprocessing class (tokenizer, feature extractor, or processor), you can create any 🤗 Transformers model. Each of these base classes are configurable, allowing you to create a model with the attributes you want. As a result, you can easily setup a model to train from scratch or modify an existing pretrained model to fine-tune.

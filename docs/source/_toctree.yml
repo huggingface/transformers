@@ -18,7 +18,7 @@
   - local: preprocessing
     title: Preprocessing data
   - local: training
-    title: Fine-tuning a pretrained model
+    title: Fine-tune a pretrained model
   - local: accelerate
     title: Distributed training with 🤗 Accelerate
   - local: model_sharing
@@ -30,7 +30,7 @@
   title: "Using 🤗 Transformers"
 - sections:
   - local: create_a_model
-    title: Create a model manually
+    title: Create a custom model
   - local: examples
     title: Examples
   - local: troubleshooting
