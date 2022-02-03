@@ -958,7 +958,7 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
     @slow
     def test_encoder_decoder_from_pretrained(self):
-        load_weight_prefix = "tf_encoder_decoder_model_1"
+        load_weight_prefix = TFEncoderDecoderModel.load_weight_prefix
 
         config = self.get_encoder_decoder_config()
         encoder_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
