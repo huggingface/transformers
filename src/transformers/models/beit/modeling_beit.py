@@ -25,7 +25,12 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
@@ -34,8 +39,17 @@ from .configuration_beit import BeitConfig
 
 logger = logging.get_logger(__name__)
 
+# General docstring
 _CONFIG_FOR_DOC = "BeitConfig"
-_CHECKPOINT_FOR_DOC = "microsoft/beit-base-patch16-224"
+_FEAT_EXTRACTOR_FOR_DOC = "BeitFeatureExtractor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "microsoft/beit-base-patch16-224-pt22k"
+_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "microsoft/beit-base-patch16-224"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/beit-base-patch16-224",
@@ -613,7 +627,14 @@ class BeitModel(BeitPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BeitModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=BeitModelOutputWithPooling,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     def forward(
         self,
         pixel_values=None,
@@ -623,26 +644,6 @@ class BeitModel(BeitPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import BeitFeatureExtractor, BeitModel
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
-        >>> model = BeitModel.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
-        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -813,7 +814,13 @@ class BeitForImageClassification(BeitPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
     def forward(
         self,
         pixel_values=None,
@@ -828,31 +835,8 @@ class BeitForImageClassification(BeitPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import BeitFeatureExtractor, BeitForImageClassification
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224")
-        >>> model = BeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = logits.argmax(-1).item()
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        ```"""
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.beit(
             pixel_values,
             head_mask=head_mask,

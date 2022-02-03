@@ -24,7 +24,12 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...modeling_outputs import BaseModelOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
@@ -33,8 +38,18 @@ from .configuration_segformer import SegformerConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "nvidia/segformer-b0-finetuned-ade-512-512"
+
+# General docstring
 _CONFIG_FOR_DOC = "SegformerConfig"
+_FEAT_EXTRACTOR_FOR_DOC = "SegformerFeatureExtractor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "nvidia/mit-b0"
+_EXPECTED_OUTPUT_SHAPE = [1, 256, 256]
+
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "nvidia/segformer-b0-finetuned-ade-512-512",
@@ -478,29 +493,15 @@ class SegformerModel(SegformerPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=BaseModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     def forward(self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None):
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import SegformerFeatureExtractor, SegformerModel
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/mit-b0")
-        >>> model = SegformerModel.from_pretrained("nvidia/mit-b0")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> sequence_output = outputs.last_hidden_state
-        ```"""
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -546,7 +547,13 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
     def forward(
         self,
         pixel_values=None,
@@ -560,29 +567,7 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import SegformerFeatureExtractor, SegformerForImageClassification
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/mit-b0")
-        >>> model = SegformerForImageClassification.from_pretrained("nvidia/mit-b0")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = logits.argmax(-1).item()
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        ```"""
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.segformer(
