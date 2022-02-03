@@ -62,7 +62,6 @@ DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Data2Vec
 class Data2VecEmbeddings(nn.Module):
     """
