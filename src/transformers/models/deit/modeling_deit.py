@@ -708,7 +708,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
+        output_type=DeiTForImageClassificationWithTeacherOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
