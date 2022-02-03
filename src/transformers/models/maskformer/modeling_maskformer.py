@@ -494,7 +494,7 @@ class SwinTransformerBackbone(nn.Module):
         # skipping the embeddings
         hidden_states: Tuple[Tuple[Tensor]] = output.hidden_states[1:]
         # spatial dimensions contains all the heights and widths of each stage, including after the embeddings
-        spatial_dimensions: Tuple[Tuple[int, int]] = output.hidden_states_original_spatial_dimensions
+        spatial_dimensions: Tuple[Tuple[int, int]] = output.hidden_states_spatial_dimensions
         for i, (hidden_state, (h, w)) in enumerate(zip(hidden_states, spatial_dimensions)):
             norm = self.hidden_states_norms[i]
             # the last element corespond to the layer's last block output but before patch merging
@@ -698,7 +698,7 @@ class MaskFormerTransformerModule(nn.Module):
         self.input_projection = (
             nn.Conv2d(in_features, config.hidden_size, kernel_size=1) if should_project else nn.Identity()
         )
-        # TODO hugly, ask!
+        # TODO hugly, a*sk!
         self.detr_decoder = DetrDecoder(
             DetrConfig(**{k.replace("detr_", ""): v for k, v in config.__dict__.items() if k.startswith("detr_")})
         )
@@ -911,18 +911,12 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
 
         return masks[to_keep], scores[to_keep], labels[to_keep]
 
-    def get_panoptic_segmentation(
-        self, mask_probs: Tensor, pred_scores: Tensor, pred_labels: Tensor
-    ) -> Tuple[Tensor, List[PanopticSegmentationSegment]]:
-        pass
-
     def forward(self, *args, **kwargs):
         outputs: MaskFormerOutput = self.model(*args, **kwargs)
         preds_logits: Tensor = outputs.preds_logits
         preds_masks: Tensor = outputs.preds_masks
-
+        # since all images are padded, they all have the same spatial dimensions
         _, _, height, width = preds_masks.shape
-        # TODO we need to do this for each element in the batch!
         # for each query, the best scores and their indeces
         pred_scores, pred_labels = F.softmax(preds_logits, dim=-1).max(-1)
         # pred_scores and pred_labels shape = [BATH,NUM_QUERIES]
@@ -935,7 +929,6 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
             we_detect_something: bool = mask_probs.shape[0] > 0
 
             segmentation: Tensor = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-
             segments: List[PanopticSegmentationSegment] = []
 
             if we_detect_something:
@@ -947,7 +940,6 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                 # mask_labels shape = [H,W] where each pixel has a class label
                 stuff_memory_list: Dict[str, int] = {}
                 # this is a map between stuff and segments id, the used it to keep track of the instances of one class
-
                 for k in range(pred_labels.shape[0]):
                     pred_class: int = pred_labels[k].item()
                     # check if pred_class is not a "thing", so it can be merged with other instance. For example, class "sky" cannot have more then one instance

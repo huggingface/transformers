@@ -32,7 +32,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_swin import SwinConfig
@@ -67,6 +67,7 @@ class SwinModelOutputWithPooling(ModelOutput):
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*, a tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward` method
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -75,10 +76,10 @@ class SwinModelOutputWithPooling(ModelOutput):
             heads.
     """
 
-    hidden_states_original_spatial_dimensions: Tuple[Tuple[int, int]] = None
     last_hidden_state: torch.FloatTensor = None
     pooler_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -107,6 +108,7 @@ class SwinBaseModelOutput(ModelOutput):
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*, a tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward` method
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -115,9 +117,9 @@ class SwinBaseModelOutput(ModelOutput):
             heads.
     """
 
-    hidden_states_original_spatial_dimensions: Tuple[Tuple[int, int]] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -233,7 +235,7 @@ class SwinPatchEmbeddings(nn.Module):
     def forward(self, pixel_values):
         _, _, height, width = pixel_values.shape
         # pad the input to be divisible by self.patch_size, if needed
-        pixel_values = self.maybe_pad(pixel_values)
+        pixel_values = self.maybe_pad(pixel_values, height, width)
         embeddings = self.projection(pixel_values)
         _, _, height, width = embeddings.shape
         output_dimensions = (height, width)
@@ -539,7 +541,7 @@ class SwinBlock(nn.Module):
         hidden_states = self.layernorm_before(hidden_states)
         hidden_states = hidden_states.view(batch_size, height, width, channels)
         # pad hidden_states to multiples of window size
-        hidden_states, pad_values = self.maybe_pad(hidden_states)
+        hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
 
         _, height_pad, width_pad, _ = hidden_states.shape
         # cyclic shift
@@ -732,7 +734,7 @@ class SwinEncoder(nn.Module):
         return SwinBaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
-            hidden_states_original_spatial_dimensions=all_input_dimensions,
+            hidden_states_spatial_dimensions=all_input_dimensions,
             attentions=all_self_attentions,
         )
 
@@ -830,7 +832,7 @@ class SwinModel(SwinPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=SwinModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -887,7 +889,7 @@ class SwinModel(SwinPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
 
         pooled_output = None
@@ -898,15 +900,15 @@ class SwinModel(SwinPreTrainedModel):
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        hidden_states_original_spatial_dimensions = (
+        hidden_states_spatial_dimensions = (
             input_dimensions,
-        ) + encoder_outputs.hidden_states_original_spatial_dimensions
+        ) + encoder_outputs.hidden_states_spatial_dimensions
 
         return SwinModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
-            hidden_states_original_spatial_dimensions=hidden_states_original_spatial_dimensions,
+            hidden_states_spatial_dimensions=hidden_states_spatial_dimensions,
             attentions=encoder_outputs.attentions,
         )
 

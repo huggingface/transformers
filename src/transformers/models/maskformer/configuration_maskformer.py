@@ -21,10 +21,10 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
-MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # "facebook/detr-resnet-50": "https://huggingface.co/facebook/detr-resnet-50/resolve/main/config.json",
-    # See all MaskFormer models at https://huggingface.co/models?filter=detr
-}
+MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = [
+    "facebook/maskformer-swin-base-ade-640",
+    # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
+]
 
 logger = logging.get_logger(__name__)
 
