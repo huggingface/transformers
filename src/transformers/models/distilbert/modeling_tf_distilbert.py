@@ -77,8 +77,6 @@ class TFEmbeddings(tf.keras.layers.Layer):
         self.dim = config.dim
         self.initializer_range = config.initializer_range
         self.max_position_embeddings = config.max_position_embeddings
-
-        self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.dropout)
 
@@ -104,7 +102,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
+            final_embeddings (`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
 
@@ -117,8 +115,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
             position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
-        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
-        final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds])
+        final_embeddings = inputs_embeds + position_embeds
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 
@@ -170,7 +167,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         k_length = shape_list(key)[1]
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         # assert key.size() == value.size()
-        dim_per_head = tf.math.divide(self.dim, self.n_heads)
+        dim_per_head = int(self.dim / self.n_heads)
         dim_per_head = tf.cast(dim_per_head, dtype=tf.int32)
         mask_reshape = [bs, 1, 1, k_length]
 
@@ -454,79 +451,79 @@ class TFDistilBertPreTrainedModel(TFPreTrainedModel):
 
 DISTILBERT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
 
-    .. note::
+    <Tip>
 
-        TF 2.0 models accepts two formats as inputs:
+    TF 2.0 models accepts two formats as inputs:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    tensors in the first argument of the model call function: `model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
+    first positional argument :
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids})`
+    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([input_ids, attention_mask])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"input_ids": input_ids})`
+
+    </Tip>
 
     Parameters:
-        config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model.
+        config ([`DistilBertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 DISTILBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
+        input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.DistilBertTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
-            details.
+            Indices can be obtained using [`DistilBertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            [`PreTrainedTokenizer.encode`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`Numpy array` or `tf.Tensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        head_mask (`Numpy array` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        inputs_embeds (`tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
             config will be used instead.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
-            argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
+            in eager mode, in graph mode the value will always be set to True.
+        training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
@@ -633,7 +630,7 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    """DistilBert Model with a `masked language modeling` head on top. """,
+    """DistilBert Model with a `masked language modeling` head on top.""",
     DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModelingLoss):
@@ -677,10 +674,10 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         **kwargs,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         inputs = input_processing(
             func=self.call,
@@ -712,7 +709,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         prediction_logits = self.vocab_layer_norm(prediction_logits)  # (bs, seq_length, dim)
         prediction_logits = self.vocab_projector(prediction_logits)
 
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], prediction_logits)
 
         if not inputs["return_dict"]:
             output = (prediction_logits,) + distilbert_output[1:]
@@ -778,10 +775,10 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         **kwargs,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in ``[0, ...,
-            config.num_labels - 1]``. If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
-            If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
+        labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         inputs = input_processing(
             func=self.call,
@@ -813,7 +810,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         pooled_output = self.dropout(pooled_output, training=inputs["training"])  # (bs, dim)
         logits = self.classifier(pooled_output)  # (bs, dim)
 
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + distilbert_output[1:]
@@ -873,9 +870,8 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
         **kwargs,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
-            1]``.
+        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         inputs = input_processing(
             func=self.call,
@@ -904,7 +900,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
         sequence_output = outputs[0]
         sequence_output = self.dropout(sequence_output, training=inputs["training"])
         logits = self.classifier(sequence_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[1:]
@@ -981,10 +977,9 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         **kwargs,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
-            num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
-            :obj:`input_ids` above)
+        labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
+            where `num_choices` is the size of the second dimension of the input tensors. (See `input_ids` above)
         """
         inputs = input_processing(
             func=self.call,
@@ -1034,7 +1029,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
 
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], reshaped_logits)
 
         if not inputs["return_dict"]:
             output = (reshaped_logits,) + distilbert_output[1:]
@@ -1108,14 +1103,14 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         **kwargs,
     ):
         r"""
-        start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
+        start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
-        end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        end_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         """
         inputs = input_processing(
             func=self.call,
@@ -1153,7 +1148,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
             labels = {"start_position": inputs["start_positions"]}
             labels["end_position"] = inputs["end_positions"]
-            loss = self.compute_loss(labels, (start_logits, end_logits))
+            loss = self.hf_compute_loss(labels, (start_logits, end_logits))
 
         if not inputs["return_dict"]:
             output = (start_logits, end_logits) + distilbert_output[1:]

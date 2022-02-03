@@ -24,7 +24,7 @@ from transformers.models.bart.configuration_bart import BartConfig
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.models.dpr.configuration_dpr import DPRConfig
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
-from transformers.testing_utils import require_datasets, require_faiss, require_tokenizers, require_torch, slow
+from transformers.testing_utils import require_faiss, require_tokenizers, require_torch, slow
 
 
 if is_torch_available() and is_datasets_available() and is_faiss_available():
@@ -33,7 +33,6 @@ if is_torch_available() and is_datasets_available() and is_faiss_available():
 
 
 @require_faiss
-@require_datasets
 @require_torch
 class RagTokenizerTest(TestCase):
     def setUp(self):

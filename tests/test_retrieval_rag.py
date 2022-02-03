@@ -32,13 +32,7 @@ from transformers.models.dpr.tokenization_dpr import DPRContextEncoderTokenizer,
 from transformers.models.rag.configuration_rag import RagConfig
 from transformers.models.rag.retrieval_rag import CustomHFIndex, RagRetriever
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
-from transformers.testing_utils import (
-    require_datasets,
-    require_faiss,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-)
+from transformers.testing_utils import require_faiss, require_sentencepiece, require_tokenizers, require_torch
 
 
 if is_faiss_available():
@@ -46,7 +40,6 @@ if is_faiss_available():
 
 
 @require_faiss
-@require_datasets
 class RagRetrieverTest(TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()

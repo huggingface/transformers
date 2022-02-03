@@ -197,7 +197,10 @@ def get_test_dependencies(test_fname):
     # Tests only have relative imports for other test files
     relative_imports = re.findall(r"from\s+\.(\S+)\s+import\s+([^\n]+)\n", content)
     relative_imports = [test for test, imp in relative_imports if "# tests_ignore" not in imp]
-    return [os.path.join("tests", f"{test}.py") for test in relative_imports]
+    dependencies = [os.path.join("tests", f"{test}.py") for test in relative_imports]
+    # Some tests use docstrings with relative imports in them and this could catch them, so we check the files
+    # actually exist
+    return [f for f in dependencies if os.path.isfile(f)]
 
 
 def create_reverse_dependency_map():
@@ -243,6 +246,7 @@ def create_reverse_dependency_map():
 # Any module file that has a test name which can't be inferred automatically from its name should go here. A better
 # approach is to (re-)name the test file accordingly, and second best to add the correspondence map here.
 SPECIAL_MODULE_TO_TEST_MAP = {
+    "commands/add_new_model_like.py": "test_add_new_model_like.py",
     "configuration_utils.py": "test_configuration_common.py",
     "convert_graph_to_onnx.py": "test_onnx.py",
     "data/data_collator.py": "test_data_collator.py",
@@ -252,10 +256,10 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "file_utils.py": ["test_file_utils.py", "test_model_output.py"],
     "modelcard.py": "test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
-    "modeling_tf_utils.py": "test_modeling_tf_common.py",
+    "modeling_tf_utils.py": ["test_modeling_tf_common.py", "test_modeling_tf_core.py"],
     "modeling_utils.py": ["test_modeling_common.py", "test_offline.py"],
     "models/auto/modeling_auto.py": ["test_modeling_auto.py", "test_modeling_tf_pytorch.py", "test_modeling_bort.py"],
-    "models/auto/modeling_flax_auto.py": "test_flax_auto.py",
+    "models/auto/modeling_flax_auto.py": "test_modeling_flax_auto.py",
     "models/auto/modeling_tf_auto.py": [
         "test_modeling_tf_auto.py",
         "test_modeling_tf_pytorch.py",
@@ -431,6 +435,8 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None):
             # Example files are tested separately
             elif f.startswith("examples/pytorch"):
                 test_files_to_run.append("examples/pytorch/test_examples.py")
+            elif f.startswith("examples/flax"):
+                test_files_to_run.append("examples/flax/test_examples.py")
             else:
                 new_tests = module_to_test_file(f)
                 if new_tests is not None:

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch DeiT model. """
+""" PyTorch DeiT model."""
 
 
 import collections.abc
@@ -28,6 +28,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -40,8 +41,18 @@ from .configuration_deit import DeiTConfig
 
 logger = logging.get_logger(__name__)
 
+# General docstring
 _CONFIG_FOR_DOC = "DeiTConfig"
+_FEAT_EXTRACTOR_FOR_DOC = "DeiTFeatureExtractor"
+
+# Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/deit-base-distilled-patch16-224"
+_EXPECTED_OUTPUT_SHAPE = [1, 198, 768]
+
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "facebook/deit-base-distilled-patch16-224"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+
 
 DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/deit-base-distilled-patch16-224",
@@ -159,7 +170,7 @@ class DeiTSelfAttention(nn.Module):
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -297,12 +308,6 @@ class DeiTLayer(nn.Module):
 
         # in DeiT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
-
-        # TODO feedforward chunking not working for now
-        # layer_output = apply_chunking_to_forward(
-        #     self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, layer_output
-        # )
-
         layer_output = self.intermediate(layer_output)
 
         # second residual connection is done here
@@ -311,11 +316,6 @@ class DeiTLayer(nn.Module):
         outputs = (layer_output,) + outputs
 
         return outputs
-
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output)
-        return layer_output
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->DeiT
@@ -385,6 +385,7 @@ class DeiTPreTrainedModel(PreTrainedModel):
 
     config_class = DeiTConfig
     base_model_prefix = "deit"
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -409,37 +410,36 @@ class DeiTPreTrainedModel(PreTrainedModel):
 
 
 DEIT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config (:class:`~transformers.DeiTConfig`): Model configuration class with all the parameters of the model.
+        config ([`DeiTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 DEIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.DeiTFeatureExtractor`. See
-            :meth:`transformers.DeiTFeatureExtractor.__call__` for details.
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`DeiTFeatureExtractor`]. See
+            [`DeiTFeatureExtractor.__call__`] for details.
 
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -458,7 +458,8 @@ class DeiTModel(DeiTPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = DeiTPooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
@@ -472,35 +473,22 @@ class DeiTModel(DeiTPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=BaseModelOutputWithPooling,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     def forward(
         self,
         pixel_values=None,
-        attention_mask=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
-        r"""
-        Returns:
-
-        Examples::
-
-            >>> from transformers import DeiTFeatureExtractor, DeiTModel
-            >>> from PIL import Image
-            >>> import requests
-
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
-
-            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
-            >>> model = DeiTModel.from_pretrained('facebook/deit-base-distilled-patch16-224', add_pooling_layer=False)
-
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -574,7 +562,8 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
@@ -588,34 +577,35 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
-            >>> from PIL import Image
-            >>> import requests
+        ```python
+        >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
+        >>> from PIL import Image
+        >>> import requests
 
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
-            >>> # so the head will be randomly initialized, hence the predictions will be random
-            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
-            >>> model = DeiTForImageClassification.from_pretrained('facebook/deit-base-distilled-patch16-224')
+        >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
+        >>> # so the head will be randomly initialized, hence the predictions will be random
+        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
-            >>> logits = outputs.logits
-            >>> # model predicts one of the 1000 ImageNet classes
-            >>> predicted_class_idx = logits.argmax(-1).item()
-            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        """
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_class_idx = logits.argmax(-1).item()
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.deit(
@@ -656,25 +646,25 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 @dataclass
 class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.DeiTForImageClassificationWithTeacher`.
+    Output type of [`DeiTForImageClassificationWithTeacher`].
 
     Args:
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Prediction scores as the average of the cls_logits and distillation logits.
-        cls_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+        cls_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
             class token).
-        distillation_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+        distillation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
             distillation token).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
-            each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
     """
 
     logits: torch.FloatTensor = None
@@ -711,10 +701,17 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
             nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
         )
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DeiTForImageClassificationWithTeacherOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=DeiTForImageClassificationWithTeacherOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
     def forward(
         self,
         pixel_values=None,
@@ -723,28 +720,6 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        """
-        Returns:
-
-        Examples::
-
-            >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassificationWithTeacher
-            >>> from PIL import Image
-            >>> import requests
-
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
-
-            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
-            >>> model = DeiTForImageClassificationWithTeacher.from_pretrained('facebook/deit-base-distilled-patch16-224')
-
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
-            >>> logits = outputs.logits
-            >>> # model predicts one of the 1000 ImageNet classes
-            >>> predicted_class_idx = logits.argmax(-1).item()
-            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.deit(

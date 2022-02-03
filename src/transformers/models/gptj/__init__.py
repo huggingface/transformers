@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available
+from ...file_utils import _LazyModule, is_flax_available, is_torch_available
 
 
 _import_structure = {
@@ -28,9 +28,17 @@ if is_torch_available():
     _import_structure["modeling_gptj"] = [
         "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTJForCausalLM",
+        "GPTJForQuestionAnswering",
         "GPTJForSequenceClassification",
         "GPTJModel",
         "GPTJPreTrainedModel",
+    ]
+
+if is_flax_available():
+    _import_structure["modeling_flax_gptj"] = [
+        "FlaxGPTJForCausalLM",
+        "FlaxGPTJModel",
+        "FlaxGPTJPreTrainedModel",
     ]
 
 
@@ -41,12 +49,16 @@ if TYPE_CHECKING:
         from .modeling_gptj import (
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTJForCausalLM,
+            GPTJForQuestionAnswering,
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
         )
 
+    if is_flax_available():
+        from .modeling_flax_gptj import FlaxGPTJForCausalLM, FlaxGPTJModel, FlaxGPTJPreTrainedModel
+
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

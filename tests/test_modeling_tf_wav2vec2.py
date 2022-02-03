@@ -15,15 +15,19 @@
 
 
 import copy
+import glob
 import inspect
 import math
 import unittest
 
 import numpy as np
 import pytest
+from datasets import load_dataset
 
+from huggingface_hub import snapshot_download
 from transformers import Wav2Vec2Config, is_tf_available
-from transformers.testing_utils import require_datasets, require_soundfile, require_tf, slow
+from transformers.file_utils import is_librosa_available, is_pyctcdecode_available
+from transformers.testing_utils import require_librosa, require_pyctcdecode, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -34,6 +38,14 @@ if is_tf_available():
 
     from transformers import TFWav2Vec2ForCTC, TFWav2Vec2Model, Wav2Vec2Processor
     from transformers.models.wav2vec2.modeling_tf_wav2vec2 import _compute_mask_indices
+
+
+if is_pyctcdecode_available():
+    from transformers import Wav2Vec2ProcessorWithLM
+
+
+if is_librosa_available():
+    import librosa
 
 
 @require_tf
@@ -184,7 +196,7 @@ class TFWav2Vec2ModelTester:
         model = TFWav2Vec2ForCTC(config)
 
         # freeze feature encoder
-        model.freeze_feature_extractor()
+        model.freeze_feature_encoder()
 
         input_values = input_values[:3]
 
@@ -473,12 +485,8 @@ class TFWav2Vec2UtilsTest(unittest.TestCase):
 
 @require_tf
 @slow
-@require_datasets
-@require_soundfile
 class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
@@ -544,3 +552,21 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
             "his instant panic was followed by a small sharp blow high on his chest",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
+    @require_pyctcdecode
+    @require_librosa
+    def test_wav2vec2_with_lm(self):
+        downloaded_folder = snapshot_download("patrickvonplaten/common_voice_es_sample")
+        file_path = glob.glob(downloaded_folder + "/*")[0]
+        sample = librosa.load(file_path, sr=16_000)[0]
+
+        model = TFWav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+
+        input_values = processor(sample, return_tensors="tf").input_values
+
+        logits = model(input_values).logits
+
+        transcription = processor.batch_decode(logits.numpy()).text
+
+        self.assertEqual(transcription[0], "el libro ha sido escrito por cervantes")

@@ -39,11 +39,12 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def canine_tokenizer(self):
-        # TODO replace nielsr by google
-        return CanineTokenizer.from_pretrained("nielsr/canine-s")
+        return CanineTokenizer.from_pretrained("google/canine-s")
 
     def get_tokenizer(self, **kwargs) -> CanineTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+        tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+        tokenizer._unicode_vocab_size = 1024
+        return tokenizer
 
     @require_torch
     def test_prepare_batch_integration(self):

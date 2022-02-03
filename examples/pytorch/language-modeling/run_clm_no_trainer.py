@@ -18,7 +18,7 @@ Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, .
 on a text file or a dataset without using HuggingFace Trainer.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=causal-lm
+https://huggingface.co/models?filter=text-generation
 """
 # You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
 
@@ -27,6 +27,7 @@ import logging
 import math
 import os
 import random
+from itertools import chain
 from pathlib import Path
 
 import datasets
@@ -366,7 +367,7 @@ def main():
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(examples):
         # Concatenate all texts.
-        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
         # customize this part to your needs.
@@ -507,7 +508,9 @@ def main():
             unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
-                repo.push_to_hub(commit_message=f"Training in progress epoch {epoch}", blocking=False)
+                repo.push_to_hub(
+                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                )
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
@@ -516,7 +519,7 @@ def main():
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                repo.push_to_hub(commit_message="End of training")
+                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
 
 if __name__ == "__main__":

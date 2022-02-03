@@ -47,53 +47,50 @@ _TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
 FLAX_DISTILBERT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading, saving and converting weights from
-    PyTorch models)
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen `flax.linen.Module
-    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
-    and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
+    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
+    general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model.
+        config ([`DistilBertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 DISTILBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`):
+        input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`numpy.ndarray` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [What are attention masks?](../glossary#attention-mask)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -102,7 +99,7 @@ def get_angles(pos, i, d_model):
     return pos * angle_rates
 
 
-def positional_encoding(position, d_model, dtype):
+def positional_encoding(position, d_model):
     # create the sinusoidal pattern for the positional encoding
     angle_rads = get_angles(np.arange(position)[:, np.newaxis], np.arange(d_model)[np.newaxis, :], d_model)
 
@@ -114,8 +111,7 @@ def positional_encoding(position, d_model, dtype):
 
     pos_encoding = angle_rads[np.newaxis, ...]
 
-    # cast to dtype
-    return jnp.array(pos_encoding, dtype=dtype)
+    return jnp.array(pos_encoding)
 
 
 class FlaxEmbeddings(nn.Module):
@@ -129,17 +125,15 @@ class FlaxEmbeddings(nn.Module):
             self.config.vocab_size,
             self.config.dim,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         if not self.config.sinusoidal_pos_embds:
             self.position_embeddings = nn.Embed(
                 self.config.max_position_embeddings,
                 self.config.dim,
                 embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-                dtype=self.dtype,
             )
         else:
-            self.pos_encoding = positional_encoding(self.config.max_position_embeddings, self.config.dim, self.dtype)
+            self.pos_encoding = positional_encoding(self.config.max_position_embeddings, self.config.dim)
         self.LayerNorm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.dropout)
 
@@ -153,6 +147,8 @@ class FlaxEmbeddings(nn.Module):
             position_embeds = self.position_embeddings(position_ids.astype("i4"))
         else:
             position_embeds = self.pos_encoding[:, :seq_length, :]
+            # explictly cast the positions here, since self.embed_positions are not registered as parameters
+            position_embeds = position_embeds.astype(inputs_embeds.dtype)
 
         # Sum all embeddings
         hidden_states = inputs_embeds + position_embeds
@@ -289,10 +285,10 @@ class FlaxTransformerBlock(nn.Module):
         ), f"Hidden size {self.config.dim} not dividable by number of heads {self.config.n_heads}"
 
         self.attention = FlaxMultiHeadSelfAttention(self.config, dtype=self.dtype)
-        self.sa_layer_norm = nn.LayerNorm(epsilon=1e-12)
+        self.sa_layer_norm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
 
         self.ffn = FlaxFFN(self.config, dtype=self.dtype)
-        self.output_layer_norm = nn.LayerNorm(epsilon=1e-12)
+        self.output_layer_norm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
 
     def __call__(
         self,
@@ -412,8 +408,11 @@ class FlaxDistilBertLMDecoder(nn.Module):
         self.bias = self.param("bias", self.bias_init, (self.config.vocab_size,))
 
     def __call__(self, inputs, kernel):
+        inputs = jnp.asarray(inputs, self.dtype)
+        kernel = jnp.asarray(kernel, self.dtype)
         y = lax.dot_general(inputs, kernel, (((inputs.ndim - 1,), (0,)), ((), ())))
-        y = y + self.bias
+        bias = jnp.asarray(self.bias, self.dtype)
+        y = y + bias
         return y
 
 
@@ -597,7 +596,7 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
         )
 
 
-@add_start_docstrings("""DistilBert Model with a `language modeling` head on top. """, FLAX_DISTILBERT_START_DOCSTRING)
+@add_start_docstrings("""DistilBert Model with a `language modeling` head on top.""", FLAX_DISTILBERT_START_DOCSTRING)
 class FlaxDistilBertForMaskedLM(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForMaskedLMModule
 

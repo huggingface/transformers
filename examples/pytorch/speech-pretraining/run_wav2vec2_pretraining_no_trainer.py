@@ -302,6 +302,8 @@ class DataCollatorForWav2Vec2Pretraining:
         batch_size = batch["input_values"].shape[0]
 
         mask_indices_seq_length = self.model._get_feat_extract_output_lengths(batch["input_values"].shape[-1])
+        # make sure masked sequence length is a Python scalar
+        mask_indices_seq_length = int(mask_indices_seq_length)
 
         # make sure that no loss is computed on padded inputs
         if batch.get("attention_mask") is not None:
@@ -667,7 +669,11 @@ def main():
                     unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
 
                 if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
-                    repo.push_to_hub(commit_message=f"Training in progress step {completed_steps}", blocking=False)
+                    repo.push_to_hub(
+                        commit_message=f"Training in progress step {completed_steps}",
+                        blocking=False,
+                        auto_lfs_prune=True,
+                    )
 
             # if completed steps > `args.max_train_steps` stop
             if completed_steps >= args.max_train_steps:
@@ -714,7 +720,7 @@ def main():
             unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
             if accelerator.is_main_process:
                 if args.push_to_hub:
-                    repo.push_to_hub(commit_message="End of training")
+                    repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
 
 if __name__ == "__main__":

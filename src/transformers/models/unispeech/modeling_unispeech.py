@@ -12,9 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch UniSpeech model. """
+""" PyTorch UniSpeech model."""
 
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -34,21 +35,33 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, torch_int_div
 from ...utils import logging
 from .configuration_unispeech import UniSpeechConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "UniSpeechConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
-_CHECKPOINT_FOR_DOC = "microsoft/unispeech-large-1500h-cv"
-
-_SEQ_CLASS_CHECKPOINT = "microsoft/unispeech-large-1500h-cv"
-_SEQ_CLASS_PROCESSOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 
 _HIDDEN_STATES_START_POSITION = 2
+
+# General docstring
+_CONFIG_FOR_DOC = "UniSpeechConfig"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "patrickvonplaten/unispeech-large-1500h-cv-timit"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 1024]
+
+# CTC docstring
+_CTC_EXPECTED_OUTPUT = "'mister quilter is the apposl of the midle classes and weare glad to welcom his gosepl'"
+_CTC_EXPECTED_LOSS = 17.17
+
+# Audio class docstring
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_SEQ_CLASS_CHECKPOINT = "hf-internal-testing/tiny-random-unispeech"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
+_SEQ_CLASS_EXPECTED_LOSS = 0.66  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
 
 UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/unispeech-large-1500h-cv",
@@ -60,21 +73,21 @@ UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class UniSpeechBaseModelOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.UniSpeechBaseModelOutput`, with potential hidden states and attentions.
+    Output type of [`UniSpeechBaseModelOutput`], with potential hidden states and attentions.
 
     Args:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        extract_features (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, conv_dim[-1])`):
+        extract_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, conv_dim[-1])`):
             Sequence of extracted feature vectors of the last convolutional layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -89,26 +102,26 @@ class UniSpeechBaseModelOutput(ModelOutput):
 @dataclass
 class UniSpeechForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.UniSpeechForPreTrainingOutput`, with potential hidden states and attentions.
+    Output type of [`UniSpeechForPreTrainingOutput`], with potential hidden states and attentions.
 
     Args:
-        loss (`optional`, returned when model is in train mode, ``torch.FloatTensor`` of shape :obj:`(1,)`):
-            Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the `official
-            paper <https://arxiv.org/pdf/2006.11477.pdf>`__ . (classification) loss.
-        projected_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
-            Hidden-states of the model projected to `config.proj_codevector_dim` that can be used to predict the masked
+        loss (*optional*, returned when model is in train mode, `torch.FloatTensor` of shape `(1,)`):
+            Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
+            paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+        projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+            Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
             projected quantized states.
-        projected_quantized_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.proj_codevector_dim)`):
-            Quantized extracted feature vectors projected to `config.proj_codevector_dim` representing the positive
+        projected_quantized_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+            Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
             target vectors for contrastive loss.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -131,18 +144,21 @@ def _compute_mask_indices(
     min_masks: int = 0,
 ) -> np.ndarray:
     """
-    Computes random mask spans for a given shape. Used to implement `SpecAugment: A Simple Data Augmentation Method for
-    ASR <https://arxiv.org/abs/1904.08779>`__. Note that this method is not optimized to run on TPU and should be run
-    on CPU as part of the preprocessing during training.
+    Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
+    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    CPU as part of the preprocessing during training.
 
     Args:
-        shape: the the shape for which to compute masks.
-            should be of size 2 where first element is batch size and 2nd is timesteps
-        mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
-            number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
-            however due to overlaps, the actual number will be smaller (unless no_overlap is True)
+        shape: The shape for which to compute masks. This should be of a tuple of size 2 where
+               the first element is the batch size and the second element is the length of the axis to span.
+        mask_prob:  The percentage of the whole axis (between 0 and 1) which will be masked. The number of
+                    independently generated mask spans of length `mask_length` is computed by
+                    `mask_prob*shape[1]/mask_length`. Note that due to overlaps, `mask_prob` is an upper bound and the
+                    actual percentage will be smaller.
         mask_length: size of the mask
         min_masks: minimum number of masked spans
+        attention_mask: A (right-padded) attention mask which independently shortens the feature axis of
+                        each batch dimension.
     """
     batch_size, sequence_length = shape
 
@@ -151,9 +167,11 @@ def _compute_mask_indices(
 
     if mask_length > sequence_length:
         raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length}"
+            f" and `sequence_length`: {sequence_length}`"
         )
 
+    # epsilon is used for probabilistic rounding
     epsilon = np.random.rand(1).item()
 
     def compute_num_masked_span(input_length):
@@ -161,9 +179,13 @@ def _compute_mask_indices(
         num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
         num_masked_span = max(num_masked_span, min_masks)
 
-        # make sure num masked indices <= sequence_length
+        # make sure num masked span <= sequence_length
         if num_masked_span * mask_length > sequence_length:
             num_masked_span = sequence_length // mask_length
+
+        # make sure num_masked span is also <= input_length - (mask_length - 1)
+        if input_length - (mask_length - 1) < num_masked_span:
+            num_masked_span = max(input_length - (mask_length - 1), 0)
 
         return num_masked_span
 
@@ -180,16 +202,28 @@ def _compute_mask_indices(
 
     max_num_masked_span = compute_num_masked_span(sequence_length)
 
+    if max_num_masked_span == 0:
+        return spec_aug_mask
+
     for input_length in input_lengths:
         # compute num of masked spans for this input
         num_masked_span = compute_num_masked_span(input_length)
+
         # get random indices to mask
         spec_aug_mask_idx = np.random.choice(
             np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
         )
 
         # pick first sampled index that will serve as a dummy index to pad vector
-        dummy_mask_idx = spec_aug_mask_idx[0]
+        # to ensure same dimension for all batches due to probabilistic rounding
+        # Picking first sample just pads those vectors twice.
+        if len(spec_aug_mask_idx) == 0:
+            # this case can only happen if `input_length` is strictly smaller then
+            # `sequence_length` in which case the last token has to be a padding
+            # token which we can use as a dummy mask id
+            dummy_mask_idx = sequence_length - 1
+        else:
+            dummy_mask_idx = spec_aug_mask_idx[0]
 
         spec_aug_mask_idx = np.concatenate(
             [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
@@ -204,11 +238,16 @@ def _compute_mask_indices(
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
 
+    # add offset to the starting indexes so that that indexes now create a span
     offsets = np.arange(mask_length)[None, None, :]
     offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
         batch_size, max_num_masked_span * mask_length
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
+
+    # ensure that we cannot have indices larger than sequence_length
+    if spec_aug_mask_idxs.max() > sequence_length - 1:
+        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
 
     # scatter indices to mask
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
@@ -339,8 +378,8 @@ class UniSpeechSamePadLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->UniSpeech
-class UniSpeechFeatureExtractor(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder with Wav2Vec2->UniSpeech
+class UniSpeechFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
@@ -361,20 +400,22 @@ class UniSpeechFeatureExtractor(nn.Module):
             )
         self.conv_layers = nn.ModuleList(conv_layers)
         self.gradient_checkpointing = False
+        self._requires_grad = True
 
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False
+        self._requires_grad = False
 
     def forward(self, input_values):
         hidden_states = input_values[:, None]
 
         # make sure hidden_states require grad for gradient_checkpointing
-        if self.training:
+        if self._requires_grad and self.training:
             hidden_states.requires_grad = True
 
         for conv_layer in self.conv_layers:
-            if self.gradient_checkpointing and self.training:
+            if self._requires_grad and self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -390,6 +431,17 @@ class UniSpeechFeatureExtractor(nn.Module):
                 hidden_states = conv_layer(hidden_states)
 
         return hidden_states
+
+
+class UniSpeechFeatureExtractor(UniSpeechFeatureEncoder):
+    def __init__(self, config):
+        super().__init__(config)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection with Wav2Vec2->UniSpeech
@@ -456,7 +508,8 @@ class UniSpeechAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -542,7 +595,10 @@ class UniSpeechAttention(nn.Module):
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned aross GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -820,8 +876,8 @@ class UniSpeechEncoderStableLayerNorm(nn.Module):
 
 class UniSpeechGumbelVectorQuantizer(nn.Module):
     """
-    Vector quantization using gumbel softmax. See `CATEGORICAL REPARAMETERIZATION WITH GUMBEL-SOFTMAX
-    <https://arxiv.org/pdf/1611.01144.pdf>`__ for more information.
+    Vector quantization using gumbel softmax. See [CATEGORICAL REPARAMETERIZATION WITH
+    GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
     """
 
     def __init__(self, config):
@@ -886,7 +942,6 @@ class UniSpeechGumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel with Wav2Vec2->UniSpeech, wav2vec2->unispeech
 class UniSpeechPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -895,6 +950,7 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
 
     config_class = UniSpeechConfig
     base_model_prefix = "unispeech"
+    main_input_name = "input_values"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = True
 
@@ -939,7 +995,7 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return (input_length - kernel_size) // stride + 1
+            return torch_int_div(input_length - kernel_size, stride) + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
@@ -947,7 +1003,10 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
         return input_lengths
 
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
-        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+        # Effectively attention_mask.sum(-1), but not inplace to be able to run
+        # on inference mode.
+        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths).to(torch.long)
         batch_size = attention_mask.shape[0]
 
         attention_mask = torch.zeros(
@@ -959,63 +1018,64 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
         return attention_mask
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (UniSpeechEncoder, UniSpeechEncoderStableLayerNorm, UniSpeechFeatureExtractor)):
+        if isinstance(module, (UniSpeechEncoder, UniSpeechEncoderStableLayerNorm, UniSpeechFeatureEncoder)):
             module.gradient_checkpointing = value
 
 
 UNISPEECH_START_DOCSTRING = r"""
-    UniSpeech was proposed in `UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled Data
-    <https://arxiv.org/abs/2101.07597>`__ by Chengyi Wang, Yu Wu, Yao Qian, Kenichi Kumatani, Shujie Liu, Furu Wei,
+    UniSpeech was proposed in [UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled
+    Data](https://arxiv.org/abs/2101.07597) by Chengyi Wang, Yu Wu, Yao Qian, Kenichi Kumatani, Shujie Liu, Furu Wei,
     Michael Zeng, Xuedong Huang.
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving etc.).
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving etc.).
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config (:class:`~transformers.UniSpeechConfig`): Model configuration class with all the parameters of the model.
+        config ([`UniSpeechConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
 UNISPEECH_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.UniSpeechProcessor` should
-            be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
-            :meth:`transformers.UniSpeechProcessor.__call__` for details.
-        attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
-            1]``:
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
+            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
+            soundfile*). To prepare the array into *input_values*, the [`UniSpeechProcessor`] should be used for
+            padding and conversion into a tensor of type *torch.FloatTensor*. See [`UniSpeechProcessor.__call__`] for
+            details.
+        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
+            1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
+            [What are attention masks?](../glossary#attention-mask)
 
-            .. warning::
-                :obj:`attention_mask` should only be passed if the corresponding processor has
-                ``config.return_attention_mask == True``. For all models whose processor has
-                ``config.return_attention_mask == False``, :obj:`attention_mask` should **not** be passed to avoid
-                degraded performance when doing batched inference. For such models :obj:`input_values` should simply be
-                padded with 0 and passed without :obj:`attention_mask`. Be aware that these models also yield slightly
-                different results depending on whether :obj:`input_values` is padded or not.
+            <Tip warning={true}>
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
+            True`. For all models whose processor has `config.return_attention_mask == False`, `attention_mask` should
+            **not** be passed to avoid degraded performance when doing batched inference. For such models
+            `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware that these
+            models also yield slightly different results depending on whether `input_values` is padded or not.
+
+            </Tip>
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1023,23 +1083,25 @@ UNISPEECH_INPUTS_DOCSTRING = r"""
     "The bare UniSpeech Model transformer outputting raw hidden-states without any specific head on top.",
     UNISPEECH_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->UniSpeech, wav2vec2->unispeech, WAV_2_VEC_2->UNISPEECH
 class UniSpeechModel(UniSpeechPreTrainedModel):
     def __init__(self, config: UniSpeechConfig):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = UniSpeechFeatureExtractor(config)
+        self.feature_extractor = UniSpeechFeatureEncoder(config)
         self.feature_projection = UniSpeechFeatureProjection(config)
 
-        self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+        if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
+            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
             self.encoder = UniSpeechEncoderStableLayerNorm(config)
         else:
             self.encoder = UniSpeechEncoder(config)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,
@@ -1047,8 +1109,8 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
     ):
         """
-        Masks extracted features along time axis and/or along feature axis according to `SpecAugment
-        <https://arxiv.org/abs/1904.08779>`__ .
+        Masks extracted features along time axis and/or along feature axis according to
+        [SpecAugment](https://arxiv.org/abs/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -1067,7 +1129,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
                 mask_prob=self.config.mask_time_prob,
                 mask_length=self.config.mask_time_length,
                 attention_mask=attention_mask,
-                min_masks=2,
+                min_masks=self.config.mask_time_min_masks,
             )
             mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
             hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
@@ -1078,6 +1140,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
                 (batch_size, hidden_size),
                 mask_prob=self.config.mask_feature_prob,
                 mask_length=self.config.mask_feature_length,
+                min_masks=self.config.mask_feature_min_masks,
             )
             mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
             mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
@@ -1092,6 +1155,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         output_type=UniSpeechBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1142,7 +1206,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
 
 
 @add_start_docstrings(
-    """UniSpeech Model with a vector-quantization module and ctc loss for pre-training. """, UNISPEECH_START_DOCSTRING
+    """UniSpeech Model with a vector-quantization module and ctc loss for pre-training.""", UNISPEECH_START_DOCSTRING
 )
 class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     def __init__(self, config: UniSpeechConfig):
@@ -1157,7 +1221,8 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         self.ctc_proj = nn.Linear(config.hidden_size, config.num_ctc_classes)
         self.dropout = nn.Dropout(config.final_dropout)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def set_gumbel_temperature(self, temperature: int):
         """
@@ -1167,8 +1232,20 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.unispeech.feature_extractor._freeze_parameters()
 
@@ -1181,8 +1258,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     ):
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between
-        :obj:`[positive_feature, negative_features]` and :obj:`[predicted_features]`. Additionally, temperature can be
-        applied.
+        `[positive_feature, negative_features]` and `[predicted_features]`. Additionally, temperature can be applied.
         """
         target_features = torch.cat([target_features, negative_features], dim=0)
 
@@ -1204,58 +1280,28 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        mask_time_indices (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
-            masked extracted features in `config.proj_codevector_dim` space.
-        sampled_negative_indices (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, sequence_length, num_negatives)`, `optional`):
+            masked extracted features in *config.proj_codevector_dim* space.
+        sampled_negative_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_negatives)`, *optional*):
             Indices indicating which quantized target vectors are used as negative sampled vectors in contrastive loss.
             Required input for pre-training.
 
         Returns:
 
-        Example::
+        Example:
 
-            >>> import torch
-            >>> from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForPreTraining
-            >>> from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
+        ```python
+        >>> import torch
+        >>> from transformers import Wav2Vec2FeatureExtractor, UniSpeechForPreTraining
+        >>> from transformers.models.unispeech.modeling_unispeech import _compute_mask_indices
 
-            >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/wav2vec2-base")
-            >>> model = Wav2Vec2ForPreTraining.from_pretrained("patrickvonplaten/wav2vec2-base")
-
-
-            >>> def map_to_array(batch):
-            ...     speech, _ = sf.read(batch["file"])
-            ...     batch["speech"] = speech
-            ...     return batch
-
-
-            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
-
-            >>> input_values = feature_extractor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-
-            >>> # compute masked indices
-            >>> batch_size, raw_sequence_length = input_values.shape
-            >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
-            >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2, device=model.device)
-
-            >>> with torch.no_grad():
-            ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
-
-            >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
-            >>> cosine_sim = torch.cosine_similarity(
-            ...     outputs.projected_states, outputs.projected_quantized_states, dim=-1
-            ... )
-
-            >>> # show that cosine similarity is much higher than random
-            >>> assert cosine_sim[mask_time_indices].mean() > 0.5
-
-            >>> # for contrastive loss training model should be put into train mode
-            >>> model.train()
-            >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
-        """
+        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+        ...     "hf-internal-testing/tiny-random-unispeech-sat"
+        ... )
+        >>> model = UniSpeechForPreTraining.from_pretrained("microsoft/unispeech-large-1500h-cv")
+        >>> # TODO: Add full pretraining example
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1309,7 +1355,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
 
 @add_start_docstrings(
-    """UniSpeech Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
+    """UniSpeech Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     UNISPEECH_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->UniSpeech, wav2vec2->unispeech, WAV_2_VEC_2->UNISPEECH
@@ -1329,12 +1375,25 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
             )
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.unispeech.feature_extractor._freeze_parameters()
 
@@ -1344,6 +1403,8 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1355,11 +1416,11 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_length)`, `optional`):
-            Labels for connectionist temporal classification. Note that ``target_length`` has to be smaller or equal to
-            the sequence length of the output logits. Indices are selected in ``[-100, 0, ..., config.vocab_size -
-            1]``. All labels set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ...,
-            config.vocab_size - 1]``.
+        labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
+            Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
+            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`.
+            All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
+            config.vocab_size - 1]`.
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1437,12 +1498,25 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
         self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
         self.classifier = nn.Linear(config.classifier_proj_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameters
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.unispeech.feature_extractor._freeze_parameters()
 
@@ -1456,11 +1530,13 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UNISPEECH_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_SEQ_CLASS_PROCESSOR_FOR_DOC,
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1472,10 +1548,10 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

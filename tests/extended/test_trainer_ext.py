@@ -130,6 +130,7 @@ class TestTrainerExt(TestCasePlus):
         self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp simple")
 
     # test --sharded_ddp w/ --fp16
+    @unittest.skip("Requires an update of the env running those tests")
     @require_torch_multi_gpu
     @require_fairscale
     def test_run_seq2seq_sharded_ddp_fp16(self):
@@ -142,6 +143,7 @@ class TestTrainerExt(TestCasePlus):
         self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp zero_dp_2", predict_with_generate=False)
 
     # test --sharded_ddp zero_dp_2 w/ --fp16
+    @unittest.skip("Requires an update of the env running those tests")
     @require_torch_multi_gpu
     @require_fairscale
     def test_run_seq2seq_fully_sharded_ddp_fp16(self):

@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available
+from ...file_utils import _LazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -35,6 +35,15 @@ if is_torch_available():
         "TapasModel",
         "TapasPreTrainedModel",
         "load_tf_weights_in_tapas",
+    ]
+if is_tf_available():
+    _import_structure["modeling_tf_tapas"] = [
+        "TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFTapasForMaskedLM",
+        "TFTapasForQuestionAnswering",
+        "TFTapasForSequenceClassification",
+        "TFTapasModel",
+        "TFTapasPreTrainedModel",
     ]
 
 
@@ -53,7 +62,18 @@ if TYPE_CHECKING:
             load_tf_weights_in_tapas,
         )
 
+    if is_tf_available():
+        from .modeling_tf_tapas import (
+            TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFTapasForMaskedLM,
+            TFTapasForQuestionAnswering,
+            TFTapasForSequenceClassification,
+            TFTapasModel,
+            TFTapasPreTrainedModel,
+        )
+
+
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

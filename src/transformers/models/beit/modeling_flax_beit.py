@@ -18,6 +18,7 @@ from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 
+import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -40,44 +41,77 @@ from ...modeling_flax_utils import (
 from .configuration_beit import BeitConfig
 
 
+@flax.struct.dataclass
+class FlaxBeitModelOutputWithPooling(FlaxBaseModelOutputWithPooling):
+    """
+    Class for outputs of [`FlaxBeitModel`].
+
+    Args:
+        last_hidden_state (`jnp.ndarray` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`jnp.ndarray` of shape `(batch_size, hidden_size)`):
+            Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
+            *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
+            will be returned.
+        hidden_states (`tuple(jnp.ndarray)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
+            the initial embedding outputs.
+        attentions (`tuple(jnp.ndarray)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `jnp.ndarray` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+    """
+
+
 BEIT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading, saving and converting weights from
-    PyTorch models)
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen `flax.linen.Module
-    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
-    and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
+    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
+    general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config (:class:`~transformers.BeitConfig`): Model configuration class with all the parameters of the model.
+        config ([`BeitConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
-            model weights.
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
+            `jax.numpy.bfloat16` (on TPUs).
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given `dtype`.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 BEIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.BeitFeatureExtractor`. See
-            :meth:`transformers.BeitFeatureExtractor.__call__` for details.
+        pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`BeitFeatureExtractor`]. See
+            [`BeitFeatureExtractor.__call__`] for details.
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -554,6 +588,7 @@ class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
 
     config_class = BeitConfig
     base_model_prefix = "beit"
+    main_input_name = "pixel_values"
     module_class: nn.Module = None
 
     def __init__(self, config: BeitConfig, input_shape=None, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
@@ -674,7 +709,7 @@ class FlaxBeitModule(nn.Module):
                 return (hidden_states,) + outputs[1:]
             return (hidden_states, pooled) + outputs[1:]
 
-        return FlaxBaseModelOutputWithPooling(
+        return FlaxBeitModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=pooled,
             hidden_states=outputs.hidden_states,
@@ -693,25 +728,27 @@ class FlaxBeitModel(FlaxBeitPreTrainedModel):
 FLAX_BEIT_MODEL_DOCSTRING = """
     Returns:
 
-    Examples::
+    Examples:
 
-        >>> from transformers import BeitFeatureExtractor, FlaxBeitModel
-        >>> from PIL import Image
-        >>> import requests
+    ```python
+    >>> from transformers import BeitFeatureExtractor, FlaxBeitModel
+    >>> from PIL import Image
+    >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
-        >>> model = FlaxBeitModel.from_pretrained('microsoft/beit-base-patch16-224-pt22k-ft22k')
+    >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
+    >>> model = FlaxBeitModel.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="np")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
+    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> outputs = model(**inputs)
+    >>> last_hidden_states = outputs.last_hidden_state
+    ```
 """
 
 overwrite_call_docstring(FlaxBeitModel, FLAX_BEIT_MODEL_DOCSTRING)
-append_replace_return_docstrings(FlaxBeitModel, output_type=FlaxBaseModelOutputWithPooling, config_class=BeitConfig)
+append_replace_return_docstrings(FlaxBeitModel, output_type=FlaxBeitModelOutputWithPooling, config_class=BeitConfig)
 
 
 class FlaxBeitForMaskedImageModelingModule(nn.Module):
@@ -773,26 +810,28 @@ class FlaxBeitForMaskedImageModeling(FlaxBeitPreTrainedModel):
 
 
 FLAX_BEIT_MLM_DOCSTRING = """
-    bool_masked_pos (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_patches)`):
+    bool_masked_pos (`numpy.ndarray` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
 
     Returns:
 
-    Examples::
+    Examples:
 
-        >>> from transformers import BeitFeatureExtractor, BeitForMaskedImageModeling
-        >>> from PIL import Image
-        >>> import requests
+    ```python
+    >>> from transformers import BeitFeatureExtractor, BeitForMaskedImageModeling
+    >>> from PIL import Image
+    >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224-pt22k')
-        >>> model = BeitForMaskedImageModeling.from_pretrained('microsoft/beit-base-patch16-224-pt22k')
+    >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+    >>> model = BeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="np")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
+    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> outputs = model(**inputs)
+    >>> logits = outputs.logits
+    ```
 """
 
 overwrite_call_docstring(FlaxBeitForMaskedImageModeling, FLAX_BEIT_MLM_DOCSTRING)
@@ -860,24 +899,26 @@ class FlaxBeitForImageClassification(FlaxBeitPreTrainedModel):
 FLAX_BEIT_CLASSIF_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import BeitFeatureExtractor, FlaxBeitForImageClassification
-        >>> from PIL import Image
-        >>> import requests
+    ```python
+    >>> from transformers import BeitFeatureExtractor, FlaxBeitForImageClassification
+    >>> from PIL import Image
+    >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained('microsoft/beit-base-patch16-224')
-        >>> model = FlaxBeitForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
+    >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224")
+    >>> model = FlaxBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="np")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = logits.argmax(-1).item()
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> outputs = model(**inputs)
+    >>> logits = outputs.logits
+    >>> # model predicts one of the 1000 ImageNet classes
+    >>> predicted_class_idx = logits.argmax(-1).item()
+    >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+    ```
 """
 
 overwrite_call_docstring(FlaxBeitForImageClassification, FLAX_BEIT_CLASSIF_DOCSTRING)

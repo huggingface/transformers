@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 {{cookiecutter.authors}} and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 {{cookiecutter.authors}} and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -55,57 +55,71 @@ _CONFIG_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Config"
 _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
 {{cookiecutter.uppercase_modelname}}_START_DOCSTRING =  r"""
 
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading, saving and converting weights from
     PyTorch models)
 
-    This model is also a Flax Linen `flax.linen.Module
-    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
+    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module) subclass. Use it as a regular Flax linen Module
     and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config (:class:`~transformers.{{cookiecutter.uppercase_modelname}}Config`): Model configuration class with all the parameters of the model.
+        config ([`~{{cookiecutter.uppercase_modelname}}Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the
             model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on
+            GPUs) and `jax.numpy.bfloat16` (on TPUs).
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given `dtype`.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see
+            [`~FlaxPreTrainedModel.to_fp16`] and [`~FlaxPreTrainedModel.to_bf16`].
 """
 {{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`):
+        input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.{{cookiecutter.uppercase_modelname}}ConfiTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`~{{cookiecutter.uppercase_modelname}}ConfiTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`numpy.ndarray` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`numpy.ndarray` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`numpy.ndarray` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+        head_mask (`numpy.ndarray` of shape `({0})`, `optional): Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 
 """
 
@@ -123,19 +137,16 @@ class Flax{{cookiecutter.camelcase_modelname}}Embeddings(nn.Module):
             self.config.vocab_size,
             self.config.hidden_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         self.position_embeddings = nn.Embed(
             self.config.max_position_embeddings,
             self.config.hidden_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         self.token_type_embeddings = nn.Embed(
             self.config.type_vocab_size,
             self.config.hidden_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
-            dtype=self.dtype,
         )
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
@@ -170,20 +181,27 @@ class Flax{{cookiecutter.camelcase_modelname}}SelfAttention(nn.Module):
         self.query = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
         self.key = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
         self.value = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
-    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        layer_head_mask,
+        deterministic=True,
+        output_attentions: bool = False
+    ):
         head_dim = self.config.hidden_size // self.config.num_attention_heads
 
         query_states = self.query(hidden_states).reshape(
@@ -224,6 +242,10 @@ class Flax{{cookiecutter.camelcase_modelname}}SelfAttention(nn.Module):
             precision=None,
         )
 
+        # Mask heads if we want to
+        if layer_head_mask is not None:
+            attn_weights = jnp.einsum("...hqk,h->...hqk", attn_weights, layer_head_mask)
+
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
         attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
 
@@ -239,7 +261,7 @@ class Flax{{cookiecutter.camelcase_modelname}}SelfOutput(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
@@ -261,12 +283,23 @@ class Flax{{cookiecutter.camelcase_modelname}}Attention(nn.Module):
         self.self = Flax{{cookiecutter.camelcase_modelname}}SelfAttention(self.config, dtype=self.dtype)
         self.output = Flax{{cookiecutter.camelcase_modelname}}SelfOutput(self.config, dtype=self.dtype)
 
-    def __call__(self, hidden_states, attention_mask, deterministic=True, output_attentions: bool = False):
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        layer_head_mask,
+        deterministic=True,
+        output_attentions: bool = False,
+    ):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
         attn_outputs = self.self(
-            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+            hidden_states,
+            attention_mask,
+            layer_head_mask=layer_head_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
         )
         attn_output = attn_outputs[0]
         hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
@@ -287,7 +320,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Intermediate(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.intermediate_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.activation = ACT2FN[self.config.hidden_act]
@@ -306,7 +339,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Output(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
@@ -329,9 +362,20 @@ class Flax{{cookiecutter.camelcase_modelname}}Layer(nn.Module):
         self.intermediate = Flax{{cookiecutter.camelcase_modelname}}Intermediate(self.config, dtype=self.dtype)
         self.output = Flax{{cookiecutter.camelcase_modelname}}Output(self.config, dtype=self.dtype)
 
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True, output_attentions: bool = False):
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        layer_head_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+    ):
         attention_outputs = self.attention(
-            hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+            hidden_states,
+            attention_mask,
+            layer_head_mask=layer_head_mask,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
         )
         attention_output = attention_outputs[0]
 
@@ -359,6 +403,7 @@ class Flax{{cookiecutter.camelcase_modelname}}LayerCollection(nn.Module):
         self,
         hidden_states,
         attention_mask,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -367,12 +412,24 @@ class Flax{{cookiecutter.camelcase_modelname}}LayerCollection(nn.Module):
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
+        # Check if head_mask has a correct number of layers specified if desired
+        if head_mask is not None:
+            if head_mask.shape[0] != (len(self.layers)):
+                raise ValueError(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for \
+                        {head_mask.shape[0]}."
+                )
+
         for i, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             layer_outputs = layer(
-                hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+                hidden_states,
+                attention_mask,
+                layer_head_mask=head_mask[i] if head_mask is not None else None,
+                deterministic=deterministic,
+                output_attentions=output_attentions,
             )
 
             hidden_states = layer_outputs[0]
@@ -405,6 +462,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
         self,
         hidden_states,
         attention_mask,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -413,6 +471,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
         return self.layer(
             hidden_states,
             attention_mask,
+            head_mask=head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -428,7 +487,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Pooler(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
 
@@ -538,13 +597,14 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
         token_type_ids = jnp.zeros_like(input_ids)
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
         attention_mask = jnp.ones_like(input_ids)
+        head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids, return_dict=False)[
-            "params"
-        ]
+        return self.module.init(
+            rngs, input_ids, attention_mask, token_type_ids, position_ids, head_mask, return_dict=False
+        )["params"]
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
@@ -553,6 +613,7 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
+        head_mask=None,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
@@ -576,6 +637,9 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
 
+        if head_mask is None:
+            head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
+
         # Handle any PRNG if needed
         rngs = {}
         if dropout_rng is not None:
@@ -587,6 +651,7 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
+            jnp.array(head_mask, dtype="i4"),
             not train,
             output_attentions,
             output_hidden_states,
@@ -611,6 +676,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Module(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -622,6 +688,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Module(nn.Module):
         outputs = self.encoder(
             hidden_states,
             attention_mask,
+            head_mask=head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -665,6 +732,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForMaskedLMModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -676,6 +744,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForMaskedLMModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -724,6 +793,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForCausalLMModule(nn.Module):
         attention_mask,
         token_type_ids,
         position_ids,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -735,6 +805,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForCausalLMModule(nn.Module):
             attention_mask,
             token_type_ids,
             position_ids,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -788,6 +859,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassificationModule(nn
         attention_mask,
         token_type_ids,
         position_ids,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -799,6 +871,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForSequenceClassificationModule(nn
             attention_mask,
             token_type_ids,
             position_ids,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -854,6 +927,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoiceModule(nn.Module)
         attention_mask,
         token_type_ids,
         position_ids,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -871,6 +945,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForMultipleChoiceModule(nn.Module)
             attention_mask,
             token_type_ids,
             position_ids,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -927,6 +1002,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForTokenClassificationModule(nn.Mo
         attention_mask,
         token_type_ids,
         position_ids,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -938,6 +1014,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForTokenClassificationModule(nn.Mo
             attention_mask,
             token_type_ids,
             position_ids,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -988,6 +1065,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnsweringModule(nn.Modu
         attention_mask,
         token_type_ids,
         position_ids,
+        head_mask,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -999,6 +1077,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnsweringModule(nn.Modu
             attention_mask,
             token_type_ids,
             position_ids,
+            head_mask,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1085,158 +1164,165 @@ _CONFIG_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Config"
 _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
 
 {{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a Flax Linen `flax.nn.Module
-    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
+    This model is also a Flax Linen [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a regular Flax
     Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config (:class:`~transformers.{{cookiecutter.camelcase_modelname}}Config`): Model configuration class with all the parameters of the model.
+        config ([`~{{cookiecutter.camelcase_modelname}}Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the
             model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on
+            GPUs) and `jax.numpy.bfloat16` (on TPUs).
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given `dtype`.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see
+            [`~FlaxPreTrainedModel.to_fp16`] and [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 {{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`~{{cookiecutter.camelcase_modelname}}Tokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`~{{cookiecutter.camelcase_modelname}}Tokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
+            For translation and summarization training, `decoder_input_ids` should be provided. If no
+            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to
             the right for denoising pre-training following the paper.
-        decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
+        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will
             also be used by default.
 
-            If you want to change padding behavior, you should modify to your needs. See diagram 1 in `the paper
-            <https://arxiv.org/abs/1910.13461>`__ for more information on the default strategy.
-        position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
-        decoder_position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+        decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range ``[0, config.max_position_embeddings - 1]``.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            range `[0, config.max_position_embeddings - 1]`.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 {{cookiecutter.uppercase_modelname}}_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`~{{cookiecutter.camelcase_modelname}}Tokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.max_position_embeddings - 1]`.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 {{cookiecutter.uppercase_modelname}}_DECODE_INPUTS_DOCSTRING = r"""
     Args:
-        decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`):
+        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            Indices can be obtained using [`~{{cookiecutter.camelcase_modelname}}Tokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
             details.
 
-            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
+            For translation and summarization training, `decoder_input_ids` should be provided. If no
+            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to
             the right for denoising pre-training following the paper.
-        encoder_outputs (:obj:`tuple(tuple(jnp.ndarray)`):
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
-            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
-            `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
+        encoder_outputs (`tuple(tuple(jnp.ndarray)`):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*:
+            `attentions`) `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`,
+            *optional*) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
             cross-attention of the decoder.
-        encoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+        encoder_attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will
             also be used by default.
 
-            If you want to change padding behavior, you should modify to your needs. See diagram 1 in `the paper
-            <https://arxiv.org/abs/1910.13461>`__ for more information on the default strategy.
-        decoder_position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+        decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range ``[0, config.max_position_embeddings - 1]``.
-        past_key_values (:obj:`Dict[str, np.ndarray]`, `optional`, returned by ``init_cache`` or when passing previous ``past_key_values``):
+            range `[0, config.max_position_embeddings - 1]`.
+        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
-            auto-regressive decoding. Pre-computed key and value hidden-states are of shape `[batch_size, max_length]`.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
@@ -1272,7 +1358,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Attention(nn.Module):
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
         self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
@@ -1428,6 +1514,7 @@ class Flax{{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=self.config.encoder_attention_heads,
             dropout=self.config.attention_dropout,
+            dtype=self.dtype
         )
         self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -1436,10 +1523,10 @@ class Flax{{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
         self.fc1 = nn.Dense(
             self.config.encoder_ffn_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.fc2 = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
 
@@ -1538,6 +1625,7 @@ class Flax{{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
             num_heads=self.config.decoder_attention_heads,
             dropout=self.config.attention_dropout,
             causal=True,
+            dtype=self.dtype,
         )
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
@@ -1549,15 +1637,16 @@ class Flax{{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=self.config.decoder_attention_heads,
             dropout=self.config.attention_dropout,
+            dtype=self.dtype,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
         self.fc1 = nn.Dense(
             self.config.encoder_ffn_dim,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.fc2 = nn.Dense(
-            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+            self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
         self.final_layer_norm = nn.LayerNorm(dtype=self.dtype)
 
@@ -1692,13 +1781,13 @@ class Flax{{cookiecutter.camelcase_modelname}}ClassificationHead(nn.Module):
 
     def setup(self):
         self.dense = nn.Dense(
-            self.inner_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+            self.inner_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
         self.dropout = nn.Dropout(rate=self.pooler_dropout)
         self.out_proj = nn.Dense(
             self.num_classes,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
     def __call__(self, hidden_states: jnp.ndarray, deterministic: bool):
@@ -1727,8 +1816,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
             self.embed_tokens = nn.Embed(
                 self.config.vocab_size,
                 embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-                dtype=self.dtype,
+                embedding_init=jax.nn.initializers.normal(self.config.init_std),
             )
 
         # {{cookiecutter.camelcase_modelname}} is set up so that if padding_idx is specified then offset the embedding ids by 2
@@ -1737,8 +1825,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
         self.embed_positions = nn.Embed(
             self.config.max_position_embeddings + self.offset,
             embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.layers = Flax{{cookiecutter.camelcase_modelname}}EncoderLayerCollection(self.config, self.dtype)
         self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype)
@@ -1800,8 +1887,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Decoder(nn.Module):
             self.embed_tokens = nn.Embed(
                 self.config.vocab_size,
                 embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-                dtype=self.dtype,
+                embedding_init=jax.nn.initializers.normal(self.config.init_std),
             )
 
         # {{cookiecutter.camelcase_modelname}} is set up so that if padding_idx is specified then offset the embedding ids by 2
@@ -1810,8 +1896,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Decoder(nn.Module):
         self.embed_positions = nn.Embed(
             self.config.max_position_embeddings + self.offset,
             embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
         self.layers = Flax{{cookiecutter.camelcase_modelname}}DecoderLayerCollection(self.config, self.dtype)
@@ -1874,8 +1959,7 @@ class Flax{{cookiecutter.camelcase_modelname}}Module(nn.Module):
         self.shared = nn.Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
-            dtype=self.dtype,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
         self.encoder = Flax{{cookiecutter.camelcase_modelname}}Encoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
@@ -1981,15 +2065,14 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
     def init_cache(self, batch_size, max_length, encoder_outputs):
         r"""
         Args:
-            batch_size (:obj:`int`):
+            batch_size (`int`):
                 batch_size used for fast auto-regressive decoding. Defines the batch size of the initialized cache.
-            max_length (:obj:`int`):
+            max_length (`int`):
                 maximum possible length for auto-regressive decoding. Defines the sequence length of the initialized
                 cache.
-            encoder_outputs (:obj:`Union[FlaxBaseModelOutput, tuple(tuple(jnp.ndarray)]`):
-                ``encoder_outputs`` consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`,
-                `optional`: :obj:`attentions`). :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length,
-                hidden_size)`, `optional`) is a sequence of hidden-states at the output of the last layer of the
+            encoder_outputs (`Union[FlaxBaseModelOutput, tuple(tuple(jnp.ndarray)]`):
+                `encoder_outputs` consists of (`last_hidden_state`, *optional*: `hidden_states`,
+                *optional*: `attentions`). `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of hidden-states at the output of the last layer of the
                 encoder. Used in the cross-attention of the decoder.
         """
         # init input variables to retrieve cache
@@ -2036,17 +2119,18 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+        ```python
+        >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 
-            >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
-            >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
-        """
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
+        >>> encoder_outputs = model.encode(**inputs)
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2101,23 +2185,25 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+        ```python
+        >>> import jax.numpy as jnp
+        >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 
-            >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
-            >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
+        >>> encoder_outputs = model.encode(**inputs)
 
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> last_decoder_hidden_states = outputs.last_hidden_state
-        """
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> last_decoder_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2279,7 +2365,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForConditionalGenerationModule(nn.
             self.model.shared.num_embeddings,
             use_bias=False,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.final_logits_bias = self.param("final_logits_bias", self.bias_init, (1, self.model.shared.num_embeddings))
 
@@ -2323,7 +2409,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForConditionalGenerationModule(nn.
         else:
             lm_logits = self.lm_head(hidden_states)
 
-        lm_logits += self.final_logits_bias
+        lm_logits += self.final_logits_bias.astype(self.dtype)
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
@@ -2367,23 +2453,25 @@ class Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(Flax{{coo
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+        ```python
+        >>> import jax.numpy as jnp
+        >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 
-            >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
-            >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+        >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
+        >>> encoder_outputs = model.encode(**inputs)
 
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> logits = outputs.logits
-        """
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2439,7 +2527,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(Flax{{coo
             else:
                 lm_logits = module.lm_head(hidden_states)
 
-            lm_logits += module.final_logits_bias
+            lm_logits += module.final_logits_bias.astype(self.dtype)
             return lm_logits, outputs
 
         outputs = self.module.apply(
@@ -2522,35 +2610,41 @@ class Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(Flax{{coo
 FLAX_{{cookiecutter.uppercase_modelname}}_CONDITIONAL_GENERATION_DOCSTRING = """
     Returns:
 
-    Summarization example::
+    Summarization example:
 
-        >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+    ```python
+    >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 
-        >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
-        >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+    >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+    >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='np')
+    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='np')
 
-        >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids']).sequences
-        >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs['input_ids']).sequences
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    ```
 
-    Mask filling example::
+    Mask filling example:
 
-        >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
-        >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
-        >>> TXT = "My friends are <mask> but they eat too many carbs."
+    ```python
+    >>> import jax
+    >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+    
+    >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+    >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
+    
+    >>> TXT = "My friends are <mask> but they eat too many carbs."
+    >>> input_ids = tokenizer([TXT], return_tensors='np')['input_ids']
 
-        >>> model = Flax{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
-        >>> input_ids = tokenizer([TXT], return_tensors='np')['input_ids']
-        >>> logits = model(input_ids).logits
+    >>> logits = model(input_ids).logits
+    >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+    >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
+    >>> values, predictions = jax.lax.top_k(probs, k=1)
 
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-        >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
-        >>> values, predictions = jax.lax.top_k(probs)
-
-        >>> tokenizer.decode(predictions).split()
+    >>> tokenizer.decode(predictions).split()
+    ```
 """
 
 overwrite_call_docstring(
@@ -2670,7 +2764,7 @@ class Flax{{cookiecutter.camelcase_modelname}}ForQuestionAnsweringModule(nn.Modu
     def setup(self):
         self.model = Flax{{cookiecutter.camelcase_modelname}}Module(config=self.config, dtype=self.dtype)
         self.qa_outputs = nn.Dense(
-            self.num_labels, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std, self.dtype)
+            self.num_labels, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
         )
 
     def _get_encoder_module(self):

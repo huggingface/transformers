@@ -1,0 +1,102 @@
+name: Build documentation
+
+on:
+  push:
+    branches:
+      - master
+      - doc-builder*
+      - v*-release
+
+jobs:
+  build_and_package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: 'huggingface/doc-build'
+          path: doc-build
+          token: ${{ secrets.HUGGINGFACE_PUSH }}
+      
+      - uses: actions/checkout@v2
+        with:
+          repository: 'huggingface/transformers'
+          path: transformers
+      
+      - uses: actions/checkout@v2
+        with:
+          repository: 'huggingface/notebooks'
+          path: notebooks
+          token: ${{ secrets.HUGGINGFACE_PUSH }}
+      
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: ~/.cache/pip
+          key: v1-test_build_doc
+          restore-keys: |
+            v1-test_build_doc-${{ hashFiles('setup.py') }}
+            v1-test_build_doc
+
+      - name: Setup environment
+        run: |
+          sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+
+          pip install git+https://github.com/huggingface/doc-builder
+          cd transformers
+          pip install .[dev]
+          cd ..
+
+          export TORCH_VERSION=$(python -c "from torch import version; print(version.__version__.split('+')[0])")
+          pip install torch-scatter -f https://data.pyg.org/whl/torch-${TORCH_VERSION}+cpu.html
+
+          pip install torchvision
+          python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
+
+          sudo apt install tesseract-ocr
+          pip install pytesseract
+          pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
+          pip install https://github.com/kpu/kenlm/archive/master.zip
+
+      - name: Setup git
+        run: |
+          git config --global user.name "Hugging Face Doc Builder"
+          git config --global user.email docs@huggingface.co
+          
+          cd doc-build
+          git pull origin main
+          cd ..
+
+          cd notebooks
+          git pull origin master
+          cd ..
+
+      - name: Make documentation
+        run: |
+          doc-builder build transformers transformers/docs/source --build_dir doc-build --notebook_dir notebooks/transformers_doc --clean
+
+      - name: Push to repositories
+        run: |
+          cd doc-build
+          if [[ `git status --porcelain` ]]; then
+            git add .
+            git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
+            git push origin main
+          else
+            echo "No diff in the documentation."
+          fi
+          cd ..
+
+          cd notebooks
+          if [[ `git status --porcelain` ]]; then
+            git add transformers_doc
+            git commit -m "Updated Transformer doc notebooks with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
+            git push origin master
+          else
+            echo "No diff in the notebooks."
+          fi
+          cd ..
