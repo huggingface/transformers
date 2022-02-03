@@ -1340,6 +1340,15 @@ class GenerationMixin:
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
+            if num_beams <= 1:
+                raise ValueError("`num_beams` needs to be greater than 1 for constrained genertation.")
+
+            if do_sample:
+                raise ValueError("`do_sample` needs to be false for constrained generation.")
+
+            if num_beam_groups is not None and num_beam_groups > 1:
+                raise ValueError("`num_beam_groups` not supported yet for constrained generation.")
+
             # 10. prepare beam search scorer
             constrained_beam_scorer = ConstrainedBeamSearchScorer(
                 constraints=constraints,
@@ -2930,7 +2939,9 @@ class GenerationMixin:
         ...     )
         ... }
 
-        >>> constraints = [PhrasalConstraint(tokenizer.encode("required phrase")[0])]
+        >>> constraint_str = "sind"
+        >>> constraint_token_ids = tokenizer.encode(constraint_str)[:-1]  # slice to remove eos token
+        >>> constraints = [PhrasalConstraint(token_ids=constraint_token_ids)]
 
 
         >>> # instantiate beam scorer
@@ -2950,6 +2961,7 @@ class GenerationMixin:
         ... )
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        # => ['Wie alter sind Sie?']
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()

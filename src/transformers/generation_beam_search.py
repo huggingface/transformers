@@ -367,7 +367,8 @@ class BeamSearchScorer(BeamScorer):
                 best_scores[i * self.num_beam_hyps_to_keep + j] = best_score
 
         # prepare for adding eos
-        sent_max_len = min(sent_lengths.max().item() + 1, max_length)
+        sent_lengths_max = sent_lengths.max().item() + 1
+        sent_max_len = min(sent_lengths_max, max_length) if max_length is not None else sent_lengths_max
         decoded: torch.LongTensor = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
         # shorter batches are padded if needed
         if sent_lengths.min().item() != sent_lengths.max().item():
@@ -377,8 +378,9 @@ class BeamSearchScorer(BeamScorer):
         # fill with hypotheses and eos_token_id if the latter fits in
         for i, hypo in enumerate(best):
             decoded[i, : sent_lengths[i]] = hypo
-            if sent_lengths[i] < max_length:
+            if sent_lengths[i] < sent_max_len:
                 decoded[i, sent_lengths[i]] = eos_token_id
+
         return UserDict(
             {
                 "sequences": decoded,
@@ -744,6 +746,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
             # all open beam hypotheses are added to the beam hypothesis
             # beam hypothesis class automatically keeps the best beams
+
+            ids_collect = []
             for beam_id in range(self.num_beams):
                 batch_beam_idx = batch_idx * self.num_beams + beam_id
                 final_score = final_beam_scores[batch_beam_idx].item()
@@ -752,6 +756,19 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 completes_constraint = self.check_completes_constraints(final_tokens)
                 if completes_constraint:
                     beam_hyp.add(final_tokens, final_score)
+                    ids_collect.append(beam_id)
+
+            # due to overly complex constraints or other factors, sometimes we can't gaurantee a successful
+            # generation. In these cases we simply return the highest scoring outputs.
+            if len(ids_collect) < self.num_beam_hyps_to_keep:
+                for beam_id in range(self.num_beams):
+                    if beam_id not in ids_collect:
+                        batch_beam_idx = batch_idx * self.num_beams + beam_id
+                        final_score = final_beam_scores[batch_beam_idx].item()
+                        final_tokens = input_ids[batch_beam_idx]
+                        beam_hyp.add(final_tokens, final_score)
+                    if len(ids_collect) >= self.num_beam_hyps_to_keep:
+                        break
 
         # select the best hypotheses
         sent_lengths = input_ids.new(batch_size * self.num_beam_hyps_to_keep)
@@ -772,7 +789,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 best_scores[i * self.num_beam_hyps_to_keep + j] = best_score
 
         # prepare for adding eos
-        sent_max_len = min(sent_lengths.max().item() + 1, max_length)
+        sent_lengths_max = sent_lengths.max().item() + 1
+        sent_max_len = min(sent_lengths_max, max_length) if max_length is not None else sent_lengths_max
         decoded: torch.LongTensor = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
         # shorter batches are padded if needed
         if sent_lengths.min().item() != sent_lengths.max().item():
@@ -782,7 +800,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         # fill with hypotheses and eos_token_id if the latter fits in
         for i, hypo in enumerate(best):
             decoded[i, : sent_lengths[i]] = hypo
-            if sent_lengths[i] < max_length:
+            if sent_lengths[i] < sent_max_len:
                 decoded[i, sent_lengths[i]] = eos_token_id
         return UserDict(
             {
