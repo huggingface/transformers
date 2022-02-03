@@ -1189,12 +1189,15 @@ def create_new_model_like(
             if "tokenization" not in str(f) and "processor" not in str(f) and "feature_extraction" not in str(f)
         ]
 
-    def disable_fx_test(filename: Path):
+    def disable_fx_test(filename: Path) -> bool:
         with open(filename) as fp:
             content = fp.read()
         with open(filename, "w") as fp:
             new_content = re.sub(r"fx_ready\s*=\s*True", "fx_ready = False", content)
             fp.write(new_content)
+        return content != new_content
+
+    disabled_fx_test = False
 
     for test_file in files_to_adapt:
         new_test_file_name = test_file.name.replace(
@@ -1208,7 +1211,9 @@ def create_new_model_like(
             dest_file=dest_file,
             add_copied_from=False,
         )
-        disable_fx_test(dest_file)
+        disabled_fx_test = disabled_fx_test | disable_fx_test(dest_file)
+
+    if disabled_fx_test:
         print(
             "The tests for symbolic tracing with torch.fx were disabled, you can add those once symbolic tracing works "
             "for your new model."
