@@ -25,9 +25,9 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -36,8 +36,17 @@ from .configuration_convnext import ConvNextConfig
 
 logger = logging.get_logger(__name__)
 
+# General docstring
 _CONFIG_FOR_DOC = "ConvNextConfig"
+_FEAT_EXTRACTOR_FOR_DOC = "ConvNextFeatureExtractor"
+
+# Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/convnext-tiny-224"
+_EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
+
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "facebook/convnext-tiny-224"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/convnext-tiny-224",
@@ -371,28 +380,15 @@ class ConvNextModel(ConvNextPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ConvNextModelOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=ConvNextModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     def forward(self, pixel_values=None, output_hidden_states=None, return_dict=None):
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoFeatureExtractor, ConvNextModel
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-tiny-224-in21k")
-        >>> model = ConvNextModel.from_pretrained("facebook/convnext-tiny-224-in21k")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
-        ```"""
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -447,36 +443,20 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ConvNextClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=ConvNextClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
     def forward(self, pixel_values=None, labels=None, output_hidden_states=None, return_dict=None):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoFeatureExtractor, ConvNextForImageClassification
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-tiny-224")
-        >>> model = ConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = logits.argmax(-1).item()
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        ```"""
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.convnext(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)

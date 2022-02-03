@@ -18,4 +18,4 @@ for name, param in model.named_parameters():
 # Shape of hidden states: torch.Size([1, 384, 14, 14]) / 16
 # Shape of hidden states: torch.Size([1, 768, 7, 7]) / 32
 
-print("Shape of pooled output:", outputs.pooler_output.shape)
+print("Shape of outputs:", outputs.last_hidden_state.shape)
