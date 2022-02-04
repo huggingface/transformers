@@ -114,7 +114,7 @@ class MaskFormerConfig(PretrainedConfig):
 
     @classmethod
     def from_backbone_and_transformer_decoder_configs(
-        cls, backbone_config: PretrainedConfig, transformer_decode_config: DetrConfig, **kwargs
+        cls, backbone_config: PretrainedConfig, transformer_decoder_config: DetrConfig, **kwargs
     ) -> PretrainedConfig:
         r"""
         Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model configuration and
@@ -122,4 +122,4 @@ class MaskFormerConfig(PretrainedConfig):
         Returns:
             [`EncoderDecoderConfig`]: An instance of a configuration object
         """
-        return cls(backbone_config=backbone_config.to_dict(), transformer_decode_config=transformer_decode_config.to_dict(), **kwargs)
+        return cls(backbone_config=backbone_config.to_dict(), transformer_decoder_config=transformer_decoder_config.to_dict(), **kwargs)
