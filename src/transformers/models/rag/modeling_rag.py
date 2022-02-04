@@ -1536,7 +1536,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
             remove_invalid_values if remove_invalid_values is not None else self.config.remove_invalid_values
         )
         exponential_decay_length_penalty = (
-            exponential_decay_length_penalty if exponential_decay_length_penalty is not None else self.config.exponential_decay_length_penalty
+            exponential_decay_length_penalty
+            if exponential_decay_length_penalty is not None
+            else self.config.exponential_decay_length_penalty
         )
 
         # retrieve docs
