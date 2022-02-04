@@ -2347,6 +2347,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             ],
         )
 
+    @slow
     def test_beam_search_example_integration(self):
         tokenizer = AutoTokenizer.from_pretrained("t5-base")
         model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
