@@ -248,30 +248,10 @@ class T5LayerNorm(nn.Module):
         # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
-        # half-precision inputs is done in fp32, so the original code, which might be easier to
-        # understand was:
+        # half-precision inputs is done in fp32
 
         variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
-        # but it's more efficient to use the fused kernel norm and it doesn't require converting the
-        # inputs to fp32, just the intermediary results with norm which are much smaller, we just
-        # need to make a correction for sqrt(N) - note that this is also similar to weight
-        # normalization
-
-        # attempt to fuse:
-        # with torch.jit.fuser("fuser2"):
-        #     hidden_states = (
-        #         hidden_states
-        #         / (torch_norm(hidden_states, dim=-1, keepdim=True, dtype=torch.float32) + self.variance_epsilon)
-        #         * math.sqrt(hidden_states.shape[-1])
-        #     )
-        # if self.weight.dtype in [torch.float16, torch.bfloat16]:
-        #     hidden_states = hidden_states.to(self.weight.dtype)
-
-        # layer norm should always be calculated in float32
-        # variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        # hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
 
         # convert into half-precision if necessary
         if self.weight.dtype in [torch.float16, torch.bfloat16]:
