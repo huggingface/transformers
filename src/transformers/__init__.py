@@ -427,7 +427,6 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.plbart"].append("PLBartTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")

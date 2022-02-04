@@ -49,10 +49,7 @@ else:
         [
             (
                 "plbart",
-                (
-                    "PLBartTokenizer" if is_sentencepiece_available() else None,
-                    "PLBartTokenizerFast" if is_tokenizers_available() else None,
-                ),
+                ("PLBartTokenizer" if is_sentencepiece_available() else None,),
             ),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),

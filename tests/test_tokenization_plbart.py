@@ -16,7 +16,7 @@ import os
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, BatchEncoding, PLBartTokenizer, PLBartTokenizerFast, is_torch_available
+from transformers import SPIECE_UNDERLINE, BatchEncoding, PLBartTokenizer, is_torch_available
 from transformers.testing_utils import nested_simplify, require_sentencepiece, require_tokenizers, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -36,7 +36,7 @@ PYTHON_CODE = 50002
 @require_tokenizers
 class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = PLBartTokenizer
-    rust_tokenizer_class = PLBartTokenizerFast
+    rust_tokenizer_class = None
     test_rust_tokenizer = False
 
     def setUp(self):
