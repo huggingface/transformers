@@ -1288,6 +1288,58 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     ```
 """
 
+PT_VISION_BASE_MODEL_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
+    >>> from datasets import load_dataset
+
+    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> image = dataset["test"]["image"][0]
+
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> inputs = feature_extractor(image, return_tensors="pt")
+
+    >>> with torch.no_grad():
+    ...     outputs = model(**inputs)
+
+    >>> last_hidden_states = outputs.last_hidden_state
+    >>> list(last_hidden_states.shape)
+    {expected_output}
+    ```
+"""
+
+PT_VISION_SEQ_CLASS_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
+    >>> from datasets import load_dataset
+
+    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> image = dataset["test"]["image"][0]
+
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> inputs = feature_extractor(image, return_tensors="pt")
+
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
+    >>> # model predicts one of the 1000 ImageNet classes
+    >>> predicted_label = logits.argmax(-1).item()
+    >>> print(model.config.id2label[predicted_label])
+    {expected_output}
+    ```
+"""
+
+
 PT_SAMPLE_DOCSTRINGS = {
     "SequenceClassification": PT_SEQUENCE_CLASSIFICATION_SAMPLE,
     "QuestionAnswering": PT_QUESTION_ANSWERING_SAMPLE,
@@ -1301,6 +1353,8 @@ PT_SAMPLE_DOCSTRINGS = {
     "AudioClassification": PT_SPEECH_SEQ_CLASS_SAMPLE,
     "AudioFrameClassification": PT_SPEECH_FRAME_CLASS_SAMPLE,
     "AudioXVector": PT_SPEECH_XVECTOR_SAMPLE,
+    "VisionBaseModel": PT_VISION_BASE_MODEL_SAMPLE,
+    "ImageClassification": PT_VISION_SEQ_CLASS_SAMPLE,
 }
 
 
@@ -1639,8 +1693,12 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["AudioXVector"]
         elif "Model" in model_class and modality == "audio":
             code_sample = sample_docstrings["SpeechBaseModel"]
+        elif "Model" in model_class and modality == "vision":
+            code_sample = sample_docstrings["VisionBaseModel"]
         elif "Model" in model_class or "Encoder" in model_class:
             code_sample = sample_docstrings["BaseModel"]
+        elif "ImageClassification" in model_class:
+            code_sample = sample_docstrings["ImageClassification"]
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")
 

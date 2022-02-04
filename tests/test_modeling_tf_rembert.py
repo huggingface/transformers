@@ -90,9 +90,6 @@ class TFRemBertModelTester:
         self.num_choices = 4
         self.scope = None
 
-        # RemBERT also returns the upprojected word embeddings as an hidden layers
-        self.expected_num_hidden_layers = self.num_hidden_layers + 2
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
