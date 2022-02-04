@@ -2311,6 +2311,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
 
     @slow
+    @slow
     def test_constrained_beam_search(self):
         model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
