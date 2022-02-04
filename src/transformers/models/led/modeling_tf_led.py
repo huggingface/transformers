@@ -1812,7 +1812,11 @@ class TFLEDEncoder(tf.keras.layers.Layer):
 
         # undo padding
         if inputs["output_attentions"]:
-            all_attentions = tuple([state[:, :, :-padding_len, :] for state in all_attentions]) if padding_len > 0 else all_attentions
+            all_attentions = (
+                tuple([state[:, :, :-padding_len, :] for state in all_attentions])
+                if padding_len > 0
+                else all_attentions
+            )
 
         if inputs["output_hidden_states"]:
             encoder_states = encoder_states + (hidden_states,)
@@ -2096,7 +2100,11 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         present_key_values = (encoder_hidden_states, present_key_values) if inputs["use_cache"] else None
 
         if not inputs["return_dict"]:
-            return tuple(v for v in [hidden_states, present_key_values, all_hidden_states, all_self_attns, all_cross_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, present_key_values, all_hidden_states, all_self_attns, all_cross_attentions]
+                if v is not None
+            )
         else:
             return TFBaseModelOutputWithPastAndCrossAttentions(
                 last_hidden_state=hidden_states,
