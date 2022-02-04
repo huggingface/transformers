@@ -265,11 +265,9 @@ try:
 
     T5LayerNorm = FusedRMSNorm  # noqa
 
-    print("XXX: using FusedRMSNorm")
+    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of T5LayerNorm")
 except ImportError:
-    print("XXX: using T5LayerNorm")
-except Exception:
-    print("XXX: using T5LayerNorm: unknown exception")
+    # using the normal T5LayerNorm
     pass
 
 
