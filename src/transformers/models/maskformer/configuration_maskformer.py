@@ -14,11 +14,9 @@
 # limitations under the License.
 """ MaskFormer model configuration"""
 
-from dataclasses import dataclass, field
-from lib2to3.pgen2.token import OP
 from typing import Dict, List, Optional, Tuple, TypedDict
 
-from transformers.models.detr.configuration_detr import DetrConfig
+from ..detr import DetrConfig
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -98,8 +96,6 @@ class MaskFormerConfig(PretrainedConfig):
         self.backbone = backbone
 
         self.transformer_decoder = transformer_decoder
-        for base in self.transformer_decoder.__class__.__bases__:
-            print(base)
 
         self.dataset_metadata = dataset_metadata
 
