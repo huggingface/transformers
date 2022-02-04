@@ -63,8 +63,7 @@ class MaskFormerConfig(PretrainedConfig):
         mask_feature_size: Optional[int] = 256,
         no_object_weight: Optional[float] = 0.1,
         use_auxilary_loss: Optional[bool] = False,
-        # TODO we need to set the transformer_decoder.num_queries
-        num_queries: Optional[int] = 100,
+
         backbone_config: Optional[Dict] = None,
         # TODO better name?
         transformer_decoder_config: Optional[Dict] = None,
@@ -101,7 +100,6 @@ class MaskFormerConfig(PretrainedConfig):
 
         self.fpn_feature_size = fpn_feature_size
         self.mask_feature_size = mask_feature_size
-        self.num_queries = num_queries
         self.no_object_weight = no_object_weight
         self.use_auxilary_loss = use_auxilary_loss
 
