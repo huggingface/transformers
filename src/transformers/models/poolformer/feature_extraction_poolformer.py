@@ -155,9 +155,17 @@ class PoolFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             else:
                 scale_size = int(math.floor(self.size / self.crop_pct))
 
+            # Debug
+            for img in images:
+                print(img.shape)
+
             images = [self.resize(image=image, size=scale_size, resample=self.resample, default_to_square=False) for image in images]
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
+        
+        # Debug
+        for img in images:
+            print(img.shape)
 
         # return as BatchFeature
         data = {"pixel_values": images}

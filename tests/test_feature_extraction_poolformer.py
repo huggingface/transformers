@@ -32,11 +32,24 @@ if is_vision_available():
 
     from transformers import PoolFormerFeatureExtractor
 
-def calc_crop_size(original_size, crop_pct):
+def calc_cropped_sizes(images, crop_pct=0.9, size=224, pil=False):
+    """Calculates and returns a list of the expected sizes of all the cropped images.
     """
-    Calculates the new crop size
-    """
-    return int(math.floor(original_size[0] / crop_pct))
+    size = int(math.floor(size / crop_pct))
+    image_shapes = []
+    for img in images:
+        if pil:
+            height, width = img.size
+        else:
+            width, height = img.shape[-2], img.shape[-1]
+        short, long = (width, height) if width <= height else (height, width)
+        if short == size:
+            image_shapes.append((width, height))
+        else:
+            new_short, new_long = size, int(size * long / short)
+            new_size = (new_short, new_long) if width <= height else (new_long, new_short)
+            image_shapes.append(new_size)
+    return image_shapes
 
 class PoolFormerFeatureExtractionTester(unittest.TestCase):
     def __init__(
@@ -64,7 +77,6 @@ class PoolFormerFeatureExtractionTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        self.expected_size = calc_crop_size((size, size), crop_pct)
 
     def prepare_feat_extract_dict(self):
         return {
@@ -110,6 +122,14 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
+        # Calculate the expected sizes of all the images
+        expected_sizes = calc_cropped_sizes(
+            image_inputs, 
+            self.feature_extract_tester.crop_pct,
+            self.feature_extract_tester.size,
+            pil=True
+        )
+
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
 
@@ -118,8 +138,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.expected_size,
-                self.feature_extract_tester.expected_size,
+                expected_sizes[0][0],
+                expected_sizes[0][1],
             ),
         )
 
@@ -130,8 +150,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.expected_size,
-                self.feature_extract_tester.expected_size,
+                expected_sizes[0][0],
+                expected_sizes[0][1],
             ),
         )
 
@@ -143,15 +163,22 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
+        # Calculate the expected sizes of all the images
+        expected_sizes = calc_cropped_sizes(
+            image_inputs, 
+            self.feature_extract_tester.crop_pct, 
+            self.feature_extract_tester.size
+        )
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
+        
         self.assertEqual(
             encoded_images.shape,
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.expected_size,
-                self.feature_extract_tester.expected_size,
+                expected_sizes[0][0],
+                expected_sizes[0][1],
             ),
         )
 
@@ -162,8 +189,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.expected_size,
-                self.feature_extract_tester.expected_size,
+                expected_sizes[0][0],
+                expected_sizes[0][1],
             ),
         )
 
@@ -175,6 +202,13 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
+        # Calculate the expected sizes of all the images
+        expected_sizes = calc_cropped_sizes(
+            image_inputs, 
+            self.feature_extract_tester.crop_pct, 
+            self.feature_extract_tester.size
+        )
+
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
         self.assertEqual(
@@ -182,8 +216,8 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.expected_size,
-                self.feature_extract_tester.expected_size,
+                expected_sizes[0][0],
+                expected_sizes[0][1],
             ),
         )
 
@@ -194,7 +228,7 @@ class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.expected_size,
-                self.feature_extract_tester.expected_size,
+                expected_sizes[0][0],
+                expected_sizes[0][1],
             ),
         )
