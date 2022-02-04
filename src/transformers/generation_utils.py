@@ -17,6 +17,7 @@
 import inspect
 import warnings
 from dataclasses import dataclass
+from lib2to3.pgen2.token import OP
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
@@ -28,6 +29,7 @@ from .generation_beam_constraints import Constraint, DisjunctiveConstraint, Phra
 from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .generation_logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
+    ExponentialDecayLengthPenalty,
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
     HammingDiversityLogitsProcessor,
@@ -38,7 +40,6 @@ from .generation_logits_process import (
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
-    SoftLengthLogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
@@ -666,8 +667,7 @@ class GenerationMixin:
         num_beam_groups: int,
         diversity_penalty: float,
         remove_invalid_values: bool,
-        length_regulation_start: int,
-        length_regulation_factor: float,
+        exponential_decay_length_penalty: Tuple,
         logits_processor: Optional[LogitsProcessorList],
     ) -> LogitsProcessorList:
         """
@@ -699,11 +699,10 @@ class GenerationMixin:
         remove_invalid_values = (
             remove_invalid_values if remove_invalid_values is not None else self.config.remove_invalid_values
         )
-        length_regulation_start = (
-            length_regulation_start if length_regulation_start is not None else self.config.length_regulation_start
-        )
-        length_regulation_factor = (
-            length_regulation_factor if length_regulation_factor is not None else self.config.length_regulation_factor
+        exponential_decay_length_penalty = (
+            exponential_decay_length_penalty
+            if exponential_decay_length_penalty is not None
+            else self.config.exponential_decay_length_penalty
         )
         # instantiate processors list
 
@@ -738,10 +737,8 @@ class GenerationMixin:
             processors.append(ForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
         if remove_invalid_values is True:
             processors.append(InfNanRemoveLogitsProcessor())
-        if length_regulation_factor is not None and length_regulation_start is not None:
-            processors.append(
-                SoftLengthLogitsProcessor(length_regulation_start, length_regulation_factor, eos_token_id)
-            )
+        if exponential_decay_length_penalty is not None:
+            processors.append(ExponentialDecayLengthPenalty(exponential_decay_length_penalty, eos_token_id))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         return processors
 
@@ -857,8 +854,7 @@ class GenerationMixin:
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
         synced_gpus: Optional[bool] = None,
-        length_regulation_start: Optional[int] = None,
-        length_regulation_factor: Optional[float] = None,
+        exponential_decay_length_penalty: Optional[Tuple] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -985,6 +981,14 @@ class GenerationMixin:
                 crash. Note that using `remove_invalid_values` can slow down generation.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            exponential_decay_length_penalty (`Tuple`, *optional*):
+                This Tuple adds an exponentially increasing length penalty, after a certain amount of tokens have been
+                generated. The tuple shall consists of: (start_index, decay_factor) where:
+                start_index (`int`): Index where penalty starts, input tokens are ignored
+                decay_factor (`float`): factor of exponential decay
+            length_regulation_factor (`int`, *optional*):
+                Growth factor of soft length regulation (exponential increase of EOS)
+
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
                 is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific kwargs
@@ -1144,6 +1148,12 @@ class GenerationMixin:
             # if decoder-only then inputs_tensor has to be `input_ids`
             input_ids = inputs_tensor
 
+        # Prepare exponential_decay_length_penalty, so decay start is applied to newly generated tokens
+        if exponential_decay_length_penalty is not None:
+            decay_start = exponential_decay_length_penalty[0] + input_ids.shape[-1]
+            decay_factor = exponential_decay_length_penalty[1]
+            exponential_decay_length_penalty = (decay_start, decay_factor)
+
         # 5. Prepare `max_length` depending on other stopping criteria
         # if `max_new_tokens` is passed, but not `max_length` -> set `max_length = max_new_tokens`
         if max_length is None and max_new_tokens is not None:
@@ -1206,8 +1216,7 @@ class GenerationMixin:
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
             remove_invalid_values=remove_invalid_values,
-            length_regulation_start=length_regulation_start,
-            length_regulation_factor=length_regulation_factor,
+            exponential_decay_length_penalty=exponential_decay_length_penalty,
             logits_processor=logits_processor,
         )
 

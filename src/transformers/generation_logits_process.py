@@ -15,7 +15,8 @@
 
 import inspect
 import math
-from typing import Callable, Iterable, List, Optional
+from abc import ABC
+from typing import Callable, Iterable, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -649,7 +650,7 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class SoftLengthLogitsProcessor(LogitsProcessor):
+class ExponentialDecayLengthPenalty(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that exponentially increases the score of the eos_token_id after regulation_start has been
     reached.
@@ -663,9 +664,9 @@ class SoftLengthLogitsProcessor(LogitsProcessor):
             The id of the *end-of-sequence* token.
     """
 
-    def __init__(self, regulation_start: int, regulation_factor: int, eos_token_id: int):
-        self.regulation_start = regulation_start
-        self.regulation_factor = regulation_factor
+    def __init__(self, exponential_decay_length_penalty: Tuple, eos_token_id: int):
+        self.regulation_start = exponential_decay_length_penalty[0]
+        self.regulation_factor = exponential_decay_length_penalty[1]
         self.eos_token_id = eos_token_id
 
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.FloatTensor:
