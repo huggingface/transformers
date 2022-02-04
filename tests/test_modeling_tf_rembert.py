@@ -90,8 +90,6 @@ class TFRemBertModelTester:
         self.num_choices = 4
         self.scope = None
 
-        self.expected_num_hidden_layers = self.num_hidden_layers + 1
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
