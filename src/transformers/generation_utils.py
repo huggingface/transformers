@@ -644,7 +644,7 @@ class GenerationMixin:
         if top_p is not None and top_p < 1.0:
             warpers.append(TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         if typical_p is not None and typical_p < 1.0:
-            warpers.append(TypicalLogitsWarper(mass=typical, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
+            warpers.append(TypicalLogitsWarper(mass=typical_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         return warpers
 
     def _get_logits_processor(
