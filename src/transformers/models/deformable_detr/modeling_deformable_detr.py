@@ -38,7 +38,7 @@ from ...file_utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
+from ...modeling_outputs import BaseModelOutput, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_deformable_detr import DeformableDetrConfig
@@ -106,7 +106,7 @@ DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-class DeformableDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
+class DeformableDetrDecoderOutput(ModelOutput):
     """
     Base class for outputs of the DeformableDetrDecoder. This class adds two attributes to
     BaseModelOutputWithCrossAttentions, namely:
@@ -153,6 +153,10 @@ class DeformableDetrModelOutput(Seq2SeqModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
+        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            Stacked intermediate hidden states (output of each layer of the decoder).
+        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Stacked intermediate reference points (reference points of each layer of the decoder).
         decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of each
@@ -175,24 +179,30 @@ class DeformableDetrModelOutput(Seq2SeqModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights of the encoder, after the attention softmax, used to compute the
             weighted average in the self-attention heads.
-        intermediate_hidden_states
-            ...
         init_reference_points (`torch.FloatTensor` of shape ...):
-            Initial reference points send through the Transformer decoder.
-        intermediate_reference_points
-            ...
+            Initial reference points sent through the Transformer decoder.
         enc_outputs_class
             ...
         enc_outputs_coord_unact
             ...
     """
 
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    init_reference_points: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    intermediate_hidden_states: torch.FloatTensor = None
+    intermediate_hidden_states: torch.FloatTensor = None
+    intermediate_reference_points: torch.FloatTensor = None
     enc_outputs_class: Optional = None
     enc_outputs_coord_unact: Optional = None
-
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    init_reference_points: torch.FloatTensor = None
+    enc_outputs_class: Optional[torch.FloatTensor] = None
+    enc_outputs_coord_unact: Optional[torch.FloatTensor] = None
+    
 
 @dataclass
 class DeformableDetrObjectDetectionOutput(ModelOutput):
@@ -1656,22 +1666,28 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
 
         print("Last hidden states of decoder:", decoder_outputs[0][0, :3, :3])
 
-        intermediate_reference_points = decoder_outputs.intermediate_reference_points if return_dict else decoder_outputs[2]
-
         if not return_dict:
-            return decoder_outputs + encoder_outputs
+            enc_outputs = tuple(
+                v
+                for v in [
+                    enc_outputs_class,
+                    enc_outputs_coord_unact,
+                ]
+                if v is not None
+            )
+            return (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
 
         return DeformableDetrModelOutput(
+            init_reference_points=init_reference_points,
             last_hidden_state=decoder_outputs.last_hidden_state,
+            intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
+            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
-            init_reference_points=init_reference_points,
-            intermediate_reference_points=intermediate_reference_points,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_unact=enc_outputs_coord_unact,
         )
