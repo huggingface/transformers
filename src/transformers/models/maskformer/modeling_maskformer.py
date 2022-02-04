@@ -43,7 +43,7 @@ from ..detr import DetrConfig
 from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput
 from ..swin import SwinConfig, SwinModel
 from .configuration_maskformer import ClassSpec, MaskFormerConfig
-
+from ..auto.modeling_auto import AutoModel
 
 logger = logging.get_logger(__name__)
 import torch.distributed as dist
@@ -52,7 +52,7 @@ import torch.distributed as dist
 _CONFIG_FOR_DOC = "MaskFormerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/maskformer-swin-base-ade-640"
 
-DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
+MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/maskformer-swin-base-ade-640",
     # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
 ]
@@ -101,6 +101,27 @@ def is_dist_avail_and_initialized():
     if not dist.is_initialized():
         return False
     return True
+
+
+def upsample_like(x: Tensor, like: Tensor, mode: str = "bilinear") -> Tensor:
+    """An utility function that upsamples `x` to match the dimension of `like`
+
+    Args:
+        x (Tensor): The tensor we wish to upsample
+        like (Tensor): The tensor we wish to use as size target
+        mode (str, optional): The interpolation mode. Defaults to "bilinear".
+
+    Returns:
+        Tensor: The upsampled tensor
+    """
+    _, _, height, width = like.shape
+    upsampled: Tensor = F.interpolate(
+        x,
+        size=(height, width),
+        mode=mode,
+        align_corners=False,
+    )
+    return upsampled
 
 
 # refactored from original implementation
@@ -482,7 +503,8 @@ class MaskFormerLoss(nn.Module):
 class SwinTransformerBackbone(nn.Module):
     def __init__(self, config: SwinConfig):
         super().__init__()
-        self.model = SwinModel(config)
+        # TODO should add a pretrain
+        self.model = AutoModel.from_config(config)
         self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(out_shape) for out_shape in self.outputs_shapes])
         # little hack, our swin transformer has already the last norm, so let's switch the refence of the last item
         self.hidden_states_norms[-1] = self.model.layernorm
@@ -671,37 +693,31 @@ class MaskFormerPixelLevelModule(nn.Module):
         Segmentation](https://arxiv.org/abs/2107.06278). It runs the input image trough a backbone and a pixel decoder,
         generating a image features and pixel embeddings."""
         super().__init__()
-        self.backbone = SwinTransformerBackbone(
-            SwinConfig(**{k.replace("swin_", ""): v for k, v in config.__dict__.items() if k.startswith("swin_")})
-        )
-        self.pixel_decoder = MaskFormerPixelDecoder(
-            in_features=self.backbone.outputs_shapes[-1],
+        self.encoder = SwinTransformerBackbone(config.backbone)
+        self.decoder = MaskFormerPixelDecoder(
+            in_features=self.encoder.outputs_shapes[-1],
             feature_size=config.fpn_feature_size,
             mask_feature_size=config.mask_feature_size,
-            lateral_widths=self.backbone.outputs_shapes[:-1],
+            lateral_widths=self.encoder.outputs_shapes[:-1],
         )
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
-        features: List[Tensor] = self.backbone(x)
+        features: List[Tensor] = self.encoder(x)
         # the last feature is actually the output from the last layer
         image_features: Tensor = features[-1]
-        pixel_embeddings: Tensor = self.pixel_decoder(features)
+        pixel_embeddings: Tensor = self.decoder(features)
         return image_features, pixel_embeddings
 
 
 class MaskFormerTransformerModule(nn.Module):
     def __init__(self, in_features: int, config: MaskFormerConfig):
         super().__init__()
-        self.position_embedder = PositionEmbeddingSine(num_pos_feats=config.hidden_size // 2, normalize=True)
-        self.queries_embedder = nn.Embedding(config.num_queries, config.hidden_size)
-        should_project = in_features != config.hidden_size
-        self.input_projection = (
-            nn.Conv2d(in_features, config.hidden_size, kernel_size=1) if should_project else nn.Identity()
-        )
-        # TODO hugly, a*sk!
-        self.detr_decoder = DetrDecoder(
-            DetrConfig(**{k.replace("detr_", ""): v for k, v in config.__dict__.items() if k.startswith("detr_")})
-        )
+        hidden_size: int = config.transformer_decoder.hidden_size
+        self.position_embedder = PositionEmbeddingSine(num_pos_feats=hidden_size // 2, normalize=True)
+        self.queries_embedder = nn.Embedding(config.transformer_decoder.num_queries, hidden_size)
+        should_project = in_features != hidden_size
+        self.input_projection = nn.Conv2d(in_features, hidden_size, kernel_size=1) if should_project else nn.Identity()
+        self.transformer_decoder = DetrDecoder(config=config.transformer_decoder)
 
     def forward(self, image_features: Tensor) -> Tuple[Tensor]:
         image_features = self.input_projection(image_features)
@@ -711,7 +727,7 @@ class MaskFormerTransformerModule(nn.Module):
         image_features = rearrange(image_features, "b c h w -> (h w) b c")
         position_embeddings = rearrange(position_embeddings, "b c h w -> (h w) b c")
 
-        detr_output: DetrDecoderOutput = self.detr_decoder(
+        transformer_decoder_output: ModelOutput = self.transformer_decoder(
             inputs_embeds=inputs_embeds,
             attention_mask=None,
             encoder_hidden_states=image_features,
@@ -722,19 +738,17 @@ class MaskFormerTransformerModule(nn.Module):
             output_hidden_states=True,
             return_dict=None,
         )
-        # TODO return a tuple is not a good idea, torch.summary will fail
-        return detr_output.hidden_states
+        return transformer_decoder_output.hidden_states
 
 
 class MaskFormerSegmentationModule(nn.Module):
     def __init__(self, config: MaskFormerConfig):
         super().__init__()
+        hidden_size: int = config.transformer_decoder.hidden_size
         # + 1 because we add the "null" class
         self.mask_classification = config.mask_classification
-        self.class_predictor = nn.Linear(config.hidden_size, config.num_labels + 1)
-        self.mask_embedder = MaskformerMLPPredictionHead(
-            config.hidden_size, config.hidden_size, config.mask_feature_size
-        )
+        self.class_predictor = nn.Linear(hidden_size, config.num_labels + 1)
+        self.mask_embedder = MaskformerMLPPredictionHead(hidden_size, hidden_size, config.mask_feature_size)
 
     def forward(
         self, decoder_outputs: Tuple[Tensor], pixel_embeddings: Tensor, use_auxilary_loss: bool = True
@@ -773,26 +787,6 @@ class MaskFormerSegmentationModule(nn.Module):
         return out
 
 
-def upsample_like(x: Tensor, like: Tensor, mode: str = "bilinear") -> Tensor:
-    """An utility function that upsamples `x` to match the dimension of `like`
-
-    Args:
-        x (Tensor): The tensor we wish to upsample
-        like (Tensor): The tensor we wish to use as size target
-        mode (str, optional): The interpolation mode. Defaults to "bilinear".
-
-    Returns:
-        Tensor: The upsampled tensor
-    """
-    _, _, height, width = like.shape
-    upsampled: Tensor = F.interpolate(
-        x,
-        size=(height, width),
-        mode=mode,
-        align_corners=False,
-    )
-    return upsampled
-
 MASKFORMER_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -826,7 +820,7 @@ class MaskFormerModel(PreTrainedModel):
         super().__init__(config)
         self.pixel_level_module = MaskFormerPixelLevelModule(config)
         self.transformer_module = MaskFormerTransformerModule(
-            in_features=self.pixel_level_module.backbone.outputs_shapes[-1], config=config
+            in_features=self.pixel_level_module.encoder.outputs_shapes[-1], config=config
         )
         self.segmentation_module = MaskFormerSegmentationModule(config)
         self.matcher = MaskFormerHungarianMatcher(
@@ -848,7 +842,7 @@ class MaskFormerModel(PreTrainedModel):
             eos_coef=config.no_object_weight,
             losses=losses,
         )
-        
+
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
     # @replace_return_docstrings(output_type=MaskFormerOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -887,6 +881,7 @@ class MaskFormerModel(PreTrainedModel):
         # probably an awkward way to reduce it
         return torch.tensor(list(loss_dict.values()), dtype=torch.float).sum()
 
+
 @add_start_docstrings(
     """
     MaskFormer for semantic segmentation
@@ -922,6 +917,7 @@ class PanopticSegmentationSegment(TypedDict):
     category_id: int
     is_thing: bool
     label: str
+
 
 @add_start_docstrings(
     """

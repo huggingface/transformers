@@ -15,7 +15,10 @@
 """ MaskFormer model configuration"""
 
 from dataclasses import dataclass, field
+from lib2to3.pgen2.token import OP
 from typing import Dict, List, Optional, Tuple, TypedDict
+
+from transformers.models.detr.configuration_detr import DetrConfig
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -53,6 +56,8 @@ class MaskFormerConfig(PretrainedConfig):
 
     attribute_map = {"hidden_size": "d_model"}
 
+    backbones_supported = ["swin"]
+
     def __init__(
         self,
         dataset_metadata: DatasetMetadata = None,
@@ -60,39 +65,42 @@ class MaskFormerConfig(PretrainedConfig):
         mask_feature_size: Optional[int] = 256,
         no_object_weight: Optional[float] = 0.1,
         use_auxilary_loss: Optional[bool] = False,
+        # TODO we need to set the transformer_decoder.num_queries
         num_queries: Optional[int] = 100,
-        swin_image_size: Optional[int] = 384,
-        swin_in_channels: Optional[int] = 3,
-        swin_patch_size: Optional[int] = 4,
-        swin_embed_dim: Optional[int] = 128,
-        swin_depths: Optional[List[int]] = [2, 2, 18, 2],
-        swin_num_heads: Optional[List[int]] = [4, 8, 16, 32],
-        swin_window_size: Optional[int] = 12,
-        swin_drop_path_rate: Optional[float] = 0.3,
+        backbone_config: Optional[Dict] = None,
+        # TODO better name?
+        transformer_decoder_config: Optional[Dict] = None,
         dice_weight: Optional[float] = 1.0,
         cross_entropy_weight: Optional[float] = 1.0,
         mask_weight: Optional[float] = 20.0,
         mask_classification: Optional[bool] = True,
-        detr_max_position_embeddings: Optional[int] = 1024,
-        detr_encoder_layers: Optional[int] = 6,
-        detr_encoder_ffn_dim: Optional[int] = 2048,
-        detr_encoder_attention_heads: Optional[int] = 8,
-        detr_decoder_layers: Optional[int] = 6,
-        detr_decoder_ffn_dim: Optional[int] = 2048,
-        detr_decoder_attention_heads: Optional[int] = 8,
-        detr_encoder_layerdrop: Optional[int] = 0.0,
-        detr_decoder_layerdrop: Optional[int] = 0.0,
-        detr_d_model: Optional[int] = 256,
-        detr_dropout: Optional[int] = 0.1,
-        detr_attention_dropout: Optional[int] = 0.0,
-        detr_activation_dropout: Optional[int] = 0.0,
-        detr_init_std: Optional[int] = 0.02,
-        detr_init_xavier_std: Optional[int] = 1.0,
-        detr_scale_embedding: Optional[int] = False,
-        detr_auxiliary_loss: Optional[int] = False,
-        detr_dilation: Optional[int] = False,
         **kwargs,
     ):
+        from ..auto.configuration_auto import AutoConfig
+
+        if backbone_config is None:
+            backbone_model_type = "swin"
+            backbone = AutoConfig.from_pretrained("microsoft/swin-base-patch4-window12-384")
+        else:
+            backbone_model_type = backbone_config.pop("model_type")
+            backbone = AutoConfig.for_model(backbone_model_type, **backbone_config)
+
+        if transformer_decoder_config is None:
+            # NOTE we have to force detr -> fix it
+            transformer_decoder_model_type = "detr"
+            transformer_decoder = DetrConfig()
+
+        else:
+            # NOTE we have to force detr -> fix it
+            transformer_decoder_model_type = transformer_decoder_config.pop("model_type")
+            transformer_decoder = DetrConfig(**transformer_decoder_config)
+
+        self.backbone = backbone
+
+        self.transformer_decoder = transformer_decoder
+        for base in self.transformer_decoder.__class__.__bases__:
+            print(base)
+
         self.dataset_metadata = dataset_metadata
 
         self.fpn_feature_size = fpn_feature_size
@@ -100,48 +108,24 @@ class MaskFormerConfig(PretrainedConfig):
         self.num_queries = num_queries
         self.no_object_weight = no_object_weight
         self.use_auxilary_loss = use_auxilary_loss
-        # swin backbone parameters
-        self.swin_image_size = swin_image_size
-        self.swin_in_channels = swin_in_channels
-        self.swin_patch_size = swin_patch_size
-        self.swin_embed_dim = swin_embed_dim
-        self.swin_depths = swin_depths
-        self.swin_num_heads = swin_num_heads
-        self.swin_window_size = swin_window_size
-        self.swin_drop_path_rate = swin_drop_path_rate
+
         # Hungarian matcher && loss
         self.cross_entropy_weight = cross_entropy_weight
         self.dice_weight = dice_weight
         self.mask_weight = mask_weight
 
         self.mask_classification = mask_classification
-        # DETR parameters
-        self.detr_max_position_embeddings = detr_max_position_embeddings
-        self.detr_d_model = detr_d_model
-        self.detr_encoder_ffn_dim = detr_encoder_ffn_dim
-        self.detr_encoder_layers = detr_encoder_layers
-        self.detr_encoder_attention_heads = detr_encoder_attention_heads
-        self.detr_decoder_ffn_dim = detr_decoder_ffn_dim
-        self.detr_decoder_layers = detr_decoder_layers
-        self.detr_decoder_attention_heads = detr_decoder_attention_heads
-        self.detr_dropout = detr_dropout
-        self.detr_attention_dropout = detr_attention_dropout
-        self.detr_activation_dropout = detr_activation_dropout
-        self.detr_init_std = detr_init_std
-        self.detr_init_xavier_std = detr_init_xavier_std
-        self.detr_encoder_layerdrop = detr_encoder_layerdrop
-        self.detr_decoder_layerdrop = detr_decoder_layerdrop
-        self.detr_num_hidden_layers = detr_encoder_layers
-        self.detr_scale_embedding = detr_scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.detr_auxiliary_loss = detr_auxiliary_loss
-        self.detr_dilation = detr_dilation
 
         super().__init__(**kwargs)
 
-    @property
-    def hidden_size(self) -> int:
-        return self.detr_d_model
-
-    @property
-    def d_model(self) -> int:
-        return self.detr_d_model
+    @classmethod
+    def from_backbone_and_transformer_decoder_configs(
+        cls, backbone_config: PretrainedConfig, transformer_decode_config: DetrConfig, **kwargs
+    ) -> PretrainedConfig:
+        r"""
+        Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model configuration and
+        decoder model configuration.
+        Returns:
+            [`EncoderDecoderConfig`]: An instance of a configuration object
+        """
+        return cls(backbone_config=backbone_config.to_dict(), generator=transformer_decode_config.to_dict(), **kwargs)
