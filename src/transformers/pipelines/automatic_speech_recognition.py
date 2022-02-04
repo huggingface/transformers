@@ -130,10 +130,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         elif (
             feature_extractor._processor_class
             and feature_extractor._processor_class.endswith("WithLM")
-            and kwargs.get("decoder", None) is not None
         ):
-            self.decoder = kwargs["decoder"]
-            self.type = "ctc_with_lm"
+            if kwargs.get("decoder", None) is not None:
+                self.decoder = kwargs["decoder"]
+                self.type = "ctc_with_lm"
+            else:
+                # this sounds like an error
+                logger.warning("This ctc model is capable of using a Language Model decoder, but none was provided: pipeline(..., decoder=None).")
+                self.type = "ctc"
         else:
             self.type = "ctc"
 
