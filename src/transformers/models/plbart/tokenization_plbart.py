@@ -411,7 +411,6 @@ class PLBartTokenizer(PreTrainedTokenizer):
                 content_spiece_model = self.sp_model.serialized_model_proto()
                 fi.write(content_spiece_model)
 
-
         return (out_vocab_file,)
 
     def prepare_seq2seq_batch(
