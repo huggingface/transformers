@@ -18,11 +18,18 @@
 import inspect
 import unittest
 
+<<<<<<< HEAD
 from typing import List, Tuple, Dict
 
 from transformers import is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
+=======
+from transformers import PoolFormerConfig
+from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils.dummy_vision_objects import DeiTFeatureExtractor
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -30,6 +37,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
+<<<<<<< HEAD
 
     from transformers import (
         MODEL_MAPPING,
@@ -38,6 +46,12 @@ if is_torch_available():
         PoolFormerModel,
     )
     from transformers.models.poolformer.modeling_poolformer import POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
+=======
+    from torch import nn
+
+    from transformers import PoolFormerForImageClassification, PoolFormerModel
+    from transformers.models.poolformer.modeling_poolformer import POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
 
 
 if is_vision_available():
@@ -46,6 +60,7 @@ if is_vision_available():
     from transformers import DeiTFeatureExtractor
 
 
+<<<<<<< HEAD
 class PoolFormerConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
@@ -53,11 +68,14 @@ class PoolFormerConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_encoder_blocks"))
 
 
+=======
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
 class PoolFormerModelTester:
     def __init__(
         self,
         parent,
         batch_size=13,
+<<<<<<< HEAD
         image_size=64,
         num_channels=3,
         num_encoder_blocks=4,
@@ -69,6 +87,21 @@ class PoolFormerModelTester:
         use_labels=True,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
+=======
+        image_size=30,
+        patch_size=2,
+        num_channels=3,
+        is_training=True,
+        use_labels=True,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        type_sequence_label_size=10,
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
         initializer_range=0.02,
         num_labels=3,
         scope=None,
@@ -76,6 +109,7 @@ class PoolFormerModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
+<<<<<<< HEAD
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
         self.sr_ratios = sr_ratios
@@ -88,6 +122,21 @@ class PoolFormerModelTester:
         self.hidden_dropout_prob = hidden_dropout_prob
         self.initializer_range = initializer_range
         self.num_labels = num_labels
+=======
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.type_sequence_label_size = type_sequence_label_size
+        self.initializer_range = initializer_range
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -95,6 +144,7 @@ class PoolFormerModelTester:
 
         labels = None
         if self.use_labels:
+<<<<<<< HEAD
             labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
 
         config = PoolFormerConfig(
@@ -110,11 +160,36 @@ class PoolFormerModelTester:
 
         return config, pixel_values, labels
 
+=======
+            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+
+        config = self.get_config()
+
+        return config, pixel_values, labels
+
+    def get_config(self):
+        return PoolFormerConfig(
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            num_channels=self.num_channels,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            hidden_act=self.hidden_act,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            is_decoder=False,
+            initializer_range=self.initializer_range,
+        )
+
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
     def create_and_check_model(self, config, pixel_values, labels):
         model = PoolFormerModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
+<<<<<<< HEAD
         expected_height = expected_width = self.image_size // 32.0
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.hidden_sizes[-1], expected_height, expected_width)
@@ -123,12 +198,42 @@ class PoolFormerModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
+=======
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = to_2tuple(self.image_size)
+        patch_size = to_2tuple(self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+
+    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+        config.num_labels = self.type_sequence_label_size
+        model = PoolFormerForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            pixel_values,
+            labels,
+        ) = config_and_inputs
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
 
 @require_torch
 class PoolFormerModelTest(ModelTesterMixin, unittest.TestCase):
+<<<<<<< HEAD
+=======
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as PoolFormer does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
 
     all_model_classes = (
         (
@@ -139,6 +244,7 @@ class PoolFormerModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
 
+<<<<<<< HEAD
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
@@ -147,10 +253,21 @@ class PoolFormerModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = PoolFormerModelTester(self)
         self.config_tester = PoolFormerConfigTester(self, config_class=PoolFormerConfig)
+=======
+    test_pruning = False
+    test_torchscript = False
+    test_resize_embeddings = False
+    test_head_masking = False
+
+    def setUp(self):
+        self.model_tester = PoolFormerModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=PoolFormerConfig, has_text_modality=False, hidden_size=37)
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
+<<<<<<< HEAD
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -240,6 +357,20 @@ class PoolFormerModelTest(ModelTesterMixin, unittest.TestCase):
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+=======
+    def test_inputs_embeds(self):
+        # PoolFormer does not use inputs_embeds
+        pass
+
+    def test_model_common_attributes(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -253,7 +384,15 @@ class PoolFormerModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+<<<<<<< HEAD
     @unittest.skip("PoolFormer does not have attention")
+=======
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+    
+    @unittest.skip()
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
     def test_attention_outputs(self):
         pass
 
@@ -266,6 +405,7 @@ class PoolFormerModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
+<<<<<<< HEAD
             hidden_states = outputs.hidden_states
 
             expected_num_layers = self.model_tester.num_encoder_blocks
@@ -279,6 +419,24 @@ class PoolFormerModelTest(ModelTesterMixin, unittest.TestCase):
                     self.model_tester.image_size // 4,
                     self.model_tester.image_size // 4,
                 ],
+=======
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            # PoolFormer has a different seq_length
+            image_size = to_2tuple(self.model_tester.image_size)
+            patch_size = to_2tuple(self.model_tester.patch_size)
+            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+            seq_length = num_patches + 1
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -293,6 +451,7 @@ class PoolFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+<<<<<<< HEAD
     def test_training(self):
         if not self.model_tester.is_training:
             return
@@ -316,6 +475,11 @@ class PoolFormerModelTest(ModelTesterMixin, unittest.TestCase):
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
+=======
+    def test_for_image_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
 
     @slow
     def test_model_from_pretrained(self):
@@ -331,11 +495,22 @@ def prepare_img():
 
 
 @require_torch
+<<<<<<< HEAD
 class PoolFormerModelIntegrationTest(unittest.TestCase):
+=======
+@require_vision
+class PoolFormerModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_feature_extractor(self):
+        # return DeiTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+        pass
+
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
     @slow
     def test_inference_image_classification_head(self):
         model = PoolFormerForImageClassification.from_pretrained("sail/poolformer_s12").to(torch_device)
 
+<<<<<<< HEAD
         img_size = (224, 224)
         feature_extractor = DeiTFeatureExtractor(
             size=img_size,
@@ -343,16 +518,28 @@ class PoolFormerModelIntegrationTest(unittest.TestCase):
             crop_size=224,
         )
 
+=======
+        feature_extractor = self.default_feature_extractor
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
+<<<<<<< HEAD
         outputs = model(**inputs)
+=======
+        with torch.no_grad():
+            outputs = model(**inputs)
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
 
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
+<<<<<<< HEAD
         expected_slice = torch.tensor([-0.3045, -0.6758, -0.4869]).to(torch_device)
+=======
+        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

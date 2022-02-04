@@ -29,12 +29,15 @@ MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
         ("poolformer", "PoolFormerModel"),
+<<<<<<< HEAD
         ("yoso", "YosoModel"),
         ("swin", "SwinModel"),
         ("vilt", "ViltModel"),
         ("vit_mae", "ViTMAEModel"),
         ("nystromformer", "NystromformerModel"),
         ("xglm", "XGLMModel"),
+=======
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
         ("imagegpt", "ImageGPTModel"),
         ("qdqbert", "QDQBertModel"),
         ("fnet", "FNetModel"),
@@ -260,7 +263,11 @@ MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image Classification mapping
+<<<<<<< HEAD
         ("poolformer", "PoolFormerForImageClassification"),
+=======
+        ("poolformer", "PoolFormerForImageClassification")
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
         ("vit", "ViTForImageClassification"),
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
         ("beit", "BeitForImageClassification"),

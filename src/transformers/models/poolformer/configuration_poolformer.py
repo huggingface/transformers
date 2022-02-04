@@ -101,6 +101,10 @@ class PoolFormerConfig(PretrainedConfig):
         padding=[2, 1, 1, 1],
         num_encoder_blocks=4,
         drop_path_rate=0.0,
+<<<<<<< HEAD
+=======
+        num_hidden_layers=12,
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
         hidden_act="gelu",
         use_layer_scale=True,
         layer_scale_init_value=1e-5,
@@ -120,6 +124,10 @@ class PoolFormerConfig(PretrainedConfig):
         self.strides = strides
         self.num_encoder_blocks = num_encoder_blocks
         self.drop_path_rate = drop_path_rate
+<<<<<<< HEAD
+=======
+        self.num_hidden_layers = num_hidden_layers
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
         self.hidden_act = hidden_act
         self.use_layer_scale = use_layer_scale
         self.layer_scale_init_value = layer_scale_init_value

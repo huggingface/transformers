@@ -31,6 +31,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
         ("poolformer", "PoolFormerConfig"),
+<<<<<<< HEAD
         ("yoso", "YosoConfig"),
         ("swin", "SwinConfig"),
         ("vilt", "ViltConfig"),
@@ -38,6 +39,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("realm", "RealmConfig"),
         ("nystromformer", "NystromformerConfig"),
         ("xglm", "XGLMConfig"),
+=======
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
         ("imagegpt", "ImageGPTConfig"),
         ("qdqbert", "QDQBertConfig"),
         ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
@@ -126,6 +129,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
         ("poolformer", "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+<<<<<<< HEAD
         ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -133,6 +137,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("realm", "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nystromformer", "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("xglm", "XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+=======
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
         ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -208,6 +214,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("poolformer", "PoolFormer"),
+<<<<<<< HEAD
         ("yoso", "YOSO"),
         ("swin", "Swin"),
         ("vilt", "ViLT"),
@@ -215,6 +222,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("realm", "Realm"),
         ("nystromformer", "Nystromformer"),
         ("xglm", "XGLM"),
+=======
+>>>>>>> ab6eef14f71b03393bdbaa02fd26f2912e99d14e
         ("imagegpt", "ImageGPT"),
         ("qdqbert", "QDQBert"),
         ("vision-encoder-decoder", "Vision Encoder decoder"),
