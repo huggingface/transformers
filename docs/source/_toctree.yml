@@ -39,6 +39,16 @@
     title: Troubleshooting
   - local: custom_datasets
     title: Fine-tuning with custom datasets
+  - sections:
+    - local: nlp/sequence_classification
+      title: Sequence classification
+    - local: nlp/token_classification
+      title: Token classification
+    - local: nlp/question_answering
+      title: Question answering
+    - local: Causal language modeling
+      title: nlp/clm
+    title: NLP tasks
   - local: notebooks
     title: "🤗 Transformers Notebooks"
   - local: sagemaker
@@ -71,7 +81,7 @@
     title: Sharing custom models
   - local: pr_checks
     title: Checks on a Pull Request
-  title: Advanced guides
+  title: How-to guides
 - sections:
   - local: bertology
     title: BERTology
