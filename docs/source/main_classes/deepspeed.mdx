@@ -1806,11 +1806,11 @@ import deepspeed
 import os
 import torch
 
-os.environ["TOKENIZERS_PARALLELISM"] = "false" # To avoid warnings about parallelism in tokenizers
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To avoid warnings about parallelism in tokenizers
 
 # distributed setup
-local_rank = int(os.getenv('LOCAL_RANK', '0'))
-world_size = int(os.getenv('WORLD_SIZE', '1'))
+local_rank = int(os.getenv("LOCAL_RANK", "0"))
+world_size = int(os.getenv("WORLD_SIZE", "1"))
 torch.cuda.set_device(local_rank)
 deepspeed.init_distributed()
 
@@ -1838,12 +1838,15 @@ train_batch_size = 1 * world_size
 #
 # For indepth info on Deepspeed config see
 # https://huggingface.co/docs/transformers/master/main_classes/deepspeed
+
+# keeping the same format as json for consistency
+# fmt: off
 ds_config = {
     "fp16": {
-        "enabled": False,
+        "enabled": False
     },
     "bf16": {
-        "enabled": False,
+        "enabled": False
     },
     "zero_optimization": {
         "stage": 3,
@@ -1862,6 +1865,7 @@ ds_config = {
     "train_micro_batch_size_per_gpu": 1,
     "wall_clock_breakdown": False
 }
+# fmt: on
 
 # next line instructs transformers to partition the model directly over multiple gpus using
 # deepspeed.zero.Init when model's `from_pretrained` method is called.
@@ -1870,18 +1874,16 @@ ds_config = {
 #
 # otherwise the model will first be loaded normally and only partitioned at forward time which is
 # less efficient and when there is little CPU RAM may fail
-dschf = HfDeepSpeedConfig(ds_config) # keep this object alive
+dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 
 # now a model can be loaded.
 model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
 # we are ready to initialise deepspeed ZeRO now
-ds_engine = deepspeed.initialize(model=model,
-                                 config_params=ds_config,
-                                 model_parameters=None,
-                                 optimizer=None,
-                                 lr_scheduler=None)[0]
-ds_engine.module.eval() # inference
+ds_engine = deepspeed.initialize(
+    model=model, config_params=ds_config, model_parameters=None, optimizer=None, lr_scheduler=None
+)[0]
+ds_engine.module.eval()  # inference
 
 # Deepspeed ZeRO can process unrelated inputs on each GPU. So for 2 gpus you process 2 inputs at once.
 # If you use more GPUs adjust for more.
