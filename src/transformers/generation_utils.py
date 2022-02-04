@@ -17,7 +17,6 @@
 import inspect
 import warnings
 from dataclasses import dataclass
-from lib2to3.pgen2.token import OP
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
@@ -853,7 +852,7 @@ class GenerationMixin:
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
-        synced_gpus: Optional[bool] = None,
+        synced_gpus: Optional[bool] = False,
         exponential_decay_length_penalty: Optional[Tuple] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
