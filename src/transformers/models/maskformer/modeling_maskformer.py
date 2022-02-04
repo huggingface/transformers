@@ -71,8 +71,6 @@ from scipy.optimize import linear_sum_assignment
 class MaskFormerOutput(ModelOutput):
     preds_logits: torch.FloatTensor
     preds_masks: torch.FloatTensor = None
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
 
 
 @dataclass
@@ -806,16 +804,21 @@ MASKFORMER_INPUTS_DOCSTRING = r"""
 """
 # TODO add the others but first we need to decide on their names/format
 
+class MaskFormerPretrainedModel(PreTrainedModel):
+    config_class = MaskFormerConfig
+    base_model_prefix = "model"
+    main_input_name = "pixel_values"
+
+    def _init_weights(self, module):
+        # TODO code it!
+        pass
 
 @add_start_docstrings(
     "The bare MaskFormer Model outputting raw hidden-states without any specific head on top.",
     MASKFORMER_START_DOCSTRING,
 )
-class MaskFormerModel(PreTrainedModel):
-    config_class = MaskFormerConfig
-    base_model_prefix = "model"
-    main_input_name = "pixel_values"
-
+class MaskFormerModel(MaskFormerPretrainedModel):
+    
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
         self.pixel_level_module = MaskFormerPixelLevelModule(config)
@@ -823,11 +826,42 @@ class MaskFormerModel(PreTrainedModel):
             in_features=self.pixel_level_module.encoder.outputs_shapes[-1], config=config
         )
         self.segmentation_module = MaskFormerSegmentationModule(config)
+
+
+    @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
+    # @replace_return_docstrings(output_type=MaskFormerOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values: Tensor,
+        pixel_mask: Optional[Tensor] = None,
+    ) -> MaskFormerOutput:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+        image_features, pixel_embeddings = self.pixel_level_module(pixel_values)
+        queries = self.transformer_module(image_features)
+        outputs: Dict[str, Tensor] = self.segmentation_module(queries, pixel_embeddings, self.config.use_auxilary_loss)
+
+        # upsample the masks to match the inputs' spatial dimension
+        outputs[PREDICTIONS_MASKS_KEY] = upsample_like(outputs[PREDICTIONS_MASKS_KEY], pixel_values)
+
+        return MaskFormerOutput(**outputs)
+
+@add_start_docstrings(
+    """
+    MaskFormer for semantic segmentation
+    """,
+    MASKFORMER_START_DOCSTRING,
+)
+class MaskFormerForSemanticSegmentation(MaskFormerPretrainedModel):
+    def __init__(self, config: MaskFormerConfig):
+        super().__init__(config)
+        self.model = MaskFormerModel(config)
+
+        losses = ["labels", "masks"]
+
         self.matcher = MaskFormerHungarianMatcher(
             cost_class=1.0, cost_dice=config.dice_weight, cost_mask=config.mask_weight
         )
-
-        losses = ["labels", "masks"]
 
         self.weight_dict: Dict[str, float] = {
             "loss_cross_entropy": config.cross_entropy_weight,
@@ -843,32 +877,6 @@ class MaskFormerModel(PreTrainedModel):
             losses=losses,
         )
 
-    @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=MaskFormerOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values: Tensor,
-        pixel_mask: Optional[Tensor] = None,
-        labels: Optional[Dict[str, Tensor]] = None,
-    ) -> MaskFormerOutput:
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-        image_features, pixel_embeddings = self.pixel_level_module(pixel_values)
-        queries = self.transformer_module(image_features)
-        outputs: Dict[str, Tensor] = self.segmentation_module(queries, pixel_embeddings, self.config.use_auxilary_loss)
-
-        loss_dict: Dict[str, Tensor] = {}
-        loss: Tensor = None
-
-        if labels is not None:
-            loss_dict.update(self.get_loss_dict(outputs, labels))
-            loss = self.get_loss(loss_dict)
-        else:
-            # upsample the masks to match the inputs' spatial dimension
-            outputs[PREDICTIONS_MASKS_KEY] = upsample_like(outputs[PREDICTIONS_MASKS_KEY], pixel_values)
-
-        return MaskFormerOutput(**outputs, loss_dict=loss_dict, loss=loss)
-
     def get_loss_dict(self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor]) -> Dict[str, Tensor]:
         loss_dict: Dict[str, Tensor] = self.criterion(outputs, labels)
         # weight each loss by `self.weight_dict[<LOSS_NAME>]`
@@ -881,35 +889,35 @@ class MaskFormerModel(PreTrainedModel):
         # probably an awkward way to reduce it
         return torch.tensor(list(loss_dict.values()), dtype=torch.float).sum()
 
-
-@add_start_docstrings(
-    """
-    MaskFormer for semantic segmentation
-    """,
-    MASKFORMER_START_DOCSTRING,
-)
-class MaskFormerForSemanticSegmentation(nn.Module):
-    def __init__(self, config: MaskFormerConfig):
-        super().__init__()
-        self.model = MaskFormerModel(config)
-
-    @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=MaskFormerForSemanticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, *args, **kwargs):
-        outputs: MaskFormerOutput = self.model(*args, **kwargs)
+    def get_segmentation(self, preds_logits: Tensor, preds_masks: Tensor) -> Tensor:
         # mask classes has shape [BATCH, QUERIES, CLASSES + 1]
         # remove the null class `[..., :-1]`
-        masks_classes: Tensor = outputs.preds_logits.softmax(dim=-1)[..., :-1]
+        masks_classes: Tensor = preds_logits.softmax(dim=-1)[..., :-1]
         # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_probs: Tensor = outputs.preds_masks.sigmoid()
+        masks_probs: Tensor = preds_masks.sigmoid()
         # now we want to sum over the queries,
         # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
         # where $ softmax(p) \in R^{q, c} $ is the mask classes
         # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
         segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        return segmentation
 
-        return MaskFormerForSemanticSegmentationOutput(segmentation=segmentation, **outputs)
+    @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
+    # @replace_return_docstrings(output_type=MaskFormerForSemanticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(self, *args, labels: Optional[Dict[str, Tensor]] = None,**kwargs):
+        outputs: MaskFormerOutput = self.model(*args, **kwargs)
+        # NOTE the segmentation post processing is here for now but I'll be moved to the feature extractor
+        segmentation: Tensor = self.get_segmentation(outputs.preds_logits, outputs.preds_masks)
+
+        loss_dict: Dict[str, Tensor] = {}
+        loss: Tensor = None
+
+        if labels is not None:
+            loss_dict.update(self.get_loss_dict(outputs, labels))
+            loss = self.get_loss(loss_dict)
+
+        return MaskFormerForSemanticSegmentationOutput(segmentation=segmentation, loss_dict=loss_dict, loss=loss, **outputs)
 
 
 class PanopticSegmentationSegment(TypedDict):
@@ -1017,3 +1025,4 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                                 stuff_memory_list[pred_class] = current_segment_id
 
             return MaskFormerForPanopticSegmentationOutput(segmentation=segmentation, segments=segments, **outputs)
+
