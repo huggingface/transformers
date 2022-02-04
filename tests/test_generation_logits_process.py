@@ -191,7 +191,7 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # first batch should keep three tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
         self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [3, 2])
-        
+
     def test_typical_dist_warper(self):
         input_ids = None
         vocab_size = 10
@@ -211,7 +211,7 @@ class LogitsProcessorTest(unittest.TestCase):
             [[0.97, 0.0, 0.0, 0.0], [0.0, 0.2, 0.2, 0.2]], device=torch_device, dtype=torch.float
         )
         self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
-        
+
         # check special cases
         length = 5
 

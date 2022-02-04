@@ -620,7 +620,12 @@ class GenerationMixin:
         )
 
     def _get_logits_warper(
-            self, top_k: int = None, top_p: float = None, typical_p: float = None, temperature: float = None, num_beams: int = None
+        self,
+        top_k: int = None,
+        top_p: float = None,
+        typical_p: float = None,
+        temperature: float = None,
+        num_beams: int = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsWarper`] instances
@@ -2822,5 +2827,5 @@ def top_k_top_p_filtering(
 
     if 0 <= top_p <= 1.0:
         logits = TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=min_tokens_to_keep)(None, logits)
-    
+
     return logits
