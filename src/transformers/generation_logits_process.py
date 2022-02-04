@@ -15,6 +15,10 @@
 
 import inspect
 import math
+<<<<<<< HEAD
+=======
+from abc import ABC
+>>>>>>> 4c53400ff (change param to tuple, add test)
 from typing import Callable, Iterable, List, Optional, Tuple
 
 import numpy as np
@@ -663,8 +667,13 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
             The id of the *end-of-sequence* token.
     """
 
+<<<<<<< HEAD
     def __init__(self, exponential_decay_length_penalty: Tuple, eos_token_id: int, input_ids: torch.LongTensor):
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids.shape[-1]
+=======
+    def __init__(self, exponential_decay_length_penalty: Tuple, eos_token_id: int):
+        self.regulation_start = exponential_decay_length_penalty[0]
+>>>>>>> 4c53400ff (change param to tuple, add test)
         self.regulation_factor = exponential_decay_length_penalty[1]
         self.eos_token_id = eos_token_id
 
