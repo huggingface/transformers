@@ -982,11 +982,8 @@ class GenerationMixin:
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             exponential_decay_length_penalty (`Tuple`, *optional*):
                 This Tuple adds an exponentially increasing length penalty, after a certain amount of tokens have been
-                generated. The tuple shall consists of: (start_index, decay_factor) where:
-                start_index (`int`): Index where penalty starts, input tokens are ignored
-                decay_factor (`float`): factor of exponential decay
-            length_regulation_factor (`int`, *optional*):
-                Growth factor of soft length regulation (exponential increase of EOS)
+                generated. The tuple shall consist of: (start_index, decay_factor) where start_index indicates where
+                penalty starts and decay_factor represents the factor of exponential decay
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
