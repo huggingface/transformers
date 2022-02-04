@@ -146,13 +146,13 @@ class DataTrainingArguments:
     train_split_name: str = field(
         default="train+validation",
         metadata={
-            "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
+            "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train+validation'"
         },
     )
     eval_split_name: str = field(
         default="test",
         metadata={
-            "help": "The name of the training data set split to use (via the datasets library). Defaults to 'test'"
+            "help": "The name of the evaluation data set split to use (via the datasets library). Defaults to 'test'"
         },
     )
     audio_column_name: str = field(

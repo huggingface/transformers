@@ -239,7 +239,7 @@ The example script uses the 🤗 Datasets library. You can easily customize them
 Let's start by creating a model repository to save the trained model and logs.
 Here we call the model `"norwegian-t5-base"`, but you can change the model name as you like.
 
-To setup all relevant files for trairing, let's create a directory.
+To setup all relevant files for training, let's create a directory.
 
 ```bash
 cd ./norwegian-t5-base

@@ -20,9 +20,11 @@ import json
 import os
 import os.path
 import random
+import sys
 import tempfile
 import unittest
 import warnings
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -55,10 +57,16 @@ from transformers.testing_utils import (
 )
 
 
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
+
+from test_module.custom_configuration import CustomConfig  # noqa E402
+
+
 if is_torch_available():
     import torch
     from torch import nn
 
+    from test_module.custom_modeling import CustomModel
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
@@ -2109,61 +2117,6 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.dtype, torch.float16)
 
 
-class FakeConfig(PretrainedConfig):
-    def __init__(self, attribute=1, **kwargs):
-        self.attribute = attribute
-        super().__init__(**kwargs)
-
-
-# Make sure this is synchronized with the config above.
-FAKE_CONFIG_CODE = """
-from transformers import PretrainedConfig
-
-class FakeConfig(PretrainedConfig):
-    def __init__(self, attribute=1, **kwargs):
-        self.attribute = attribute
-        super().__init__(**kwargs)
-"""
-
-
-if is_torch_available():
-
-    class FakeModel(PreTrainedModel):
-        config_class = BertConfig
-        base_model_prefix = "fake"
-
-        def __init__(self, config):
-            super().__init__(config)
-            self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
-
-        def forward(self, x):
-            return self.linear(x)
-
-        def _init_weights(self, module):
-            pass
-
-
-# Make sure this is synchronized with the model above.
-FAKE_MODEL_CODE = """
-import torch
-from transformers import BertConfig, PreTrainedModel
-
-class FakeModel(PreTrainedModel):
-    config_class = BertConfig
-    base_model_prefix = "fake"
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
-
-    def forward(self, x):
-        return self.linear(x)
-
-    def _init_weights(self, module):
-        pass
-"""
-
-
 @require_torch
 @is_staging_test
 class ModelPushToHubTester(unittest.TestCase):
@@ -2223,62 +2176,29 @@ class ModelPushToHubTester(unittest.TestCase):
                 self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_dynamic_model(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        config.auto_map = {"AutoModel": "modeling.FakeModel"}
-        model = FakeModel(config)
+        CustomConfig.register_for_auto_class()
+        CustomModel.register_for_auto_class()
+
+        config = CustomConfig(hidden_size=32)
+        model = CustomModel(config)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-model", use_auth_token=self._token)
             model.save_pretrained(tmp_dir)
-            with open(os.path.join(tmp_dir, "modeling.py"), "w") as f:
-                f.write(FAKE_MODEL_CODE)
+            # checks
+            self.assertDictEqual(
+                config.auto_map,
+                {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
+            )
 
             repo.push_to_hub()
 
         new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
-        # Can't make an isinstance check because the new_model is from the FakeModel class of a dynamic module
-        self.assertEqual(new_model.__class__.__name__, "FakeModel")
+        # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module
+        self.assertEqual(new_model.__class__.__name__, "CustomModel")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model")
+        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
         new_model = AutoModel.from_config(config, trust_remote_code=True)
-        self.assertEqual(new_model.__class__.__name__, "FakeModel")
-
-    def test_push_to_hub_dynamic_model_and_config(self):
-        config = FakeConfig(
-            attribute=42,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-        )
-        config.auto_map = {"AutoConfig": "configuration.FakeConfig", "AutoModel": "modeling.FakeModel"}
-        model = FakeModel(config)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-model-config", use_auth_token=self._token)
-            model.save_pretrained(tmp_dir)
-            with open(os.path.join(tmp_dir, "configuration.py"), "w") as f:
-                f.write(FAKE_CONFIG_CODE)
-            with open(os.path.join(tmp_dir, "modeling.py"), "w") as f:
-                f.write(FAKE_MODEL_CODE)
-
-            repo.push_to_hub()
-
-        new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model-config", trust_remote_code=True)
-        # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
-        self.assertEqual(new_model.config.__class__.__name__, "FakeConfig")
-        self.assertEqual(new_model.config.attribute, 42)
-
-        # Can't make an isinstance check because the new_model is from the FakeModel class of a dynamic module
-        self.assertEqual(new_model.__class__.__name__, "FakeModel")
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
-
-        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model")
-        new_model = AutoModel.from_config(config, trust_remote_code=True)
-        self.assertEqual(new_model.__class__.__name__, "FakeModel")
+        self.assertEqual(new_model.__class__.__name__, "CustomModel")
