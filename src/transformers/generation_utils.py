@@ -17,7 +17,6 @@
 import inspect
 import warnings
 from dataclasses import dataclass
-from lib2to3.pgen2.token import OP
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
