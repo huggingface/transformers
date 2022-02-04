@@ -43,7 +43,7 @@ class ConvNextFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=384,
+        size=20,
         crop_pct=0.875,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],

@@ -316,12 +316,11 @@ def prepare_img():
 class ConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("nielsr/convnext-tiny-224") if is_vision_available() else None
+        return AutoFeatureExtractor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        # TODO replace nielsr by facebook
-        model = ConvNextForImageClassification.from_pretrained("nielsr/convnext-tiny-224").to(torch_device)
+        model = ConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
