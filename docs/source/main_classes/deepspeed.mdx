@@ -1764,8 +1764,7 @@ Make sure to:
 1. disable CPU offload if you have enough GPU memory (since it slows things down)
 2. enable bf16 if you own an Ampere or a newer GPU to make things faster. If you don't have that hardware you may enable fp16 as long as you don't use any model that was pre-trained in bf16 mixed precision (such as most t5 models). These usually overflow in fp16 and you will see garbage as output.
 
-```
-$ cat t0.py
+```python
 #!/usr/bin/env python
 
 # This script demonstrates how to use Deepspeed ZeRO in an inference mode when one can't fit a model
@@ -1902,7 +1901,7 @@ text_out = tokenizer.decode(outputs[0], skip_special_tokens=True)
 print(f"rank{rank}:\n   in={text_in}\n  out={text_out}")
 ```
 
-Let's take it for a run:
+Let's save it as `t0.py` and run it:
 ```
 $ deepspeed --num_gpus 2 t0.py
 rank0:
