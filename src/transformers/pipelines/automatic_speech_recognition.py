@@ -136,8 +136,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 self.type = "ctc_with_lm"
             else:
                 # this sounds like an error
-                logger.warning("This ctc model is capable of using a Language Model decoder, but none was provided: pipeline(..., decoder=None).")
                 self.type = "ctc"
+                logger.warning(
+                    "This ctc model is capable of using a Language Model decoder, but none was provided: pipeline(..., decoder=None)."
+                )
         else:
             self.type = "ctc"
 
