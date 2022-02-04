@@ -67,7 +67,7 @@ class SwinModelOutputWithPooling(ModelOutput):
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*, a tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward` method
+        hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*, a tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward` method:
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -108,7 +108,7 @@ class SwinBaseModelOutput(ModelOutput):
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*, a tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward` method
+        hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*, a tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward` method:
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -900,9 +900,7 @@ class SwinModel(SwinPreTrainedModel):
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        hidden_states_spatial_dimensions = (
-            input_dimensions,
-        ) + encoder_outputs.hidden_states_spatial_dimensions
+        hidden_states_spatial_dimensions = (input_dimensions,) + encoder_outputs.hidden_states_spatial_dimensions
 
         return SwinModelOutputWithPooling(
             last_hidden_state=sequence_output,

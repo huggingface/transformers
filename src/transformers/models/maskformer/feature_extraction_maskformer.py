@@ -80,8 +80,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
     def _resize(self, image, size, target=None, max_size=None):
         """
-        Resize the image to the given size. Size can be min_size (scalar) or (width, height) tuple. If size is an int, smaller
-        edge of the image will be matched to this number.
+        Resize the image to the given size. Size can be min_size (scalar) or (width, height) tuple. If size is an int,
+        smaller edge of the image will be matched to this number.
 
         If given, also resize the target accordingly.
         """

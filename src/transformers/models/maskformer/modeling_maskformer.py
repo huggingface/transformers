@@ -39,11 +39,12 @@ from ...file_utils import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ..auto.modeling_auto import AutoModel
 from ..detr import DetrConfig
 from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput
 from ..swin import SwinConfig, SwinModel
 from .configuration_maskformer import ClassSpec, MaskFormerConfig
-from ..auto.modeling_auto import AutoModel
+
 
 logger = logging.get_logger(__name__)
 import torch.distributed as dist
@@ -804,6 +805,7 @@ MASKFORMER_INPUTS_DOCSTRING = r"""
 """
 # TODO add the others but first we need to decide on their names/format
 
+
 class MaskFormerPretrainedModel(PreTrainedModel):
     config_class = MaskFormerConfig
     base_model_prefix = "model"
@@ -813,12 +815,12 @@ class MaskFormerPretrainedModel(PreTrainedModel):
         # TODO code it!
         pass
 
+
 @add_start_docstrings(
     "The bare MaskFormer Model outputting raw hidden-states without any specific head on top.",
     MASKFORMER_START_DOCSTRING,
 )
 class MaskFormerModel(MaskFormerPretrainedModel):
-    
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
         self.pixel_level_module = MaskFormerPixelLevelModule(config)
@@ -826,7 +828,6 @@ class MaskFormerModel(MaskFormerPretrainedModel):
             in_features=self.pixel_level_module.encoder.outputs_shapes[-1], config=config
         )
         self.segmentation_module = MaskFormerSegmentationModule(config)
-
 
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
     # @replace_return_docstrings(output_type=MaskFormerOutput, config_class=_CONFIG_FOR_DOC)
@@ -845,6 +846,7 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         outputs[PREDICTIONS_MASKS_KEY] = upsample_like(outputs[PREDICTIONS_MASKS_KEY], pixel_values)
 
         return MaskFormerOutput(**outputs)
+
 
 @add_start_docstrings(
     """
@@ -905,7 +907,7 @@ class MaskFormerForSemanticSegmentation(MaskFormerPretrainedModel):
 
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
     # @replace_return_docstrings(output_type=MaskFormerForSemanticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, *args, labels: Optional[Dict[str, Tensor]] = None,**kwargs):
+    def forward(self, *args, labels: Optional[Dict[str, Tensor]] = None, **kwargs):
         outputs: MaskFormerOutput = self.model(*args, **kwargs)
         # NOTE the segmentation post processing is here for now but I'll be moved to the feature extractor
         segmentation: Tensor = self.get_segmentation(outputs.preds_logits, outputs.preds_masks)
@@ -917,7 +919,9 @@ class MaskFormerForSemanticSegmentation(MaskFormerPretrainedModel):
             loss_dict.update(self.get_loss_dict(outputs, labels))
             loss = self.get_loss(loss_dict)
 
-        return MaskFormerForSemanticSegmentationOutput(segmentation=segmentation, loss_dict=loss_dict, loss=loss, **outputs)
+        return MaskFormerForSemanticSegmentationOutput(
+            segmentation=segmentation, loss_dict=loss_dict, loss=loss, **outputs
+        )
 
 
 class PanopticSegmentationSegment(TypedDict):
@@ -937,26 +941,32 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
     def __init__(
         self,
         config: MaskFormerConfig,
-        object_mask_threshold: Optional[float] = 0.8,
-        overlap_mask_area_threshold: Optional[float] = 0.8,
     ):
         super().__init__(config)
-        self.object_mask_threshold = object_mask_threshold
-        self.overlap_mask_area_threshold = overlap_mask_area_threshold
 
     def remove_low_and_no_objects(
-        self, masks: Tensor, scores: Tensor, labels: Tensor
+        self,
+        masks: Tensor,
+        scores: Tensor,
+        labels: Tensor,
+        object_mask_threshold: float,
     ) -> Tuple[Tensor, Tensor, Tensor]:
         if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
             raise ValueError("mask, scores and labels must have the same shape!")
 
-        to_keep: Tensor = labels.ne(self.model.config.num_labels) & (scores > self.object_mask_threshold)
+        to_keep: Tensor = labels.ne(self.model.config.num_labels) & (scores > object_mask_threshold)
 
         return masks[to_keep], scores[to_keep], labels[to_keep]
 
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
     # @replace_return_docstrings(output_type=MaskFormerForPanopticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, *args, **kwargs):
+    def forward(
+        self,
+        *args,
+        object_mask_threshold: Optional[float] = 0.8,
+        overlap_mask_area_threshold: Optional[float] = 0.8,
+        **kwargs
+    ):
         outputs: MaskFormerOutput = self.model(*args, **kwargs)
         preds_logits: Tensor = outputs.preds_logits
         preds_masks: Tensor = outputs.preds_masks
@@ -970,7 +980,9 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
         # now, we need to iterate over the batch size to correctly process the segmentation we got from the queries using our thresholds. Even if the original predicted masks have the same shape across the batch, they won't after thresholding so batch-wise operations are impossible
         for (mask_probs, pred_scores, pred_labels) in zip(mask_probs, pred_scores, pred_labels):
 
-            mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(mask_probs, pred_scores, pred_labels)
+            mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(
+                mask_probs, pred_scores, pred_labels, object_mask_threshold
+            )
             we_detect_something: bool = mask_probs.shape[0] > 0
 
             segmentation: Tensor = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
@@ -1003,7 +1015,7 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                     if mask_does_exist:
                         # find out how much of the all area mask_k is using
                         area_ratio: float = mask_k_area / original_area
-                        mask_k_is_overlapping_enough: bool = area_ratio.item() > self.overlap_mask_area_threshold
+                        mask_k_is_overlapping_enough: bool = area_ratio.item() > overlap_mask_area_threshold
 
                         if mask_k_is_overlapping_enough:
                             # merge stuff regions
@@ -1025,4 +1037,3 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
                                 stuff_memory_list[pred_class] = current_segment_id
 
             return MaskFormerForPanopticSegmentationOutput(segmentation=segmentation, segments=segments, **outputs)
-

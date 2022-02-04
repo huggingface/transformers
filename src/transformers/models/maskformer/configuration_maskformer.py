@@ -16,10 +16,9 @@
 
 from typing import Dict, List, Optional, Tuple, TypedDict
 
-from ..detr import DetrConfig
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..detr import DetrConfig
 
 
 MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = [
@@ -63,7 +62,6 @@ class MaskFormerConfig(PretrainedConfig):
         mask_feature_size: Optional[int] = 256,
         no_object_weight: Optional[float] = 0.1,
         use_auxilary_loss: Optional[bool] = False,
-
         backbone_config: Optional[Dict] = None,
         # TODO better name?
         transformer_decoder_config: Optional[Dict] = None,
@@ -118,8 +116,11 @@ class MaskFormerConfig(PretrainedConfig):
     ) -> PretrainedConfig:
         r"""
         Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model configuration and
-        decoder model configuration.
-        Returns:
+        decoder model configuration. Returns:
             [`EncoderDecoderConfig`]: An instance of a configuration object
         """
-        return cls(backbone_config=backbone_config.to_dict(), transformer_decoder_config=transformer_decoder_config.to_dict(), **kwargs)
+        return cls(
+            backbone_config=backbone_config.to_dict(),
+            transformer_decoder_config=transformer_decoder_config.to_dict(),
+            **kwargs,
+        )
