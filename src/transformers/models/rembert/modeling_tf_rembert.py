@@ -477,7 +477,7 @@ class TFRemBertEncoder(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
         hidden_states = self.embedding_hidden_mapping_in(inputs=hidden_states)
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
+        all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
