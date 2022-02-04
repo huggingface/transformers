@@ -514,7 +514,6 @@ class LogitsProcessorTest(unittest.TestCase):
         penalty_start = 5
         penalty_factor = 1.1
 
-<<<<<<< HEAD:tests/generation/test_generation_logits_process.py
         input_ids = ids_tensor((batch_size, 2), vocab_size=vocab_size)
 
         length_decay_processor = ExponentialDecayLengthPenalty(
@@ -524,14 +523,6 @@ class LogitsProcessorTest(unittest.TestCase):
         )
 
         # check that penalty is not applied before start
-=======
-        length_decay_processor = ExponentialDecayLengthPenalty(
-            exponential_decay_length_penalty=(penalty_start, penalty_factor), eos_token_id=eos_token_id
-        )
-
-        # check that penalty is not applied before start
-        input_ids = ids_tensor((batch_size, 2), vocab_size=vocab_size)
->>>>>>> 4c53400ff (change param to tuple, add test):tests/test_generation_logits_process.py
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores_before_start = length_decay_processor(input_ids, scores)
         self.assertListEqual(scores_before_start[:, eos_token_id].tolist(), scores[:, eos_token_id].tolist())
@@ -540,11 +531,7 @@ class LogitsProcessorTest(unittest.TestCase):
         input_ids = ids_tensor((batch_size, 20), vocab_size=vocab_size)
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores_after_start = length_decay_processor(input_ids, scores)
-<<<<<<< HEAD:tests/generation/test_generation_logits_process.py
         self.assertTrue(
-=======
-        self.assertGreater(
->>>>>>> 4c53400ff (change param to tuple, add test):tests/test_generation_logits_process.py
             torch.gt(
                 scores_after_start[penalty_start + 1 :, eos_token_id], scores[penalty_start + 1 :, eos_token_id]
             ).all()
