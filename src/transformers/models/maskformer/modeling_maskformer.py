@@ -810,6 +810,41 @@ class MaskFormerPretrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 
+    def __init__(self, config: MaskFormerConfig):
+        super().__init__(config)
+        losses = ["labels", "masks"]
+
+        self.matcher = MaskFormerHungarianMatcher(
+            cost_class=1.0, cost_dice=config.dice_weight, cost_mask=config.mask_weight
+        )
+
+        self.weight_dict: Dict[str, float] = {
+            "loss_cross_entropy": config.cross_entropy_weight,
+            "loss_mask": config.mask_weight,
+            "loss_dice": config.dice_weight,
+        }
+
+        self.criterion = MaskFormerLoss(
+            config.num_labels,
+            matcher=self.matcher,
+            weight_dict=self.weight_dict,
+            eos_coef=config.no_object_weight,
+            losses=losses,
+        )
+
+    def get_loss_dict(self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        loss_dict: Dict[str, Tensor] = self.criterion(outputs, labels)
+        # weight each loss by `self.weight_dict[<LOSS_NAME>]`
+        weighted_loss_dict: Dict[str, Tensor] = {
+            k: v * self.weight_dict[k] for k, v in loss_dict.items() if k in self.weight_dict
+        }
+        return weighted_loss_dict
+
+    def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
+        # probably an awkward way to reduce it
+        return torch.tensor(list(loss_dict.values()), dtype=torch.float).sum()
+
+
     def _init_weights(self, module):
         # TODO code it!
         pass
@@ -843,7 +878,7 @@ class MaskFormerModel(MaskFormerPretrainedModel):
 
         return MaskFormerOutput(**outputs)
 
-
+# NOTE this to be moved inside the feature extractor
 @add_start_docstrings(
     """
     MaskFormer for semantic segmentation
@@ -854,38 +889,6 @@ class MaskFormerForSemanticSegmentation(MaskFormerPretrainedModel):
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
         self.model = MaskFormerModel(config)
-
-        losses = ["labels", "masks"]
-
-        self.matcher = MaskFormerHungarianMatcher(
-            cost_class=1.0, cost_dice=config.dice_weight, cost_mask=config.mask_weight
-        )
-
-        self.weight_dict: Dict[str, float] = {
-            "loss_cross_entropy": config.cross_entropy_weight,
-            "loss_mask": config.mask_weight,
-            "loss_dice": config.dice_weight,
-        }
-
-        self.criterion = MaskFormerLoss(
-            config.num_labels,
-            matcher=self.matcher,
-            weight_dict=self.weight_dict,
-            eos_coef=config.no_object_weight,
-            losses=losses,
-        )
-
-    def get_loss_dict(self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor]) -> Dict[str, Tensor]:
-        loss_dict: Dict[str, Tensor] = self.criterion(outputs, labels)
-        # weight each loss by `self.weight_dict[<LOSS_NAME>]`
-        weighted_loss_dict: Dict[str, Tensor] = {
-            k: v * self.weight_dict[k] for k, v in loss_dict.items() if k in self.weight_dict
-        }
-        return weighted_loss_dict
-
-    def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
-        # probably an awkward way to reduce it
-        return torch.tensor(list(loss_dict.values()), dtype=torch.float).sum()
 
     def get_segmentation(self, preds_logits: Tensor, preds_masks: Tensor) -> Tensor:
         # mask classes has shape [BATCH, QUERIES, CLASSES + 1]
@@ -929,7 +932,7 @@ class PanopticSegmentationSegment(TypedDict):
     is_thing: bool
     label: str
 
-
+# NOTE this to be moved inside the feature extractor
 @add_start_docstrings(
     """
     MaskFormer for panoptic segmentation
