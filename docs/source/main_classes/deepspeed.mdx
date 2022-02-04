@@ -1839,7 +1839,7 @@ train_batch_size = 1 * world_size
 # For indepth info on Deepspeed config see
 # https://huggingface.co/docs/transformers/master/main_classes/deepspeed
 
-# keeping the same format as json for consistency
+# keeping the same format as json for consistency, except it uses lower case for true/false
 # fmt: off
 ds_config = {
     "fp16": {
@@ -1879,10 +1879,8 @@ dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
 # now a model can be loaded.
 model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
-# we are ready to initialise deepspeed ZeRO now
-ds_engine = deepspeed.initialize(
-    model=model, config_params=ds_config, model_parameters=None, optimizer=None, lr_scheduler=None
-)[0]
+# initialise Deepspeed ZeRO and store only the engine object
+ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
 ds_engine.module.eval()  # inference
 
 # Deepspeed ZeRO can process unrelated inputs on each GPU. So for 2 gpus you process 2 inputs at once.
