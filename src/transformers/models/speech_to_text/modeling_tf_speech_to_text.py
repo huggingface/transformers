@@ -52,7 +52,10 @@ _TOKENIZER_FOR_DOC = "Speech2TextTokenizer"
 _CHECKPOINT_FOR_DOC = "facebook/s2t-small-librispeech-asr"
 
 
-TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/s2t-small-librispeech-asr",
+    # See all Speech2Text models at https://huggingface.co/models?filter=speech_to_text
+]
 
 
 LARGE_NEGATIVE = -1e8
@@ -164,7 +167,6 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         self.offset = 2
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
-        # self.embeddings = tf.Variable(self.get_embedding(num_positions + self.offset, embedding_dim, padding_idx), name="weights")
         self.embeddings = self.get_embedding(num_positions + self.offset, embedding_dim, padding_idx)
 
     @staticmethod
@@ -552,8 +554,14 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         return {
-            self.main_input_name: tf.random.normal([1, 7, 80]),
-            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int32)
+            self.main_input_name: tf.random.uniform(
+                [
+                    1,
+                    random.randint(1, self.config.max_source_positions),  # time
+                    self.config.input_feat_per_channel * self.config.input_channels,  # input channels
+                ]
+            ),
+            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int32),
         }
 
     def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
@@ -1366,17 +1374,6 @@ class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
     SPEECH_TO_TEXT_START_DOCSTRING,
 )
 class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCausalLanguageModelingLoss):
-    _keys_to_ignore_on_load_missing = [
-        r"encoder\.version",
-        r"decoder\.version",
-        r"model.encoder.embed_positions.weights",
-        r"model.decoder.embed_positions.weights",
-    ]
-    _keys_to_ignore_on_save = [
-        r"model.encoder.embed_positions.weights",
-        r"model.decoder.embed_positions.weights",
-    ]
-
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
         self.model = TFSpeech2TextMainLayer(config, name="model")

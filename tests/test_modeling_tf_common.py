@@ -456,8 +456,12 @@ class TFModelTesterMixin:
                         dtype="int32",
                     ),
                     "input_features": tf.keras.Input(
-                        batch_shape=(2, self.model_tester.conv_channels, self.model_tester.input_feat_per_channel),
-                        name="input_ids",
+                        batch_shape=(
+                            2,
+                            max_input,
+                            self.model_tester.input_feat_per_channel * self.model_tester.input_channels,
+                        ),
+                        name="input_features",
                         dtype="float32",
                     ),
                 }
@@ -971,7 +975,9 @@ class TFModelTesterMixin:
 
     def test_lm_head_model_no_beam_search_generate_dict_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict.get("input_ids", None) or inputs_dict.get("input_features", None)
+        input_ids = inputs_dict.get("input_ids", None)
+        if input_ids is None:
+            input_ids = inputs_dict.get("input_features", None)
 
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:
@@ -1042,7 +1048,9 @@ class TFModelTesterMixin:
 
     def test_lm_head_model_beam_search_generate_dict_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict.get("input_ids", None) or inputs_dict.get("input_features", None)
+        input_ids = inputs_dict.get("input_ids", None)
+        if input_ids is None:
+            input_ids = inputs_dict.get("input_features", None)
 
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:

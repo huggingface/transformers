@@ -859,7 +859,11 @@ class TFGenerationMixin:
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs,
+                input_ids,
+                past=past,
+                attention_mask=attention_mask,
+                use_cache=use_cache,
+                **kwargs,
             )
             outputs = self(
                 **model_inputs,
@@ -1119,9 +1123,12 @@ class TFGenerationMixin:
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
-            # import pdb; pdb.set_trace()
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs,
+                input_ids,
+                past=past,
+                attention_mask=attention_mask,
+                use_cache=use_cache,
+                **kwargs,
             )
             outputs = self(
                 **model_inputs,

@@ -79,7 +79,7 @@ class TFSpeech2TextModelTester:
         num_conv_layers=2,
         conv_kernel_sizes=(5, 5),
         conv_channels=32,
-        input_feat_per_channel=80,
+        input_feat_per_channel=24,
         input_channels=1,
         hidden_act="relu",
         hidden_dropout_prob=0.1,
