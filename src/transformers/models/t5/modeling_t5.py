@@ -66,13 +66,6 @@ T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# deal with deprecated torch.norm
-if hasattr(torch, "linalg") and hasattr(torch.linalg, "norm"):
-    torch_norm = torch.linalg.norm
-else:
-    torch_norm = torch.norm
-
-
 ####################################################
 # This is a conversion method from TF 1.0 to PyTorch
 # More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
@@ -242,6 +235,7 @@ class T5LayerNorm(nn.Module):
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
     def forward(self, hidden_states):
 
@@ -250,25 +244,47 @@ class T5LayerNorm(nn.Module):
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32, so the original code, which might be easier to
         # understand was:
-        #
-        # variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        # hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        # if self.weight.dtype in [torch.float16, torch.bfloat16]:
-        #     hidden_states = hidden_states.to(self.weight.dtype)
-        #
+
+        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+
         # but it's more efficient to use the fused kernel norm and it doesn't require converting the
         # inputs to fp32, just the intermediary results with norm which are much smaller, we just
         # need to make a correction for sqrt(N) - note that this is also similar to weight
         # normalization
 
-        hidden_states = (
-            hidden_states
-            / torch_norm(hidden_states, dim=-1, keepdim=True, dtype=torch.float32)
-            * math.sqrt(hidden_states.shape[-1])
-        )
+        # attempt to fuse:
+        # with torch.jit.fuser("fuser2"):
+        #     hidden_states = (
+        #         hidden_states
+        #         / (torch_norm(hidden_states, dim=-1, keepdim=True, dtype=torch.float32) + self.variance_epsilon)
+        #         * math.sqrt(hidden_states.shape[-1])
+        #     )
+        # if self.weight.dtype in [torch.float16, torch.bfloat16]:
+        #     hidden_states = hidden_states.to(self.weight.dtype)
+
+        # layer norm should always be calculated in float32
+        # variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        # hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+
+        # convert into half-precision if necessary
         if self.weight.dtype in [torch.float16, torch.bfloat16]:
             hidden_states = hidden_states.to(self.weight.dtype)
+
         return self.weight * hidden_states
+
+
+try:
+    from apex.normalization import FusedRMSNorm
+
+    T5LayerNorm = FusedRMSNorm  # noqa
+
+    print("XXX: using FusedRMSNorm")
+except ImportError:
+    print("XXX: using T5LayerNorm")
+except Exception:
+    print("XXX: using T5LayerNorm: unknown exception")
+    pass
 
 
 class T5DenseReluDense(nn.Module):
