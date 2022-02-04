@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Tuple, TypedDict
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..detr import DetrConfig
+from ..swin import SwinConfig
 
 
 MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = [
@@ -74,20 +75,29 @@ class MaskFormerConfig(PretrainedConfig):
         from ..auto.configuration_auto import AutoConfig
 
         if backbone_config is None:
-            backbone_model_type = "swin"
-            backbone = AutoConfig.from_pretrained("microsoft/swin-base-patch4-window12-384")
+            # fall back to https://huggingface.co/microsoft/swin-base-patch4-window12-384-in22k
+            backbone = SwinConfig(
+                image_size=384,
+                in_channels=3,
+                patch_size=4,
+                embed_dim=128,
+                depths=[2, 2, 18, 2],
+                num_heads=[4, 8, 16, 32],
+                window_size=12,
+                drop_path_rate=0.3,
+            )
         else:
             backbone_model_type = backbone_config.pop("model_type")
+            if backbone_model_type not in self.backbones_supported:
+                raise ValueError(
+                    f"Backbone {backbone_model_type} not supported, please use one of {','.join(self.backbones_supported)}"
+                )
             backbone = AutoConfig.for_model(backbone_model_type, **backbone_config)
 
         if transformer_decoder_config is None:
-            # NOTE we have to force detr -> fix it
-            transformer_decoder_model_type = "detr"
             transformer_decoder = DetrConfig()
 
         else:
-            # NOTE we have to force detr -> fix it
-            transformer_decoder_model_type = transformer_decoder_config.pop("model_type")
             transformer_decoder = DetrConfig(**transformer_decoder_config)
 
         self.backbone = backbone

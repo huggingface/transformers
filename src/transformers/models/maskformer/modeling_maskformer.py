@@ -39,7 +39,6 @@ from ...file_utils import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..auto.modeling_auto import AutoModel
 from ..detr import DetrConfig
 from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput
 from ..swin import SwinConfig, SwinModel
@@ -503,7 +502,7 @@ class SwinTransformerBackbone(nn.Module):
     def __init__(self, config: SwinConfig):
         super().__init__()
         # TODO should add a pretrain
-        self.model = AutoModel.from_config(config)
+        self.model = SwinModel(config)
         self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(out_shape) for out_shape in self.outputs_shapes])
         # little hack, our swin transformer has already the last norm, so let's switch the refence of the last item
         self.hidden_states_norms[-1] = self.model.layernorm
@@ -842,9 +841,6 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         queries = self.transformer_module(image_features)
         outputs: Dict[str, Tensor] = self.segmentation_module(queries, pixel_embeddings, self.config.use_auxilary_loss)
 
-        # upsample the masks to match the inputs' spatial dimension
-        outputs[PREDICTIONS_MASKS_KEY] = upsample_like(outputs[PREDICTIONS_MASKS_KEY], pixel_values)
-
         return MaskFormerOutput(**outputs)
 
 
@@ -907,8 +903,8 @@ class MaskFormerForSemanticSegmentation(MaskFormerPretrainedModel):
 
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
     # @replace_return_docstrings(output_type=MaskFormerForSemanticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, *args, labels: Optional[Dict[str, Tensor]] = None, **kwargs):
-        outputs: MaskFormerOutput = self.model(*args, **kwargs)
+    def forward(self, pixel_values: Tensor, labels: Optional[Dict[str, Tensor]] = None, **kwargs):
+        outputs: MaskFormerOutput = self.model(pixel_values, **kwargs)
         # NOTE the segmentation post processing is here for now but I'll be moved to the feature extractor
         segmentation: Tensor = self.get_segmentation(outputs.preds_logits, outputs.preds_masks)
 
@@ -918,6 +914,9 @@ class MaskFormerForSemanticSegmentation(MaskFormerPretrainedModel):
         if labels is not None:
             loss_dict.update(self.get_loss_dict(outputs, labels))
             loss = self.get_loss(loss_dict)
+
+        # upsample the masks to match the inputs' spatial dimension
+        segmentation = upsample_like(segmentation, pixel_values)
 
         return MaskFormerForSemanticSegmentationOutput(
             segmentation=segmentation, loss_dict=loss_dict, loss=loss, **outputs
@@ -978,6 +977,7 @@ class MaskFormerForPanopticSegmentation(MaskFormerForSemanticSegmentation):
         mask_probs = preds_masks.sigmoid()
         # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
         # now, we need to iterate over the batch size to correctly process the segmentation we got from the queries using our thresholds. Even if the original predicted masks have the same shape across the batch, they won't after thresholding so batch-wise operations are impossible
+        # TODO we need to store the segmentations and the segments in a list
         for (mask_probs, pred_scores, pred_labels) in zip(mask_probs, pred_scores, pred_labels):
 
             mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(
