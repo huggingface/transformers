@@ -1202,7 +1202,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
             warnings.warn(
                 "The output of this model has changed in v4.17.0 and the logits now have the same size as the inputs. "
                 "You can activate the previous behavior by passing `legacy_output=True` to this call or the "
-                "configuration of this model (only until v5, then that argument will be removed.",
+                "configuration of this model (only until v5, then that argument will be removed).",
                 FutureWarning,
             )
 
