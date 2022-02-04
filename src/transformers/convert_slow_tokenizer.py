@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Utilities to convert slow tokenizers in their fast tokenizers counterparts.
+Utilities to convert slow tokenizers in their fast tokenizers counterparts.
 
-    All the conversions are grouped here to gather SentencePiece dependencies outside of the fast tokenizers files and
-    allow to make our dependency on SentencePiece optional.
+All the conversions are grouped here to gather SentencePiece dependencies outside of the fast tokenizers files and
+allow to make our dependency on SentencePiece optional.
 """
 
 from typing import Dict, List, Tuple
@@ -910,6 +910,35 @@ class BlenderbotConverter(Converter):
         return tokenizer
 
 
+class XGLMConverter(SpmConverter):
+    def vocab(self, proto):
+        vocab = [
+            ("<s>", 0.0),
+            ("<pad>", 0.0),
+            ("</s>", 0.0),
+            ("<unk>", 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        # fmt: off
+        vocab += [("<madeupword0>", 0.0), ("<madeupword1>", 0.0), ("<madeupword2>", 0.0), ("<madeupword3>", 0.0), ("<madeupword4>", 0.0), ("<madeupword5>", 0.0), ("<madeupword6>", 0.0)]
+        # fmt: on
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 3
+        return unk_id
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="</s> $A",
+            pair="</s> $A </s> </s> $B",
+            special_tokens=[
+                ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
+
+
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
@@ -942,6 +971,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "MobileBertTokenizer": BertConverter,
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
+    "RealmTokenizer": BertConverter,
     "ReformerTokenizer": ReformerConverter,
     "RemBertTokenizer": RemBertConverter,
     "RetriBertTokenizer": BertConverter,
@@ -952,6 +982,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,
     "SplinterTokenizer": SplinterConverter,
+    "XGLMTokenizer": XGLMConverter,
 }
 
 
@@ -960,13 +991,13 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
     Args:
-        transformer_tokenizer (:class:`~transformers.tokenization_utils_base.PreTrainedTokenizer`):
+        transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
-            :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast`.
+            [`~tokenization_utils_base.PreTrainedTokenizerFast`].
 
     Return:
-        A instance of :class:`~tokenizers.Tokenizer` to be used as the backend tokenizer of a
-        :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerFast`
+        A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
+        [`~tokenization_utils_base.PreTrainedTokenizerFast`]
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__

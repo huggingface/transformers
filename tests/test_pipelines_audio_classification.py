@@ -21,7 +21,6 @@ from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
-    require_datasets,
     require_tf,
     require_torch,
     require_torchaudio,
@@ -65,7 +64,6 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
         self.run_torchaudio(audio_classifier)
 
-    @require_datasets
     @require_torchaudio
     def run_torchaudio(self, audio_classifier):
         import datasets
@@ -101,7 +99,6 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
 
     @require_torch
-    @require_datasets
     @slow
     def test_large_model_pt(self):
         import datasets

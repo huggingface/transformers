@@ -41,14 +41,14 @@ def is_torch_tensor(obj):
 
 def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
     """
-    Loads :obj:`image` to a PIL Image.
+    Loads `image` to a PIL Image.
 
     Args:
-        image (:obj:`str` or :obj:`PIL.Image.Image`):
+        image (`str` or `PIL.Image.Image`):
             The image to convert to the PIL Image format.
 
     Returns:
-        :obj:`PIL.Image.Image`: A PIL Image.
+        `PIL.Image.Image`: A PIL Image.
     """
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
@@ -87,15 +87,15 @@ class ImageFeatureExtractionMixin:
 
     def to_pil_image(self, image, rescale=None):
         """
-        Converts :obj:`image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last
-        axis if needed.
+        Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
+        needed.
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`numpy.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `numpy.ndarray` or `torch.Tensor`):
                 The image to convert to the PIL Image format.
-            rescale (:obj:`bool`, `optional`):
+            rescale (`bool`, *optional*):
                 Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will
-                default to :obj:`True` if the image type is a floating type, :obj:`False` otherwise.
+                default to `True` if the image type is a floating type, `False` otherwise.
         """
         self._ensure_format_supported(image)
 
@@ -117,17 +117,16 @@ class ImageFeatureExtractionMixin:
 
     def to_numpy_array(self, image, rescale=None, channel_first=True):
         """
-        Converts :obj:`image` to a numpy array. Optionally rescales it and puts the channel dimension as the first
+        Converts `image` to a numpy array. Optionally rescales it and puts the channel dimension as the first
         dimension.
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to convert to a NumPy array.
-            rescale (:obj:`bool`, `optional`):
+            rescale (`bool`, *optional*):
                 Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.). Will
-                default to :obj:`True` if the image is a PIL Image or an array/tensor of integers, :obj:`False`
-                otherwise.
-            channel_first (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                default to `True` if the image is a PIL Image or an array/tensor of integers, `False` otherwise.
+            channel_first (`bool`, *optional*, defaults to `True`):
                 Whether or not to permute the dimensions of the image to put the channel dimension first.
         """
         self._ensure_format_supported(image)
@@ -151,15 +150,15 @@ class ImageFeatureExtractionMixin:
 
     def normalize(self, image, mean, std):
         """
-        Normalizes :obj:`image` with :obj:`mean` and :obj:`std`. Note that this will trigger a conversion of
-        :obj:`image` to a NumPy array if it's a PIL Image.
+        Normalizes `image` with `mean` and `std`. Note that this will trigger a conversion of `image` to a NumPy array
+        if it's a PIL Image.
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to normalize.
-            mean (:obj:`List[float]` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            mean (`List[float]` or `np.ndarray` or `torch.Tensor`):
                 The mean (per channel) to use for normalization.
-            std (:obj:`List[float]` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            std (`List[float]` or `np.ndarray` or `torch.Tensor`):
                 The standard deviation (per channel) to use for normalization.
         """
         self._ensure_format_supported(image)
@@ -185,38 +184,77 @@ class ImageFeatureExtractionMixin:
         else:
             return (image - mean) / std
 
-    def resize(self, image, size, resample=PIL.Image.BILINEAR):
+    def resize(self, image, size, resample=PIL.Image.BILINEAR, default_to_square=True, max_size=None):
         """
-        Resizes :obj:`image`. Note that this will trigger a conversion of :obj:`image` to a PIL Image.
+        Resizes `image`. Note that this will trigger a conversion of `image` to a PIL Image.
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to resize.
-            size (:obj:`int` or :obj:`Tuple[int, int]`):
-                The size to use for resizing the image.
-            resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
+            size (`int` or `Tuple[int, int]`):
+                The size to use for resizing the image. If `size` is a sequence like (h, w), output size will be
+                matched to this.
+
+                If `size` is an int and `default_to_square` is `True`, then image will be resized to (size, size). If
+                `size` is an int and `default_to_square` is `False`, then smaller edge of the image will be matched to
+                this number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
+            resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
                 The filter to user for resampling.
+            default_to_square (`bool`, *optional*, defaults to `True`):
+                How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a
+                square (`size`,`size`). If set to `False`, will replicate
+                [`torchvision.transforms.Resize`](https://pytorch.org/vision/stable/transforms.html#torchvision.transforms.Resize)
+                with support for resizing only the smallest edge and providing an optional `max_size`.
+            max_size (`int`, *optional*, defaults to `None`):
+                The maximum allowed for the longer edge of the resized image: if the longer edge of the image is
+                greater than `max_size` after being resized according to `size`, then the image is resized again so
+                that the longer edge is equal to `max_size`. As a result, `size` might be overruled, i.e the smaller
+                edge may be shorter than `size`. Only used if `default_to_square` is `False`.
         """
         self._ensure_format_supported(image)
 
-        if isinstance(size, int):
-            size = (size, size)
-        elif isinstance(size, list):
-            size = tuple(size)
         if not isinstance(image, PIL.Image.Image):
             image = self.to_pil_image(image)
+
+        if isinstance(size, list):
+            size = tuple(size)
+
+        if isinstance(size, int) or len(size) == 1:
+            if default_to_square:
+                size = (size, size) if isinstance(size, int) else (size[0], size[0])
+            else:
+                width, height = image.size
+                # specified size only for the smallest edge
+                short, long = (width, height) if width <= height else (height, width)
+                requested_new_short = size if isinstance(size, int) else size[0]
+
+                if short == requested_new_short:
+                    return image
+
+                new_short, new_long = requested_new_short, int(requested_new_short * long / short)
+
+                if max_size is not None:
+                    if max_size <= requested_new_short:
+                        raise ValueError(
+                            f"max_size = {max_size} must be strictly greater than the requested "
+                            f"size for the smaller edge size = {size}"
+                        )
+                    if new_long > max_size:
+                        new_short, new_long = int(max_size * new_short / new_long), max_size
+
+                size = (new_short, new_long) if width <= height else (new_long, new_short)
 
         return image.resize(size, resample=resample)
 
     def center_crop(self, image, size):
         """
-        Crops :obj:`image` to the given size using a center crop. Note that if the image is too small to be cropped to
-        the size given, it will be padded (so the returned result has the size asked).
+        Crops `image` to the given size using a center crop. Note that if the image is too small to be cropped to the
+        size given, it will be padded (so the returned result has the size asked).
 
         Args:
-            image (:obj:`PIL.Image.Image` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
                 The image to resize.
-            size (:obj:`int` or :obj:`Tuple[int, int]`):
+            size (`int` or `Tuple[int, int]`):
                 The size to which crop the image.
         """
         self._ensure_format_supported(image)

@@ -636,6 +636,19 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             [],
         )
 
+        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
+        # Overload offset_mapping
+        outputs = token_classifier(
+            "This is a test !", offset_mapping=[(0, 0), (0, 1), (0, 2), (0, 0), (0, 0), (0, 0), (0, 0)]
+        )
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 1},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 0, "end": 2},
+            ],
+        )
+
     @require_torch
     def test_pt_ignore_subwords_slow_tokenizer_raises(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"

@@ -99,6 +99,44 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_text = "unwanted, running"
         return input_text, output_text
 
+    # override test in `test_tokenization_common.py` because of the required input format of the `__call__`` method of
+    # this tokenizer
+    def test_save_sentencepiece_tokenizer(self) -> None:
+        if not self.test_sentencepiece or not self.test_slow_tokenizer:
+            return
+        # We want to verify that we will be able to save the tokenizer even if the original files that were used to
+        # build the tokenizer have been deleted in the meantime.
+        words, boxes = self.get_words_and_boxes()
+
+        tokenizer_slow_1 = self.get_tokenizer()
+        encoding_tokenizer_slow_1 = tokenizer_slow_1(
+            words,
+            boxes=boxes,
+        )
+
+        tmpdirname_1 = tempfile.mkdtemp()
+        tmpdirname_2 = tempfile.mkdtemp()
+
+        tokenizer_slow_1.save_pretrained(tmpdirname_1)
+        tokenizer_slow_2 = self.tokenizer_class.from_pretrained(tmpdirname_1)
+        encoding_tokenizer_slow_2 = tokenizer_slow_2(
+            words,
+            boxes=boxes,
+        )
+
+        shutil.rmtree(tmpdirname_1)
+        tokenizer_slow_2.save_pretrained(tmpdirname_2)
+
+        tokenizer_slow_3 = self.tokenizer_class.from_pretrained(tmpdirname_2)
+        encoding_tokenizer_slow_3 = tokenizer_slow_3(
+            words,
+            boxes=boxes,
+        )
+        shutil.rmtree(tmpdirname_2)
+
+        self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_2)
+        self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_3)
+
     @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutxlm-base")
@@ -939,6 +977,10 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname)
 
+    @unittest.skip("Not implemented")
+    def test_right_and_left_truncation(self):
+        pass
+
     def test_right_and_left_padding(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -1641,6 +1683,78 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     else:
                         self.assertEqual(len(tokens[key].shape), 3)
                         self.assertEqual(tokens[key].shape[-1], 4)
+
+    # overwrite from test_tokenization_common to speed up test
+    def test_save_pretrained(self):
+        if not self.test_slow_tokenizer:
+            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            return
+
+        self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-random-layoutxlm", {})
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+                tmpdirname2 = tempfile.mkdtemp()
+
+                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2)
+                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
+
+                # Checks it save with the same files + the tokenizer.json file for the fast one
+                self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
+                tokenizer_r_files = tuple(f for f in tokenizer_r_files if "tokenizer.json" not in f)
+                self.assertSequenceEqual(tokenizer_r_files, tokenizer_p_files)
+
+                # Checks everything loads correctly in the same way
+                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
+                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
+
+                # Check special tokens are set accordingly on Rust and Python
+                for key in tokenizer_pp.special_tokens_map:
+                    self.assertTrue(hasattr(tokenizer_rp, key))
+                    # self.assertEqual(getattr(tokenizer_rp, key), getattr(tokenizer_pp, key))
+                    # self.assertEqual(getattr(tokenizer_rp, key + "_id"), getattr(tokenizer_pp, key + "_id"))
+
+                shutil.rmtree(tmpdirname2)
+
+                # Save tokenizer rust, legacy_format=True
+                tmpdirname2 = tempfile.mkdtemp()
+
+                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=True)
+                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
+
+                # Checks it save with the same files
+                self.assertSequenceEqual(tokenizer_r_files, tokenizer_p_files)
+
+                # Checks everything loads correctly in the same way
+                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
+                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
+
+                # Check special tokens are set accordingly on Rust and Python
+                for key in tokenizer_pp.special_tokens_map:
+                    self.assertTrue(hasattr(tokenizer_rp, key))
+
+                shutil.rmtree(tmpdirname2)
+
+                # Save tokenizer rust, legacy_format=False
+                tmpdirname2 = tempfile.mkdtemp()
+
+                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=False)
+                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
+
+                # Checks it saved the tokenizer.json file
+                self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
+
+                # Checks everything loads correctly in the same way
+                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
+                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
+
+                # Check special tokens are set accordingly on Rust and Python
+                for key in tokenizer_pp.special_tokens_map:
+                    self.assertTrue(hasattr(tokenizer_rp, key))
+
+                shutil.rmtree(tmpdirname2)
 
     @unittest.skip("TO DO: overwrite this very extensive test.")
     def test_alignement_methods(self):

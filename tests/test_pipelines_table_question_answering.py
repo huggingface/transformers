@@ -35,17 +35,16 @@ from transformers.testing_utils import (
 from .test_pipelines_common import PipelineTestCaseMeta
 
 
-@require_tensorflow_probability
-@require_torch_scatter
-@require_torch
-@require_pandas
 @is_pipeline_test
 class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     # Putting it there for consistency, but TQA do not have fast tokenizer
     # which are needed to generate automatic tests
     model_mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
 
+    @require_tensorflow_probability
+    @require_pandas
     @require_tf
+    @require_torch
     def test_small_model_tf(self):
         model_id = "lysandre/tiny-tapas-random-wtq"
         model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id, from_pt=True)
@@ -147,6 +146,7 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             )
 
     @require_torch
+    @require_torch_scatter
     def test_small_model_pt(self):
         model_id = "lysandre/tiny-tapas-random-wtq"
         model = AutoModelForTableQuestionAnswering.from_pretrained(model_id)
@@ -248,6 +248,7 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             )
 
     @require_torch
+    @require_torch_scatter
     def test_slow_tokenizer_sqa_pt(self):
         model_id = "lysandre/tiny-tapas-random-sqa"
         model = AutoModelForTableQuestionAnswering.from_pretrained(model_id)
@@ -366,6 +367,9 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             )
 
     @require_tf
+    @require_tensorflow_probability
+    @require_pandas
+    @require_torch
     def test_slow_tokenizer_sqa_tf(self):
         model_id = "lysandre/tiny-tapas-random-sqa"
         model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id, from_pt=True)
@@ -484,6 +488,7 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             )
 
     @slow
+    @require_torch_scatter
     def test_integration_wtq_pt(self):
         table_querier = pipeline("table-question-answering")
 
@@ -528,6 +533,8 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         self.assertListEqual(results, expected_results)
 
     @slow
+    @require_tensorflow_probability
+    @require_pandas
     def test_integration_wtq_tf(self):
         model_id = "google/tapas-base-finetuned-wtq"
         model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id)
@@ -575,6 +582,7 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         self.assertListEqual(results, expected_results)
 
     @slow
+    @require_torch_scatter
     def test_integration_sqa_pt(self):
         table_querier = pipeline(
             "table-question-answering",
@@ -598,6 +606,8 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         self.assertListEqual(results, expected_results)
 
     @slow
+    @require_tensorflow_probability
+    @require_pandas
     def test_integration_sqa_tf(self):
         model_id = "google/tapas-base-finetuned-sqa"
         model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id)

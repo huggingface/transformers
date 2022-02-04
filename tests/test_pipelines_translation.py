@@ -47,6 +47,12 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
         outputs = translator("Some string")
         self.assertEqual(outputs, [{"translation_text": ANY(str)}])
 
+        outputs = translator(["Some string"])
+        self.assertEqual(outputs, [{"translation_text": ANY(str)}])
+
+        outputs = translator(["Some string", "other string"])
+        self.assertEqual(outputs, [{"translation_text": ANY(str)}, {"translation_text": ANY(str)}])
+
     @require_torch
     def test_small_model_pt(self):
         translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random", framework="pt")

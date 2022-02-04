@@ -85,10 +85,10 @@ class ExamplesTests(TestCasePlus):
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
             --learning_rate=1e-4
-            --max_train_steps=10
-            --num_warmup_steps=2
+            --eval_steps=2
+            --warmup_steps=2
             --seed=42
-            --max_length=128
+            --max_seq_length=128
             """.split()
 
         with patch.object(sys, "argv", testargs):
@@ -137,7 +137,7 @@ class ExamplesTests(TestCasePlus):
             --test_file tests/fixtures/tests_samples/xsum/sample.json
             --output_dir {tmp_dir}
             --overwrite_output_dir
-            --max_steps=50
+            --num_train_epochs=3
             --warmup_steps=8
             --do_train
             --do_eval
@@ -257,7 +257,7 @@ class ExamplesTests(TestCasePlus):
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
             --output_dir {tmp_dir}
             --overwrite_output_dir
-            --max_steps=10
+            --num_train_epochs=3
             --warmup_steps=2
             --do_train
             --do_eval

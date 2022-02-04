@@ -27,13 +27,16 @@ _import_structure = {
     "tokenization_wav2vec2": ["Wav2Vec2CTCTokenizer", "Wav2Vec2Tokenizer"],
 }
 
+
 if is_torch_available():
     _import_structure["modeling_wav2vec2"] = [
         "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "Wav2Vec2ForAudioFrameClassification",
         "Wav2Vec2ForCTC",
         "Wav2Vec2ForMaskedLM",
         "Wav2Vec2ForPreTraining",
         "Wav2Vec2ForSequenceClassification",
+        "Wav2Vec2ForXVector",
         "Wav2Vec2Model",
         "Wav2Vec2PreTrainedModel",
     ]
@@ -64,10 +67,12 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Wav2Vec2ForAudioFrameClassification,
             Wav2Vec2ForCTC,
             Wav2Vec2ForMaskedLM,
             Wav2Vec2ForPreTraining,
             Wav2Vec2ForSequenceClassification,
+            Wav2Vec2ForXVector,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
         )
@@ -92,4 +97,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
