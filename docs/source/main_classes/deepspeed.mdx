@@ -1755,14 +1755,14 @@ Please note that if you're not using the [`Trainer`] integration, you're complet
 
 Here is an example of how one could do DeepSpeed ZeRO Inference without using [`Trainer`] when one can't fit a model onto a single GPU. The solution includes using additional GPUs or/and offloading GPU memory to CPU memory.
 
-The important nuance to understand here is that the way ZeRO is designed you can process different inputs on different gpus in parallel.
+The important nuance to understand here is that the way ZeRO is designed you can process different inputs on different GPUs in parallel.
 
 The example has copious notes and is self-documenting.
 
 Make sure to:
 
-1. disable cpu offload if you have enough GPU memory (since it slows things down)
-2. enable bf16 if you own an Ampere or a newer gpu to make things faster. If you don't have that hardware you may enable fp16 as long as you use a different model than a t5-variant or any other model that was pre-trained in bf16 mixed precision - these usually overflow in fp16 and you will see garbage as output.
+1. disable CPU offload if you have enough GPU memory (since it slows things down)
+2. enable bf16 if you own an Ampere or a newer GPU to make things faster. If you don't have that hardware you may enable fp16 as long as you don't use any model that was pre-trained in bf16 mixed precision (such as most t5 models). These usually overflow in fp16 and you will see garbage as output.
 
 ```
 $ cat t0.py
