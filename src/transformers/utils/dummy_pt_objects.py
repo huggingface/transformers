@@ -474,6 +474,13 @@ class AutoModelForQuestionAnswering(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class AutoModelForSemanticSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AutoModelForSeq2SeqLM(metaclass=DummyObject):
     _backends = ["torch"]
 

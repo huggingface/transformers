@@ -17,6 +17,7 @@
 
 import collections
 import math
+import warnings
 
 import torch
 import torch.utils.checkpoint
@@ -30,7 +31,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput, SemanticSegmentationModelOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_segformer import SegformerConfig
@@ -688,7 +689,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=SemanticSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -696,11 +697,17 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        legacy_output=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+        legacy_output (`bool`, *optional*):
+            Whether to return the legacy outputs or not (with logits of shape `height / 4 , width / 4`). Will default
+            to `self.config.legacy_output`.
+
+            This argument is only present for backward compatibility reasons and will be removed in v5 of Transformers.
 
         Returns:
 
@@ -719,12 +726,20 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> logits = outputs.logits  # shape (batch_size, num_labels, height/4, width/4)
+        >>> logits = outputs.logits  # shape (batch_size, num_labels, height, width)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        legacy_output = legacy_output if legacy_output is not None else self.config.legacy_output
+        if not legacy_output:
+            warnings.warn(
+                "The output of this model has changed in v4.17.0 and the logits now have the same size as the inputs. "
+                "You can activate the previous behavior by passing `legacy_output=True` to this call or the "
+                "configuration of this model (only until v5, then that argument will be removed).",
+                FutureWarning,
+            )
 
         outputs = self.segformer(
             pixel_values,
@@ -737,28 +752,37 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
 
         logits = self.decode_head(encoder_hidden_states)
 
+        upsampled_logits = nn.functional.interpolate(
+            logits, size=pixel_values.shape[-2:], mode="bilinear", align_corners=False
+        )
+
         loss = None
         if labels is not None:
             if self.config.num_labels == 1:
                 raise ValueError("The number of labels should be greater than one")
             else:
                 # upsample logits to the images' original size
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                )
                 loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
                 loss = loss_fct(upsampled_logits, labels)
 
         if not return_dict:
             if output_hidden_states:
-                output = (logits,) + outputs[1:]
+                output = (logits if legacy_output else upsampled_logits,) + outputs[1:]
             else:
-                output = (logits,) + outputs[2:]
+                output = (logits if legacy_output else upsampled_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
-        )
+        if legacy_output:
+            return SequenceClassifierOutput(
+                loss=loss,
+                logits=logits,
+                hidden_states=outputs.hidden_states if output_hidden_states else None,
+                attentions=outputs.attentions,
+            )
+        else:
+            return SemanticSegmentationModelOutput(
+                loss=loss,
+                logits=upsampled_logits,
+                hidden_states=outputs.hidden_states if output_hidden_states else None,
+                attentions=outputs.attentions,
+            )
