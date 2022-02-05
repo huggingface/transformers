@@ -103,7 +103,7 @@ class TPMapping(object):
                     copy_elem.name = name
                     cache_tp_mapping[cls].append(copy_elem)
 
-        self.__MAPPING__ = {cls: {} for cls in cache_tp_mapping}
+        self.__MAPPING__ = {cls: defaultdict(list) for cls in cache_tp_mapping}
         # clear exist mapping rather than making new mapping dict
 
         for cls, mapping in cache_tp_mapping.items():
