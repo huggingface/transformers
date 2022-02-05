@@ -123,7 +123,7 @@ class TPMapping(object):
     def get_mapping(self, model):
         for cls, mapping in self.__MAPPING__.items():
             if isinstance(model, cls):
-                return mapping
+                return dict(mapping)
         return None
 
     def column_parallel_params(self, model):
