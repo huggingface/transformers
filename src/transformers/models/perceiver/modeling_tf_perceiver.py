@@ -15,7 +15,12 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_tf_utils import get_initializer, TFMaskedLanguageModelingLoss, TFSequenceClassificationLoss
+from ...modeling_tf_utils import (
+    get_initializer,
+    TFMaskedLanguageModelingLoss,
+    TFSequenceClassificationLoss,
+    input_processing,
+)
 from ...utils import logging
 
 
@@ -732,7 +737,7 @@ class TFPerceiverModel(TFPerceiverPreTrainedModel):
     @replace_return_docstrings(output_type=TFPerceiverModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs: tf.Tensor,
+        input_ids: tf.Tensor,
         attention_mask: tf.Tensor = None,
         subsampled_output_points=None,  # TODO: add typing(something seems wrong here)
         head_mask: tf.Tensor = None,
@@ -740,6 +745,7 @@ class TFPerceiverModel(TFPerceiverPreTrainedModel):
         output_hidden_states: bool = None,
         return_dict: bool = None,
         training: bool = False,
+        **kwargs
     ):
         r"""
         Returns:
@@ -815,34 +821,51 @@ class TFPerceiverModel(TFPerceiverPreTrainedModel):
         >>> outputs = model(inputs=inputs)
         >>> logits = outputs.logits
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            subsampled_output_points=subsampled_output_points,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"]
+            if inputs["output_hidden_states"] is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
 
         if self.input_preprocessor is not None:
-            inputs, modality_sizes, inputs_without_pos = self.input_preprocessor(inputs)
+            inputs["input_ids"], modality_sizes, inputs_without_pos = self.input_preprocessor(inputs["input_ids"])
         else:
             modality_sizes = None
             inputs_without_pos = None
-            d = shape_list(inputs)[-1]
+            d = shape_list(inputs["input_ids"])[-1]
             if d != self.config.d_model:
                 raise ValueError(
                     f"Last dimension of the inputs: {d} doesn't correspond to config.d_model: {self.config.d_model}. "
                     "Make sure to set config.d_model appropriately."
                 )
 
-        batch_size, seq_length, _ = shape_list(inputs)
+        batch_size, seq_length, _ = shape_list(inputs["input_ids"])
 
         # If no attention mask is provided, make them all ones
-        if attention_mask is None:
+        if inputs["attention_mask"] is None:
             attention_mask = tf.fill(dims=(batch_size, seq_length), value=1.0)
         attention_mask_shape = shape_list(attention_mask)
         extended_attention_mask = tf.reshape(attention_mask, (attention_mask_shape[0], 1, 1, attention_mask_shape[1]))
         extended_attention_mask = tf.cast(extended_attention_mask, dtype=tf.float32)
 
-        if head_mask is not None:
+        if inputs["head_mask"] is not None:
             raise NotImplementedError
         else:
             head_mask = [None] * (self.config.num_blocks * self.config.num_self_attends_per_block)
@@ -853,37 +876,40 @@ class TFPerceiverModel(TFPerceiverPreTrainedModel):
             embedding_output,
             attention_mask=None,
             head_mask=head_mask,
-            inputs=inputs,
+            inputs=inputs["input_ids"],
             inputs_mask=extended_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
         )
         sequence_output = encoder_outputs[0]
 
         logits = None
         if self.decoder:
-            if subsampled_output_points is not None:
+            if inputs["subsampled_output_points"] is not None:
                 output_modality_sizes = {
-                    "audio": subsampled_output_points["audio"].shape[0],
-                    "image": subsampled_output_points["image"].shape[0],
+                    "audio": inputs["subsampled_output_points"]["audio"].shape[0],
+                    "image": inputs["subsampled_output_points"]["image"].shape[0],
                     "label": 1,
                 }
             else:
                 output_modality_sizes = None
             decoder_query = self.decoder.decoder_query(
-                inputs, modality_sizes, inputs_without_pos, subsampled_points=subsampled_output_points
+                inputs["input_ids"],
+                modality_sizes,
+                inputs_without_pos,
+                subsampled_points=inputs["subsampled_output_points"],
             )
             decoder_outputs = self.decoder(
                 decoder_query,
                 z=sequence_output,
                 query_mask=extended_attention_mask,
-                output_attentions=output_attentions,
+                output_attentions=inputs["output_attentions"],
             )
             logits = decoder_outputs.logits
 
             # add cross-attentions of decoder
-            if output_attentions and decoder_outputs.cross_attentions is not None:
+            if inputs["output_attentions"] and decoder_outputs.cross_attentions is not None:
                 if return_dict:
                     encoder_outputs.cross_attentions = (
                         encoder_outputs.cross_attentions,
@@ -895,7 +921,7 @@ class TFPerceiverModel(TFPerceiverPreTrainedModel):
             if self.output_postprocessor:
                 logits = self.output_postprocessor(logits, modality_sizes=output_modality_sizes)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             if logits is not None:
                 return (logits, sequence_output) + encoder_outputs[1:]
             else:
@@ -943,14 +969,15 @@ class TFPerceiverForMaskedLM(TFPerceiverPreTrainedModel, TFMaskedLanguageModelin
     @replace_return_docstrings(output_type=TFPerceiverMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs: tf.Tensor = None,
+        input_ids: tf.Tensor = None,
         attention_mask: tf.Tensor = None,
         head_mask: tf.Tensor = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
         labels: tf.Tensor = None,
         return_dict: bool = None,
-        input_ids: tf.Tensor = None,
+        training: bool = False,
+        **kwargs,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -994,34 +1021,45 @@ class TFPerceiverForMaskedLM(TFPerceiverPreTrainedModel, TFMaskedLanguageModelin
         >>> tokenizer.decode(masked_tokens_predictions)
         ' missing.'
         ```"""
-        if inputs is not None and input_ids is not None:
-            raise ValueError("You cannot use both `inputs` and `input_ids`")
-        elif inputs is None and input_ids is not None:
-            inputs = input_ids
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.perceiver(
-            inputs=inputs,
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            labels=labels,
             return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        # if inputs is not None and input_ids is not None:
+        #     raise ValueError("You cannot use both `inputs` and `input_ids`")
+        # elif inputs is None and input_ids is not None:
+        #     inputs = input_ids
+
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            head_mask=inputs["head_mask"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"]
         )
 
         logits = self.embedding_decoder(
-            hidden_states=outputs.logits if return_dict else outputs[0],
+            hidden_states=outputs.logits if inputs["return_dict"] else outputs[0],
             embedding_layer=self.perceiver.input_preprocessor.embeddings,
         )
 
         masked_lm_loss = None
-        if labels is not None:
-            masked_lm_loss = self.compute_loss(labels=labels, logits=logits)
-            # loss_fct = tf.keras.losses.CategoricalCrossentropy(from_logits=True)  # -100 index = padding token
-            # masked_lm_loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+        if inputs["labels"] is not None:
+            masked_lm_loss = self.compute_loss(labels=inputs["labels"], logits=logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
@@ -1057,14 +1095,15 @@ class TFPerceiverForSequenceClassification(TFPerceiverPreTrainedModel, TFSequenc
     @replace_return_docstrings(output_type=TFPerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs: tf.Tensor = None,
+        input_ids: tf.Tensor = None,
         attention_mask: tf.Tensor = None,
         head_mask: tf.Tensor = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
         labels: tf.Tensor = None,
         return_dict: bool = None,
-        input_ids: tf.Tensor = None,
+        training: bool = False,
+        **kwargs
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1087,27 +1126,40 @@ class TFPerceiverForSequenceClassification(TFPerceiverPreTrainedModel, TFSequenc
         >>> outputs = model(inputs=inputs)
         >>> logits = outputs.logits
         ```"""
-        if inputs is not None and input_ids is not None:
-            raise ValueError("You cannot use both `inputs` and `input_ids`")
-        elif inputs is None and input_ids is not None:
-            inputs = input_ids
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.perceiver(
-            inputs=inputs,
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            labels=labels,
             return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        # if inputs is not None and input_ids is not None:
+        #     raise ValueError("You cannot use both `inputs` and `input_ids`")
+        # elif inputs is None and input_ids is not None:
+        #     inputs = input_ids
+
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            head_mask=inputs["head_mask"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
         )
 
-        logits = outputs.logits if return_dict else outputs[0]
+        logits = outputs.logits if inputs["return_dict"] else outputs[0]
 
         loss = None
-        if labels is not None:
-            loss = self.compute_loss(labels=labels, logits=logits)
+        if inputs["labels"] is not None:
+            loss = self.compute_loss(labels=inputs["labels"], logits=logits)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1168,7 +1220,7 @@ class TFPerceiverForImageClassificationLearned(TFPerceiverPreTrainedModel, TFSeq
     @replace_return_docstrings(output_type=TFPerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs: tf.Tensor = None,
+        input_ids: tf.Tensor = None,
         attention_mask: tf.Tensor = None,
         head_mask: tf.Tensor = None,
         output_attentions: bool = None,
@@ -1176,6 +1228,8 @@ class TFPerceiverForImageClassificationLearned(TFPerceiverPreTrainedModel, TFSeq
         labels: tf.Tensor = None,
         return_dict: bool = None,
         pixel_values: tf.Tensor = None,
+        training: bool = False,
+        **kwargs
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1205,28 +1259,42 @@ class TFPerceiverForImageClassificationLearned(TFPerceiverPreTrainedModel, TFSeq
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         ```"""
-        if inputs is not None and pixel_values is not None:
-            raise ValueError("You cannot use both `inputs` and `pixel_values`")
-        elif inputs is None and pixel_values is not None:
-            inputs = pixel_values
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.perceiver(
-            inputs=inputs,
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            labels=labels,
             return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
         )
-        logits = outputs.logits if return_dict else outputs[0]
+        if inputs["input_ids"] is not None and inputs["pixel_values"] is not None:
+            raise ValueError("You cannot use both `inputs` and `pixel_values`")
+        elif inputs["input_ids"] is None and inputs["pixel_values"] is not None:
+            inputs["input_ids"] = inputs["pixel_values"]
+
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            head_mask=inputs["head_mask"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            # **kwargs,
+        )
+        logits = outputs.logits if inputs["return_dict"] else outputs[0]
 
         loss = None
-        if labels is not None:
-            loss = self.compute_loss(labels=labels, logits=logits)
+        if inputs["labels"] is not None:
+            loss = self.compute_loss(labels=inputs["labels"], logits=logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1283,7 +1351,7 @@ class TFPerceiverForImageClassificationFourier(TFPerceiverPreTrainedModel, TFSeq
     @replace_return_docstrings(output_type=TFPerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs: tf.Tensor = None,
+        input_ids: tf.Tensor = None,
         attention_mask: tf.Tensor = None,
         head_mask: tf.Tensor = None,
         output_attentions: bool = None,
@@ -1291,6 +1359,8 @@ class TFPerceiverForImageClassificationFourier(TFPerceiverPreTrainedModel, TFSeq
         labels: tf.Tensor = None,
         return_dict: bool = None,
         pixel_values: tf.Tensor = None,
+        training: bool = False,
+        **kwargs
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1320,27 +1390,42 @@ class TFPerceiverForImageClassificationFourier(TFPerceiverPreTrainedModel, TFSeq
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         ```"""
-        if inputs is not None and pixel_values is not None:
-            raise ValueError("You cannot use both `inputs` and `pixel_values`")
-        elif inputs is None and pixel_values is not None:
-            inputs = pixel_values
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.perceiver(
-            inputs=inputs,
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            labels=labels,
             return_dict=return_dict,
+            pixel_values=pixel_values,
+            training=training,
+            kwargs_call=kwargs,
         )
-        logits = outputs.logits if return_dict else outputs[0]
+        if inputs["input_ids"] is not None and inputs["pixel_values"] is not None:
+            raise ValueError("You cannot use both `inputs` and `pixel_values`")
+        elif inputs["input_ids"] is None and inputs["pixel_values"] is not None:
+            inputs["input_ids"] = inputs["pixel_values"]
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            head_mask=inputs["head_mask"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            # **kwargs,
+        )
+        logits = outputs.logits if inputs["return_dict"] else outputs[0]
 
         loss = None
-        if labels is not None:
-            loss = self.compute_loss(labels=labels, logits=logits)
+        if inputs["labels"] is not None:
+            loss = self.compute_loss(labels=inputs["labels"], logits=logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1398,7 +1483,7 @@ class TFPerceiverForImageClassificationConvProcessing(TFPerceiverPreTrainedModel
     @replace_return_docstrings(output_type=TFPerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs: tf.Tensor = None,
+        input_ids: tf.Tensor = None,
         attention_mask: tf.Tensor = None,
         head_mask: tf.Tensor = None,
         output_attentions: bool = None,
@@ -1406,6 +1491,8 @@ class TFPerceiverForImageClassificationConvProcessing(TFPerceiverPreTrainedModel
         labels: tf.Tensor = None,
         return_dict: bool = None,
         pixel_values: tf.Tensor = None,
+        training: bool = False,
+        **kwargs
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1435,27 +1522,42 @@ class TFPerceiverForImageClassificationConvProcessing(TFPerceiverPreTrainedModel
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         ```"""
-        if inputs is not None and pixel_values is not None:
-            raise ValueError("You cannot use both `inputs` and `pixel_values`")
-        elif inputs is None and pixel_values is not None:
-            inputs = pixel_values
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.perceiver(
-            inputs=inputs,
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            labels=labels,
             return_dict=return_dict,
+            pixel_values=pixel_values,
+            training=training,
+            kwargs_call=kwargs,
         )
-        logits = outputs.logits if return_dict else outputs[0]
+        if inputs["input_ids"] is not None and inputs["pixel_values"] is not None:
+            raise ValueError("You cannot use both `inputs` and `pixel_values`")
+        elif inputs["input_ids"] is None and inputs["pixel_values"] is not None:
+            inputs["input_ids"] = inputs["pixel_values"]
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            head_mask=inputs["head_mask"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            # **kwargs,
+        )
+        logits = outputs.logits if inputs["return_dict"] else outputs[0]
 
         loss = None
-        if labels is not None:
-            loss = self.compute_loss(labels=labels, logits=logits)
+        if inputs["labels"] is not None:
+            loss = self.compute_loss(labels=inputs["labels"], logits=logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1530,13 +1632,15 @@ class TFPerceiverForOpticalFlow(TFPerceiverPreTrainedModel):
     @replace_return_docstrings(output_type=TFPerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs: tf.Tensor = None,
+        input_ids: tf.Tensor = None,
         attention_mask: tf.Tensor = None,
         head_mask: tf.Tensor = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
         labels: tf.Tensor = None,
         return_dict: bool = None,
+        training: bool = False,
+        **kwargs
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1560,23 +1664,36 @@ class TFPerceiverForOpticalFlow(TFPerceiverPreTrainedModel):
         >>> outputs = model(inputs=patches)
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.perceiver(
-            inputs=inputs,
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            labels=labels,
             return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
         )
-        logits = outputs.logits if return_dict else outputs[0]
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            head_mask=inputs["head_mask"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+        )
+        logits = outputs.logits if inputs["return_dict"] else outputs[0]
 
         loss = None
-        if labels is not None:
+        if inputs["labels"] is not None:
             raise NotImplementedError("Optical flow training is not yet supported")
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1736,7 +1853,7 @@ class TFPerceiverForMultimodalAutoencoding(TFPerceiverPreTrainedModel):
     @replace_return_docstrings(output_type=TFPerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs: tf.Tensor = None,
+        input_ids: tf.Tensor = None,
         attention_mask: tf.Tensor = None,
         subsampled_output_points=None,  # TODO: add typing(something seems wrong here)
         head_mask: tf.tan = None,
@@ -1744,6 +1861,8 @@ class TFPerceiverForMultimodalAutoencoding(TFPerceiverPreTrainedModel):
         output_hidden_states: bool = None,
         labels: tf.Tensor = None,
         return_dict: bool = None,
+        training: bool = False,
+        **kwargs
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1783,24 +1902,38 @@ class TFPerceiverForMultimodalAutoencoding(TFPerceiverPreTrainedModel):
         >>> outputs = model(inputs=inputs, subsampled_output_points=subsampling)
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.perceiver(
-            inputs=inputs,
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
             attention_mask=attention_mask,
-            subsampled_output_points=subsampled_output_points,
+            # subsampled_output_points=subsampled_output_points,  # TODO=add typing(something seems wrong here)
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            labels=labels,
             return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
         )
-        logits = outputs.logits if return_dict else outputs[0]
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+
+        outputs = self.perceiver(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            subsampled_output_points=inputs["subsampled_output_points"],
+            head_mask=inputs["head_mask"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+        )
+        logits = outputs.logits if inputs["return_dict"] else outputs[0]
 
         loss = None
-        if labels is not None:
+        if inputs["labels"] is not None:
             raise NotImplementedError("Multimodal autoencoding training is not yet supported")
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 

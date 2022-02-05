@@ -202,19 +202,19 @@ class TFPerceiverModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, inputs, input_mask, sequence_labels, token_labels = config_and_inputs
-        inputs_dict = {"inputs": inputs, "attention_mask": input_mask}
+        inputs_dict = {"input_ids": inputs, "attention_mask": input_mask}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
         config_and_inputs = self.prepare_config_and_inputs(model_class)
         config, inputs, input_mask, sequence_labels, token_labels = config_and_inputs
-        inputs_dict = {"inputs": inputs, "attention_mask": input_mask}
+        inputs_dict = {"input_ids": inputs, "attention_mask": input_mask}
 
         return config, inputs_dict
 
 
 @require_tf
-class PerceiverModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFPerceiverModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
@@ -232,7 +232,7 @@ class PerceiverModelTest(TFModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_head_masking = False
-
+    test_onnx = False
     maxDiff = None
 
     def setUp(self):
@@ -302,18 +302,18 @@ class PerceiverModelTest(TFModelTesterMixin, unittest.TestCase):
             model = model_class(config)
             # we overwrite this, as the embeddings of Perceiver are an instance of nn.Parameter
             # and Perceiver doesn't support get_output_embeddings
-            self.assertIsInstance(model.get_input_embeddings(), (tf.Variable))
+            self.assertIsInstance(model.get_input_embeddings(), tf.keras.layers.Layer)
 
     def test_forward_signature(self):
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
             model = model_class(config)
-            signature = inspect.signature(model.forward)
+            signature = inspect.signature(model.call)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["inputs"]
+            expected_arg_names = ["input_ids"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_determinism(self):
