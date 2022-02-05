@@ -90,6 +90,11 @@ class SwinConfig(PretrainedConfig):
     ```"""
     model_type = "swin"
 
+    attribute_map = {
+        "num_attention_heads": "num_heads",
+        "hidden_size": "embed_dim",
+    }
+
     def __init__(
         self,
         image_size=224,
