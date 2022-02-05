@@ -34,9 +34,8 @@ from transformers.models.bert.modeling_bert import (
 )
 from transformers.utils import logging
 
-from .data2vec_text import (
-    Data2VecTextModel,  # Copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_text.py
-)
+# File copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_text.py
+from .data2vec_text import Data2VecTextModel
 
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):
