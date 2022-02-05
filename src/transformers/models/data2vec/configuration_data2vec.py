@@ -29,7 +29,6 @@ DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class Data2VecConfig(BertConfig):
     r"""
     This is the configuration class to store the configuration of a [`Data2VecModel`] or a [`TFData2VecModel`]. It is
