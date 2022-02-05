@@ -150,6 +150,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -512,6 +513,7 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+    _import_structure["models.poolformer"].append("PoolerFeatureExtractor")
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.clip"].append("CLIPProcessor")
@@ -646,6 +648,15 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.poolformer"].extend(
+        [
+            "POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PoolFormerModel",
+            "PoolFormerPreTrainedModel",
+            "PoolFormerForImageClassification",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2385,6 +2396,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2691,6 +2703,7 @@ if TYPE_CHECKING:
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
+        from .models.poolformer import PoolFormerFeatureExtractor
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
         from .models.convnext import ConvNextFeatureExtractor
@@ -2750,6 +2763,12 @@ if TYPE_CHECKING:
         from .utils.dummy_pytorch_quantization_and_torch_objects import *
 
     if is_torch_available():
+
+        from .models.poolformer import (
+            POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PoolFormerModel,
+            PoolFormerPreTrainedModel,
+        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
