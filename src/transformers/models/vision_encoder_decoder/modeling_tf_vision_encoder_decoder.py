@@ -674,7 +674,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         loss = None
         if labels is not None:
             warnings.warn(DEPRECATION_WARNING, FutureWarning)
-            loss = self.compute_loss(labels, logits)
+            loss = self.hf_compute_loss(labels, logits)
 
         past_key_values = None
         if decoder_inputs["use_cache"]:
