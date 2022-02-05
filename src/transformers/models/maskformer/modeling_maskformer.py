@@ -57,8 +57,8 @@ MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
 ]
 
-PREDICTIONS_MASKS_KEY = "preds_masks"
-PREDICTIONS_LOGITS_KEY = "preds_logits"
+PREDICTIONS_MASKS_KEY = "masks_queries_logits"
+PREDICTIONS_LOGITS_KEY = "class_queries_logits"
 TARGETS_MASKS_KEY = "pixel"
 TARGETS_LABELS_KEY = "classes"
 
@@ -69,15 +69,15 @@ from scipy.optimize import linear_sum_assignment
 
 @dataclass
 class MaskFormerOutput(ModelOutput):
-    preds_logits: torch.FloatTensor
-    preds_masks: torch.FloatTensor = None
+    class_queries_logits: torch.FloatTensor
+    masks_queries_logits: torch.FloatTensor = None
 
 
 @dataclass
 class MaskFormerForSemanticSegmentationOutput(ModelOutput):
     segmentation: torch.FloatTensor = None
-    preds_logits: torch.FloatTensor = None
-    preds_masks: torch.FloatTensor = None
+    class_queries_logits: torch.FloatTensor = None
+    masks_queries_logits: torch.FloatTensor = None
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
 
@@ -85,8 +85,8 @@ class MaskFormerForSemanticSegmentationOutput(ModelOutput):
 @dataclass
 class MaskFormerForPanopticSegmentationOutput(ModelOutput):
     segmentation: torch.FloatTensor = None
-    preds_logits: torch.FloatTensor = None
-    preds_masks: torch.FloatTensor = None
+    class_queries_logits: torch.FloatTensor = None
+    masks_queries_logits: torch.FloatTensor = None
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
     segments: List[List[PanopticSegmentationSegment]] = None
