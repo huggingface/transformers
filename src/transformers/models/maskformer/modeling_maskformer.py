@@ -810,6 +810,19 @@ class MaskFormerPretrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 
+    def _init_weights(self, module):
+        if isinstance(module, SwinModel):
+            # okay but how do I call the Swin init weights on this module???
+            module._init_weights()
+        elif isinstance(module, DetrDecoder):
+            # same here
+            pass
+        # TODO code the rest
+        # - ffpn
+        # - probably a couple of mapping
+
+
+class MaskFormerForPretraining(PreTrainedModel):
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
         losses = ["labels", "masks"]
@@ -845,11 +858,6 @@ class MaskFormerPretrainedModel(PreTrainedModel):
         return torch.tensor(list(loss_dict.values()), dtype=torch.float).sum()
 
 
-    def _init_weights(self, module):
-        # TODO code it!
-        pass
-
-
 @add_start_docstrings(
     "The bare MaskFormer Model outputting raw hidden-states without any specific head on top.",
     MASKFORMER_START_DOCSTRING,
@@ -877,6 +885,7 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         outputs: Dict[str, Tensor] = self.segmentation_module(queries, pixel_embeddings, self.config.use_auxilary_loss)
 
         return MaskFormerOutput(**outputs)
+
 
 # NOTE this to be moved inside the feature extractor
 @add_start_docstrings(
@@ -931,6 +940,7 @@ class PanopticSegmentationSegment(TypedDict):
     category_id: int
     is_thing: bool
     label: str
+
 
 # NOTE this to be moved inside the feature extractor
 @add_start_docstrings(
