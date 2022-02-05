@@ -14,6 +14,7 @@
 # limitations under the License.
 import copy
 import importlib
+from collections import defaultdict
 from math import ceil
 
 
