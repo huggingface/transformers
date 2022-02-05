@@ -73,8 +73,8 @@ class TFWav2Vec2BaseModelOutput(ModelOutput):
         extract_features (`tf.Tensor` of shape `(batch_size, sequence_length, conv_dim[-1])`):
             Sequence of extracted feature vectors of the last convolutional layer of the model.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
