@@ -33,6 +33,7 @@ from transformers.models.bert.modeling_bert import (
     BertSelfOutput,
 )
 from transformers.utils import logging
+
 from .data2vec_text import Data2VecTextModel
 
 
@@ -53,7 +54,9 @@ def convert_data2vec_checkpoint_to_pytorch(
     Copy/paste/tweak data2vec's weights to our BERT structure.
     """
     data2vec_checkpoint_dir, data2vec_checkpoint_file_name = os.path.split(data2vec_checkpoint_path)
-    data2vec = Data2VecTextModel.from_pretrained(data2vec_checkpoint_dir, checkpoint_file=data2vec_checkpoint_file_name)
+    data2vec = Data2VecTextModel.from_pretrained(
+        data2vec_checkpoint_dir, checkpoint_file=data2vec_checkpoint_file_name
+    )
     data2vec.eval()  # disable dropout
     data2vec_model = data2vec.models[0]
     data2vec_sent_encoder = data2vec_model.encoder.sentence_encoder
