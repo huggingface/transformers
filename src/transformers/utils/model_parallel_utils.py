@@ -109,10 +109,7 @@ class TPMapping(object):
 
         for cls, mapping in cache_tp_mapping.items():
             for elem in mapping:
-                if elem.code in self.__MAPPING__[cls]:
-                    self.__MAPPING__[cls][elem.code].append(elem)
-                else:
-                    self.__MAPPING__[cls][elem.code] = [elem]
+                self.__MAPPING__[cls][elem.code].append(elem)
 
     @staticmethod
     def _load_class_by_model_name(model_name):
