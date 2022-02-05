@@ -1766,20 +1766,6 @@ if is_tf_available():
             "TFCTRLPreTrainedModel",
         ]
     )
-    _import_structure["models.data2vec"].extend(
-        [
-            "TF_DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFData2VecForCausalLM",
-            "TFData2VecForMaskedLM",
-            "TFData2VecForMultipleChoice",
-            "TFData2VecForQuestionAnswering",
-            "TFData2VecForSequenceClassification",
-            "TFData2VecForTokenClassification",
-            "TFData2VecMainLayer",
-            "TFData2VecModel",
-            "TFData2VecPreTrainedModel",
-        ]
-    )
     _import_structure["models.deberta"].extend(
         [
             "TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2239,17 +2225,6 @@ if is_flax_available():
             "FlaxCLIPTextPreTrainedModel",
             "FlaxCLIPVisionModel",
             "FlaxCLIPVisionPreTrainedModel",
-        ]
-    )
-    _import_structure["models.data2vec"].extend(
-        [
-            "FlaxData2VecForMaskedLM",
-            "FlaxData2VecForMultipleChoice",
-            "FlaxData2VecForQuestionAnswering",
-            "FlaxData2VecForSequenceClassification",
-            "FlaxData2VecForTokenClassification",
-            "FlaxData2VecModel",
-            "FlaxData2VecPreTrainedModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
