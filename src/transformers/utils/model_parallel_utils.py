@@ -143,6 +143,8 @@ class TPMapping(object):
 
     def search(self, model, param_name):
         mapping = self.get_mapping(model)
+        if mapping is None:
+            raise ValueError(f"{model} does not support tensor parallelism.")
         count_contain_elem_in_param = 0
         param_split = param_name.split(".")
         first_check = []
