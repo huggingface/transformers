@@ -828,7 +828,7 @@ class FlaxWav2Vec2AdapterLayersCollection(nn.Module):
 
     def __call__(self, hidden_states, deterministic=True):
         for conv_layer in self.layers:
-                hidden_states = conv_layer(hidden_states)
+            hidden_states = conv_layer(hidden_states)
 
         return hidden_states
 
