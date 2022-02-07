@@ -837,10 +837,10 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         sequence_output = outputs[0]
 
         # Reshape to (batch_size, num_channels, height, width)
-        sequence_output = sequence_output[:, 1:]
-        B, L, C = sequence_output.shape
+        sequence_output = sequence_output.transpose(1, 2)
+        B, C, L = sequence_output.shape
         H = W = int(L ** 0.5)
-        sequence_output = sequence_output.permute(0, 2, 1).reshape(B, C, H, W)
+        sequence_output = sequence_output.reshape(B, C, H, W)
 
         # Reconstruct pixel values
         reconstructed_pixel_values = self.decoder(sequence_output)
