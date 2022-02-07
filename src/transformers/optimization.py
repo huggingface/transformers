@@ -15,6 +15,7 @@
 """PyTorch optimization for BERT model."""
 
 import math
+import warnings
 from typing import Callable, Iterable, Optional, Tuple, Union
 
 import torch
@@ -287,6 +288,8 @@ class AdamW(Optimizer):
             Decoupled weight decay to apply.
         correct_bias (`bool`, *optional*, defaults to `True`):
             Whether or not to correct bias in Adam (for instance, in Bert TF repository they use `False`).
+        no_deprecation_warning (`bool`, *optional*, defaults to `False`):
+            A flag used to disable the deprecation warning (set to `True` to disable the warning).
     """
 
     def __init__(
@@ -297,7 +300,14 @@ class AdamW(Optimizer):
         eps: float = 1e-6,
         weight_decay: float = 0.0,
         correct_bias: bool = True,
+        no_deprecation_warning: bool = False,
     ):
+        if not no_deprecation_warning:
+            warnings.warn(
+                "This implementation of AdamW is deprecated and will be removed in a future version. Use the"
+                "PyTorch implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this warning",
+                FutureWarning,
+            )
         require_version("torch>=1.5.0")  # add_ with alpha
         if lr < 0.0:
             raise ValueError(f"Invalid learning rate: {lr} - should be >= 0.0")

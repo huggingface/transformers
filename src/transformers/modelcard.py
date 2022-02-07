@@ -672,7 +672,7 @@ class TrainingSummary:
             tags = ["generated_from_keras_callback"]
         elif isinstance(tags, str) and tags != "generated_from_keras_callback":
             tags = [tags, "generated_from_keras_callback"]
-        elif "generated_from_trainer" not in tags:
+        elif "generated_from_keras_callback" not in tags:
             tags.append("generated_from_keras_callback")
 
         if keras_history is not None:
@@ -706,6 +706,9 @@ def parse_keras_history(logs):
     """
     if hasattr(logs, "history"):
         # This looks like a `History` object
+        if not hasattr(logs, "epoch"):
+            # This history looks empty, return empty results
+            return None, [], dict()
         logs.history["epoch"] = logs.epoch
         logs = logs.history
     else:

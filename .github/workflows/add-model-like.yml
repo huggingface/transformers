@@ -1,0 +1,59 @@
+name: Add model like runner
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+    types: [opened, synchronize, reopened]
+
+jobs:
+  run_tests_templates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: ~/.cache/pip
+          key: v1-tests_model_like
+          restore-keys: |
+            v1-tests_model_like-${{ hashFiles('setup.py') }}
+            v1-tests_model_like
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip!=21.3
+          sudo apt -y update && sudo apt install -y libsndfile1-dev
+          pip install .[dev]
+
+      - name: Create model files
+        run: |
+          transformers-cli add-new-model-like --config_file tests/fixtures/add_distilbert_like_config.json --path_to_repo .
+          make style
+          make fix-copies
+
+      - name: Run all PyTorch modeling test
+        run: |
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_new_models tests/test_modeling_bert_new.py
+
+      - name: Run style changes
+        run: |
+          make style && make quality && make repo-consistency
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_new_models_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_new_models_test_reports
+          path: reports

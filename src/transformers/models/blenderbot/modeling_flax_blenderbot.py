@@ -1048,6 +1048,7 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import BlenderbotTokenizer, FlaxBlenderbotForConditionalGeneration
 
         >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-400M-distill")
@@ -1317,6 +1318,7 @@ class FlaxBlenderbotForConditionalGeneration(FlaxBlenderbotPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import BlenderbotTokenizer, FlaxBlenderbotForConditionalGeneration
 
         >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-400M-distill")

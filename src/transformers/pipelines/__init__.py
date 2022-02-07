@@ -4,6 +4,7 @@
 
 import io
 import json
+import os
 
 # coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
@@ -617,17 +618,16 @@ def pipeline(
                 and isinstance(model_name, str)
             ):
                 try:
+                    import kenlm  # to trigger `ImportError` if not installed
                     from pyctcdecode import BeamSearchDecoderCTC
 
                     language_model_glob = os.path.join(BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*")
                     alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
                     allow_regex = [language_model_glob, alphabet_filename]
 
-                    decoder = BeamSearchDecoderCTC.load_from_hf_hub(
-                        pretrained_model_name_or_path, allow_regex=allow_regex
-                    )
+                    decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name, allow_regex=allow_regex)
                     kwargs["decoder"] = decoder
-                except Exception as e:
+                except ImportError as e:
                     logger.warning(
                         "Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Try to install `pyctcdecode` and `kenlm`: (`pip install pyctcdecode`, `pip install https://github.com/kpu/kenlm/archive/master.zip`): Error: {e}"
                     )

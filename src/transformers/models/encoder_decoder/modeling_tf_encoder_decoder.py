@@ -155,7 +155,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
     """
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
-    load_weight_prefix = "tf_encoder_decoder_model_1"
+    load_weight_prefix = "tf_encoder_decoder_model"
 
     def __init__(
         self,
@@ -259,6 +259,8 @@ class TFEncoderDecoderModel(TFPreTrainedModel):
 
         ```python
         >>> # a workaround to load from pytorch checkpoint
+        >>> from transformers import EncoderDecoderModel, TFEncoderDecoderModel
+
         >>> _model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
         >>> _model.encoder.save_pretrained("./encoder")
         >>> _model.decoder.save_pretrained("./decoder")

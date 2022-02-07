@@ -326,7 +326,9 @@ def tokenize_and_align_labels(examples):
                 label_ids.append(-100)
             elif word_idx != previous_word_idx:  # Only label the first token of a given word.
                 label_ids.append(label[word_idx])
-
+            else:
+                label_ids.append(-100)
+            previous_word_idx = word_idx
         labels.append(label_ids)
 
     tokenized_inputs["labels"] = labels

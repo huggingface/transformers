@@ -23,10 +23,12 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import numpy as np
 
 from huggingface_hub import Repository, delete_repo, login
+from parameterized import parameterized
 from requests.exceptions import HTTPError
 from transformers import (
     AutoTokenizer,
@@ -36,7 +38,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.file_utils import WEIGHTS_NAME
+from transformers.file_utils import WEIGHTS_NAME, is_apex_available
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     PASS,
@@ -58,9 +60,11 @@ from transformers.testing_utils import (
     require_torch_non_multi_gpu,
     require_torch_tf32,
     require_torch_up_to_2_gpus,
+    require_wandb,
     slow,
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+from transformers.training_args import OptimizerNames
 from transformers.utils.hp_naming import TrialShortNamer
 
 
@@ -69,6 +73,7 @@ if is_torch_available():
     from torch import nn
     from torch.utils.data import IterableDataset
 
+    import transformers.optimization
     from transformers import (
         AutoModelForSequenceClassification,
         EarlyStoppingCallback,
@@ -284,6 +289,7 @@ if is_torch_available():
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
         output_dir = kwargs.pop("output_dir", "./regression")
+        preprocess_logits_for_metrics = kwargs.pop("preprocess_logits_for_metrics", None)
 
         args = RegressionTrainingArguments(output_dir, a=a, b=b, **kwargs)
         return Trainer(
@@ -295,6 +301,7 @@ if is_torch_available():
             compute_metrics=compute_metrics,
             optimizers=optimizers,
             model_init=model_init,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         )
 
 
@@ -677,6 +684,22 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         expected_loss = ((pred - y) ** 2).mean()
         self.assertAlmostEqual(results["eval_loss"], expected_loss)
         expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+        # With logits preprocess
+        trainer = get_regression_trainer(
+            a=1.5,
+            b=2.5,
+            compute_metrics=AlmostAccuracy(),
+            preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
+        )
+        results = trainer.evaluate()
+
+        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
         self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
     def test_predict(self):
@@ -1710,4 +1733,155 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
             )
             trainer.hyperparameter_search(
                 direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="sigopt", n_trials=4
+            )
+
+
+optim_test_params = []
+if is_torch_available():
+    default_adam_kwargs = {
+        "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
+        "eps": TrainingArguments.adam_epsilon,
+        "lr": TrainingArguments.learning_rate,
+    }
+
+    optim_test_params = [
+        (
+            OptimizerNames.ADAMW_HF,
+            transformers.optimization.AdamW,
+            default_adam_kwargs,
+        ),
+        (
+            OptimizerNames.ADAMW_HF.value,
+            transformers.optimization.AdamW,
+            default_adam_kwargs,
+        ),
+        (
+            OptimizerNames.ADAMW_TORCH,
+            torch.optim.AdamW,
+            default_adam_kwargs,
+        ),
+        (
+            OptimizerNames.ADAFACTOR,
+            transformers.optimization.Adafactor,
+            {
+                "scale_parameter": False,
+                "relative_step": False,
+                "lr": TrainingArguments.learning_rate,
+            },
+        ),
+    ]
+    if is_apex_available():
+        import apex
+
+        optim_test_params.append(
+            (
+                OptimizerNames.ADAMW_APEX_FUSED,
+                apex.optimizers.FusedAdam,
+                default_adam_kwargs,
+            )
+        )
+
+
+@require_torch
+class TrainerOptimizerChoiceTest(unittest.TestCase):
+    def check_optim_and_kwargs(self, optim: OptimizerNames, mandatory_kwargs, expected_cls):
+        args = TrainingArguments(optim=optim, output_dir="None")
+        actual_cls, optim_kwargs = Trainer.get_optimizer_cls_and_kwargs(args)
+        self.assertEqual(expected_cls, actual_cls)
+        self.assertIsNotNone(optim_kwargs)
+
+        for p, v in mandatory_kwargs.items():
+            self.assertTrue(p in optim_kwargs)
+            actual_v = optim_kwargs[p]
+            self.assertTrue(actual_v == v, f"Failed check for {p}. Expected {v}, but got {actual_v}.")
+
+    @parameterized.expand(optim_test_params, skip_on_empty=True)
+    def test_optim_supported(self, name: str, expected_cls, mandatory_kwargs):
+        # exercises all the valid --optim options
+        self.check_optim_and_kwargs(name, mandatory_kwargs, expected_cls)
+
+        trainer = get_regression_trainer(optim=name)
+        trainer.train()
+
+    def test_fused_adam(self):
+        # Pretend that apex is installed and mock apex.optimizers.FusedAdam exists.
+        # Trainer.get_optimizer_cls_and_kwargs does not use FusedAdam, but only has to return a
+        # class called, so mocking apex.optimizers.FusedAdam should be fine for testing and allow
+        # the test to run without requiring an apex installation.
+        mock = Mock()
+        modules = {
+            "apex": mock,
+            "apex.optimizers": mock.optimizers,
+            "apex.optimizers.FusedAdam": mock.optimizers.FusedAdam,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                OptimizerNames.ADAMW_APEX_FUSED,
+                default_adam_kwargs,
+                mock.optimizers.FusedAdam,
+            )
+
+    def test_fused_adam_no_apex(self):
+        args = TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir="None")
+
+        # Pretend that apex does not exist, even if installed. By setting apex to None, importing
+        # apex will fail even if apex is installed.
+        with patch.dict("sys.modules", {"apex.optimizers": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+
+@require_torch
+@require_wandb
+class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        args = TrainingArguments(".")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
+
+    def test_hyperparameter_search(self):
+        class MyTrialShortNamer(TrialShortNamer):
+            DEFAULTS = {"a": 0, "b": 0}
+
+        def hp_space(trial):
+
+            return {
+                "method": "random",
+                "metric": {},
+                "parameters": {
+                    "a": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
+                    "b": {"distribution": "int_uniform", "min": 1, "max": 6},
+                },
+            }
+
+        def model_init(config):
+            if config is None:
+                a = 0
+                b = 0
+            else:
+                a = config["a"]
+                b = config["b"]
+            model_config = RegressionModelConfig(a=a, b=b, double_output=False)
+
+            return RegressionPreTrainedModel(model_config)
+
+        def hp_name(params):
+            return MyTrialShortNamer.shortname(params)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                learning_rate=0.1,
+                logging_steps=1,
+                evaluation_strategy=IntervalStrategy.EPOCH,
+                save_strategy=IntervalStrategy.EPOCH,
+                num_train_epochs=4,
+                disable_tqdm=True,
+                load_best_model_at_end=True,
+                logging_dir="runs",
+                run_name="test",
+                model_init=model_init,
+            )
+            trainer.hyperparameter_search(
+                direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="wandb", n_trials=4, anonymous="must"
             )

@@ -11,7 +11,6 @@ from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.ibert import IBertOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
-from ..models.longformer import LongformerOnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
@@ -153,15 +152,6 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls=DistilBertOnnxConfig,
-        ),
-        "longformer": supported_features_mapping(
-            "default",
-            "masked-lm",
-            "sequence-classification",
-            # "multiple-choice",
-            "token-classification",
-            "question-answering",
-            onnx_config_cls=LongformerOnnxConfig,
         ),
         "marian": supported_features_mapping(
             "default",
