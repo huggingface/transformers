@@ -87,7 +87,6 @@ class Data2VecEmbeddings(nn.Module):
                 persistent=False,
             )
 
-        # End copy
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
