@@ -274,7 +274,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 ]
         # NOTE I will be always forced to pad them them since they have to be stacked in the batch dim
         encoded_inputs = self.encode_inputs(
-            images, annotations, should_pad=pad_and_return_pixel_mask, return_tensors=return_tensors
+            images, annotations, pad_and_return_pixel_mask, return_tensors=return_tensors
         )
 
         if annotations is not None:
@@ -359,21 +359,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         data = {
             "pixel_values": pixel_values,
             "pixel_mask": pixel_mask,
-            "mask_labels": mask_labels,
-            "class_labels": class_labels,
         }
 
-        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
         if annotations:
-            # BatchFeature doesn't support nested dicts, adding after it
-            tensor_type = return_tensors
-            if not isinstance(tensor_type, TensorType):
-                tensor_type = TensorType(tensor_type)
-            if not tensor_type == TensorType.PYTORCH:
-                raise ValueError("Only PyTorch is supported for the moment.")
-            else:
-                if not is_torch_available():
-                    raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
+            data["mask_labels"] = mask_labels
+            data["class_labels"] = class_labels
+
+        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs
 
