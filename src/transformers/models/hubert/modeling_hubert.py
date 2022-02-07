@@ -1097,7 +1097,10 @@ class HubertForCTC(HubertPreTrainedModel):
                 "instantiate the model as follows: `HubertForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
+        output_hidden_size = (
+            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
+        )
+        self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1215,6 +1218,10 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        if hasattr(config, "add_adapter") and config.add_adapter:
+            raise ValueError(
+                "Sequence classification does not support the use of Hubert adapters (config.add_adapter=True)"
+            )
         self.hubert = HubertModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
