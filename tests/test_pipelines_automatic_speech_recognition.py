@@ -107,6 +107,24 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "(Applaudissements)"})
 
+    @require_torch
+    def test_small_model_pt_seq2seq(self):
+        model_id = "hf-internal-testing/tiny-random-speech-encoder-decoder"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model=model_id,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            framework="pt",
+        )
+
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        output = speech_recognizer(waveform)
+        self.assertEqual(output, {"text": "あл ش 湯 清 ه ܬ া लᆨしث ल eか u w 全 u"})
+
     @slow
     @require_torch
     @require_pyctcdecode
