@@ -34,8 +34,6 @@
     title: Troubleshooting
   - local: custom_datasets
     title: Fine-tuning with custom datasets
-  - local: scaling
-    title: A Guide to Train Large Models
   - local: notebooks
     title: "🤗 Transformers Notebooks"
   - local: sagemaker
