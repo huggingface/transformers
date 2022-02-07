@@ -18,6 +18,7 @@
 import copy
 import math
 import random
+import warnings
 from typing import Optional, Tuple
 
 import numpy as np
@@ -1291,6 +1292,8 @@ class MarianMTModel(MarianPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
+            if use_cache:
+                warnings.warn("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
             if decoder_input_ids is None:
                 decoder_input_ids = shift_tokens_right(
