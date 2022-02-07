@@ -47,6 +47,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("swin", "ViTFeatureExtractor"),
         ("vit_mae", "ViTFeatureExtractor"),
         ("segformer", "SegformerFeatureExtractor"),
+        ("convnext", "ConvNextFeatureExtractor"),
     ]
 )
 

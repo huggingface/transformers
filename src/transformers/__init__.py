@@ -201,6 +201,7 @@ _import_structure = {
         "CLIPVisionConfig",
     ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
+    "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
@@ -513,6 +514,7 @@ if is_vision_available():
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.clip"].append("CLIPProcessor")
+    _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
@@ -836,6 +838,14 @@ if is_torch_available():
             "ConvBertModel",
             "ConvBertPreTrainedModel",
             "load_tf_weights_in_convbert",
+        ]
+    )
+    _import_structure["models.convnext"].extend(
+        [
+            "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConvNextForImageClassification",
+            "ConvNextModel",
+            "ConvNextPreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -2393,6 +2403,7 @@ if TYPE_CHECKING:
         CLIPVisionConfig,
     )
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
+    from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
@@ -2656,6 +2667,7 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
+        from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
@@ -2923,6 +2935,12 @@ if TYPE_CHECKING:
             ConvBertModel,
             ConvBertPreTrainedModel,
             load_tf_weights_in_convbert,
+        )
+        from .models.convnext import (
+            CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvNextForImageClassification,
+            ConvNextModel,
+            ConvNextPreTrainedModel,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
