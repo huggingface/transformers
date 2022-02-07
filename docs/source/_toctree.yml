@@ -22,7 +22,7 @@
   - local: model_summary
     title: Summary of the models
   - local: training
-    title: Fine-tuning a pretrained model
+    title: Fine-tune a pretrained model
   - local: accelerate
     title: Distributed training with 🤗 Accelerate
   - local: model_sharing
@@ -33,6 +33,8 @@
     title: Multi-lingual models
   title: Tutorials
 - sections:
+  - local: create_a_model
+    title: Create a custom model
   - local: examples
     title: Examples
   - local: troubleshooting
