@@ -55,13 +55,33 @@ class MaskFormerConfig(PretrainedConfig):
         use_auxilary_loss (Optional[bool], optional): If `true` [`MaskFormerOutput`] will contain. Defaults to False.
         backbone_config (Optional[Dict], optional): [description]. Defaults to None.
         detr_config (Optional[Dict], optional): [description]. Defaults to None.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        init_xavier_std (`float`, *optional*, defaults to 1):
+            The scaling factor used for the Xavier initialization gain in the HM Attention map module.
         dice_weight (Optional[float], optional): [description]. Defaults to 1.0.
         cross_entropy_weight (Optional[float], optional): [description]. Defaults to 1.0.
         mask_weight (Optional[float], optional): [description]. Defaults to 20.0.
         mask_classification (Optional[bool], optional): [description]. Defaults to True.
 
     Raises:
-        ValueError: [description]
+        ValueError: Raised if the backbone model type selected is not in `MaskFormerConfig.backbones_supported`
+
+    Examples:
+
+    ```python
+    >>> from transformers import MaskFormerModel, MaskFormerConfig
+
+    >>> # Initializing a maskFormer facebook/maskformer-swin-base-ade-640 configuration
+    >>> configuration = MaskFormerConfig()
+
+    >>> # Initializing a model from the facebook/maskformer-swin-base-ade-640 style configuration
+    >>> model = MaskFormerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+
     """
     model_type = "maskformer"
 
@@ -77,6 +97,8 @@ class MaskFormerConfig(PretrainedConfig):
         use_auxilary_loss: Optional[bool] = False,
         backbone_config: Optional[Dict] = None,
         detr_config: Optional[Dict] = None,
+        init_std: float = 0.02,
+        init_xavier_std: float = 1.0,
         dice_weight: Optional[float] = 1.0,
         cross_entropy_weight: Optional[float] = 1.0,
         mask_weight: Optional[float] = 20.0,
@@ -119,7 +141,9 @@ class MaskFormerConfig(PretrainedConfig):
         self.mask_feature_size = mask_feature_size
         self.no_object_weight = no_object_weight
         self.use_auxilary_loss = use_auxilary_loss
-
+        # initializer
+        self.init_std = init_std
+        self.init_xavier_std = init_xavier_std
         # Hungarian matcher && loss
         self.cross_entropy_weight = cross_entropy_weight
         self.dice_weight = dice_weight

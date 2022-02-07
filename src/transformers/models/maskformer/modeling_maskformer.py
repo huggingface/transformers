@@ -516,7 +516,7 @@ class SwinTransformerBackbone(nn.Module):
         return [layer.dim for layer in self.model.encoder.layers]
 
 
-class ConvLayer(nn.Sequential):
+class FPNConvLayer(nn.Sequential):
     def __init__(self, in_features: int, out_features: int, kernel_size: int = 3, padding: int = 1):
         """A basic module that executs conv - norm - in sequence used in MaskFormer.
 
@@ -546,7 +546,7 @@ class FPNLayer(nn.Module):
             nn.GroupNorm(32, in_features),
         )
 
-        self.block = ConvLayer(in_features, in_features)
+        self.block = FPNConvLayer(in_features, in_features)
 
     def forward(self, down: Tensor, left: Tensor) -> Tensor:
         left = self.proj(left)
@@ -568,7 +568,7 @@ class FPNModel(nn.Module):
                         The features (channels) of the resulting feature maps. Defaults to 256.
         """
         super().__init__()
-        self.stem = ConvLayer(in_features, feature_size)
+        self.stem = FPNConvLayer(in_features, feature_size)
         self.layers = nn.Sequential(*[FPNLayer(feature_size, lateral_width) for lateral_width in lateral_widths[::-1]])
 
     def forward(self, features: List[Tensor]) -> List[Tensor]:
@@ -648,10 +648,10 @@ class MaskformerMLPPredictionHead(nn.Sequential):
         """A classic Multi Layer Perceptron (MLP)
 
         Args:
-            input_dim (int): [description]
-            hidden_dim (int): [description]
-            output_dim (int): [description]
-            num_layers (int, optional): [description]. Defaults to 3.
+            input_dim (int): The input dimensions
+            hidden_dim (int): The hidden dimensions
+            output_dim (int): The output dimensions
+            num_layers (int, optional): The number of layers. Defaults to 3.
         """
         in_dims: List[int] = [input_dim] + [hidden_dim] * (num_layers - 1)
         out_dims: List[int] = [hidden_dim] * (num_layers - 1) + [output_dim]
@@ -696,11 +696,12 @@ class MaskFormerTransformerModule(nn.Module):
         self.position_embedder = PositionEmbeddingSine(num_pos_feats=hidden_size // 2, normalize=True)
         self.queries_embedder = nn.Embedding(config.transformer_decoder.num_queries, hidden_size)
         should_project = in_features != hidden_size
-        self.input_projection = nn.Conv2d(in_features, hidden_size, kernel_size=1) if should_project else nn.Identity()
+        self.input_projection = nn.Conv2d(in_features, hidden_size, kernel_size=1) if should_project else None
         self.transformer_decoder = DetrDecoder(config=config.transformer_decoder)
 
     def forward(self, image_features: Tensor) -> Tuple[Tensor]:
-        image_features = self.input_projection(image_features)
+        if self.input_projection is not None:
+            image_features = self.input_projection(image_features)
         position_embeddings: Tensor = self.position_embedder(image_features)
         queries_embeddings: Tensor = repeat(self.queries_embedder.weight, "q c -> b q c", b=image_features.shape[0])
         inputs_embeds = torch.zeros_like(queries_embeddings)
@@ -800,7 +801,28 @@ class MaskFormerPretrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
 
     def _init_weights(self, module):
-        pass
+        std = self.config.init_std
+        xavier_std = self.config.init_xavier_std
+        if isinstance(module, MaskFormerTransformerModule):
+            if module.input_projection is not None:
+                nn.init.xavier_uniform_(module.input_projection.weight, gain=xavier_std)
+                nn.init.constant_(module.input_projection.bias, 0)
+        # FPN
+        elif isinstance(module, FPNModel):
+            nn.init.xavier_uniform_(module.stem[0].weight, gain=xavier_std)
+
+        elif isinstance(module, FPNLayer):
+            nn.init.xavier_uniform_(module.proj[0].weight, gain=xavier_std)
+
+        elif isinstance(module, FPNConvLayer):
+            nn.init.xavier_uniform_(module[0].weight, gain=xavier_std)
+
+        elif isinstance(module, MaskformerMLPPredictionHead):
+            # I was not able to find the correct initializer in the original implementation
+            # we'll use xavier
+            for layer in module:
+                nn.init.xavier_uniform_(layer[0].weight, gain=xavier_std)
+                nn.init.constant_(layer[0].bias, 0)
 
 
 class MaskFormerForInstanceSegmentation(PreTrainedModel):
