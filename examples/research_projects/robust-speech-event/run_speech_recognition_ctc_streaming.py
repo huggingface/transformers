@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,10 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
-""" Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition"""
+""" Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition in streaming mode"""
 
-import functools
-import json
 import logging
 import os
 import re
@@ -28,7 +26,8 @@ from typing import Dict, List, Optional, Union
 import datasets
 import numpy as np
 import torch
-from datasets import DatasetDict, load_dataset, load_metric
+from datasets import IterableDatasetDict, interleave_datasets, load_dataset, load_metric
+from torch.utils.data import IterableDataset
 
 import transformers
 from transformers import (
@@ -39,19 +38,21 @@ from transformers import (
     AutoTokenizer,
     HfArgumentParser,
     Trainer,
+    TrainerCallback,
     TrainingArguments,
     Wav2Vec2Processor,
     set_seed,
 )
+from transformers.trainer_pt_utils import IterableDatasetShard
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
-# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+# Will error if the minimal version of Transformers is not installed. Remove at your own risk.
 check_min_version("4.17.0.dev0")
 
-require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
+require_version("datasets>=1.18.2", "To fix: pip install 'datasets>=1.18.2'")
 
 
 logger = logging.getLogger(__name__)
@@ -153,7 +154,7 @@ class DataTrainingArguments:
     eval_split_name: str = field(
         default="test",
         metadata={
-            "help": "The name of the evaluation data set split to use (via the datasets library). Defaults to 'test'"
+            "help": "The name of the training data set split to use (via the datasets library). Defaults to 'test'"
         },
     )
     audio_column_name: str = field(
@@ -185,6 +186,13 @@ class DataTrainingArguments:
             "value if set."
         },
     )
+    shuffle_buffer_size: Optional[int] = field(
+        default=500,
+        metadata={
+            "help": "The number of streamed examples to download before shuffling them. The large the buffer, "
+            "the closer it is to real offline shuffling."
+        },
+    )
     chars_to_ignore: Optional[List[str]] = list_field(
         default=None,
         metadata={"help": "A list of characters to remove from the transcripts."},
@@ -195,12 +203,7 @@ class DataTrainingArguments:
     )
     max_duration_in_seconds: float = field(
         default=20.0,
-        metadata={
-            "help": "Filter audio files that are longer than `max_duration_in_seconds` seconds to 'max_duration_in_seconds`"
-        },
-    )
-    min_duration_in_seconds: float = field(
-        default=0.0, metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"}
+        metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds."},
     )
     preprocessing_only: bool = field(
         default=False,
@@ -217,18 +220,6 @@ class DataTrainingArguments:
             "help": "If :obj:`True`, will use the token generated when running"
             ":obj:`transformers-cli login` as HTTP bearer authorization for remote files."
         },
-    )
-    unk_token: str = field(
-        default="[UNK]",
-        metadata={"help": "The unk token for the tokenizer"},
-    )
-    pad_token: str = field(
-        default="[PAD]",
-        metadata={"help": "The padding token for the tokenizer"},
-    )
-    word_delimiter_token: str = field(
-        default="|",
-        metadata={"help": "The word delimiter token for the tokenizer"},
     )
     phoneme_language: Optional[str] = field(
         default=None,
@@ -269,14 +260,20 @@ class DataCollatorCTCWithPadding:
 
     processor: AutoProcessor
     padding: Union[bool, str] = "longest"
+    max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
     pad_to_multiple_of_labels: Optional[int] = None
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lenghts and need
         # different padding methods
-        input_features = [{"input_values": feature["input_values"]} for feature in features]
-        label_features = [{"input_ids": feature["labels"]} for feature in features]
+        input_features = []
+        label_features = []
+        for feature in features:
+            if self.max_length and feature["input_values"].shape[-1] > self.max_length:
+                continue
+            input_features.append({"input_values": feature["input_values"]})
+            label_features.append({"input_ids": feature["labels"]})
 
         batch = self.processor.pad(
             input_features,
@@ -299,48 +296,6 @@ class DataCollatorCTCWithPadding:
         batch["labels"] = labels
 
         return batch
-
-
-def create_vocabulary_from_data(
-    datasets: DatasetDict,
-    word_delimiter_token: Optional[str] = None,
-    unk_token: Optional[str] = None,
-    pad_token: Optional[str] = None,
-):
-    # Given training and test labels create vocabulary
-    def extract_all_chars(batch):
-        all_text = " ".join(batch["target_text"])
-        vocab = list(set(all_text))
-        return {"vocab": [vocab], "all_text": [all_text]}
-
-    vocabs = datasets.map(
-        extract_all_chars,
-        batched=True,
-        batch_size=-1,
-        keep_in_memory=True,
-        remove_columns=datasets["train"].column_names,
-    )
-
-    # take union of all unique characters in each dataset
-    vocab_set = functools.reduce(
-        lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]), vocabs.values()
-    )
-
-    vocab_dict = {v: k for k, v in enumerate(sorted(list(vocab_set)))}
-
-    # replace white space with delimiter token
-    if word_delimiter_token is not None:
-        vocab_dict[word_delimiter_token] = vocab_dict[" "]
-        del vocab_dict[" "]
-
-    # add unk and pad token
-    if unk_token is not None:
-        vocab_dict[unk_token] = len(vocab_dict)
-
-    if pad_token is not None:
-        vocab_dict[pad_token] = len(vocab_dict)
-
-    return vocab_dict
 
 
 def main():
@@ -393,43 +348,79 @@ def main():
     set_seed(training_args.seed)
 
     # 1. First, let's load the dataset
-    raw_datasets = DatasetDict()
+    raw_datasets = IterableDatasetDict()
+    raw_column_names = {}
+
+    def load_streaming_dataset(split, sampling_rate, **kwargs):
+        if "+" in split:
+            dataset_splits = [load_dataset(split=split_name, **kwargs) for split_name in split.split("+")]
+            # `features` and `cast_column` won't be available after interleaving, so we'll use them here
+            features = dataset_splits[0].features
+            # make sure that the dataset decodes audio with a correct sampling rate
+            dataset_splits = [
+                dataset.cast_column(data_args.audio_column_name, datasets.features.Audio(sampling_rate=sampling_rate))
+                for dataset in dataset_splits
+            ]
+
+            interleaved_dataset = interleave_datasets(dataset_splits)
+            return interleaved_dataset, features
+        else:
+            dataset = load_dataset(split=split, **kwargs)
+            features = dataset.features
+            # make sure that the dataset decodes audio with a correct sampling rate
+            dataset = dataset.cast_column(
+                data_args.audio_column_name, datasets.features.Audio(sampling_rate=sampling_rate)
+            )
+            return dataset, features
+
+    # `datasets` takes care of automatically loading and resampling the audio,
+    # so we just need to set the correct target sampling rate and normalize the input
+    # via the `feature_extractor`
+    feature_extractor = AutoFeatureExtractor.from_pretrained(
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+    )
 
     if training_args.do_train:
-        raw_datasets["train"] = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
+        raw_datasets["train"], train_features = load_streaming_dataset(
+            path=data_args.dataset_name,
+            name=data_args.dataset_config_name,
             split=data_args.train_split_name,
             use_auth_token=data_args.use_auth_token,
+            streaming=True,
+            sampling_rate=feature_extractor.sampling_rate,
         )
+        raw_column_names["train"] = list(train_features.keys())
 
-        if data_args.audio_column_name not in raw_datasets["train"].column_names:
+        if data_args.audio_column_name not in raw_column_names["train"]:
             raise ValueError(
                 f"--audio_column_name '{data_args.audio_column_name}' not found in dataset '{data_args.dataset_name}'. "
                 "Make sure to set `--audio_column_name` to the correct audio column - one of "
-                f"{', '.join(raw_datasets['train'].column_names)}."
+                f"{', '.join(raw_column_names['train'])}."
             )
 
-        if data_args.text_column_name not in raw_datasets["train"].column_names:
+        if data_args.text_column_name not in raw_column_names["train"]:
             raise ValueError(
                 f"--text_column_name {data_args.text_column_name} not found in dataset '{data_args.dataset_name}'. "
                 "Make sure to set `--text_column_name` to the correct text column - one of "
-                f"{', '.join(raw_datasets['train'].column_names)}."
+                f"{', '.join(raw_column_names['train'])}."
             )
 
         if data_args.max_train_samples is not None:
-            raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
+            raw_datasets["train"] = raw_datasets["train"].take(range(data_args.max_train_samples))
 
     if training_args.do_eval:
-        raw_datasets["eval"] = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
+        raw_datasets["eval"], eval_features = load_streaming_dataset(
+            path=data_args.dataset_name,
+            name=data_args.dataset_config_name,
             split=data_args.eval_split_name,
             use_auth_token=data_args.use_auth_token,
+            streaming=True,
+            sampling_rate=feature_extractor.sampling_rate,
         )
+        raw_column_names["eval"] = list(eval_features.keys())
 
         if data_args.max_eval_samples is not None:
-            raw_datasets["eval"] = raw_datasets["eval"].select(range(data_args.max_eval_samples))
+            raw_datasets["eval"] = raw_datasets["eval"].take(range(data_args.max_eval_samples))
 
     # 2. We remove some special characters from the datasets
     # that make training complicated and do not help in transcribing the speech
@@ -448,77 +439,31 @@ def main():
         return batch
 
     with training_args.main_process_first(desc="dataset map special characters removal"):
-        raw_datasets = raw_datasets.map(
-            remove_special_characters,
-            remove_columns=[text_column_name],
-            desc="remove special characters from datasets",
-        )
-
-    # save special tokens for tokenizer
-    word_delimiter_token = data_args.word_delimiter_token
-    unk_token = data_args.unk_token
-    pad_token = data_args.pad_token
+        for split, dataset in raw_datasets.items():
+            raw_datasets[split] = dataset.map(
+                remove_special_characters,
+            ).remove_columns([text_column_name])
 
     # 3. Next, let's load the config as we might need it to create
     # the tokenizer
-    # load config
     config = AutoConfig.from_pretrained(
         model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
     )
 
-    # 4. Next, if no tokenizer file is defined,
-    # we create the vocabulary of the model by extracting all unique characters from
-    # the training and evaluation datasets
-    # We need to make sure that only first rank saves vocabulary
-    # make sure all processes wait until vocab is created
-    tokenizer_name_or_path = model_args.tokenizer_name_or_path
-    tokenizer_kwargs = {}
-    if tokenizer_name_or_path is None:
-        # save vocab in training output dir
-        tokenizer_name_or_path = training_args.output_dir
-
-        vocab_file = os.path.join(tokenizer_name_or_path, "vocab.json")
-
-        with training_args.main_process_first():
-            if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
-                os.remove(vocab_file)
-
-        with training_args.main_process_first(desc="dataset map vocabulary creation"):
-            if not os.path.isfile(vocab_file):
-                os.makedirs(tokenizer_name_or_path, exist_ok=True)
-                vocab_dict = create_vocabulary_from_data(
-                    raw_datasets,
-                    word_delimiter_token=word_delimiter_token,
-                    unk_token=unk_token,
-                    pad_token=pad_token,
-                )
-
-                # save vocab dict to be loaded into tokenizer
-                with open(vocab_file, "w") as file:
-                    json.dump(vocab_dict, file)
-
-        # if tokenizer has just been created
-        # it is defined by `tokenizer_class` if present in config else by `model_type`
-        tokenizer_kwargs = {
-            "config": config if config.tokenizer_class is not None else None,
-            "tokenizer_type": config.model_type if config.tokenizer_class is None else None,
-            "unk_token": unk_token,
-            "pad_token": pad_token,
-            "word_delimiter_token": word_delimiter_token,
-        }
-
-    # 5. Now we can instantiate the feature extractor, tokenizer and model
+    # 4. Now we can instantiate the tokenizer and model
     # Note for distributed training, the .from_pretrained methods guarantee that only
     # one local process can concurrently download model & vocab.
 
+    tokenizer_name_or_path = model_args.tokenizer_name_or_path
+    if tokenizer_name_or_path is None:
+        raise ValueError(
+            "Tokenizer has to be created before training in streaming mode. Please specify --tokenizer_name_or_path"
+        )
     # load feature_extractor and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
+        config=config,
         use_auth_token=data_args.use_auth_token,
-        **tokenizer_kwargs,
-    )
-    feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
     )
 
     # adapt config
@@ -553,23 +498,8 @@ def main():
     if model_args.freeze_feature_encoder:
         model.freeze_feature_encoder()
 
-    # 6. Now we preprocess the datasets including loading the audio, resampling and normalization
-    # Thankfully, `datasets` takes care of automatically loading and resampling the audio,
-    # so that we just need to set the correct target sampling rate and normalize the input
-    # via the `feature_extractor`
-
-    # make sure that dataset decodes audio with correct sampling rate
-    dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
-    if dataset_sampling_rate != feature_extractor.sampling_rate:
-        raw_datasets = raw_datasets.cast_column(
-            data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
-        )
-
-    # derive max & min input length for sample rate & max duration
-    max_input_length = data_args.max_duration_in_seconds * feature_extractor.sampling_rate
-    min_input_length = data_args.min_duration_in_seconds * feature_extractor.sampling_rate
+    # 5. Now we preprocess the datasets including loading the audio, resampling and normalization
     audio_column_name = data_args.audio_column_name
-    num_workers = data_args.preprocessing_num_workers
 
     # `phoneme_language` is only relevant if the model is fine-tuned on phoneme classification
     phoneme_language = data_args.phoneme_language
@@ -592,39 +522,26 @@ def main():
         batch["labels"] = tokenizer(batch["target_text"], **additional_kwargs).input_ids
         return batch
 
+    vectorized_datasets = IterableDatasetDict()
     with training_args.main_process_first(desc="dataset map preprocessing"):
-        vectorized_datasets = raw_datasets.map(
-            prepare_dataset,
-            remove_columns=next(iter(raw_datasets.values())).column_names,
-            num_proc=num_workers,
-            desc="preprocess datasets",
-        )
+        for split, dataset in raw_datasets.items():
+            vectorized_datasets[split] = (
+                dataset.map(prepare_dataset)
+                .remove_columns(raw_column_names[split] + ["target_text"])
+                .with_format("torch")
+            )
+            if split == "train":
+                vectorized_datasets[split] = vectorized_datasets[split].shuffle(
+                    buffer_size=data_args.shuffle_buffer_size,
+                    seed=training_args.seed,
+                )
 
-        def is_audio_in_length_range(length):
-            return length > min_input_length and length < max_input_length
-
-        # filter data that is shorter than min_input_length
-        vectorized_datasets = vectorized_datasets.filter(
-            is_audio_in_length_range,
-            num_proc=num_workers,
-            input_columns=["input_length"],
-        )
-
-    # 7. Next, we can prepare the training.
+    # 6. Next, we can prepare the training.
     # Let's use word error rate (WER) as our evaluation metric,
     # instantiate a data collator and the trainer
 
     # Define evaluation metrics during training, *i.e.* word error rate, character error rate
     eval_metrics = {metric: load_metric(metric) for metric in data_args.eval_metrics}
-
-    # for large datasets it is advised to run the preprocessing on a
-    # single machine first with ``args.preprocessing_only`` since there will mostly likely
-    # be a timeout when running the script in distributed mode.
-    # In a second step ``args.preprocessing_only`` can then be set to `False` to load the
-    # cached dataset
-    if data_args.preprocessing_only:
-        logger.info(f"Data preprocessing finished. Files cached at {vectorized_datasets.cache_files}")
-        return
 
     def compute_metrics(pred):
         pred_logits = pred.predictions
@@ -660,7 +577,16 @@ def main():
         processor = Wav2Vec2Processor.from_pretrained(training_args.output_dir)
 
     # Instantiate custom data collator
-    data_collator = DataCollatorCTCWithPadding(processor=processor)
+    max_input_length = data_args.max_duration_in_seconds * feature_extractor.sampling_rate
+    data_collator = DataCollatorCTCWithPadding(processor=processor, max_length=max_input_length)
+
+    # trainer callback to reinitialize and reshuffle the streamable datasets at the beginning of each epoch
+    class ShuffleCallback(TrainerCallback):
+        def on_epoch_begin(self, args, state, control, train_dataloader, **kwargs):
+            if isinstance(train_dataloader.dataset, IterableDatasetShard):
+                pass  # set_epoch() is handled by the Trainer
+            elif isinstance(train_dataloader.dataset, IterableDataset):
+                train_dataloader.dataset.set_epoch(train_dataloader.dataset._epoch + 1)
 
     # Initialize Trainer
     trainer = Trainer(
@@ -670,10 +596,11 @@ def main():
         compute_metrics=compute_metrics,
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        tokenizer=feature_extractor,
+        tokenizer=processor,
+        callbacks=[ShuffleCallback()],
     )
 
-    # 8. Finally, we can start training
+    # 7. Finally, we can start training
 
     # Training
     if training_args.do_train:
@@ -690,12 +617,8 @@ def main():
         trainer.save_model()
 
         metrics = train_result.metrics
-        max_train_samples = (
-            data_args.max_train_samples
-            if data_args.max_train_samples is not None
-            else len(vectorized_datasets["train"])
-        )
-        metrics["train_samples"] = min(max_train_samples, len(vectorized_datasets["train"]))
+        if data_args.max_train_samples:
+            metrics["train_samples"] = data_args.max_train_samples
 
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
@@ -706,10 +629,8 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate()
-        max_eval_samples = (
-            data_args.max_eval_samples if data_args.max_eval_samples is not None else len(vectorized_datasets["eval"])
-        )
-        metrics["eval_samples"] = min(max_eval_samples, len(vectorized_datasets["eval"]))
+        if data_args.max_eval_samples:
+            metrics["eval_samples"] = data_args.max_eval_samples
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
