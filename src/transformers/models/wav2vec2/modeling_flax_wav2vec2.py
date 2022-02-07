@@ -912,7 +912,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
     def _get_feat_extract_output_lengths(
         self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None
     ):
-        return self.module._get_feat_extract_output_lengths(input_lengths)
+        return self.module._get_feat_extract_output_lengths(input_lengths, add_adapter=add_adapter)
 
 
 class FlaxWav2Vec2Module(nn.Module):
