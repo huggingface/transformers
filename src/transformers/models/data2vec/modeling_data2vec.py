@@ -871,7 +871,7 @@ class Data2VecModel(Data2VecPreTrainedModel):
 
 
 @add_start_docstrings(
-    """data2vec Model with a `language modeling` head on top for CLM fine-tuning.""", DATA2VEC_START_DOCSTRING
+    """Data2Vec Model with a `language modeling` head on top for CLM fine-tuning.""", DATA2VEC_START_DOCSTRING
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec,roberta-base->data2vec
 class Data2VecForCausalLM(Data2VecPreTrainedModel):
