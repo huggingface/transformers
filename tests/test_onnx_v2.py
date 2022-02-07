@@ -174,7 +174,6 @@ PYTORCH_EXPORT_MODELS = {
     ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
     ("distilbert", "distilbert-base-cased"),
-    # ("longFormer", "longformer-base-4096"),
     ("roberta", "roberta-base"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
