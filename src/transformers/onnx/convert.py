@@ -82,14 +82,15 @@ def export(
     Returns:
 
     """
-    from ..file_utils import torch_version
 
     if not (is_torch_available() or is_tf_available()):
         raise ImportError(
-            "Cannot convert because neither PyTorch nor Tensorflow are not installed. Please install torch or tensorflow first."
+            "Cannot convert because neither PyTorch nor TensorFlow are not installed. Please install torch or tensorflow first."
         )
 
     if is_torch_available():
+        from ..file_utils import torch_version
+
         if not is_torch_onnx_dict_inputs_support_available():
             raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
