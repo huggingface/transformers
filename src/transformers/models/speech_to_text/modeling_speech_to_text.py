@@ -153,9 +153,9 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.weights = emb_weights
+        self.weights = nn.Parameter(emb_weights)
         self.weights.requires_grad = False
-        self.weights.detach()
+        self.weights.detach_()
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -1239,6 +1239,12 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"encoder\.version",
         r"decoder\.version",
+        r"model.encoder.embed_positions.weights",
+        r"model.decoder.embed_positions.weights",
+    ]
+    _keys_to_ignore_on_save = [
+        r"model.encoder.embed_positions.weights",
+        r"model.decoder.embed_positions.weights",
     ]
 
     def __init__(self, config: Speech2TextConfig):

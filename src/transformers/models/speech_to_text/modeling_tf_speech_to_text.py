@@ -167,10 +167,10 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         self.offset = 2
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
-        self.embeddings = self.get_embedding(num_positions + self.offset, embedding_dim, padding_idx)
+        self.embedding_weights = self._get_embedding(num_positions + self.offset, embedding_dim, padding_idx)
 
     @staticmethod
-    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None) -> tf.Tensor:
+    def _get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None) -> tf.Tensor:
         """
         Build sinusoidal embeddings. This matches the implementation in tensor2tensor, but differs slightly from the
         description in Section 3.5 of "Attention Is All You Need".
@@ -187,6 +187,22 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
             emb = tf.concat([emb[:padding_idx, :], tf.zeros((1, emb.shape[1])), emb[padding_idx + 1 :, :]], axis=0)
         return emb
 
+    def _resize_embeddings(self):
+        """Recreates (and effectivelly resizes) the sinusoidal embeddings"""
+        self.embeddings = self.add_weight(
+            name="weights",  # name also used in PT
+            shape=self.embedding_weights.shape,
+        )
+        self.embeddings.assign(self.embedding_weights)
+
+    def build(self, input_shape: tf.TensorShape):
+        """
+        Build shared token embedding layer Shared weights logic adapted from
+        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+        """
+        self._resize_embeddings()
+        super().build(input_shape)
+
     def call(self, input_ids: tf.Tensor, past_key_values_length: int = 0) -> tf.Tensor:
         bsz, seq_len = shape_list(input_ids)
         # Create the position ids from the input token ids. Any padded tokens remain padded.
@@ -195,7 +211,8 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len
         if max_pos > shape_list(self.embeddings)[0]:
-            self.get_embedding(max_pos + self.offset, self.embedding_dim, self.padding_idx)
+            self.embedding_weights = self._get_embedding(max_pos + self.offset, self.embedding_dim, self.padding_idx)
+            self._resize_embeddings()
         return tf.reshape(tf.gather(self.embeddings, tf.reshape(position_ids, (-1,)), axis=0), (bsz, seq_len, -1))
 
     @staticmethod
