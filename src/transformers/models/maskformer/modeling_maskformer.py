@@ -887,54 +887,6 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         return MaskFormerOutput(**outputs)
 
 
-# NOTE this to be moved inside the feature extractor
-@add_start_docstrings(
-    """
-    MaskFormer for semantic segmentation
-    """,
-    MASKFORMER_START_DOCSTRING,
-)
-class MaskFormerForSemanticSegmentation(MaskFormerPretrainedModel):
-    def __init__(self, config: MaskFormerConfig):
-        super().__init__(config)
-        self.model = MaskFormerModel(config)
-
-    def get_segmentation(self, preds_logits: Tensor, preds_masks: Tensor) -> Tensor:
-        # mask classes has shape [BATCH, QUERIES, CLASSES + 1]
-        # remove the null class `[..., :-1]`
-        masks_classes: Tensor = preds_logits.softmax(dim=-1)[..., :-1]
-        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_probs: Tensor = preds_masks.sigmoid()
-        # now we want to sum over the queries,
-        # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
-        # where $ softmax(p) \in R^{q, c} $ is the mask classes
-        # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
-        # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
-        segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
-        return segmentation
-
-    @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=MaskFormerForSemanticSegmentationOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, pixel_values: Tensor, labels: Optional[Dict[str, Tensor]] = None, **kwargs):
-        outputs: MaskFormerOutput = self.model(pixel_values, **kwargs)
-        # NOTE the segmentation post processing is here for now but I'll be moved to the feature extractor
-        segmentation: Tensor = self.get_segmentation(outputs.preds_logits, outputs.preds_masks)
-
-        loss_dict: Dict[str, Tensor] = {}
-        loss: Tensor = None
-
-        if labels is not None:
-            loss_dict.update(self.get_loss_dict(outputs, labels))
-            loss = self.get_loss(loss_dict)
-
-        # upsample the masks to match the inputs' spatial dimension
-        segmentation = upsample_like(segmentation, pixel_values)
-
-        return MaskFormerForSemanticSegmentationOutput(
-            segmentation=segmentation, loss_dict=loss_dict, loss=loss, **outputs
-        )
-
-
 class PanopticSegmentationSegment(TypedDict):
     id: int
     category_id: int

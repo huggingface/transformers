@@ -14,10 +14,11 @@
 # limitations under the License.
 """Feature extractor class for MaskFormer."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
+from transformers.models.maskformer.modeling_maskformer import MaskFormerOutput
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType, is_torch_available
@@ -28,6 +29,7 @@ from ...utils import logging
 if is_torch_available():
     import torch
     from torch import nn
+    from torch import Tensor
 
 logger = logging.get_logger(__name__)
 
@@ -372,3 +374,38 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                     "classes": torch.from_numpy(np.stack(class_labels)).long(),
                 }
         return encoded_inputs
+
+    def post_process_segmentation(self, outputs: MaskFormerOutput, target_sizes: List[Tuple[int, int]]):
+        """
+        Converts the output of [`DetrForSegmentation`] into image segmentation predictions. Only supports PyTorch.
+
+        Parameters:
+            outputs ([`DetrSegmentationOutput`]):
+                Raw outputs of the model.
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
+                Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction.
+            threshold (`float`, *optional*, defaults to 0.9):
+                Threshold to use to filter out queries.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
+
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
+            in the batch as predicted by the model.
+        """
+        # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
+        class_queries_logits = outputs.preds_logits
+        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
+        masks_queries_logits = outputs.masks_queries_logits
+        # remove the null class `[..., :-1]`
+        masks_classes: Tensor = class_queries_logits.softmax(dim=-1)[..., :-1]
+        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
+        masks_probs: Tensor = masks_queries_logits.sigmoid()
+        # now we want to sum over the queries,
+        # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
+        # where $ softmax(p) \in R^{q, c} $ is the mask classes
+        # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
+        # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
+        segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+
+        return segmentation
