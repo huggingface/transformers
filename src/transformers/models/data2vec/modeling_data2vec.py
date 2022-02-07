@@ -1152,7 +1152,7 @@ class Data2VecLMHead(nn.Module):
 
 @add_start_docstrings(
     """
-    data2vec Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    Data2Vec Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
     """,
     DATA2VEC_START_DOCSTRING,
