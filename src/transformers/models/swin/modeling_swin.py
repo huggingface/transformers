@@ -108,7 +108,7 @@ class SwinEmbeddings(nn.Module):
     Construct the patch and position embeddings.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, use_mask_token=False):
         super().__init__()
 
         self.patch_embeddings = SwinPatchEmbeddings(
@@ -119,6 +119,7 @@ class SwinEmbeddings(nn.Module):
         )
         num_patches = self.patch_embeddings.num_patches
         self.patch_grid = self.patch_embeddings.grid_size
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
 
         if config.use_absolute_embeddings:
             self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.embed_dim))
@@ -128,9 +129,16 @@ class SwinEmbeddings(nn.Module):
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values, bool_masked_pos=None):
         embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
+        batch_size, seq_len, _ = embeddings.size()
+
+        if bool_masked_pos is not None:
+            mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
+            # replace the masked visual tokens by mask_tokens
+            w = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+            embeddings = embeddings * (1.0 - w) + mask_tokens * w
 
         if self.position_embeddings is not None:
             embeddings = embeddings + self.position_embeddings
@@ -674,13 +682,13 @@ SWIN_INPUTS_DOCSTRING = r"""
     SWIN_START_DOCSTRING,
 )
 class SwinModel(SwinPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         super().__init__(config)
         self.config = config
         self.num_layers = len(config.depths)
         self.num_features = int(config.embed_dim * 2 ** (self.num_layers - 1))
 
-        self.embeddings = SwinEmbeddings(config)
+        self.embeddings = SwinEmbeddings(config, use_mask_token=use_mask_token)
         self.encoder = SwinEncoder(config, self.embeddings.patch_grid)
 
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
@@ -712,6 +720,7 @@ class SwinModel(SwinPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
+        bool_masked_pos=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -733,7 +742,7 @@ class SwinModel(SwinPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
         encoder_outputs = self.encoder(
             embedding_output,

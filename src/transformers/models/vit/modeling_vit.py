@@ -127,16 +127,16 @@ class ViTEmbeddings(nn.Module):
         batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
-        # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-
         batch_size, seq_len, _ = embeddings.size()
         if bool_masked_pos is not None:
             mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
             # replace the masked visual tokens by mask_tokens
             w = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
             embeddings = embeddings * (1.0 - w) + mask_tokens * w
+
+        # add the [CLS] token to the embedded patch tokens
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
