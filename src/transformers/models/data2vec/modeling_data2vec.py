@@ -683,7 +683,7 @@ DATA2VEC_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare data2vec Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Data2Vec Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaModel with ROBERTA->DATA2VEC,Roberta->Data2Vec
