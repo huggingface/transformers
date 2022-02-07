@@ -283,7 +283,7 @@ class MegatronBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    fx_ready = True
+    fx_compatible = True
     # test_resize_embeddings = False
     test_head_masking = False
 

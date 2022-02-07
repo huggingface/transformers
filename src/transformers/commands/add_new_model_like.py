@@ -1192,7 +1192,7 @@ def create_new_model_like(
     def disable_fx_test(filename: Path) -> bool:
         with open(filename) as fp:
             content = fp.read()
-        new_content = re.sub(r"fx_ready\s*=\s*True", "fx_ready = False", content)
+        new_content = re.sub(r"fx_compatible\s*=\s*True", "fx_compatible = False", content)
         with open(filename, "w") as fp:
             fp.write(new_content)
         return content != new_content

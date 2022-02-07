@@ -1410,7 +1410,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
                     f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
-        pooled_logits = logits[torch.arange(batch_size), sequence_lengths]
+        pooled_logits = logits[torch.arange(batch_size, device=self.device), sequence_lengths]
 
         loss = None
         if labels is not None:
