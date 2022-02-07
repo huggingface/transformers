@@ -114,10 +114,8 @@ _deps = [
     "jax>=0.2.8",
     "jaxlib>=0.1.65",
     "jieba",
-    "keras2onnx",
     "nltk",
     "numpy>=1.17",
-    "onnx",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
@@ -245,7 +243,7 @@ else:
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
-extras["onnx"] = deps_list("onnxconverter-common", "keras2onnx", "onnx", "tf2onnx") + extras["onnxruntime"]
+extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
