@@ -369,10 +369,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (ElectraForCausalLM,) if is_torch_available() else ()
-
-    fx_ready_model_classes = all_model_classes
-    fx_dynamic_ready_model_classes = all_model_classes
+    fx_compatible = True
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
