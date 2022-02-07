@@ -33,7 +33,7 @@ from ...file_utils import (
 )
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
-    TFBaseModelOutputWithPast,
+    TFBaseModelOutputWithPastAndCrossAttentions,
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
 )
@@ -771,6 +771,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         present_key_value_states = () if inputs["use_cache"] and self.is_decoder else None
         all_hidden_states = () if inputs["output_hidden_states"] else None
         all_attentions = () if inputs["output_attentions"] else None
+        all_cross_attentions = () if (inputs["output_attentions"] and self.is_decoder) else None
         position_bias = None
         encoder_decoder_position_bias = None
 
@@ -814,6 +815,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
             if inputs["output_attentions"]:
                 all_attentions = all_attentions + (layer_outputs[3],)
+                if self.is_decoder:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
@@ -831,14 +834,17 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 outputs = outputs + (all_hidden_states,)
             if inputs["output_attentions"]:
                 outputs = outputs + (all_attentions,)
-            return outputs  # last-layer hidden state, (all hidden states), (all attentions)
+                if self.is_decoder:
+                    outputs + (all_cross_attentions,)
+            return outputs  # last-layer hidden state, (past_key_values), (all hidden states), (all attentions), (all_cross_attentions)
 
         if self.is_decoder:
-            return TFBaseModelOutputWithPast(
+            return TFBaseModelOutputWithPastAndCrossAttentions(
                 last_hidden_state=hidden_states,
                 past_key_values=present_key_value_states,
                 hidden_states=all_hidden_states,
                 attentions=all_attentions,
+                cross_attentions=all_cross_attentions,
             )
         else:
             return TFBaseModelOutput(
@@ -1264,6 +1270,7 @@ class TFT5Model(TFT5PreTrainedModel):
             past_key_values=past,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=inputs["encoder_outputs"].last_hidden_state,
             encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
             encoder_attentions=inputs["encoder_outputs"].attentions,
@@ -1508,6 +1515,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             past_key_values=past,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=inputs["encoder_outputs"].last_hidden_state,
             encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
             encoder_attentions=inputs["encoder_outputs"].attentions,
