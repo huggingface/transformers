@@ -798,7 +798,6 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        interpolate_pos_encoding=None,
         return_dict=None,
     ):
         r"""
@@ -832,7 +831,6 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
