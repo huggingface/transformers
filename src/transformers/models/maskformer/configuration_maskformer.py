@@ -52,7 +52,7 @@ class MaskFormerConfig(PretrainedConfig):
         dataset_metadata (DatasetMetadata, optional): [description]. Defaults to None.
         mask_feature_size (Optional[int], optional): The masks' features size, this value will also be used to specify the Feature Pyramid Network features size. Defaults to 256.
         no_object_weight (Optional[float], optional): Weight to apply to the null class . Defaults to 0.1.
-        use_auxilary_loss (Optional[bool], optional): [description]. Defaults to False.
+        use_auxilary_loss (Optional[bool], optional): If `true` [`MaskFormerOutput`] will contain. Defaults to False.
         backbone_config (Optional[Dict], optional): [description]. Defaults to None.
         detr_config (Optional[Dict], optional): [description]. Defaults to None.
         dice_weight (Optional[float], optional): [description]. Defaults to 1.0.

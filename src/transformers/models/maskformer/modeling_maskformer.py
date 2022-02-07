@@ -40,7 +40,7 @@ from ...file_utils import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ..detr import DetrConfig
-from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput
+from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput, DetrPreTrainedModel
 from ..swin import SwinConfig, SwinModel
 from .configuration_maskformer import MaskFormerConfig
 
@@ -57,8 +57,6 @@ MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
 ]
 
-TARGETS_MASKS_KEY = "mask_labels"
-TARGETS_LABELS_KEY = "class_labels"
 
 # TODO this has to go away!
 from detectron2.utils.comm import get_world_size
@@ -273,13 +271,13 @@ class MaskFormerHungarianMatcher(nn.Module):
 
         Params:
             outputs: This is a dict that contains at least these entries:
-                 "pred_logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
-                 "pred_masks": Tensor of dim [batch_size, num_queries, H_pred, W_pred] with the predicted masks
+                 "masks_queries_logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
+                 "class_queries_logits": Tensor of dim [batch_size, num_queries, H_pred, W_pred] with the predicted masks
 
             labels: This is a list of labels (len(labels) = batch_size), where each target is a dict containing:
                  "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
                            objects in the target) containing the class labels
-                 "masks": Tensor of dim [num_target_boxes, H_gt, W_gt] containing the target masks
+                 "mask_labels": Tensor of dim [num_target_boxes, H_gt, W_gt] containing the target masks
 
         Returns:
             A list of size batch_size, containing tuples of (index_i, index_j) where:
@@ -292,13 +290,13 @@ class MaskFormerHungarianMatcher(nn.Module):
         indices: List[Tuple[np.array]] = []
 
         preds_masks: Tensor = outputs["masks_queries_logits"]
-        labels_masks: Tensor = labels[TARGETS_MASKS_KEY]
+        labels_masks: Tensor = labels["mask_labels"]
         preds_probs: Tensor = outputs["class_queries_logits"].softmax(dim=-1)
         # downsample all masks in one go -> save memory
         labels_masks: Tensor = F.interpolate(labels_masks, size=preds_masks.shape[-2:], mode="nearest")
         # iterate through batch size
         for pred_probs, pred_mask, target_mask, labels in zip(
-            preds_probs, preds_masks, labels_masks, labels[TARGETS_LABELS_KEY]
+            preds_probs, preds_masks, labels_masks, labels["class_labels"]
         ):
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
@@ -384,9 +382,7 @@ class MaskFormerLoss(nn.Module):
 
         idx = self._get_src_permutation_idx(indices)
         # shape = [BATCH, N_QUERIES]
-        target_classes_o: Tensor = torch.cat(
-            [target[j] for target, (_, j) in zip(labels[TARGETS_LABELS_KEY], indices)]
-        )
+        target_classes_o: Tensor = torch.cat([target[j] for target, (_, j) in zip(labels["class_labels"], indices)])
         # shape = [BATCH, N_QUERIES]
         target_classes: Tensor = torch.full(
             (b, q), fill_value=self.num_classes, dtype=torch.int64, device=pred_logits.device
@@ -406,7 +402,7 @@ class MaskFormerLoss(nn.Module):
         tgt_idx = self._get_tgt_permutation_idx(indices)
         pred_masks = outputs["masks_queries_logits"]  # shape [BATCH, NUM_QUERIES, H, W]
         pred_masks = pred_masks[src_idx]  # shape [BATCH * NUM_QUERIES, H, W]
-        target_masks = labels[TARGETS_MASKS_KEY]  # shape [BATCH, NUM_QUERIES, H, W]
+        target_masks = labels["mask_labels"]  # shape [BATCH, NUM_QUERIES, H, W]
         target_masks = target_masks[tgt_idx]  # shape [BATCH * NUM_QUERIES, H, W]
         # upsample predictions to the target size, we have to add one dim to use interpolate
         pred_masks = F.interpolate(
@@ -447,7 +443,6 @@ class MaskFormerLoss(nn.Module):
              labels: list of dicts, such that len(labels) == batch_size.
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
-        # TODO in theory here we can just take the `pred_masks` key
         outputs_without_aux = {
             "masks_queries_logits": outputs["masks_queries_logits"],
             "class_queries_logits": outputs["class_queries_logits"],
@@ -477,7 +472,7 @@ class MaskFormerLoss(nn.Module):
 
     def get_num_masks(self, labels: Dict[str, Tensor], device: torch.device) -> Number:
         # Compute the average number of target masks accross all nodes, for normalization purposes
-        num_masks: int = labels[TARGETS_LABELS_KEY].shape[0]
+        num_masks: int = labels["class_labels"].shape[0]
         num_masks_pt: Tensor = torch.as_tensor([num_masks], dtype=torch.float, device=device)
         if is_dist_avail_and_initialized():
             torch.distributed.all_reduce(num_masks_pt)
@@ -788,8 +783,15 @@ MASKFORMER_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
             [`AutoFeatureExtractor.__call__`] for details.
+
+        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
+
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+
+            [What are attention masks?](../glossary#attention-mask)
 """
-# TODO add the others but first we need to decide on their names/format
 
 
 class MaskFormerPretrainedModel(PreTrainedModel):
@@ -798,18 +800,10 @@ class MaskFormerPretrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
 
     def _init_weights(self, module):
-        if isinstance(module, SwinModel):
-            # okay but how do I call the Swin init weights on this module???
-            module._init_weights()
-        elif isinstance(module, DetrDecoder):
-            # same here
-            pass
-        # TODO code the rest
-        # - ffpn
-        # - probably a couple of mapping
+        pass
 
 
-class MaskFormerForPretraining(PreTrainedModel):
+class MaskFormerForInstanceSegmentation(PreTrainedModel):
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
         self.model = MaskFormerModel(config)
@@ -832,11 +826,7 @@ class MaskFormerForPretraining(PreTrainedModel):
             losses=losses,
         )
 
-    def get_loss_dict(
-        self,
-        outputs: Dict[str, Tensor],
-        labels:  Dict[str, Tensor]
-    ) -> Dict[str, Tensor]:
+    def get_loss_dict(self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor]) -> Dict[str, Tensor]:
         loss_dict: Dict[str, Tensor] = self.criterion(outputs, labels)
         # weight each loss by `self.weight_dict[<LOSS_NAME>]`
         weighted_loss_dict: Dict[str, Tensor] = {
@@ -874,6 +864,8 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         )
         self.segmentation_module = MaskFormerSegmentationModule(config)
 
+        self.post_init()
+
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MaskFormerOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -881,8 +873,36 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         pixel_values: Tensor,
         pixel_mask: Optional[Tensor] = None,
     ) -> MaskFormerOutput:
+        """
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import DetrFeatureExtractor, DetrForSegmentation
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-base-ade-640")
+        >>> model = MaskFormerModel.from_pretrained("facebook/maskformer-swin-base-ade-640")
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> # model outputs class queries and masks logits
+        >>> class_queries_logits = outputs.class_queries_logits
+        >>> masks_queries_logits = outputs.masks_queries_logits
+        >>> segmentation = feature_extractor.post_process_segmentation(outputs)
+        >>> panoptic_segmentation = feature_extractor.post_process_panoptic_segmentation(outputs)
+        ```"""
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
+        batch_size, _, height, width = pixel_values.shape
+        if pixel_mask is None:
+            pixel_mask = torch.ones((batch_size, height, width), device=pixel_values.device)
         image_features, pixel_embeddings = self.pixel_level_module(pixel_values)
         queries = self.transformer_module(image_features)
         outputs: Dict[str, Tensor] = self.segmentation_module(queries, pixel_embeddings, self.config.use_auxilary_loss)

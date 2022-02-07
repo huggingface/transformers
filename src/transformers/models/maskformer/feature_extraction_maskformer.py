@@ -186,8 +186,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 The corresponding annotations in the following format: { "masks" : the target mask, with shape [C,H,W],
                 "labels" : the target labels, with shape [C]}
 
-            TODO explain we pad and return a padding mask
-
             pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
 
@@ -274,8 +272,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 images = [
                     self._normalize(image=image, mean=self.image_mean, std=self.image_std)[0] for image in images
                 ]
-        # NOTE I will be always forced to convert them since they have to be stacked in the batch dim
-        encoded_inputs = self.maybe_pad_and_create_pixel_mask(
+        # NOTE I will be always forced to pad them them since they have to be stacked in the batch dim
+        encoded_inputs = self.encode_inputs(
             images, annotations, should_pad=pad_and_return_pixel_mask, return_tensors=return_tensors
         )
 
@@ -300,11 +298,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 maxes[index] = max(maxes[index], item)
         return maxes
 
-    def maybe_pad_and_create_pixel_mask(
+    def encode_inputs(
         self,
         pixel_values_list: List["torch.Tensor"],
         annotations: Optional[List[Dict]] = None,
-        should_pad: Optional[bool] = True,
+        pad_and_return_pixel_mask: Optional[bool] = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ):
         """
@@ -323,19 +321,20 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               *"pixel_mask"* is in `self.model_input_names`).
-
+            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_classes, height, width) to be fed to a model (when `annotations` are provided)
+            - **class_labels** -- Optional class labels of shape `(batch_size, num_classes) to be fed to a model (when `annotations` are provided)
         """
 
         max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
         c, height, width = max_size
         pixel_values = []
         pixel_mask = []
-        pixel_labels = []
+        mask_labels = []
         class_labels = []
 
         for idx, image in enumerate(pixel_values_list):
             # create padded image
-            if should_pad:
+            if pad_and_return_pixel_mask:
                 padded_image = np.zeros((c, height, width), dtype=np.float32)
                 padded_image[: image.shape[0], : image.shape[1], : image.shape[2]] = np.copy(image)
                 image = padded_image
@@ -344,13 +343,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             if annotations:
                 annotation = annotations[idx]
                 masks = annotation["masks"]
-                if should_pad:
+                if pad_and_return_pixel_mask:
                     padded_masks = np.zeros((masks.shape[0], height, width), dtype=masks.dtype)
                     padded_masks[:, : padded_masks.shape[1], : padded_masks.shape[2]] = np.copy(padded_masks)
                     masks = padded_masks
-                pixel_labels.append(masks)
+                mask_labels.append(masks)
                 class_labels.append(annotation["labels"])
-            if should_pad:
+            if pad_and_return_pixel_mask:
                 # create pixel mask
                 mask = np.zeros((height, width), dtype=np.int64)
                 mask[: image.shape[1], : image.shape[2]] = True
@@ -360,8 +359,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         data = {
             "pixel_values": pixel_values,
             "pixel_mask": pixel_mask,
-            # "pixel_labels": pixel_labels,
-            # "class_labels": class_labels,
+            "mask_labels": mask_labels,
+            "class_labels": class_labels,
         }
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
@@ -376,10 +375,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 if not is_torch_available():
                     raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
 
-                encoded_inputs["labels"] = {
-                    "pixel": torch.from_numpy(np.stack(pixel_labels)).float(),
-                    "classes": torch.from_numpy(np.stack(class_labels)).long(),
-                }
         return encoded_inputs
 
     def post_process_segmentation(self, outputs: MaskFormerOutput) -> Tensor:
