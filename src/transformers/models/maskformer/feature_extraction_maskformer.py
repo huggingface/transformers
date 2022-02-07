@@ -24,7 +24,7 @@ from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType, is_torch_available
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
-
+from .configuration_maskformer import ClassSpec,
 
 if is_torch_available():
     import torch
@@ -35,6 +35,13 @@ logger = logging.get_logger(__name__)
 
 
 ImageInput = Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]]
+
+
+class PanopticSegmentationSegment(TypedDict):
+    id: int
+    category_id: int
+    is_thing: bool
+    label: str
 
 
 class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -375,26 +382,18 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 }
         return encoded_inputs
 
-    def post_process_segmentation(self, outputs: MaskFormerOutput, target_sizes: List[Tuple[int, int]]):
+    def post_process_segmentation(self, outputs: MaskFormerOutput) -> Tensor:
         """
-        Converts the output of [`DetrForSegmentation`] into image segmentation predictions. Only supports PyTorch.
+        Converts the output of [`MaskFormerOutput`] into image segmentation predictions. Only supports PyTorch.
 
         Parameters:
             outputs ([`DetrSegmentationOutput`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
-                Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction.
-            threshold (`float`, *optional*, defaults to 0.9):
-                Threshold to use to filter out queries.
-            mask_threshold (`float`, *optional*, defaults to 0.5):
-                Threshold to use when turning the predicted masks into binary values.
 
-        Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
-            in the batch as predicted by the model.
+
         """
         # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
-        class_queries_logits = outputs.preds_logits
+        class_queries_logits = outputs.class_queries_logits
         # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
         masks_queries_logits = outputs.masks_queries_logits
         # remove the null class `[..., :-1]`
@@ -409,3 +408,125 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
         return segmentation
+
+    def remove_low_and_no_objects(
+        self,
+        masks: Tensor,
+        scores: Tensor,
+        labels: Tensor,
+        object_mask_threshold: float,
+    ) -> Tuple[Tensor, Tensor, Tensor]:
+        """
+
+        Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and `labels`
+
+        Args:
+            masks (Tensor): A tensor of shape `(num_queries, height, width)`
+            scores (Tensor): A tensor of shape `(num_queries, num_classes_+ 1)`
+            labels (Tensor): A tensor of shape `(num_classes)`
+            object_mask_threshold (float): A number between 0 and 1 used to binarize the masks
+
+        Raises:
+            ValueError: [description]
+
+        Returns:
+            Tuple[Tensor, Tensor, Tensor]: [description]
+        """
+        if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
+            raise ValueError("mask, scores and labels must have the same shape!")
+
+        to_keep: Tensor = labels.ne(self.model.config.num_labels) & (scores > object_mask_threshold)
+
+        return masks[to_keep], scores[to_keep], labels[to_keep]
+
+    def post_process_panoptic_segmentation(
+        self,
+        outputs: MaskFormerOutput,
+        object_mask_threshold: Optional[float] = 0.8,
+        overlap_mask_area_threshold: Optional[float] = 0.8,
+    ) -> Tensor:
+        """
+        Converts the output of [`MaskFormerOutput`] into image segmentation predictions. Only supports PyTorch.
+
+        Args:
+            outputs (MaskFormerOutput): [description]
+            object_mask_threshold (Optional[float], optional): [description]. Defaults to 0.8.
+            overlap_mask_area_threshold (Optional[float], optional): [description]. Defaults to 0.8.
+
+        Returns:
+            Tensor: [description]
+        """
+        # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
+        class_queries_logits: Tensor = outputs.class_queries_logits
+        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
+        masks_queries_logits: Tensor = outputs.masks_queries_logits
+        # since all images are padded, they all have the same spatial dimensions
+        _, _, height, width = masks_queries_logits.shape
+        # for each query, the best scores and their indeces
+        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
+        # pred_scores and pred_labels shape = [BATH,NUM_QUERIES]
+        mask_probs = masks_queries_logits.sigmoid()
+        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
+        # now, we need to iterate over the batch size to correctly process the segmentation we got from the queries using our thresholds. Even if the original predicted masks have the same shape across the batch, they won't after thresholding so batch-wise operations are impossible
+
+        results: List[Dict[str, Tensor]] = []
+        for (mask_probs, pred_scores, pred_labels) in zip(mask_probs, pred_scores, pred_labels):
+
+            mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(
+                mask_probs, pred_scores, pred_labels, object_mask_threshold
+            )
+            we_detect_something: bool = mask_probs.shape[0] > 0
+
+            segmentation: Tensor = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
+            segments: List[PanopticSegmentationSegment] = []
+            
+            if we_detect_something:
+                current_segment_id: int = 0
+                # weight each mask by its score
+                mask_probs *= pred_scores.view(-1, 1, 1)
+                # find out for each pixel what is the most likely class to be there
+                mask_labels: Tensor = mask_probs.argmax(0)
+                # mask_labels shape = [H,W] where each pixel has a class label
+                stuff_memory_list: Dict[str, int] = {}
+                # this is a map between stuff and segments id, the used it to keep track of the instances of one class
+                for k in range(pred_labels.shape[0]):
+                    pred_class: int = pred_labels[k].item()
+                    # check if pred_class is not a "thing", so it can be merged with other instance. For example, class "sky" cannot have more then one instance
+                    class_spec: ClassSpec = self.model.config.dataset_metadata["classes"][pred_class]
+                    is_stuff = not class_spec["is_thing"]
+                    # get the mask associated with the k class
+                    mask_k: Tensor = mask_labels == k
+                    # create the area, since bool we just need to sum :)
+                    mask_k_area: Tensor = mask_k.sum()
+                    # this is the area of all the stuff in query k
+                    # TODO not 100%, why are the taking the k query here????
+                    original_area: Tensor = (mask_probs[k] >= 0.5).sum()
+
+                    mask_does_exist: bool = mask_k_area > 0 and original_area > 0
+
+                    if mask_does_exist:
+                        # find out how much of the all area mask_k is using
+                        area_ratio: float = mask_k_area / original_area
+                        mask_k_is_overlapping_enough: bool = area_ratio.item() > overlap_mask_area_threshold
+
+                        if mask_k_is_overlapping_enough:
+                            # merge stuff regions
+                            if pred_class in stuff_memory_list:
+                                current_segment_id = stuff_memory_list[pred_class]
+                            else:
+                                current_segment_id += 1
+                            # then we update out mask with the current segment
+                            segmentation[mask_k] = current_segment_id
+                            segments.append(
+                                {
+                                    "id": current_segment_id,
+                                    "category_id": pred_class,
+                                    "is_thing": not is_stuff,
+                                    "label": class_spec["label"],
+                                }
+                            )
+                            if is_stuff:
+                                stuff_memory_list[pred_class] = current_segment_id
+
+                    results.append({'segmentation': segmentation, 'segments': segments})
+            
