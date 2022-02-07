@@ -1009,6 +1009,18 @@ def get_parameter_names(model, forbidden_layer_types):
     return result
 
 
+def has_length(dataset: Dataset):
+    """
+    Checks if the dataset implements __len__() and it doesn't raise an error
+    """
+    try:
+        if len(dataset) is not None:
+            return True
+    except TypeError:
+        # TypeError: len() of unsized object
+        return False
+
+
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
 
