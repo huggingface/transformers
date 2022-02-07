@@ -73,7 +73,7 @@ class SwinConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        encoder_stride (`int`, `optional`, defaults to 16):
+        encoder_stride (`int`, `optional`, defaults to 32):
             The stride of the encoder for masked image modeling.
 
         Example:
@@ -115,7 +115,7 @@ class SwinConfig(PretrainedConfig):
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        encoder_stride=16,
+        encoder_stride=32,
         **kwargs
     ):
         super().__init__(**kwargs)
