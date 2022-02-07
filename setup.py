@@ -114,6 +114,7 @@ _deps = [
     "jax>=0.2.8",
     "jaxlib>=0.1.65",
     "jieba",
+    "keras2onnx",
     "nltk",
     "numpy>=1.17",
     "onnx",
