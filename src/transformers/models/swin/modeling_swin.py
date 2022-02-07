@@ -105,7 +105,7 @@ def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
 
 class SwinEmbeddings(nn.Module):
     """
-    Construct the patch and position embeddings.
+    Construct the patch and position embeddings. Optionally, also the mask token.
     """
 
     def __init__(self, config, use_mask_token=False):
@@ -119,7 +119,7 @@ class SwinEmbeddings(nn.Module):
         )
         num_patches = self.patch_embeddings.num_patches
         self.patch_grid = self.patch_embeddings.grid_size
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim)) if use_mask_token else None
 
         if config.use_absolute_embeddings:
             self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.embed_dim))

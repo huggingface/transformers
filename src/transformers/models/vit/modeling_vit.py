@@ -72,7 +72,7 @@ def to_2tuple(x):
 
 class ViTEmbeddings(nn.Module):
     """
-    Construct the CLS token, position and patch embeddings.
+    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
 
     """
 
