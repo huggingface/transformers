@@ -57,8 +57,8 @@ MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
 ]
 
-TARGETS_MASKS_KEY = "pixel"
-TARGETS_LABELS_KEY = "classes"
+TARGETS_MASKS_KEY = "mask_labels"
+TARGETS_LABELS_KEY = "class_labels"
 
 # TODO this has to go away!
 from detectron2.utils.comm import get_world_size
@@ -67,6 +67,15 @@ from scipy.optimize import linear_sum_assignment
 
 @dataclass
 class MaskFormerOutput(ModelOutput):
+    """
+    Base class for MaskFormer's outputs. This class adds two attributes to ModelOutput, the per queries class and mask logits.
+
+
+    Args:
+        class_queries_logits (torch.FloatTensor): A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each query.
+        masks_queries_logits (torch.FloatTensor):  A tensor of shape `(batch_size, num_queries, num_classes + 1)` representing the proposed classes for each query. Note the `+ 1` is needed because we incorporate the null class.
+    """
+
     class_queries_logits: torch.FloatTensor = None
     masks_queries_logits: torch.FloatTensor = None
 
@@ -347,7 +356,7 @@ class MaskFormerLoss(nn.Module):
             matcher (MaskFormerHungarianMatcher):
                 A torch module that computes the assigments between the predictions and labels
             weight_dict (Dict[str, float]): A dictionary of weights to be applied to the different losses
-            eos_coef (float): TODO no idea
+            eos_coef (float): Weight to apply to the null class
             losses (List[str]): A list of losses to be used TODO probably remove it
         """
 
@@ -803,8 +812,8 @@ class MaskFormerPretrainedModel(PreTrainedModel):
 class MaskFormerForPretraining(PreTrainedModel):
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
+        self.model = MaskFormerModel(config)
         losses = ["labels", "masks"]
-
         self.matcher = MaskFormerHungarianMatcher(
             cost_class=1.0, cost_dice=config.dice_weight, cost_mask=config.mask_weight
         )
@@ -823,7 +832,11 @@ class MaskFormerForPretraining(PreTrainedModel):
             losses=losses,
         )
 
-    def get_loss_dict(self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def get_loss_dict(
+        self,
+        outputs: Dict[str, Tensor],
+        labels:  Dict[str, Tensor]
+    ) -> Dict[str, Tensor]:
         loss_dict: Dict[str, Tensor] = self.criterion(outputs, labels)
         # weight each loss by `self.weight_dict[<LOSS_NAME>]`
         weighted_loss_dict: Dict[str, Tensor] = {
@@ -834,6 +847,18 @@ class MaskFormerForPretraining(PreTrainedModel):
     def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
         # probably an awkward way to reduce it
         return torch.tensor(list(loss_dict.values()), dtype=torch.float).sum()
+
+    def forward(
+        self, pixel_values: Tensor, mask_labels: Tensor, class_labels: Tensor, pixel_mask: Optional[Tensor] = None
+    ) -> MaskFormerOutput:
+
+        outputs: MaskFormerOutput = self.model(pixel_values)
+
+        labels: Dict[str, Tensor] = {"mask_labels": mask_labels, "class_labels": class_labels}
+        loss_dict: Dict[str, Tensor] = self.get_loss_dict(outputs, labels)
+        loss: Tensor = self.get_loss(loss_dict)
+
+        return MaskFormerOutput(**outputs, loss_dict=loss_dict, loss=loss)
 
 
 @add_start_docstrings(
@@ -850,7 +875,7 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         self.segmentation_module = MaskFormerSegmentationModule(config)
 
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=MaskFormerOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=MaskFormerOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Tensor,

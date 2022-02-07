@@ -13,14 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ MaskFormer model configuration"""
-
+from __future__ import annotations
 from typing import Dict, List, Optional, Tuple, TypedDict
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..detr import DetrConfig
 from ..swin import SwinConfig
-
+from ..auto.configuration_auto import AutoConfig
 
 MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = [
     "facebook/maskformer-swin-base-ade-640",
@@ -44,11 +43,25 @@ class MaskFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormer`]. It is used to instantiate a
     MaskFormer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the "maskformer-swin-base-ade-640"
-    architecture trained on ade20k-150
+    configuration with the defaults will yield a similar configuration to that of the "maskformer-swin-base-ade-640" architecture trained on ade20k-150
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        dataset_metadata (DatasetMetadata, optional): [description]. Defaults to None.
+        mask_feature_size (Optional[int], optional): The masks' features size, this value will also be used to specify the Feature Pyramid Network features size. Defaults to 256.
+        no_object_weight (Optional[float], optional): Weight to apply to the null class . Defaults to 0.1.
+        use_auxilary_loss (Optional[bool], optional): [description]. Defaults to False.
+        backbone_config (Optional[Dict], optional): [description]. Defaults to None.
+        detr_config (Optional[Dict], optional): [description]. Defaults to None.
+        dice_weight (Optional[float], optional): [description]. Defaults to 1.0.
+        cross_entropy_weight (Optional[float], optional): [description]. Defaults to 1.0.
+        mask_weight (Optional[float], optional): [description]. Defaults to 20.0.
+        mask_classification (Optional[bool], optional): [description]. Defaults to True.
+
+    Raises:
+        ValueError: [description]
     """
     model_type = "maskformer"
 
@@ -59,21 +72,17 @@ class MaskFormerConfig(PretrainedConfig):
     def __init__(
         self,
         dataset_metadata: DatasetMetadata = None,
-        fpn_feature_size: Optional[int] = 256,
         mask_feature_size: Optional[int] = 256,
         no_object_weight: Optional[float] = 0.1,
         use_auxilary_loss: Optional[bool] = False,
         backbone_config: Optional[Dict] = None,
-        # TODO better name?
-        transformer_decoder_config: Optional[Dict] = None,
+        detr_config: Optional[Dict] = None,
         dice_weight: Optional[float] = 1.0,
         cross_entropy_weight: Optional[float] = 1.0,
         mask_weight: Optional[float] = 20.0,
         mask_classification: Optional[bool] = True,
         **kwargs,
     ):
-        from ..auto.configuration_auto import AutoConfig
-
         if backbone_config is None:
             # fall back to https://huggingface.co/microsoft/swin-base-patch4-window12-384-in22k
             backbone = SwinConfig(
@@ -94,11 +103,11 @@ class MaskFormerConfig(PretrainedConfig):
                 )
             backbone = AutoConfig.for_model(backbone_model_type, **backbone_config)
 
-        if transformer_decoder_config is None:
+        if detr_config is None:
             transformer_decoder = DetrConfig()
 
         else:
-            transformer_decoder = DetrConfig(**transformer_decoder_config)
+            transformer_decoder = DetrConfig(**detr_config)
 
         self.backbone = backbone
 
@@ -106,7 +115,7 @@ class MaskFormerConfig(PretrainedConfig):
 
         self.dataset_metadata = dataset_metadata
 
-        self.fpn_feature_size = fpn_feature_size
+        self.fpn_feature_size = mask_feature_size
         self.mask_feature_size = mask_feature_size
         self.no_object_weight = no_object_weight
         self.use_auxilary_loss = use_auxilary_loss
@@ -121,16 +130,20 @@ class MaskFormerConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
     @classmethod
-    def from_backbone_and_transformer_decoder_configs(
-        cls, backbone_config: PretrainedConfig, transformer_decoder_config: DetrConfig, **kwargs
-    ) -> PretrainedConfig:
-        r"""
-        Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model configuration and
-        decoder model configuration. Returns:
-            [`EncoderDecoderConfig`]: An instance of a configuration object
+    def from_backbone_and_detr_configs(
+        cls, backbone_config: PretrainedConfig, detr_config: DetrConfig, **kwargs
+    ) -> MaskFormerConfig:
+        """Instantiate a [`MaskFormerConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model configuration.
+
+        Args:
+            backbone_config (PretrainedConfig): The backbone configuration
+            detr_config (DetrConfig): The transformer decoder configuration to use
+
+        Returns:
+            [`MaskFormerConfig`]: An instance of a configuration object
         """
         return cls(
             backbone_config=backbone_config.to_dict(),
-            transformer_decoder_config=transformer_decoder_config.to_dict(),
+            detr_config=detr_config.to_dict(),
             **kwargs,
         )
