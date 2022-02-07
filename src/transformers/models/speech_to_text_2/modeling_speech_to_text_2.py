@@ -93,9 +93,9 @@ class Speech2Text2SinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.weights = emb_weights
+        self.weights = nn.Parameter(emb_weights)
         self.weights.requires_grad = False
-        self.weights.detach()
+        self.weights.detach_()
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
