@@ -189,6 +189,30 @@ that make things deterministic (.e.g., `torch.backends.cudnn.deterministic`) may
 can't be done by default, but you can enable those yourself if needed.
 
 
+## Specific GPUs Selection
+
+If you have multiple GPUs and you'd like to use only 1 or a few of those GPUs, set the environment variable `CUDA_VISIBLE_DEVICES`. For example to run only on GPUs 0 and 2, you can do:
+
+```bash
+CUDA_VISIBLE_DEVICES=0,2 python trainer-program.py ...
+```
+
+So now pytorch will see only 2 gpus where your real GPU 0 becomes gpu0, and your real GPU 2 becomes gpu1.
+
+You can even change their order:
+
+```bash
+CUDA_VISIBLE_DEVICES=2,0 python trainer-program.py ...
+```
+
+To emulate an environment without GPUs simply set it to an empty value like so:
+
+```bash
+CUDA_VISIBLE_DEVICES= python trainer-program.py ...
+```
+
+
+
 ## Trainer Integrations
 
 The [`Trainer`] has been extended to support libraries that may dramatically improve your training
