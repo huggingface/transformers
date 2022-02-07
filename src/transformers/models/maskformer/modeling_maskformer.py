@@ -42,7 +42,7 @@ from ...utils import logging
 from ..detr import DetrConfig
 from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput
 from ..swin import SwinConfig, SwinModel
-from .configuration_maskformer import ClassSpec, MaskFormerConfig
+from .configuration_maskformer import MaskFormerConfig
 
 
 logger = logging.get_logger(__name__)
@@ -67,27 +67,8 @@ from scipy.optimize import linear_sum_assignment
 
 @dataclass
 class MaskFormerOutput(ModelOutput):
-    class_queries_logits: torch.FloatTensor
-    masks_queries_logits: torch.FloatTensor = None
-
-
-@dataclass
-class MaskFormerForSemanticSegmentationOutput(ModelOutput):
-    segmentation: torch.FloatTensor = None
     class_queries_logits: torch.FloatTensor = None
     masks_queries_logits: torch.FloatTensor = None
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
-
-
-@dataclass
-class MaskFormerForPanopticSegmentationOutput(ModelOutput):
-    segmentation: torch.FloatTensor = None
-    class_queries_logits: torch.FloatTensor = None
-    masks_queries_logits: torch.FloatTensor = None
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
-    segments: List[List[PanopticSegmentationSegment]] = None
 
 
 # copied from original implementation
@@ -152,7 +133,7 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: float) -> Tensor:
     return loss
 
 
-# copied from original implementation
+# refactored from original implementation
 def sigmoid_focal_loss(
     inputs: Tensor, labels: Tensor, num_masks: int, alpha: float = 0.25, gamma: float = 2
 ) -> Tensor:
@@ -195,6 +176,7 @@ def sigmoid_focal_loss(
     return loss
 
 
+# refactored from original implementation
 def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     """
     A pair wise version of the dice loss, see `dice_loss` for usage
@@ -209,10 +191,7 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     Returns:
         Tensor: The computed loss between each pairs
     """
-    inputs: Tensor = inputs.sigmoid()
-    # TODO this .flatten seems to be unecessary because the shape is 2d
-    inputs: Tensor = inputs.flatten(1)
-    # TODO why 1 is not added to the number to avoid numerator = 0 in edge cases?
+    inputs: Tensor = inputs.sigmoid().flatten(1)
     numerator: Tensor = 2 * torch.einsum("nc,mc->nm", inputs, labels)
     # using broadcasting to get a [NUM_QUERIES, NUM_CLASSES] matrix
     denominator: Tensor = inputs.sum(-1)[:, None] + labels.sum(-1)[None, :]
@@ -220,6 +199,7 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     return loss
 
 
+# refactored from original implementation
 def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 0.25, gamma: float = 2.0) -> Tensor:
     """
     A pair wise version of the focal loss, see `sigmoid_focal_loss` for usage
@@ -237,7 +217,7 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 
     if alpha < 0:
         raise ValueError(f"alpha must be positive")
 
-    hw: int = inputs.shape[1]
+    height_and_width: int = inputs.shape[1]
 
     prob: Tensor = inputs.sigmoid()
     cross_entropy_loss_pos = F.binary_cross_entropy_with_logits(inputs, torch.ones_like(inputs), reduction="none")
@@ -251,7 +231,7 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 
 
     loss: Tensor = torch.einsum("nc,mc->nm", focal_pos, labels) + torch.einsum("nc,mc->nm", focal_neg, (1 - labels))
 
-    return loss / hw
+    return loss / height_and_width
 
 
 # refactored from original implementation
@@ -723,7 +703,7 @@ class MaskFormerTransformerModule(nn.Module):
         image_features = rearrange(image_features, "b c h w -> (h w) b c")
         position_embeddings = rearrange(position_embeddings, "b c h w -> (h w) b c")
 
-        transformer_decoder_output: ModelOutput = self.transformer_decoder(
+        transformer_decoder_output: DetrDecoderOutput = self.transformer_decoder(
             inputs_embeds=inputs_embeds,
             attention_mask=None,
             encoder_hidden_states=image_features,
@@ -752,7 +732,7 @@ class MaskFormerSegmentationModule(nn.Module):
 
         out: Dict[str, Tensor] = {}
 
-        # NOTE this code is a little bit cumbersome, an easy fix is to always return a list of predictions, if we have auxilary loss then we are going to return more than one element in the list
+        # This code is a little bit cumbersome, an improvement can be to return a list of predictions. If we have auxilary loss then we are going to return more than one element in the list
         if use_auxilary_loss:
             stacked_decoder_outputs: Tensor = torch.stack(decoder_outputs)
             classes: Tensor = self.class_predictor(stacked_decoder_outputs)

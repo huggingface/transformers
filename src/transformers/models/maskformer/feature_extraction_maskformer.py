@@ -14,7 +14,7 @@
 # limitations under the License.
 """Feature extractor class for MaskFormer."""
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, TypedDict
 
 import numpy as np
 from PIL import Image
@@ -24,7 +24,7 @@ from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType, is_torch_available
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
-from .configuration_maskformer import ClassSpec,
+from .configuration_maskformer import ClassSpec
 
 if is_torch_available():
     import torch
@@ -383,14 +383,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         return encoded_inputs
 
     def post_process_segmentation(self, outputs: MaskFormerOutput) -> Tensor:
-        """
-        Converts the output of [`MaskFormerOutput`] into image segmentation predictions. Only supports PyTorch.
+        """Converts the output of [`MaskFormerModel`] into image segmentation predictions. Only supports PyTorch.
 
-        Parameters:
-            outputs ([`DetrSegmentationOutput`]):
-                Raw outputs of the model.
+        Args:
+            outputs (MaskFormerOutput): The outputs from MaskFor
 
-
+        Returns:
+            Tensor: A tensor of shape `batch_size, num_labels, height, width`
         """
         # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits = outputs.class_queries_logits
@@ -410,11 +409,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         return segmentation
 
     def remove_low_and_no_objects(
-        self,
-        masks: Tensor,
-        scores: Tensor,
-        labels: Tensor,
-        object_mask_threshold: float,
+        self, masks: Tensor, scores: Tensor, labels: Tensor, object_mask_threshold: float, num_labels: int
     ) -> Tuple[Tensor, Tensor, Tensor]:
         """
 
@@ -422,20 +417,20 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         Args:
             masks (Tensor): A tensor of shape `(num_queries, height, width)`
-            scores (Tensor): A tensor of shape `(num_queries, num_classes_+ 1)`
-            labels (Tensor): A tensor of shape `(num_classes)`
+            scores (Tensor): A tensor of shape `(num_queries)`
+            labels (Tensor): A tensor of shape `(num_queries)`
             object_mask_threshold (float): A number between 0 and 1 used to binarize the masks
 
         Raises:
-            ValueError: [description]
+            ValueError: When the first dimension doesn't match in all input tensors
 
         Returns:
-            Tuple[Tensor, Tensor, Tensor]: [description]
+            Tuple[Tensor, Tensor, Tensor]: The inputs tensors without the region with `< object_mask_threshold`
         """
         if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
             raise ValueError("mask, scores and labels must have the same shape!")
 
-        to_keep: Tensor = labels.ne(self.model.config.num_labels) & (scores > object_mask_threshold)
+        to_keep: Tensor = labels.ne(num_labels) & (scores > object_mask_threshold)
 
         return masks[to_keep], scores[to_keep], labels[to_keep]
 
@@ -446,7 +441,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         overlap_mask_area_threshold: Optional[float] = 0.8,
     ) -> Tensor:
         """
-        Converts the output of [`MaskFormerOutput`] into image segmentation predictions. Only supports PyTorch.
+        Converts the output of [`MaskFormerModel`] into image panoptic segmentation predictions. Only supports PyTorch.
 
         Args:
             outputs (MaskFormerOutput): [description]
@@ -458,6 +453,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         """
         # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits: Tensor = outputs.class_queries_logits
+        # keep track of the number of labels, subtract -1 for null class
+        num_labels: int = class_queries_logits.shape[-1] - 1
         # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
         masks_queries_logits: Tensor = outputs.masks_queries_logits
         # since all images are padded, they all have the same spatial dimensions
@@ -473,13 +470,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         for (mask_probs, pred_scores, pred_labels) in zip(mask_probs, pred_scores, pred_labels):
 
             mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(
-                mask_probs, pred_scores, pred_labels, object_mask_threshold
+                mask_probs, pred_scores, pred_labels, object_mask_threshold, num_labels
             )
             we_detect_something: bool = mask_probs.shape[0] > 0
 
             segmentation: Tensor = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
             segments: List[PanopticSegmentationSegment] = []
-            
+
             if we_detect_something:
                 current_segment_id: int = 0
                 # weight each mask by its score
@@ -528,5 +525,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                             if is_stuff:
                                 stuff_memory_list[pred_class] = current_segment_id
 
-                    results.append({'segmentation': segmentation, 'segments': segments})
-            
+                    results.append({"segmentation": segmentation, "segments": segments})
+
+        return results
