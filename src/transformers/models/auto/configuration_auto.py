@@ -263,7 +263,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("reformer", "Reformer"),
         ("longformer", "Longformer"),
         ("roberta", "RoBERTa"),
-        ("data2vec", "data2vec"),
+        ("data2vec", "Data2Vec"),
         ("flaubert", "FlauBERT"),
         ("fsmt", "FairSeq Machine-Translation"),
         ("squeezebert", "SqueezeBERT"),
