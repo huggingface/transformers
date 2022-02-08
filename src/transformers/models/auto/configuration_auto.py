@@ -228,6 +228,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("tapex", "TAPEX"),
         ("dpt", "DPT"),
         ("decision_transformer", "Decision Transformer"),
         ("glpn", "GLPN"),

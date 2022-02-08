@@ -233,6 +233,13 @@ else:
                     "XGLMTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "tapex",
+                (
+                    "TapexTokenizer",
+                    None,
+                ),
+            ),
         ]
     )
 
