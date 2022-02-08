@@ -394,9 +394,12 @@ class TFGenerationMixin:
 
         Parameters:
 
-            input_ids (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
-                The sequence used as a prompt for the generation. If `None` the method initializes it with
-                `bos_token_id` and a batch size of 1.
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length,
+            feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
+                The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
+                method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
+                should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
+                `input_ids`, `input_values`, `input_features`, or `pixel_values`.
             max_length (`int`, *optional*, defaults to 20):
                 The maximum length of the sequence to be generated.
             min_length (`int`, *optional*, defaults to 10):
@@ -657,11 +660,12 @@ class TFGenerationMixin:
                 ), "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams >= num_return_sequences"
 
         # create attention mask if necessary
-        # TODO (PVP): this should later be handled by the forward fn() in each model in the future see PR 3140
-        if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids.numpy()):
-            attention_mask = tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
-        elif attention_mask is None:
-            attention_mask = tf.ones_like(input_ids)
+        accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
+        if accepts_attention_mask:
+            if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids.numpy()):
+                attention_mask = tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
+            elif attention_mask is None:
+                attention_mask = tf.ones(shape_list(input_ids)[:2], dtype=tf.int32)
 
         if pad_token_id is None and eos_token_id is not None:
             logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
@@ -697,16 +701,12 @@ class TFGenerationMixin:
             encoder = self.get_encoder()
 
             encoder_kwargs = {
-                "attention_mask": attention_mask,
                 "output_attentions": output_attentions,
                 "output_hidden_states": output_hidden_states,
                 "return_dict": return_dict_in_generate,
             }
-
-            # vision models don't use `attention_mask`.
-            signature = dict(inspect.signature(encoder.call).parameters)
-            if "attention_mask" not in signature:
-                encoder_kwargs.pop("attention_mask")
+            if accepts_attention_mask:
+                encoder_kwargs["attention_mask"] = attention_mask
 
             encoder_outputs = encoder(input_ids, **encoder_kwargs)
             if return_dict_in_generate:
@@ -715,23 +715,15 @@ class TFGenerationMixin:
                 if output_hidden_states:
                     model_kwargs["encoder_hidden_states"] = encoder_outputs.hidden_states
 
-        # The condition `len(shape_list(input_ids)) == 2` is to make this block treats only text inputs.
-        # (vision inputs might occur when the model is an encoder-decoder model)
-        # Expand input ids if num_beams > 1 or num_return_sequences > 1
-        if len(shape_list(input_ids)) == 2 and (num_return_sequences > 1 or num_beams > 1):
-            input_ids_len = shape_list(input_ids)[-1]
-            input_ids = tf.broadcast_to(
-                tf.expand_dims(input_ids, 1), (batch_size, effective_batch_mult * num_beams, input_ids_len)
-            )
-            attention_mask = tf.broadcast_to(
-                tf.expand_dims(attention_mask, 1), (batch_size, effective_batch_mult * num_beams, input_ids_len)
-            )
-            input_ids = tf.reshape(
-                input_ids, (effective_batch_size * num_beams, input_ids_len)
-            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
-            attention_mask = tf.reshape(
-                attention_mask, (effective_batch_size * num_beams, input_ids_len)
-            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
+        expanded_batch_idxs = tf.reshape(
+            tf.repeat(tf.expand_dims(tf.range(batch_size), -1), repeats=num_beams * effective_batch_mult, axis=1),
+            shape=(-1,),
+        )
+        # prepares text-based inputs
+        if len(shape_list(input_ids)) == 2:
+            input_ids = tf.gather(input_ids, expanded_batch_idxs, axis=0)
+        if accepts_attention_mask:
+            attention_mask = tf.gather(attention_mask, expanded_batch_idxs, axis=0)
 
         if self.config.is_encoder_decoder:
 
@@ -749,11 +741,6 @@ class TFGenerationMixin:
                 batch_size == encoder_outputs[0].shape[0]
             ), f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[0]} "
 
-            # expand batch_idx to assign correct encoder output for expanded input_ids (due to num_beams > 1 and num_return_sequences > 1)
-            expanded_batch_idxs = tf.reshape(
-                tf.repeat(tf.expand_dims(tf.range(batch_size), -1), repeats=num_beams * effective_batch_mult, axis=1),
-                shape=(-1,),
-            )
             # expand encoder_outputs
             encoder_outputs = (tf.gather(encoder_outputs[0], expanded_batch_idxs, axis=0),)
         else:
@@ -851,7 +838,8 @@ class TFGenerationMixin:
         unfinished_sents = tf.ones_like(input_ids[:, 0])
         sent_lengths = tf.ones_like(input_ids[:, 0]) * max_length
 
-        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
+        # defined for encoder-decoder models, None for decoder-only models
+        past = encoder_outputs
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and kwargs["output_scores"]) else None
@@ -871,7 +859,11 @@ class TFGenerationMixin:
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs
+                input_ids,
+                past=past,
+                attention_mask=attention_mask,
+                use_cache=use_cache,
+                **kwargs,
             )
             outputs = self(
                 **model_inputs,
@@ -1132,7 +1124,11 @@ class TFGenerationMixin:
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs
+                input_ids,
+                past=past,
+                attention_mask=attention_mask,
+                use_cache=use_cache,
+                **kwargs,
             )
             outputs = self(
                 **model_inputs,

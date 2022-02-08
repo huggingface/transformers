@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021, Google Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,19 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Pegasus model."""
+""" TensorFlow Speech2Text model."""
 
 
 import random
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple
 
-import numpy as np
 import tensorflow as tf
 
-from ...activations_tf import get_tf_activation
+from ...activations_tf import get_tf_activation, glu
 from ...file_utils import (
     add_code_sample_docstrings,
-    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -35,27 +33,29 @@ from ...modeling_tf_outputs import (
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
 )
-
-# Public API
 from ...modeling_tf_utils import (
-    DUMMY_INPUTS,
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     TFSharedEmbeddings,
-    TFWrappedEmbeddings,
     input_processing,
     keras_serializable,
     shape_list,
 )
 from ...utils import logging
-from .configuration_pegasus import PegasusConfig
+from .configuration_speech_to_text import Speech2TextConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "google/pegasus-large"
-_CONFIG_FOR_DOC = "PegasusConfig"
-_TOKENIZER_FOR_DOC = "PegasusTokenizer"
+_CONFIG_FOR_DOC = "Speech2TextConfig"
+_TOKENIZER_FOR_DOC = "Speech2TextTokenizer"
+_CHECKPOINT_FOR_DOC = "facebook/s2t-small-librispeech-asr"
+
+
+TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/s2t-small-librispeech-asr",
+    # See all Speech2Text models at https://huggingface.co/models?filter=speech_to_text
+]
 
 
 LARGE_NEGATIVE = -1e8
@@ -114,65 +114,126 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-# Copied from transformers.models.marian.modeling_tf_marian.TFMarianSinusoidalPositionalEmbedding with Marian->Pegasus
-class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
+class TFConv1dSubsampler(tf.keras.layers.Layer):
+    """
+    Convolutional subsampler: a stack of 1D convolution (along temporal dimension) followed by non-linear activation
+    via gated linear units (https://arxiv.org/abs/1911.08460)
+    """
+
+    def __init__(self, config: Speech2TextConfig, **kwargs):
+        super().__init__(**kwargs)
+        self.config = config
+        self.num_layers = config.num_conv_layers
+        self.in_channels = config.input_feat_per_channel * config.input_channels
+        self.mid_channels = config.conv_channels
+        self.out_channels = config.d_model
+        self.kernel_sizes = config.conv_kernel_sizes
+
+        self.conv_layers = [
+            tf.keras.layers.Conv1D(
+                filters=self.mid_channels if i < self.num_layers - 1 else self.out_channels * 2,
+                kernel_size=k,
+                strides=2,
+                name=f"conv_layers.{i}",
+            )
+            for i, k in enumerate(self.kernel_sizes)
+        ]
+
+    def call(self, input_features: tf.Tensor) -> tf.Tensor:
+        hidden_states = tf.identity(input_features)  # TF Conv1D assumes Batch x Time x Channels, same as the input
+        for i, conv in enumerate(self.conv_layers):
+            # equivalent to `padding=k // 2` on PT's `nn.Conv1d`
+            pad_len = self.kernel_sizes[i] // 2
+            hidden_shapes = shape_list(hidden_states)
+            hidden_states = tf.concat(
+                (
+                    tf.zeros((hidden_shapes[0], pad_len, hidden_shapes[2])),
+                    hidden_states,
+                    tf.zeros((hidden_shapes[0], pad_len, hidden_shapes[2])),
+                ),
+                axis=1,
+            )
+
+            hidden_states = conv(hidden_states)
+            hidden_states = glu(hidden_states, axis=2)  # GLU over the Channel dimension
+        return hidden_states
+
+
+class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, **kwargs):
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None, **kwargs):
         super().__init__(**kwargs)
-
-        if embedding_dim % 2 != 0:
-            raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
-
+        self.offset = 2
         self.embedding_dim = embedding_dim
-        self.num_positions = num_positions
+        self.padding_idx = padding_idx
+        self.embedding_weights = self._get_embedding(num_positions + self.offset, embedding_dim, padding_idx)
+
+    @staticmethod
+    def _get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None) -> tf.Tensor:
+        """
+        Build sinusoidal embeddings. This matches the implementation in tensor2tensor, but differs slightly from the
+        description in Section 3.5 of "Attention Is All You Need".
+        """
+        half_dim = embedding_dim // 2
+        emb = tf.math.log(10000.0) / (half_dim - 1)
+        emb = tf.math.exp(tf.range(half_dim, dtype=tf.float32) * -emb)
+        emb = tf.expand_dims(tf.range(num_embeddings, dtype=tf.float32), axis=1) * tf.expand_dims(emb, axis=0)
+        emb = tf.reshape(tf.concat([tf.math.sin(emb), tf.math.cos(emb)], axis=1), shape=[num_embeddings, -1])
+        if embedding_dim % 2 == 1:
+            # zero pad
+            emb = tf.concat([emb, tf.zeros(num_embeddings, 1)], axis=1)
+        if padding_idx is not None:
+            emb = tf.concat([emb[:padding_idx, :], tf.zeros((1, emb.shape[1])), emb[padding_idx + 1 :, :]], axis=0)
+        return emb
+
+    def _resize_embeddings(self):
+        """Recreates (and effectivelly resizes) the sinusoidal embeddings"""
+        self.embeddings = self.add_weight(
+            name="weights",  # name also used in PT
+            shape=self.embedding_weights.shape,
+        )
+        self.embeddings.assign(self.embedding_weights)
 
     def build(self, input_shape: tf.TensorShape):
         """
         Build shared token embedding layer Shared weights logic adapted from
         https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
-
-        weight = self._init_weight(self.num_positions, self.embedding_dim)
-
-        self.weight = self.add_weight(
-            name="embeddings",
-            shape=[self.num_positions, self.embedding_dim],
-        )
-        weight = tf.cast(weight, dtype=self.weight.dtype)
-
-        self.weight.assign(weight)
-
+        self._resize_embeddings()
         super().build(input_shape)
 
+    def call(self, input_ids: tf.Tensor, past_key_values_length: int = 0) -> tf.Tensor:
+        bsz, seq_len = shape_list(input_ids)
+        # Create the position ids from the input token ids. Any padded tokens remain padded.
+        position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length)
+
+        # expand embeddings if needed
+        max_pos = self.padding_idx + 1 + seq_len
+        if max_pos > shape_list(self.embeddings)[0]:
+            self.embedding_weights = self._get_embedding(max_pos + self.offset, self.embedding_dim, self.padding_idx)
+            self._resize_embeddings()
+        return tf.reshape(tf.gather(self.embeddings, tf.reshape(position_ids, (-1,)), axis=0), (bsz, seq_len, -1))
+
     @staticmethod
-    def _init_weight(n_pos: int, dim: int):
+    def create_position_ids_from_input_ids(
+        input_ids: tf.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
+    ) -> tf.Tensor:
         """
-        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
-        the 2nd half of the vector. [dim // 2:]
+        Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
+        symbols are ignored. This is modified from fairseq's `utils.make_positions`.
+
+        Args:
+            x: tf.Tensor x:
+        Returns: tf.Tensor
         """
-        position_enc = np.array(
-            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
-        )
-        table = np.zeros_like(position_enc)
-        # index 0 is all zero
-        table[:, 0 : dim // 2] = np.sin(position_enc[:, 0::2])
-        table[:, dim // 2 :] = np.cos(position_enc[:, 1::2])
-        # convert to tensor
-        table = tf.convert_to_tensor(table)
-        tf.stop_gradient(table)
-        return table
-
-    def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
-        """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_shape[:2]
-
-        positions = tf.range(past_key_values_length, seq_len + past_key_values_length, delta=1, name="range")
-        return tf.gather(self.weight, positions)
+        mask = tf.cast(tf.math.not_equal(input_ids, padding_idx), dtype=tf.int32)
+        incremental_indices = (tf.math.cumsum(mask, axis=1) + past_key_values_length) * mask
+        return tf.cast(incremental_indices, dtype=tf.int64) + padding_idx
 
 
-# Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->Pegasus
-class TFPegasusAttention(tf.keras.layers.Layer):
+# Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->Speech2Text
+class TFSpeech2TextAttention(tf.keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(
@@ -325,12 +386,11 @@ class TFPegasusAttention(tf.keras.layers.Layer):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.mbart.modeling_tf_mbart.TFMBartEncoderLayer with MBart->Pegasus
-class TFPegasusEncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, config: PegasusConfig, **kwargs):
+class TFSpeech2TextEncoderLayer(tf.keras.layers.Layer):
+    def __init__(self, config: Speech2TextConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
-        self.self_attn = TFPegasusAttention(
+        self.self_attn = TFSpeech2TextAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
@@ -341,19 +401,24 @@ class TFPegasusEncoderLayer(tf.keras.layers.Layer):
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
-    def call(self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training=False):
+    def call(
+        self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training: bool = False
+    ):
         """
         Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`tf.Tensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
-                *(encoder_attention_heads,)*
+                `(encoder_attention_heads,)`
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, self_attn_weights, _ = self.self_attn(
-            hidden_states=hidden_states, attention_mask=attention_mask, layer_head_mask=layer_head_mask
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
+            training=training,
         )
 
         # The tf.debugging asserts are not compliant with XLA then they
@@ -379,12 +444,12 @@ class TFPegasusEncoderLayer(tf.keras.layers.Layer):
         return hidden_states, self_attn_weights
 
 
-# Copied from transformers.models.mbart.modeling_tf_mbart.TFMBartDecoderLayer with MBart->Pegasus
-class TFPegasusDecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, config: PegasusConfig, **kwargs):
+class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
+    def __init__(self, config: Speech2TextConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
-        self.self_attn = TFPegasusAttention(
+
+        self.self_attn = TFSpeech2TextAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -396,7 +461,7 @@ class TFPegasusDecoderLayer(tf.keras.layers.Layer):
         self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.encoder_attn = TFPegasusAttention(
+        self.encoder_attn = TFSpeech2TextAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -421,17 +486,17 @@ class TFPegasusDecoderLayer(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`tf.Tensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             encoder_hidden_states (`tf.Tensor`):
-                cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (`tf.Tensor`): encoder attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
-                *(decoder_attention_heads,)*
+                `(decoder_attention_heads,)`
             cross_attn_layer_head_mask (`tf.Tensor`): mask for heads of the cross-attention module.
-                *(decoder_attention_heads,)*
+                `(decoder_attention_heads,)`
             past_key_value (`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states
@@ -446,6 +511,7 @@ class TFPegasusDecoderLayer(tf.keras.layers.Layer):
             past_key_value=self_attn_past_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
+            training=training,
         )
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
@@ -465,6 +531,7 @@ class TFPegasusDecoderLayer(tf.keras.layers.Layer):
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
+                training=training,
             )
             hidden_states = self.dropout(hidden_states, training=training)
             hidden_states = residual + hidden_states
@@ -489,21 +556,39 @@ class TFPegasusDecoderLayer(tf.keras.layers.Layer):
         )
 
 
-class TFPegasusPreTrainedModel(TFPreTrainedModel):
-    config_class = PegasusConfig
+class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
+    config_class = Speech2TextConfig
     base_model_prefix = "model"
+    main_input_name = "input_features"
 
+    # Overwritten property due to different expected input shape and type
     @property
-    def dummy_inputs(self):
-        pad_token = 1
-        input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        dummy_inputs = {
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": tf.math.not_equal(input_ids, pad_token),
-            "input_ids": input_ids,
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
+
+        Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        return {
+            self.main_input_name: tf.random.uniform(
+                [
+                    1,
+                    random.randint(1, self.config.max_source_positions),  # time
+                    self.config.input_feat_per_channel * self.config.input_channels,  # input channels
+                ]
+            ),
+            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int32),
         }
-        return dummy_inputs
+
+    def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
+        """
+        Computes the output length of the convolutional layers
+        """
+        for _ in range(self.config.num_conv_layers):
+            input_lengths = (input_lengths - 1) // 2 + 1
+
+        return input_lengths
 
     @tf.function(
         input_signature=[
@@ -515,14 +600,13 @@ class TFPegasusPreTrainedModel(TFPreTrainedModel):
             }
         ]
     )
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel.serving
     def serving(self, inputs):
         output = self.call(inputs)
 
         return self.serving_output(output)
 
 
-PEGASUS_START_DOCSTRING = r"""
+SPEECH_TO_TEXT_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -552,43 +636,22 @@ PEGASUS_START_DOCSTRING = r"""
 
     </Tip>
 
-    Args:
-        config ([`PegasusConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
+    Parameters:
+        config ([`Speech2TextConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-PEGASUS_GENERATION_EXAMPLE = r"""
-    Summarization example:
 
-    ```python
-    >>> from transformers import PegasusTokenizer, TFPegasusForConditionalGeneration
-
-    >>> model = TFPegasusForConditionalGeneration.from_pretrained("google/pegasus-xsum")
-    >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-xsum")
-
-    >>> ARTICLE_TO_SUMMARIZE = (
-    ...     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
-    ...     "amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were "
-    ...     "scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."
-    ... )
-    >>> inputs = tokenizer(ARTICLE_TO_SUMMARIZE, max_length=1024, return_tensors="tf")
-
-    >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"])
-    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
-    ```
-"""
-
-PEGASUS_INPUTS_DOCSTRING = r"""
+SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`tf.Tensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
+        input_features (`tf.Tensor` of shape `(batch_size, sequence_length, feature_size)`):
+            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
+            by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
+            via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+            [`Speech2TextTokenizer`] should be used for extracting the fbank features, padding and conversion into a
+            tensor of floats. See [`~Speech2TextTokenizer.__call__`]
         attention_mask (`tf.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -599,14 +662,17 @@ PEGASUS_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`Speech2TextTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            Pegasus uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
-            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
+            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+
+            For translation and summarization training, `decoder_input_ids` should be provided. If no
+            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
+            for denoising pre-training following the paper.
         decoder_attention_mask (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
         head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
@@ -635,12 +701,6 @@ PEGASUS_INPUTS_DOCSTRING = r"""
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`). Set to `False` during training, `True` during generation output_attentions (`bool`,
-            *optional*): Whether or not to return the attentions tensors of all attention layers. See `attentions`
-            under returned tensors for more detail. This argument can be used only in eager mode, in graph mode the
-            value in the config will be used instead.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
@@ -659,44 +719,71 @@ PEGASUS_INPUTS_DOCSTRING = r"""
 
 
 @keras_serializable
-class TFPegasusEncoder(tf.keras.layers.Layer):
-    config_class = PegasusConfig
+class TFSpeech2TextEncoder(tf.keras.layers.Layer):
+    config_class = Speech2TextConfig
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`TFPegasusEncoderLayer`].
+    [`TFSpeech2TextEncoderLayer`].
 
     Args:
-        config: PegasusConfig
+        config: Speech2TextConfig
     """
 
-    def __init__(self, config: PegasusConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
+    def __init__(self, config: Speech2TextConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
+
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.layerdrop = config.encoder_layerdrop
-        self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
 
-        self.embed_tokens = embed_tokens
-        self.embed_positions = TFPegasusSinusoidalPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
+        embed_dim = config.d_model
+        self.padding_idx = config.pad_token_id
+        self.max_source_positions = config.max_source_positions
+        self.embed_scale = tf.math.sqrt(float(embed_dim)) if config.scale_embedding else 1.0
+
+        self.conv = TFConv1dSubsampler(config, name="conv")
+
+        self.embed_positions = TFSpeech2TextSinusoidalPositionalEmbedding(
+            num_positions=config.max_source_positions,
+            embedding_dim=embed_dim,
+            padding_idx=self.padding_idx,
             name="embed_positions",
         )
-        self.layers = [TFPegasusEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
+        self.layers = [TFSpeech2TextEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
-    def get_embed_tokens(self):
-        return self.embed_tokens
+    def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
+        """
+        Computes the output length of the convolutional layers
+        """
+        for _ in range(self.config.num_conv_layers):
+            input_lengths = (input_lengths - 1) // 2 + 1
 
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
+        return input_lengths
+
+    def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
+        # generate creates 3D attention mask, because of the shape of input_features
+        # convert it to 2D if thats the case
+        if len(attention_mask.shape) > 2:
+            attention_mask = attention_mask[:, :, -1]
+
+        subsampled_lengths = self._get_feat_extract_output_lengths(tf.math.reduce_sum(attention_mask, -1))
+        bsz = shape_list(attention_mask)[0]
+        indices = tf.concat(
+            (
+                tf.expand_dims(tf.range(bsz, dtype=attention_mask.dtype), -1),
+                tf.expand_dims(subsampled_lengths - 1, -1),
+            ),
+            axis=-1,
+        )
+
+        attention_mask = tf.scatter_nd(indices=indices, updates=tf.ones(bsz), shape=[bsz, feature_vector_length])
+        attention_mask = tf.cast(tf.reverse(tf.math.cumsum(tf.reverse(attention_mask, [-1]), -1), [-1]), tf.int64)
+        return attention_mask
 
     def call(
         self,
-        input_ids=None,
-        inputs_embeds=None,
+        input_features=None,
         attention_mask=None,
         head_mask=None,
         output_attentions=None,
@@ -707,14 +794,12 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
     ):
         """
         Args:
-            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
+            input_features (`tf.Tensor` of shape `(batch_size, sequence_length, feature_size)`):
+                Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                `input_features`, the [`Speech2TextTokenizer`] should be used for extracting the fbank features,
+                padding and conversion into a tensor of floats. See [`~Speech2TextTokenizer.__call__`]
             attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -728,68 +813,60 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            inputs_embeds (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail. This argument can be used only in eager mode, in graph mode the value
-                in the config will be used instead.
+                returned tensors for more detail.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail. This argument can be used only in eager mode, in graph mode the value in the config
-                will be used instead.
+                for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be
-                used in eager mode, in graph mode the value will always be set to True.
-            training (`bool`, *optional*, defaults to `False`):
-                Whether or not to use the model in training mode (some modules like dropout modules have different
-                behaviors between training and evaluation).
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
         inputs = input_processing(
             func=self.call,
             config=self.config,
-            input_ids=input_ids,
+            input_ids=input_features,
             attention_mask=attention_mask,
             head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
             kwargs_call=kwargs,
         )
+        if "input_ids" in inputs:
+            inputs["input_features"] = inputs.pop("input_ids")
 
-        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif inputs["input_ids"] is not None:
-            input_shape = shape_list(inputs["input_ids"])
-        elif inputs["inputs_embeds"] is not None:
-            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
+        if inputs["input_features"] is None:
+            raise ValueError("You have to specify input_features")
+
+        inputs_embeds = self.conv(inputs["input_features"])
+        inputs_embeds = self.embed_scale * inputs_embeds
+
+        # subsample attention mask if necessary
+        if inputs["attention_mask"] is not None:
+            inputs["attention_mask"] = self._get_feature_vector_attention_mask(
+                inputs_embeds.shape[1], inputs["attention_mask"]
+            )
+            padding_mask = tf.cast(tf.math.not_equal(inputs["attention_mask"], 1), tf.int64)
         else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+            padding_mask = tf.zeros(inputs_embeds.shape[:-1], dtype=tf.int64)
 
-        if inputs["inputs_embeds"] is None:
-            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
+        embed_pos = self.embed_positions(padding_mask)
 
-        embed_pos = self.embed_positions(input_shape)
-        hidden_states = inputs["inputs_embeds"] + embed_pos
+        hidden_states = inputs_embeds + embed_pos
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
         # check attention mask and invert
         if inputs["attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(inputs["attention_mask"])
-        else:
-            attention_mask = None
+            inputs["attention_mask"] = _expand_mask(inputs["attention_mask"])
 
         encoder_states = () if inputs["output_hidden_states"] else None
         all_attentions = () if inputs["output_attentions"] else None
 
         # check if head_mask has a correct number of layers specified if desired
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
+        # The tf.debugging asserts are not compliant with XLA then they have to be disabled in other modes than eager.
         if inputs["head_mask"] is not None and tf.executing_eagerly():
             tf.debugging.assert_equal(
                 shape_list(inputs["head_mask"])[0],
@@ -797,9 +874,7 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
                 message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}.",
             )
 
-        # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
-
             if inputs["output_hidden_states"]:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -809,15 +884,15 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
 
             hidden_states, attn = encoder_layer(
                 hidden_states,
-                attention_mask,
+                inputs["attention_mask"],
                 inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
+                training=training,
             )
 
             if inputs["output_attentions"]:
                 all_attentions += (attn,)
 
         hidden_states = self.layer_norm(hidden_states)
-
         if inputs["output_hidden_states"]:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -829,29 +904,33 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFPegasusDecoder(tf.keras.layers.Layer):
-    config_class = PegasusConfig
+class TFSpeech2TextDecoder(tf.keras.layers.Layer):
+    config_class = Speech2TextConfig
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TFPegasusDecoderLayer`]
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TFSpeech2TextDecoderLayer`]
 
     Args:
-        config: PegasusConfig
-        embed_tokens: output embedding
+        config: Speech2TextConfig
     """
 
-    def __init__(self, config: PegasusConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
+    def __init__(self, config: Speech2TextConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.padding_idx = config.pad_token_id
-        self.embed_tokens = embed_tokens
         self.layerdrop = config.decoder_layerdrop
-        self.embed_positions = TFPegasusSinusoidalPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
+        self.padding_idx = config.pad_token_id
+        self.max_target_positions = config.max_target_positions
+        self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
+
+        self.embed_tokens = TFSharedEmbeddings(config.vocab_size, config.d_model, name="embed_tokens")
+
+        self.embed_positions = TFSpeech2TextSinusoidalPositionalEmbedding(
+            num_positions=config.max_target_positions,
+            embedding_dim=config.d_model,
+            padding_idx=self.padding_idx,
             name="embed_positions",
         )
-        self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
-        self.layers = [TFPegasusDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
+
+        self.layers = [TFSpeech2TextDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
@@ -861,6 +940,22 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
+
+    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        combined_attention_mask = None
+        if input_shape[-1] > 1:
+            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
+
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
+            combined_attention_mask = (
+                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+            )
+
+        return combined_attention_mask
 
     def call(
         self,
@@ -885,7 +980,7 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`Speech2TextTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -932,18 +1027,12 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
                 embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail. This argument can be used only in eager mode, in graph mode the value
-                in the config will be used instead.
+                returned tensors for more detail.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail. This argument can be used only in eager mode, in graph mode the value in the config
-                will be used instead.
+                for more detail.
             return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be
-                used in eager mode, in graph mode the value will always be set to True.
-            training (`bool`, *optional*, defaults to `False`):
-                Whether or not to use the model in training mode (some modules like dropout modules have different
-                behaviors between training and evaluation).
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
         inputs = input_processing(
             func=self.call,
@@ -973,46 +1062,39 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
+        # past_key_values_length
         past_key_values_length = (
             shape_list(inputs["past_key_values"][0][0])[2] if inputs["past_key_values"] is not None else 0
         )
 
-        # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
-
         if inputs["inputs_embeds"] is None:
-            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
-
-        hidden_states = inputs["inputs_embeds"]
-
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
+            inputs_embeds = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
         else:
-            combined_attention_mask = _expand_mask(
-                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
-            )
+            inputs_embeds = inputs["inputs_embeds"]
 
-        if inputs["attention_mask"] is not None:
-            combined_attention_mask = combined_attention_mask + _expand_mask(
-                inputs["attention_mask"], tgt_len=input_shape[-1]
-            )
+        attention_mask = self._prepare_decoder_attention_mask(
+            inputs["attention_mask"], input_shape, inputs_embeds, past_key_values_length
+        )
 
+        # expand encoder attention mask
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             inputs["encoder_attention_mask"] = _expand_mask(inputs["encoder_attention_mask"], tgt_len=input_shape[-1])
 
-        hidden_states = self.dropout(hidden_states + positions, training=inputs["training"])
+        # embed positions
+        positions = self.embed_positions(inputs["input_ids"], past_key_values_length=past_key_values_length)
+
+        hidden_states = inputs_embeds + positions
+        hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
         # decoder layers
         all_hidden_states = () if inputs["output_hidden_states"] else None
         all_self_attns = () if inputs["output_attentions"] else None
         all_cross_attns = () if (inputs["output_attentions"] and inputs["encoder_hidden_states"] is not None) else None
-        present_key_values = () if inputs["use_cache"] else None
+        next_decoder_cache = () if inputs["use_cache"] else None
 
         # check if head_mask and cross_attn_head_mask have a correct number of layers specified if desired
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
+        # The tf.debugging asserts are not compliant with XLA then they have to be disabled in other modes than eager.
         for attn_mask in ["head_mask", "cross_attn_head_mask"]:
             if inputs[attn_mask] is not None and tf.executing_eagerly():
                 tf.debugging.assert_equal(
@@ -1026,26 +1108,26 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
             if inputs["output_hidden_states"]:
                 all_hidden_states += (hidden_states,)
             dropout_probability = random.uniform(0, 1)
-
             if inputs["training"] and (dropout_probability < self.layerdrop):
                 continue
 
             past_key_value = inputs["past_key_values"][idx] if inputs["past_key_values"] is not None else None
+            cross_attn_layer_head_mask = (
+                inputs["cross_attn_head_mask"][idx] if inputs["cross_attn_head_mask"] is not None else None
+            )
 
             hidden_states, layer_self_attn, layer_cross_attn, present_key_value = decoder_layer(
                 hidden_states,
-                attention_mask=combined_attention_mask,
+                attention_mask=attention_mask,
                 encoder_hidden_states=inputs["encoder_hidden_states"],
                 encoder_attention_mask=inputs["encoder_attention_mask"],
                 layer_head_mask=inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
-                cross_attn_layer_head_mask=inputs["cross_attn_head_mask"][idx]
-                if inputs["cross_attn_head_mask"] is not None
-                else None,
+                cross_attn_layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=past_key_value,
             )
 
             if inputs["use_cache"]:
-                present_key_values += (present_key_value,)
+                next_decoder_cache += (present_key_value,)
 
             if inputs["output_attentions"]:
                 all_self_attns += (layer_self_attn,)
@@ -1054,25 +1136,17 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
                     all_cross_attns += (layer_cross_attn,)
 
         hidden_states = self.layer_norm(hidden_states)
-
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
 
-        if inputs["output_attentions"]:
-            all_self_attns = list(all_self_attns)
-
-            if inputs["encoder_hidden_states"] is not None:
-                all_cross_attns = list(all_cross_attns)
-
-        if inputs["use_cache"]:
-            present_key_values = (inputs["encoder_hidden_states"], present_key_values)
+        next_cache = (inputs["encoder_hidden_states"], next_decoder_cache) if use_cache else None
 
         if not inputs["return_dict"]:
-            return hidden_states, present_key_values, all_hidden_states, all_self_attns, all_cross_attns
+            return hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attns
         else:
             return TFBaseModelOutputWithPastAndCrossAttentions(
                 last_hidden_state=hidden_states,
-                past_key_values=present_key_values,
+                past_key_values=next_cache,
                 hidden_states=all_hidden_states,
                 attentions=all_self_attns,
                 cross_attentions=all_cross_attns,
@@ -1080,52 +1154,33 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFPegasusMainLayer(tf.keras.layers.Layer):
-    config_class = PegasusConfig
+class TFSpeech2TextMainLayer(tf.keras.layers.Layer):
+    config_class = Speech2TextConfig
 
-    def __init__(self, config: PegasusConfig, **kwargs):
+    def __init__(self, config: Speech2TextConfig, **kwargs):
         super().__init__(**kwargs)
-
         self.config = config
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
 
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        embed_tokens.vocab_size = self.shared.vocab_size
-        embed_tokens.hidden_size = self.shared.hidden_size
-
-        self.encoder = TFPegasusEncoder(config, embed_tokens, name="encoder")
-        self.decoder = TFPegasusDecoder(config, embed_tokens, name="decoder")
+        self.encoder = TFSpeech2TextEncoder(config, name="encoder")
+        self.decoder = TFSpeech2TextDecoder(config, name="decoder")
 
     def get_input_embeddings(self):
-        return self.shared
+        return self.decoder.embed_tokens
 
     def set_input_embeddings(self, new_embeddings):
-        self.shared.weight = new_embeddings
-        self.shared.vocab_size = self.shared.weight.shape[0]
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        self.encoder.set_embed_tokens(embed_tokens)
-        self.decoder.set_embed_tokens(embed_tokens)
+        self.decoder.embed_tokens = new_embeddings
 
     def call(
         self,
-        input_ids=None,
+        input_features=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
-        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
+        encoder_outputs=None,
         past_key_values=None,
-        inputs_embeds=None,
         decoder_inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
@@ -1137,7 +1192,7 @@ class TFPegasusMainLayer(tf.keras.layers.Layer):
         inputs = input_processing(
             func=self.call,
             config=self.config,
-            input_ids=input_ids,
+            input_ids=input_features,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
@@ -1146,7 +1201,6 @@ class TFPegasusMainLayer(tf.keras.layers.Layer):
             cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1155,22 +1209,22 @@ class TFPegasusMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
+        if "input_ids" in inputs:
+            inputs["input_features"] = inputs.pop("input_ids")
 
-        if inputs["decoder_input_ids"] is None and inputs["decoder_inputs_embeds"] is None:
-            inputs["use_cache"] = False
-
-        inputs["output_hidden_states"] = (
-            inputs["output_hidden_states"]
-            if inputs["output_hidden_states"] is not None
-            else self.config.output_hidden_states
+        # if the attribute is not set, fetch it from the config
+        for attr in ("output_attentions", "output_hidden_states", "use_cache"):
+            if inputs[attr] is None:
+                inputs[attr] = getattr(self.config, attr)
+        inputs["return_dict"] = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
         )
 
         if inputs["encoder_outputs"] is None:
             inputs["encoder_outputs"] = self.encoder(
-                input_ids=inputs["input_ids"],
+                input_features=inputs["input_features"],
                 attention_mask=inputs["attention_mask"],
                 head_mask=inputs["head_mask"],
-                inputs_embeds=inputs["inputs_embeds"],
                 output_attentions=inputs["output_attentions"],
                 output_hidden_states=inputs["output_hidden_states"],
                 return_dict=inputs["return_dict"],
@@ -1187,11 +1241,20 @@ class TFPegasusMainLayer(tf.keras.layers.Layer):
         elif not inputs["return_dict"] and not isinstance(inputs["encoder_outputs"], tuple):
             inputs["encoder_outputs"] = inputs["encoder_outputs"].to_tuple()
 
+        # downsample encoder attention mask
+        if inputs["attention_mask"] is not None:
+            inputs["encoder_attention_mask"] = self.encoder._get_feature_vector_attention_mask(
+                inputs["encoder_outputs"][0].shape[1], inputs["attention_mask"]
+            )
+        else:
+            inputs["encoder_attention_mask"] = None
+
+        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
-            inputs["decoder_input_ids"],
+            input_ids=inputs["decoder_input_ids"],
             attention_mask=inputs["decoder_attention_mask"],
             encoder_hidden_states=inputs["encoder_outputs"][0],
-            encoder_attention_mask=inputs["attention_mask"],
+            encoder_attention_mask=inputs["encoder_attention_mask"],
             head_mask=inputs["decoder_head_mask"],
             cross_attn_head_mask=inputs["cross_attn_head_mask"],
             past_key_values=inputs["past_key_values"],
@@ -1219,14 +1282,14 @@ class TFPegasusMainLayer(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "The bare PEGASUS Model outputting raw hidden-states without any specific head on top.",
-    PEGASUS_START_DOCSTRING,
+    "The bare Speech2Text Model outputting raw hidden-states without any specific head on top.",
+    SPEECH_TO_TEXT_START_DOCSTRING,
 )
-class TFPegasusModel(TFPegasusPreTrainedModel):
-    def __init__(self, config: PegasusConfig, *inputs, **kwargs):
+class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
+    def __init__(self, config: Speech2TextConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.model = TFPegasusMainLayer(config, name="model")
+        self.model = TFSpeech2TextMainLayer(config, name="model")
 
     def get_encoder(self):
         return self.model.encoder
@@ -1234,7 +1297,7 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
     def get_decoder(self):
         return self.model.decoder
 
-    @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1243,16 +1306,15 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
+        input_features=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
-        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
+        encoder_outputs=None,
         past_key_values=None,
-        inputs_embeds=None,
         decoder_inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
@@ -1264,7 +1326,7 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
         inputs = input_processing(
             func=self.call,
             config=self.config,
-            input_ids=input_ids,
+            input_ids=input_features,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
@@ -1273,7 +1335,6 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
             cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1282,9 +1343,11 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
+        if "input_ids" in inputs:
+            inputs["input_features"] = inputs.pop("input_ids")
 
         outputs = self.model(
-            input_ids=inputs["input_ids"],
+            input_features=inputs["input_features"],
             attention_mask=inputs["attention_mask"],
             decoder_input_ids=inputs["decoder_input_ids"],
             decoder_attention_mask=inputs["decoder_attention_mask"],
@@ -1293,7 +1356,6 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
             cross_attn_head_mask=inputs["cross_attn_head_mask"],
             encoder_outputs=inputs["encoder_outputs"],
             past_key_values=inputs["past_key_values"],
-            inputs_embeds=inputs["inputs_embeds"],
             decoder_inputs_embeds=inputs["decoder_inputs_embeds"],
             use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
@@ -1304,7 +1366,6 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
 
         return outputs
 
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartModel.serving_output
     def serving_output(self, output):
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
@@ -1326,79 +1387,96 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The PEGASUS Model with a language modeling head. Can be used for summarization.",
-    PEGASUS_START_DOCSTRING,
+    "The Speech2Text Model with a language modeling head. Can be used for summarization.",
+    SPEECH_TO_TEXT_START_DOCSTRING,
 )
-class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLanguageModelingLoss):
-    _keys_to_ignore_on_load_unexpected = [
-        r"model.encoder.embed_tokens.weight",
-        r"model.decoder.embed_tokens.weight",
-    ]
-
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-        self.model = TFPegasusMainLayer(config, name="model")
-        self.use_cache = config.use_cache
-        # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
-        self.final_logits_bias = self.add_weight(
-            name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
-        )
-
-    def get_decoder(self):
-        return self.model.decoder
+class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCausalLanguageModelingLoss):
+    def __init__(self, config: Speech2TextConfig):
+        super().__init__(config)
+        self.model = TFSpeech2TextMainLayer(config, name="model")
+        self.lm_head = tf.keras.layers.Dense(self.config.vocab_size, use_bias=False, name="lm_head")
 
     def get_encoder(self):
         return self.model.encoder
 
+    def get_decoder(self):
+        return self.model.decoder
+
+    def resize_token_embeddings(self, new_num_tokens: int) -> tf.Variable:
+        new_embeddings = super().resize_token_embeddings(new_num_tokens)
+        return new_embeddings
+
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
+        return self.lm_head
 
-    def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
-    def get_bias(self):
-        return {"final_logits_bias": self.final_logits_bias}
-
-    def set_bias(self, value):
-        self.final_logits_bias = value["final_logits_bias"]
-
-    @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    @add_end_docstrings(PEGASUS_GENERATION_EXAMPLE)
     def call(
         self,
-        input_ids=None,
+        input_features=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
-        encoder_outputs: Optional[TFBaseModelOutput] = None,
+        encoder_outputs=None,
         past_key_values=None,
-        inputs_embeds=None,
         decoder_inputs_embeds=None,
+        labels=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        labels=None,
         training=False,
-        **kwargs,
+        **kwargs
     ):
-        """
-        labels (`tf.tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        r"""
+        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
 
-        """
+        Example:
+
+        ```python
+        >>> import tensorflow as tf
+        >>> from transformers import Speech2TextProcessor, TFSpeech2TextForConditionalGeneration
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
+
+        >>> model = TFSpeech2TextForConditionalGeneration.from_pretrained(
+        ...     "facebook/s2t-small-librispeech-asr", from_pt=True
+        ... )
+        >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
+
+
+        >>> def map_to_array(batch):
+        ...     speech, _ = sf.read(batch["file"])
+        ...     batch["speech"] = speech
+        ...     return batch
+
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
+        >>> ds.set_format(type="tf")
+
+        >>> input_features = processor(
+        ...     ds["speech"][0], sampling_rate=16000, return_tensors="tf"
+        >>> ).input_features  # Batch size 1
+        >>> generated_ids = model.generate(input_features)
+
+        >>> transcription = processor.batch_decode(generated_ids)
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
-            input_ids=input_ids,
+            input_ids=input_features,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
@@ -1407,31 +1485,30 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
             cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
+            labels=labels,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
             training=training,
             kwargs_call=kwargs,
         )
+        if "input_ids" in inputs:
+            inputs["input_features"] = inputs.pop("input_ids")
+
+        inputs["return_dict"] = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+        )
 
         if inputs["labels"] is not None:
-            inputs["labels"] = tf.where(
-                inputs["labels"] == self.config.pad_token_id,
-                tf.fill(shape_list(inputs["labels"]), -100),
-                inputs["labels"],
-            )
-            inputs["use_cache"] = False
             if inputs["decoder_input_ids"] is None:
                 inputs["decoder_input_ids"] = shift_tokens_right(
                     inputs["labels"], self.config.pad_token_id, self.config.decoder_start_token_id
                 )
 
         outputs = self.model(
-            inputs["input_ids"],
+            input_features=inputs["input_features"],
             attention_mask=inputs["attention_mask"],
             decoder_input_ids=inputs["decoder_input_ids"],
             encoder_outputs=inputs["encoder_outputs"],
@@ -1440,7 +1517,6 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
             decoder_head_mask=inputs["decoder_head_mask"],
             cross_attn_head_mask=inputs["cross_attn_head_mask"],
             past_key_values=inputs["past_key_values"],
-            inputs_embeds=inputs["inputs_embeds"],
             decoder_inputs_embeds=inputs["decoder_inputs_embeds"],
             use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
@@ -1448,26 +1524,25 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        lm_logits = self.model.shared(outputs[0], mode="linear")
-        lm_logits = lm_logits + self.final_logits_bias
+        lm_logits = self.lm_head(outputs[0])
         masked_lm_loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], lm_logits)
 
         if not inputs["return_dict"]:
             output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+
         return TFSeq2SeqLMOutput(
             loss=masked_lm_loss,
             logits=lm_logits,
-            past_key_values=outputs.past_key_values,  # index 1 of d outputs
-            decoder_hidden_states=outputs.decoder_hidden_states,  # index 2 of d outputs
-            decoder_attentions=outputs.decoder_attentions,  # index 3 of d outputs
-            cross_attentions=outputs.cross_attentions,  # index 4 of d outputs
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,  # index 0 of encoder outputs
-            encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
-            encoder_attentions=outputs.encoder_attentions,  # 2 of e out
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
         )
 
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.serving_output
     def serving_output(self, output):
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
@@ -1476,8 +1551,8 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
         enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
 
-        return TFSeq2SeqLMOutput(
-            logits=output.logits,
+        return TFSeq2SeqModelOutput(
+            last_hidden_state=output.last_hidden_state,
             past_key_values=pkv,
             decoder_hidden_states=dec_hs,
             decoder_attentions=dec_attns,
@@ -1487,45 +1562,33 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
             encoder_attentions=enc_attns,
         )
 
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past,
-        attention_mask,
+        past=None,
+        attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
         use_cache=None,
-        **kwargs,
-    ) -> Dict:
-        assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
-        if len(past) == 1:
-            assert isinstance(past[0], tf.Tensor), f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}"
+        **kwargs
+    ):
+        if past is not None and len(past) <= 2:
+            if not isinstance(past[0], tf.Tensor):
+                raise ValueError(f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}")
             encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
-            past_key_values = None
+            if len(past) == 1:
+                past_key_values = None
+            else:
+                past_key_values = past[1]
+                if not past_key_values:
+                    raise ValueError(f"decoder cached states must be truthy, got {past_key_values}")
+                decoder_input_ids = decoder_input_ids[:, -1:]
         else:
-            assert (
-                len(past) == 2
-            ), "`past` has to be of length 2 with the encoder_outputs at the first position and past_key_values at the second position."
-            encoder_outputs, past_key_values = past
-            if isinstance(encoder_outputs, tuple):
-                assert isinstance(
-                    encoder_outputs[0], tf.Tensor
-                ), f"`encoder_outputs[0]` has to be of type `tf.Tensor`, but is {type(encoder_outputs[0])}"
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs[0])
-            elif isinstance(encoder_outputs, tf.Tensor):
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs)
-            assert (
-                past_key_values
-            ), f"decoder cached states must be truthy. got {past_key_values} from the 2nd element of past"
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            raise ValueError(f"`past` must be an iterable with length 1 or 2, got {past}")
 
-        assert isinstance(
-            encoder_outputs, TFBaseModelOutput
-        ), f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}."
         return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
+            "input_features": None,  # needs to be passed to make Keras.layer.__call__ happy
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
@@ -1536,11 +1599,7 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
-        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
-
     @staticmethod
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration._reorder_cache
     def _reorder_cache(past, beam_idx):
         if len(past) == 1:
             return past
