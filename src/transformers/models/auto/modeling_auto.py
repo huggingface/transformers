@@ -162,7 +162,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
 
-        ("poolformer", "PoolFormerForConditionalGeneration"),
         ("yoso", "YosoForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
         ("qdqbert", "QDQBertForMaskedLM"),
@@ -217,7 +216,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
-        ("poolformer", "PoolFormerForCausalLM"),
         ("xglm", "XGLMForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
@@ -355,7 +353,6 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
 
-        ("poolformer", "PoolFormerForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("m2m_100", "M2M100ForConditionalGeneration"),
         ("led", "LEDForConditionalGeneration"),
@@ -384,7 +381,6 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        ("poolformer", "PoolFormerForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
         ("perceiver", "PerceiverForSequenceClassification"),
@@ -435,7 +431,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
-        ("poolformer", "PoolFormerForQuestionAnswering"),
         ("yoso", "YosoForQuestionAnswering"),
         ("nystromformer", "NystromformerForQuestionAnswering"),
         ("qdqbert", "QDQBertForQuestionAnswering"),
