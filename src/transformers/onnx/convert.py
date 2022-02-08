@@ -85,7 +85,7 @@ def export_pytorch(
             Directory to store the exported ONNX model.
 
     Returns:
-        (matched_inputs, onnx_outputs): The ordered list of the model's inputs, ONNX Config's list of outputs.
+        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from the ONNX configuration.
     """
     if is_torch_available():
         from transformers.file_utils import torch_version
