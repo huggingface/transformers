@@ -44,15 +44,25 @@ class ProcessorMixin:
     tokenizer_class = None
 
     # args have to match the attributes class attribute
-    def __init__(self, *args):
-        if len(args) != len(self.attributes):
+    def __init__(self, *args, **kwargs):
+        # Sanitize args and kwargs
+        for key in kwargs:
+            if key not in self.attributes:
+                raise TypeError(f"Unexepcted keyword argument {key}.")
+        for arg, attribute_name in zip(args, self.attributes):
+            if attribute_name in kwargs:
+                raise TypeError(f"Got multiple values for argument {attribute_name}.")
+            else:
+                kwargs[attribute_name] = arg
+
+        if len(kwargs) != len(self.attributes):
             raise ValueError(
                 f"This processor requires {len(self.attributes)} arguments: {', '.join(self.attributes)}. Got "
                 f"{len(args)} arguments instead."
             )
 
         # Check each arg is of the proper class (this will also catch a user initializing in the wrong order)
-        for arg, attribute_name in zip(args, self.attributes):
+        for attribute_name, arg in kwargs.items():
             class_name = getattr(self, f"{attribute_name}_class")
             # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
             class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
