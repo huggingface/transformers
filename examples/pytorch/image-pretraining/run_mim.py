@@ -148,6 +148,14 @@ class ModelArguments:
             "with private models)."
         },
     )
+    image_size: Optional[int] = field(
+        default=224,
+        metadata={"help": "The size (resolution) of each image."},
+    )
+    patch_size: Optional[int] = field(
+        default=16,
+        metadata={"help": "The size (resolution) of each patch."},
+    )
 
 
 class MaskGenerator:
@@ -253,8 +261,7 @@ def main():
         ds["train"] = split["train"]
         ds["validation"] = split["test"]
 
-    # Load pretrained model and feature extractor
-    #
+    # Create config
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
@@ -275,10 +282,19 @@ def main():
             config.update_from_string(model_args.config_overrides)
             logger.info(f"New config: {config}")
 
-    # make sure the decoder_type is "simmim"
+    # make sure the decoder_type is "simmim" (only relevant for BEiT)
     if hasattr(config, "decoder_type"):
         config.decoder_type = "simmim"
 
+    # adapt config
+    config.update(
+        {
+            "image_size": model_args.image_size,
+            "patch_size": model_args.patch_size,
+        }
+    )
+
+    # create feature extractor
     if model_args.feature_extractor_name:
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_args.feature_extractor_name, **config_kwargs)
     elif model_args.model_name_or_path:
@@ -290,6 +306,7 @@ def main():
         }
         feature_extractor = FEATURE_EXTRACTOR_TYPES[model_args.model_type]()
 
+    # create model
     if model_args.model_name_or_path:
         model = AutoModelForMaskedImageModeling.from_pretrained(
             model_args.model_name_or_path,
