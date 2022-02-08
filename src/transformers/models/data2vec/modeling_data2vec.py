@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch data2vec model."""
+"""PyTorch Data2Vec model."""
 
 import math
 
@@ -68,7 +67,6 @@ class Data2VecEmbeddings(nn.Module):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -89,7 +87,6 @@ class Data2VecEmbeddings(nn.Module):
                 persistent=False,
             )
 
-        # End copy
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
@@ -686,7 +683,7 @@ DATA2VEC_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare data2vec Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Data2Vec Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaModel with ROBERTA->DATA2VEC,Roberta->Data2Vec
@@ -874,7 +871,7 @@ class Data2VecModel(Data2VecPreTrainedModel):
 
 
 @add_start_docstrings(
-    """data2vec Model with a `language modeling` head on top for CLM fine-tuning.""", DATA2VEC_START_DOCSTRING
+    """Data2Vec Model with a `language modeling` head on top for CLM fine-tuning.""", DATA2VEC_START_DOCSTRING
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec,roberta-base->data2vec
 class Data2VecForCausalLM(Data2VecPreTrainedModel):
@@ -1155,7 +1152,7 @@ class Data2VecLMHead(nn.Module):
 
 @add_start_docstrings(
     """
-    data2vec Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    Data2Vec Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
     """,
     DATA2VEC_START_DOCSTRING,
