@@ -440,7 +440,7 @@ class MaskFormerHungarianMatcher(nn.Module):
         return "\n".join(lines)
 
 
-# copied from original implementation
+# copied and adapted from original implementation
 class MaskFormerLoss(nn.Module):
     def __init__(
         self,
@@ -586,9 +586,13 @@ class MaskFormerLoss(nn.Module):
 
 
 class SwinTransformerBackbone(nn.Module):
+    """This class uses [`SwinModel`] to reshape it's `hidden_states` from (`batch_size, sequence_length, hidden_size)` to (`batch_size, num_channels, height, width)`). 
+
+    Args:
+        config (SwinConfig): The configuration used by [`SwinModel`]
+    """
     def __init__(self, config: SwinConfig):
         super().__init__()
-        # TODO should add a pretrain
         self.model = SwinModel(config)
         self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(out_shape) for out_shape in self.outputs_shapes])
         # little hack, our swin transformer has already the last norm, so let's switch the refence of the last item
@@ -666,11 +670,11 @@ class FPNModel(nn.Module):
         """Feature Pyramid Network, given an input tensor and a set of features map of different feature/spatial size, it creates
         a list of features map with different the same feature size.
 
-                Args:
-                    in_features (int): The number of input features (channels)
-                    lateral_widths (List[int]): A list with the features (channels) size of each lateral connection
-                    feature_size (int, optional):
-                        The features (channels) of the resulting feature maps. Defaults to 256.
+        Args:
+            in_features (int): The number of input features (channels)
+            lateral_widths (List[int]): A list with the features (channels) size of each lateral connection
+            feature_size (int, optional):
+                The features (channels) of the resulting feature maps. Defaults to 256.
         """
         super().__init__()
         self.stem = FPNConvLayer(in_features, feature_size)
@@ -693,10 +697,10 @@ class MaskFormerPixelDecoder(nn.Module):
         Segmentation](https://arxiv.org/abs/2107.06278). It first run the backbone's feature into a Feature Pyramid
         Network creating a list of features map. Then, it projects the last one to the correct `mask_size`
 
-                Args:
-                    feature_size (int, optional): The features (channels) of FPN feature maps. Defaults to 256.
-                    mask_feature_size (int, optional):
-                        The features (channels) of the target masks size $C_{\epsilon}$ in the paper. Defaults to 256.
+        Args:
+            feature_size (int, optional): The features (channels) of FPN feature maps. Defaults to 256.
+            mask_feature_size (int, optional):
+                The features (channels) of the target masks size $C_{\epsilon}$ in the paper. Defaults to 256.
         """
         super().__init__()
         self.fpn = FPNModel(*args, feature_size=feature_size, **kwargs)
@@ -713,7 +717,7 @@ class MaskFormerPixelDecoder(nn.Module):
         )
 
 
-# copied from original implementation, also practically equal to DetrSinePositionEmbedding
+# copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
 class PositionEmbeddingSine(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -806,6 +810,8 @@ class MaskFormerPixelLevelModule(nn.Module):
 
 
 class MaskFormerTransformerModule(nn.Module):
+    """The MaskFormer's transformer module.
+    """
     def __init__(self, in_features: int, config: MaskFormerConfig):
         super().__init__()
         hidden_size: int = config.transformer_decoder.hidden_size
@@ -848,7 +854,7 @@ MASKFORMER_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
-# TODO ask Niels, what about ForInstanceSegmentation?? Should I define another variable
+
 MASKFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -862,6 +868,10 @@ MASKFORMER_INPUTS_DOCSTRING = r"""
             - 0 for pixels that are padding (i.e. **masked**).
 
             [What are attention masks?](../glossary#attention-mask)
+
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
 """
 
 
@@ -886,7 +896,7 @@ class MaskFormerPretrainedModel(PreTrainedModel):
 
         elif isinstance(module, FPNConvLayer):
             nn.init.xavier_uniform_(module[0].weight, gain=xavier_std)
-
+        # The MLP head
         elif isinstance(module, MaskformerMLPPredictionHead):
             # I was not able to find the correct initializer in the original implementation
             # we'll use xavier
@@ -909,14 +919,14 @@ class MaskFormerModel(MaskFormerPretrainedModel):
 
         self.post_init()
 
-    # @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
-    # @add_code_sample_docstrings(
-    #     processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-    #     checkpoint=_CHECKPOINT_FOR_DOC,
-    #     output_type=MaskFormerOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    #     modality="vision",
-    # )
+    @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=MaskFormerOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+    )
     def forward(
         self,
         pixel_values: Tensor,
@@ -1036,10 +1046,9 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
     ) -> MaskFormerForInstanceSegmentationOutput:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+            Labels for computing the classification and binary mask loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'mask_labels' (the class labels and masks labels of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of shape (`num_classes) and the mask_labels a `torch.FloatTensor` of shape `(num_classes, height, width)`.
 
         Returns:
 
