@@ -300,7 +300,7 @@ class OnnxExportTestCaseV2(TestCase):
 
     @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS))
     @slow
-    @require_torch
+    @require_tf
     def test_tensorflow_export_seq2seq_with_past(
         self, test_name, name, model_name, feature, onnx_config_class_constructor
     ):
