@@ -64,7 +64,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class TapexTruncationStrategy(ExplicitEnum):
     """
-    Possible value for the `truncation` argument in [`~TapasTokenizer.__call__`]. Useful for tab-completion in an IDE.
+    Possible values for the `truncation` argument in [`~TapasTokenizer.__call__`]. Useful for tab-completion in an IDE.
     """
 
     DROP_ROWS_TO_FIT = "drop_rows_to_fit"
@@ -505,6 +505,7 @@ class TapexTokenizer(PreTrainedTokenizer):
                 List[EncodedInput],
             ]
         ] = None,
+        answer: Union[str, List[str]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -522,14 +523,15 @@ class TapexTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> BatchEncoding:
         """
-        Args:
         Main method to tokenize and prepare for the model one or several sequence(s) related to a table.
+
+        Args:
             table (`pd.DataFrame` or `List[pd.DataFrame]`):
-                Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
-                dataframe to convert it to string.
+                Table or batch of tables containing tabular data.
             query (`str` or `List[str]`):
-                Question or batch of questions related to a table to be encoded. Note that in case of a batch, all
-                questions must refer to the **same** table.
+                Sentence or batch of sentences related to a table to be encoded.
+            answer (`str` or `List[str]`):
+                Optionally, corresponding answers to the queries for precise truncating.
         """
         # Input type checking for clearer error
         valid_table = False
@@ -560,6 +562,7 @@ class TapexTokenizer(PreTrainedTokenizer):
             return self.batch_encode_plus(
                 table=table,
                 query=query,
+                answer=answer,
                 add_special_tokens=add_special_tokens,
                 padding=padding,
                 truncation=truncation,
@@ -579,6 +582,7 @@ class TapexTokenizer(PreTrainedTokenizer):
             return self.encode_plus(
                 table=table,
                 query=query,
+                answer=answer,
                 add_special_tokens=add_special_tokens,
                 padding=padding,
                 truncation=truncation,
@@ -606,6 +610,7 @@ class TapexTokenizer(PreTrainedTokenizer):
                 List[EncodedInput],
             ]
         ] = None,
+        answer: List[str] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str] = False,
@@ -622,7 +627,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> BatchEncoding:
         """
-        Prepare a table and a list of strings for the model.
+        Prepare a table or batch of tables and corresponding strings for the model.
 
         <Tip warning={true}>
 
@@ -631,12 +636,10 @@ class TapexTokenizer(PreTrainedTokenizer):
         </Tip>
 
         Args:
-            table (`pd.DataFrame`):
-                Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
-                dataframe to convert it to string.
-            query (`List[str]`):
-                Batch of questions related to a table to be encoded. Note that all questions must refer to the **same**
-                table.
+            table (`pd.DataFrame` or `List[pd.DataFrame]`):
+                Table or batch of tables containing tabular data.
+            query (`str` or `List[str]`):
+                Sentence or batch of sentences related to a table to be encoded.
         """
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
@@ -651,6 +654,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         return self._batch_encode_plus(
             table=table,
             query=query,
+            answer=answer,
             add_special_tokens=add_special_tokens,
             padding_strategy=padding_strategy,
             truncation_strategy=truncation_strategy,
@@ -675,6 +679,7 @@ class TapexTokenizer(PreTrainedTokenizer):
             List[PreTokenizedInput],
             List[EncodedInput],
         ],
+        answer: List[str] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -711,6 +716,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         batch_outputs = self._batch_prepare_for_model(
             table=table,
             query=query,
+            answer=answer,
             add_special_tokens=add_special_tokens,
             padding_strategy=padding_strategy,
             truncation_strategy=truncation_strategy,
@@ -737,6 +743,7 @@ class TapexTokenizer(PreTrainedTokenizer):
             PreTokenizedInput,
             EncodedInput,
         ],
+        answer: Union[str, List[str]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -756,9 +763,11 @@ class TapexTokenizer(PreTrainedTokenizer):
         tokens and manages a moving window (with user defined stride) for overflowing tokens.
         """
         batch_outputs = {}
-        for _table, _query in zip(table, query):
+        if answer is None:
+            answer = [None] * len(table)
+        for _table, _query, _answer in zip(table, query, answer):
             text = self.prepare_table_query(
-                _table, _query, truncation_strategy=truncation_strategy, max_length=max_length
+                _table, _query, _answer, truncation_strategy=truncation_strategy, max_length=max_length
             )
             tokens = self.tokenize(text)
             outputs = self.prepare_for_model(
@@ -807,6 +816,7 @@ class TapexTokenizer(PreTrainedTokenizer):
                 EncodedInput,
             ]
         ] = None,
+        answer: str = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy, TapexTruncationStrategy] = False,
@@ -815,19 +825,20 @@ class TapexTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> List[int]:
         """
-        Args:
         Prepare a table and a string for the model. This method does not return token type IDs, attention masks, etc.
-        which are necessary for the model to work correctly. Use that method if you want to build your processing on
+        which are necessary for the model to work correctly. Use this method if you want to build your processing on
         your own, otherwise refer to `__call__`.
+
+        Args:
             table (`pd.DataFrame`):
-                Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
-                dataframe to convert it to string.
+                Table containing tabular data.
             query (`str` or `List[str]`):
-                Question related to a table to be encoded.
+                Sentence related to a table to be encoded.
         """
         encoded_inputs = self.encode_plus(
             table,
             query=query,
+            answer=answer,
             add_special_tokens=add_special_tokens,
             padding=padding,
             truncation=truncation,
@@ -849,6 +860,7 @@ class TapexTokenizer(PreTrainedTokenizer):
                 EncodedInput,
             ]
         ] = None,
+        answer: str = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str] = False,
@@ -864,13 +876,13 @@ class TapexTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> BatchEncoding:
         """
-        Args:
         Prepare a table and a string for the model.
+
+        Args:
             table (`pd.DataFrame`):
-                Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
-                dataframe to convert it to string.
+                Table containing tabular data.
             query (`str` or `List[str]`):
-                Question related to a table to be encoded.
+                Sentence related to a table to be encoded.
         """
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
@@ -885,6 +897,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         return self._encode_plus(
             table=table,
             query=query,
+            answer=answer,
             add_special_tokens=add_special_tokens,
             padding_strategy=padding_strategy,
             truncation_strategy=truncation_strategy,
@@ -908,6 +921,7 @@ class TapexTokenizer(PreTrainedTokenizer):
             PreTokenizedInput,
             EncodedInput,
         ],
+        answer: str = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -933,7 +947,9 @@ class TapexTokenizer(PreTrainedTokenizer):
                 "https://github.com/huggingface/transformers/pull/2674"
             )
 
-        text = self.prepare_table_query(table, query, truncation_strategy=truncation_strategy, max_length=max_length)
+        text = self.prepare_table_query(
+            table, query, answer, truncation_strategy=truncation_strategy, max_length=max_length
+        )
         tokens = self.tokenize(text)
 
         return self.prepare_for_model(
@@ -966,12 +982,16 @@ class TapexTokenizer(PreTrainedTokenizer):
         This method can be used to linearize a table and add a corresponding query.
 
         Optionally, it also handles truncation of the table (cells).
+
+        An answer can be provided for more precise truncation.
         """
         if not table.empty:
             # step 1: create table dictionary
             table_content = {"header": list(table.columns), "rows": [list(row.values) for i, row in table.iterrows()]}
 
-            # TODO step 2: modify table internally
+            # step 2: modify table internally
+            # always truncate table cells based on self.max_cell_length
+            # optionally truncate rows if truncation_strategy is set to it
             self.truncate_table_cells(table_content, query, answer)
             if truncation_strategy == TapexTruncationStrategy.DROP_ROWS_TO_FIT:
                 self.truncate_table_rows(table_content, query, answer, max_length=max_length)

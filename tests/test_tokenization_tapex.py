@@ -823,7 +823,6 @@ class TapexTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # TODO replace nielsr by microsoft
         tokenizer = TapexTokenizer.from_pretrained("nielsr/tapex-large-finetuned-wtq")
-        print("Do lower case:", tokenizer.do_lower_case)
         encoding = tokenizer(table, question)
 
         # fmt: off
