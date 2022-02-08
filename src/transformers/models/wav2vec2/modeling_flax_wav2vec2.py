@@ -989,10 +989,13 @@ class FlaxWav2Vec2Module(nn.Module):
             attentions=encoder_outputs.attentions,
         )
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None
+    ):
         """
         Computes the output length of the convolutional layers
         """
+    
+        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
 
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
@@ -1001,6 +1004,10 @@ class FlaxWav2Vec2Module(nn.Module):
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        if add_adapter:
+            for _ in range(self.config.num_adapter_layers):
+                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
 
         return input_lengths
 
@@ -1096,7 +1103,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
         return FlaxCausalLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
     def _get_feat_extract_output_lengths(
-        self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None
+        self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None,
     ):
         """
         Computes the output length of the convolutional layers
