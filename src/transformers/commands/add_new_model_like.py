@@ -292,7 +292,7 @@ def replace_model_patterns(
         attributes_to_check.append("model_type")
     else:
         text = re.sub(
-            fr'(\s*)model_type = "{old_model_patterns.model_type}"',
+            rf'(\s*)model_type = "{old_model_patterns.model_type}"',
             r'\1model_type = "[MODEL_TYPE]"',
             text,
         )
@@ -301,8 +301,8 @@ def replace_model_patterns(
     # not the new one. We can't just do a replace in all the text and will need a special regex
     if old_model_patterns.model_upper_cased == old_model_patterns.model_camel_cased:
         old_model_value = old_model_patterns.model_upper_cased
-        if re.search(fr"{old_model_value}_[A-Z_]*[^A-Z_]", text) is not None:
-            text = re.sub(fr"{old_model_value}([A-Z_]*)([^a-zA-Z_])", r"[MODEL_UPPER_CASED]\1\2", text)
+        if re.search(rf"{old_model_value}_[A-Z_]*[^A-Z_]", text) is not None:
+            text = re.sub(rf"{old_model_value}([A-Z_]*)([^a-zA-Z_])", r"[MODEL_UPPER_CASED]\1\2", text)
     else:
         attributes_to_check.append("model_upper_cased")
 
@@ -750,8 +750,8 @@ def clean_frameworks_in_init(
         return
 
     remove_pattern = "|".join(to_remove)
-    re_conditional_imports = re.compile(fr"^\s*if is_({remove_pattern})_available\(\):\s*$")
-    re_is_xxx_available = re.compile(fr"is_({remove_pattern})_available")
+    re_conditional_imports = re.compile(rf"^\s*if is_({remove_pattern})_available\(\):\s*$")
+    re_is_xxx_available = re.compile(rf"is_({remove_pattern})_available")
 
     with open(init_file, "r", encoding="utf-8") as f:
         content = f.read()
@@ -831,7 +831,7 @@ def add_model_to_main_init(
         if framework is not None and frameworks is not None and framework not in frameworks:
             new_lines.append(lines[idx])
             idx += 1
-        elif re.search(fr'models.{old_model_patterns.model_lower_cased}( |")', lines[idx]) is not None:
+        elif re.search(rf'models.{old_model_patterns.model_lower_cased}( |")', lines[idx]) is not None:
             block = [lines[idx]]
             indent = find_indent(lines[idx])
             idx += 1
