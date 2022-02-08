@@ -956,14 +956,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
 
     def predict_step(self, data):
+        def raggedify_if_possible(array):
+            if array.shape.ndims >= 3:
+                return tf.RaggedTensor.from_tensor(array)
+            else:
+                return array
         x, _, _ = data_adapter.unpack_x_y_sample_weight(data)
         output = self(x, training=False)
         if isinstance(output, dict):
-            output = {key: tf.RaggedTensor.from_tensor(val) for key, val in output.items()}
+            output = {key: raggedify_if_possible(val) for key, val in output.items()}
         elif isinstance(output, tuple) or isinstance(output, list):
-            output = tuple([tf.RaggedTensor.from_tensor(arr) for arr in output])
+            output = tuple([raggedify_if_possible(arr) for arr in output])
         elif isinstance(output, tf.Tensor):
-            output = tf.RaggedTensor.from_tensor(output)
+            output = raggedify_if_possible(output)
         return output
 
     def create_model_card(
