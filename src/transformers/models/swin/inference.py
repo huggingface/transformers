@@ -41,7 +41,7 @@ transforms = T.Compose(
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-pixel_values = torch.randn(2,3,192,192)
+pixel_values = torch.randn(2, 3, 192, 192)
 
 
 class MaskGenerator:
