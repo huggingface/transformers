@@ -15,6 +15,7 @@ limitations under the License.
 -->
 
 # Performance and Scalability: How To Fit a Bigger Model and Train It Faster
+
 > _Or how to escape the dreaded "RuntimeError: CUDA error: out of memory" error._
 
 [[open-in-colab]]
@@ -160,6 +161,7 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
+
 ```
 Time: 57.82
 Samples/second: 8.86
@@ -181,6 +183,7 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
+
 ```
 Time: 66.03
 Samples/second: 7.75
@@ -208,6 +211,7 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
+
 ```
 Time: 85.47
 Samples/second: 5.99
@@ -227,6 +231,7 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
+
 ```
 Time: 27.46
 Samples/second: 18.64
@@ -249,6 +254,7 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
+
 ```
 Time: 50.76
 Samples/second: 10.09
@@ -263,16 +269,17 @@ The most common optimizer used to train transformer model is Adam or AdamW (Adam
 
 ### Adafactor
 
-Instead of keeping the rolling average for each element in the weight matrices Adafactor only stores aggregated information (row- and column-wise sums of the rolling averages) which reduces the footprint considerably. One downside of Adafactor is that in some instances convergence can be slower than Adam's so some experimentation is advised here. We can use Adafactor simply by setting `adafactor=True`:
+Instead of keeping the rolling average for each element in the weight matrices Adafactor only stores aggregated information (row- and column-wise sums of the rolling averages) which reduces the footprint considerably. One downside of Adafactor is that in some instances convergence can be slower than Adam's so some experimentation is advised here. We can use Adafactor simply by setting `optim="adafactor"`:
 
 
 ```py
-training_args = TrainingArguments(per_device_train_batch_size=4, adafactor=True, **default_args)
+training_args = TrainingArguments(per_device_train_batch_size=4, optim="adafactor", **default_args)
 
 trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
+
 ```
 Time: 64.31
 Samples/second: 7.96
@@ -288,7 +295,7 @@ training_args = TrainingArguments(
     gradient_accumulation_steps=4,
     gradient_checkpointing=True,
     fp16=True,
-    adafactor=True,
+    optim="adafactor",
     **default_args,
 )
 
@@ -296,6 +303,7 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds)
 result = trainer.train()
 print_summary(result)
 ```
+
 ```
 Time: 56.54
 Samples/second: 9.06
@@ -356,6 +364,7 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds, optimizers=
 result = trainer.train()
 print_summary(result)
 ```
+
 ```
 Time: 55.95
 Samples/second: 9.15
@@ -377,6 +386,7 @@ trainer = Trainer(model=model, args=training_args, train_dataset=ds, optimizers=
 result = trainer.train()
 print_summary(result)
 ```
+
 ```
 Time: 49.46
 Samples/second: 10.35
