@@ -46,8 +46,8 @@
       title: Token classification
     - local: nlp/question_answering
       title: Question answering
-    - local: Language modeling
-      title: nlp/language_modeling
+    - local: nlp/language_modeling
+      title: Language modeling
     title: NLP tasks
   - local: notebooks
     title: "🤗 Transformers Notebooks"
