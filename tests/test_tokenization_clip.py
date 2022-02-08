@@ -166,6 +166,16 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     (1 + len(text_of_1_token) + 1, 1 + len(text_of_1_token) + 1 + len(text_of_1_token)),
                 )
 
+    def test_log_warning(self):
+        # Test related to the breaking change introduced in transformers v4.17.0
+        # We need to check that an error in raised when the user try to load a previous version of the tokenizer.
+        with self.assertRaises(ValueError) as context:
+            self.rust_tokenizer_class.from_pretrained("robot-test/old-clip-tokenizer")
+
+        self.assertTrue(
+            context.exception.args[0].startswith("The backend_tokenizer provided does not match the expected format.")
+        )
+
     @require_ftfy
     def test_tokenization_python_rust_equals(self):
         super().test_tokenization_python_rust_equals()
