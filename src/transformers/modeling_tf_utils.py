@@ -954,13 +954,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             del return_metrics["loss_loss"]
         return return_metrics
 
-
     def predict_step(self, data):
         def raggedify_if_possible(array):
             if array.shape.ndims >= 3:
                 return tf.RaggedTensor.from_tensor(array)
             else:
                 return array
+
         x, _, _ = data_adapter.unpack_x_y_sample_weight(data)
         output = self(x, training=False)
         if isinstance(output, dict):
