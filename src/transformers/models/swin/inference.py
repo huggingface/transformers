@@ -41,7 +41,7 @@ transforms = T.Compose(
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-pixel_values = transforms(image).unsqueeze(0)
+pixel_values = torch.randn(2,3,192,192)
 
 
 class MaskGenerator:
@@ -83,7 +83,7 @@ mask_generator = MaskGenerator(
     model_patch_size=model.config.patch_size,
     mask_ratio=0.6,
 )
-mask = mask_generator().unsqueeze(0)
+mask = torch.stack([mask_generator() for mask in range(2)])
 
 # forward pass
 outputs = model(pixel_values, bool_masked_pos=mask)
