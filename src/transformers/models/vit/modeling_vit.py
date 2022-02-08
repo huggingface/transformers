@@ -667,7 +667,8 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
 
         masked_im_loss = None
         if bool_masked_pos is not None:
-            bool_masked_pos = bool_masked_pos.reshape(-1, H, W)
+            size = self.config.image_size // self.config.patch_size
+            bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
             mask = (
                 bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
                 .repeat_interleave(self.config.patch_size, 2)

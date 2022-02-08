@@ -848,8 +848,8 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
 
         masked_im_loss = None
         if bool_masked_pos is not None:
-            num_patches = self.swin.embeddings.patch_embeddings.num_patches
-            bool_masked_pos = bool_masked_pos.reshape(-1, int(math.sqrt(num_patches)), int(math.sqrt(num_patches)))
+            size = self.config.image_size // self.config.patch_size
+            bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
             mask = (
                 bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
                 .repeat_interleave(self.config.patch_size, 2)
