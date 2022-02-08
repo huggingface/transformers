@@ -22,16 +22,16 @@ from transformers.testing_utils import require_sentencepiece, require_tf, requir
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM, T5Tokenizer, TFMT5ForConditionalGeneration
+    from transformers import AutoTokenizer, T5Tokenizer, TFAutoModelForSeq2SeqLM, TFMT5ForConditionalGeneration
 
 
 @require_tf
-class TFMT5ModelTest(unittest.TestCase):  # no mixin -> most cases are already covered in the TF T5 tests
+class TFMT5ModelTest(unittest.TestCase):  # no mixin with common tests -> most cases are already covered in the TF T5
     @slow
     def test_resize_embeddings(self):
         model = TFMT5ForConditionalGeneration.from_pretrained("google/mt5-small")
         tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
-        tokenizer.add_special_tokens({'bos_token': '', 'eos_token': ''})
+        tokenizer.add_special_tokens({"bos_token": "", "eos_token": ""})
         model._resize_token_embeddings(len(tokenizer))
 
 
