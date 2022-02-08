@@ -222,9 +222,9 @@ def export(
             "Please install torch or tensorflow first."
         )
 
-    if is_torch_available():
+    if is_torch_available() and issubclass(type(model), PreTrainedModel):
         return export_pytorch(tokenizer, model, config, opset, output)
-    elif is_tf_available():
+    elif is_tf_available() and issubclass(type(model), TFPreTrainedModel):
         return export_tensorflow(tokenizer, model, config, opset, output)
 
 
