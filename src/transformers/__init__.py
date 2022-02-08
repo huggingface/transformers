@@ -95,7 +95,7 @@ _import_structure = {
     "dependency_versions_table": [],
     "dynamic_module_utils": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
-    "feature_extraction_utils": ["BatchFeature"],
+    "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
@@ -2298,7 +2298,7 @@ if TYPE_CHECKING:
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
     # Feature Extractor
-    from .feature_extraction_utils import BatchFeature
+    from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Files and general utilities
     from .file_utils import (
