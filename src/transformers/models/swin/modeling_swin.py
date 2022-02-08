@@ -846,6 +846,10 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         # Reconstruct pixel values
         reconstructed_pixel_values = self.decoder(sequence_output)
 
+        print("Shape of pixel_values:", pixel_values.shape)
+        print("Shape of reconstructed pixel values:", reconstructed_pixel_values.shape)
+        print("Shape of mask:", bool_masked_pos.shape)
+        
         masked_im_loss = None
         if bool_masked_pos is not None:
             bool_masked_pos = bool_masked_pos.reshape(-1, H, W)
@@ -856,6 +860,8 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
                 .contiguous()
             )
             reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
+            print("Shape of reconstruction_loss:", pixel_values.shape)
+            print("Shape of mask:", bool_masked_pos.shape)
             masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
 
         if not return_dict:
