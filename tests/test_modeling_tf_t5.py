@@ -314,6 +314,13 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO: Fix head-masking according to PyTorch T5 model
         pass
 
+    @slow
+    def test_resize_embeddings(self):
+        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        tokenizer.add_special_tokens({'bos_token': '', 'eos_token': ''})
+        model._resize_token_embeddings(len(tokenizer))
+
 
 class TFT5EncoderOnlyModelTester:
     def __init__(
