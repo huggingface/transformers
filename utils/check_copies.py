@@ -130,7 +130,8 @@ def blackify(code):
     has_indent = len(get_indent(code)) > 0
     if has_indent:
         code = f"class Bla:\n{code}"
-    result = black.format_str(code, mode=black.FileMode([black.TargetVersion.PY35], line_length=119))
+    mode = black.Mode(target_versions={black.TargetVersion.PY35}, line_length=119)
+    result = black.format_str(code, mode=mode)
     result, _ = style_docstrings_in_code(result)
     return result[len("class Bla:\n") :] if has_indent else result
 
