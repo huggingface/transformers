@@ -92,7 +92,6 @@ class SwinConfig(PretrainedConfig):
 
     attribute_map = {
         "num_attention_heads": "num_heads",
-        "hidden_size": "embed_dim",
     }
 
     def __init__(
@@ -135,3 +134,6 @@ class SwinConfig(PretrainedConfig):
         self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
+        # this indicates the channel dimension after the last stage of the model
+        self.hidden_size = embed_dim * 8
