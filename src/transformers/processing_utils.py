@@ -54,7 +54,7 @@ class ProcessorMixin:
         # Check each arg is of the proper class (this will also catch a user initializing in the wrong order)
         for arg, attribute_name in zip(args, self.attributes):
             class_name = getattr(self, f"{attribute_name}_class")
-            # Nothing is every going to be an instance of "AutoXxx", in that case we check the base class.
+            # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
             class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
             if isinstance(class_name, tuple):
                 proper_class = tuple(getattr(transformers_module, n) for n in class_name if n is not None)
@@ -63,7 +63,7 @@ class ProcessorMixin:
 
             if not isinstance(arg, proper_class):
                 raise ValueError(
-                    f"Received a {type(arg)} for argument {attribute_name}, but a {class_name} was expected."
+                    f"Received a {type(arg).__name__} for argument {attribute_name}, but a {class_name} was expected."
                 )
 
             setattr(self, attribute_name, arg)
