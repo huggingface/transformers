@@ -76,7 +76,6 @@ class DataTrainingArguments:
     train_val_split: Optional[float] = field(
         default=0.15, metadata={"help": "Percent to split off of train for validation."}
     )
-    image_size: int = field(default=224, metadata={"help": "The size of the images."})
     mask_patch_size: int = field(default=32, metadata={"help": "The size of the square patches to use for masking."})
     mask_ratio: float = field(
         default=0.6,
@@ -325,7 +324,7 @@ def main():
     transforms = Compose(
         [
             Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
-            RandomResizedCrop(data_args.image_size, scale=(0.67, 1.0), ratio=(3.0 / 4.0, 4.0 / 3.0)),
+            RandomResizedCrop(model_args.image_size, scale=(0.67, 1.0), ratio=(3.0 / 4.0, 4.0 / 3.0)),
             RandomHorizontalFlip(),
             ToTensor(),
             Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
@@ -334,7 +333,7 @@ def main():
 
     # create mask generator
     mask_generator = MaskGenerator(
-        input_size=data_args.image_size,
+        input_size=model_args.image_size,
         mask_patch_size=data_args.mask_patch_size,
         model_patch_size=model.config.patch_size,
         mask_ratio=data_args.mask_ratio,
