@@ -85,7 +85,8 @@ def export_pytorch(
             Directory to store the exported ONNX model.
 
     Returns:
-        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from the ONNX configuration.
+        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
+        the ONNX configuration.
     """
     if is_torch_available():
         from transformers.file_utils import torch_version
@@ -177,7 +178,8 @@ def export_tensorflow(
             Directory to store the exported ONNX model.
 
     Returns:
-        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from the ONNX configuration.
+        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
+        the ONNX configuration.
     """
     import tensorflow as tf
 
@@ -229,7 +231,8 @@ def export(
             Directory to store the exported ONNX model.
 
     Returns:
-        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from the ONNX configuration.
+        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
+        the ONNX configuration.
     """
     if not (is_torch_available() or is_tf_available()):
         raise ImportError(
