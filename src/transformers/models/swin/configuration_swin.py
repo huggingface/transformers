@@ -125,6 +125,7 @@ class SwinConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.embed_dim = embed_dim
         self.depths = depths
+        self.num_layers = len(depths)
         self.num_heads = num_heads
         self.window_size = window_size
         self.mlp_ratio = mlp_ratio

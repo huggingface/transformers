@@ -781,8 +781,9 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
 
         self.swin = SwinModel(config, add_pooling_layer=False, use_mask_token=True)
 
+        num_features = int(config.embed_dim * 2 ** (config.num_layers - 1))
         self.decoder = nn.Sequential(
-            nn.Conv2d(in_channels=config.embed_dim, out_channels=config.encoder_stride ** 2 * 3, kernel_size=1),
+            nn.Conv2d(in_channels=num_features, out_channels=config.encoder_stride ** 2 * 3, kernel_size=1),
             nn.PixelShuffle(config.encoder_stride),
         )
 
