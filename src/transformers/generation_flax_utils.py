@@ -217,7 +217,9 @@ class FlaxGenerationMixin:
             params (`Dict[str, jnp.ndarray]`, *optional*):
                 Optionally the model parameters can be passed. Can be useful for parallelized generation.
             model_kwargs:
-                Additional model specific kwargs will be forwarded to the `forward` function of the model.
+                Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
+                is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific kwargs
+                should be prefixed with *decoder_*. Also accepts `encoder_outputs` to skip encoder part.
 
         Return:
             [`~file_utils.ModelOutput`].
