@@ -329,6 +329,7 @@ class BeamSearchScorer(BeamScorer):
                 best.append(best_hyp)
                 best_scores[i * self.num_beam_hyps_to_keep + j] = best_score
 
+        # prepare for adding eos
         sent_lengths_max = sent_lengths.max().item() + 1
         sent_max_len = min(sent_lengths_max, max_length) if max_length is not None else sent_lengths_max
         decoded: torch.LongTensor = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
@@ -342,7 +343,6 @@ class BeamSearchScorer(BeamScorer):
             decoded[i, : sent_lengths[i]] = hypo
             if sent_lengths[i] < sent_max_len:
                 decoded[i, sent_lengths[i]] = eos_token_id
-
         return UserDict(
             {
                 "sequences": decoded,
