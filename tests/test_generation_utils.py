@@ -1514,7 +1514,7 @@ class GenerationTesterMixin:
                 flag = True
                 break
 
-        assert flag
+        self.assertTrue(flag)
 
 
 @require_torch

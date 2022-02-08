@@ -367,18 +367,16 @@ class BeamSearchScorer(BeamScorer):
                 best_scores[i * self.num_beam_hyps_to_keep + j] = best_score
 
         # prepare for adding eos
-        sent_lengths_max = sent_lengths.max().item() + 1
-        sent_max_len = min(sent_lengths_max, max_length) if max_length is not None else sent_lengths_max
+        sent_max_len = min(sent_lengths.max().item() + 1, max_length) 
         decoded: torch.LongTensor = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
         # shorter batches are padded if needed
         if sent_lengths.min().item() != sent_lengths.max().item():
             assert pad_token_id is not None, "`pad_token_id` has to be defined"
             decoded.fill_(pad_token_id)
-
         # fill with hypotheses and eos_token_id if the latter fits in
         for i, hypo in enumerate(best):
             decoded[i, : sent_lengths[i]] = hypo
-            if sent_lengths[i] < sent_max_len:
+            if sent_lengths[i] < max_length: 
                 decoded[i, sent_lengths[i]] = eos_token_id
 
         return UserDict(
@@ -626,14 +624,13 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         # need to make new hypothesis that advance the constraints
         track_new = {"new_seqs": [], "new_states": [], "new_indices": [], "new_tokens": [], "new_scores": []}
         for seq_idx, pre_seq in enumerate(this_batch_input_ids):
-            """
-            pre_seq = ith sequence generated before this step.
+            # pre_seq = ith sequence generated before this step.
 
-            input_ids -> (topk) generic beam search best model next tokens
-                      -> (advance) constraints forcing the next token
-            either way, we need to sort them into "banks" later, so store a "ConstraintListState" for all types of
-            hypotheses.
-            """
+            # input_ids -> (topk) generic beam search best model next tokens
+            #           -> (advance) constraints forcing the next token
+            # either way, we need to sort them into "banks" later, so store a "ConstraintListState" for all types of
+            # hypotheses.
+
             topk_state = topk_contraint_states[seq_idx]
             topk_state.reset(full_hypotheses[seq_idx])
 
@@ -656,26 +653,25 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                         track_new["new_scores"].append(this_batch_token_scores[seq_idx].take(advance_token))
                         track_new["new_states"].append(new_state)
             elif push_progress:
-                """
-                Basically, `sent_beam_indices` often chooses very little among `input_ids` the generated sequences that
-                actually fulfill our constraints. For example, let constraints == ["loves pies"] and
+                # Basically, `sent_beam_indices` often chooses very little among `input_ids` the generated sequences that
+                # actually fulfill our constraints. For example, let constraints == ["loves pies"] and
 
-                    pre_seq_1 = "The child loves pies and" pre_seq_2 = "The child plays in the playground and"
+                #     pre_seq_1 = "The child loves pies and" pre_seq_2 = "The child plays in the playground and"
 
-                Without this step, if `sent_beam_indices` is something like [1,1], then
-                    1. `pre_seq_1` won't be added to the list of (topk) hypothesis since it's not in the indices and
-                    2.  it won't be added to the list of (advance) hypothesis since it's completed already. (this is
-                        the else part of `if constraints_completed[seq_idx]`)
-                    3. it ends up simply getting removed from consideration.
+                # Without this step, if `sent_beam_indices` is something like [1,1], then
+                #     1. `pre_seq_1` won't be added to the list of (topk) hypothesis since it's not in the indices and
+                #     2.  it won't be added to the list of (advance) hypothesis since it's completed already. (this is
+                #         the else part of `if constraints_completed[seq_idx]`)
+                #     3. it ends up simply getting removed from consideration.
 
-                #3 might be fine and actually desired, since it's likely that it's a low-probability output anyways,
-                especially if it's not in the list of `sent_beam_indices`. But this often leads to lengthened beam
-                search times, since completed sequences keep getting removed after all this effort for constrained
-                generation.
+                # #3 might be fine and actually desired, since it's likely that it's a low-probability output anyways,
+                # especially if it's not in the list of `sent_beam_indices`. But this often leads to lengthened beam
+                # search times, since completed sequences keep getting removed after all this effort for constrained
+                # generation.
 
-                Here, we basically take `pre_seq_1` and to "push" it into the considered list of hypotheses, by simply
-                appending the next likely token in the vocabulary and adding it to the list of hypotheses.
-                """
+                # Here, we basically take `pre_seq_1` and to "push" it into the considered list of hypotheses, by simply
+                # appending the next likely token in the vocabulary and adding it to the list of hypotheses.
+
                 new_score, new_token = torch.max(this_batch_token_scores[seq_idx], 0)  # some next probable token
                 advance_seq = torch.cat((pre_seq, new_token.unsqueeze(0)), -1)
 
@@ -704,9 +700,9 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             zipped = all_banks * 100 + all_scores
             indices = zipped.sort(descending=True).indices
             sorted_banks = all_banks[indices]
-            """
-            Then we end up with {sorted among bank C}, {sorted among bank C-1}, ..., {sorted among bank 0}
-            """
+            
+            # Then we end up with {sorted among bank C}, {sorted among bank C-1}, ..., {sorted among bank 0}
+            
             counter = -1
             cur_bank = sorted_banks[0]
             increments = []

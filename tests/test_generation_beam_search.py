@@ -414,11 +414,6 @@ class ConstrainedBeamSearchTester:
         # make sure corresponding score is as good as possible to surely be picked first
         next_scores[0, 0] = 0.0
 
-        # # because constrainted beam search can't possibly fulfill the constraints in one pass
-        # # especially if constraints involves more than one token, so we repeat this several times.
-        # # doesn't *really* matter that we're not adjusting the scores & tokens TBH.
-        # repeat = 10
-        # for _ in range(repeat):
         beam_outputs = constrained_beam_scorer.process(
             input_ids, next_scores, tokens, next_indices, scores_for_all_vocab, eos_token_id=self.eos_token_id
         )
