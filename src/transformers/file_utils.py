@@ -527,10 +527,6 @@ def is_spacy_available():
     return importlib.util.find_spec("spacy") is not None
 
 
-def is_ftfy_available():
-    return importlib.util.find_spec("ftfy") is not None
-
-
 def is_in_notebook():
     try:
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
