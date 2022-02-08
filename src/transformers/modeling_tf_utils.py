@@ -1135,6 +1135,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         return model_embeds
 
     def _get_word_embedding_weight(model, embedding_layer):
+        # If the variable holds the weights themselves, return them
+        if isinstance(embedding_layer, tf.Tensor):
+            return embedding_layer
+        # Otherwise, try to get them from the layer's attributes
+
         embeds = getattr(embedding_layer, "weight", None)
         if embeds is not None:
             return embeds
