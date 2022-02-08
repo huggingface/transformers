@@ -17,6 +17,8 @@
 
 from typing import List, Optional, Tuple
 
+from tokenizers import pre_tokenizers
+
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_clip import CLIPTokenizer
@@ -92,6 +94,16 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
             pad_token=pad_token,
             **kwargs,
         )
+
+        if not isinstance(self.backend_tokenizer.pre_tokenizer, pre_tokenizers.Sequence):
+            raise ValueError(
+                "The backend_tokenizer provided does not match the expected format. The CLIP tokenizer has been "
+                "heavily modified from transformers version 4.17.0. If you want to use the new fast version of the "
+                "CLIP tokenizer, the easiest way for you is probably to do: "
+                '`CLIPTokenizerFast.from_pretrained("Path to local folder or Hub repo with slow tokenizer files", from_slow=True)`.'
+                " If you want to use your existing backend_tokenizer, you will have to download a version prior to "
+                "4.17.0 of transformers."
+            )
 
         self._wrap_decode_method_backend_tokenizer()
 
