@@ -736,7 +736,7 @@ class SwinModel(SwinPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         print("Shape of pixel_values:", pixel_values.shape)
-        print("Shape of mask:", bool.shape)
+        print("Shape of mask:", bool_masked_pos.shape)
         
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
