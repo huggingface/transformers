@@ -157,7 +157,7 @@ def export_tensorflow(
     output: Path,
 ) -> Tuple[List[str], List[str]]:
     """
-    Export a Tensorflow model to an ONNX Intermediate Representation (IR)
+    Export a TensorFlow model to an ONNX Intermediate Representation (IR)
 
     Args:
         tokenizer:
