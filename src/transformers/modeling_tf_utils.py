@@ -954,6 +954,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             del return_metrics["loss_loss"]
         return return_metrics
 
+
+    def predict_step(self, data):
+        x, _, _ = data_adapter.unpack_x_y_sample_weight(data)
+        output = self(x, training=False)
+        if isinstance(output, dict):
+            output = {key: tf.RaggedTensor.from_tensor(val) for key, val in output.items()}
+        elif isinstance(output, tuple) or isinstance(output, list):
+            output = tuple([tf.RaggedTensor.from_tensor(arr) for arr in output])
+        elif isinstance(output, tf.Tensor):
+            output = tf.RaggedTensor.from_tensor(output)
+        return output
+
     def create_model_card(
         self,
         output_dir,
