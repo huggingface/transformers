@@ -100,7 +100,7 @@ Here is how you can create a function that will realign the tokens and labels:
 ```py
 >>> def tokenize_and_align_labels(examples):
 ...     tokenized_inputs = tokenizer(examples["tokens"], truncation=True, is_split_into_words=True)
-... 
+
 ...     labels = []
 ...     for i, label in enumerate(examples[f"ner_tags"]):
 ...         word_ids = tokenized_inputs.word_ids(batch_index=i)  # Map tokens to their respective word.
@@ -115,7 +115,7 @@ Here is how you can create a function that will realign the tokens and labels:
 ...                 label_ids.append(-100)
 ...             previous_word_idx = word_idx
 ...         labels.append(label_ids)
-... 
+
 ...     tokenized_inputs["labels"] = labels
 ...     return tokenized_inputs
 ```
@@ -207,10 +207,10 @@ Set up an optimizer function, learning rate schedule, and some training hyperpar
 
 ```py
 >>> from transformers import create_optimizer
-
 batch_size = 16
 num_train_epochs = 3
 num_train_steps = (len(tokenized_datasets["train"]) // batch_size) * num_train_epochs
+
 >>> optimizer, lr_schedule = create_optimizer(
 ...     init_lr=2e-5,
 ...     num_train_steps=num_train_steps,
