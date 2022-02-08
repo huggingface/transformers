@@ -212,6 +212,8 @@ class FeaturesManager:
         ),
         "electra": supported_features_mapping(
             "default",
+            "masked-lm",
+            "causal-lm",
             "sequence-classification",
             "token-classification",
             "question-answering",
