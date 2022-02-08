@@ -78,7 +78,8 @@ class BeitConfig(PretrainedConfig):
         decoder_type (`str`, *optional*, defaults to `"beit"`):
             Decoder type to use for masked image modeling. Either "beit" or "simmim".
         encoder_stride (`int`, *optional*, defaults to 16):
-            The stride of the encoder for masked image modeling, in case `"decoder_type"` is set to `simmim`.
+            Factor to increase the spatial resolution by in the decoder head for masked image modeling, in case
+            `"decoder_type"` is set to `simmim`.
         out_indices (`List[int]`, *optional*, defaults to `[3, 5, 7, 11]`):
             Indices of the feature maps to use for semantic segmentation.
         pool_scales (`Tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):

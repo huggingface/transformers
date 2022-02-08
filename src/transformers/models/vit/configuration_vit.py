@@ -66,7 +66,7 @@ class ViTConfig(PretrainedConfig):
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
         encoder_stride (`int`, `optional`, defaults to 16):
-            The stride of the encoder for masked image modeling.
+           Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
     Example:
 

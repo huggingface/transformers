@@ -74,7 +74,7 @@ class SwinConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         encoder_stride (`int`, `optional`, defaults to 32):
-            The stride of the encoder for masked image modeling.
+            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
         Example:
 
