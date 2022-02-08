@@ -18,7 +18,10 @@ from typing import Dict, List, Optional, Tuple, Union, TypedDict
 
 import numpy as np
 from PIL import Image
-from transformers.models.maskformer.modeling_maskformer import MaskFormerOutput
+from transformers.models.maskformer.modeling_maskformer import (
+    MaskFormerForInstanceSegmentationOutput,
+    MaskFormerOutput,
+)
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType, is_torch_available
@@ -369,7 +372,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         return encoded_inputs
 
-    def post_process_segmentation(self, outputs: MaskFormerOutput) -> Tensor:
+    def post_process_segmentation(self, outputs: MaskFormerForInstanceSegmentationOutput) -> Tensor:
         """Converts the output of [`MaskFormerModel`] into image segmentation predictions. Only supports PyTorch.
 
         Args:
@@ -423,7 +426,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
     def post_process_panoptic_segmentation(
         self,
-        outputs: MaskFormerOutput,
+        outputs: MaskFormerForInstanceSegmentationOutput,
         object_mask_threshold: Optional[float] = 0.8,
         overlap_mask_area_threshold: Optional[float] = 0.8,
     ) -> Tensor:
