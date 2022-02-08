@@ -194,10 +194,18 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
 TENSORFLOW_EXPORT_DEFAULT_MODELS = {
     ("albert", "hf-internal-testing/tiny-albert"),
     ("bert", "bert-base-cased"),
+    ("ibert", "kssteven/ibert-roberta-base"),
+    ("camembert", "camembert-base"),
     ("distilbert", "distilbert-base-cased"),
+    ("roberta", "roberta-base"),
+    ("xlm-roberta", "xlm-roberta-base"),
+    ("layoutlm", "microsoft/layoutlm-base-uncased"),
 }
 
-TENSORFLOW_EXPORT_WITH_PAST_MODELS = {("gpt2", "gpt2")}
+TENSORFLOW_EXPORT_WITH_PAST_MODELS = {
+    ("gpt2", "gpt2"),
+    ("gpt-neo", "EleutherAI/gpt-neo-125M"),
+}
 
 TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("bart", "facebook/bart-base"),
@@ -279,11 +287,21 @@ class OnnxExportTestCaseV2(TestCase):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
     @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_DEFAULT_MODELS))
+    @slow
     @require_tf
     def test_tensorflow_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
     @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_WITH_PAST_MODELS))
+    @slow
     @require_tf
     def test_tensorflow_export_with_past(self, test_name, name, model_name, feature, onnx_config_class_constructor):
+        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+
+    @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS))
+    @slow
+    @require_tf
+    def test_tensorflow_export_seq2seq_with_past(
+        self, test_name, name, model_name, feature, onnx_config_class_constructor
+    ):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
