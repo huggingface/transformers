@@ -35,6 +35,7 @@ if is_torch_available():
         MODEL_MAPPING,
         DeiTForImageClassification,
         DeiTForImageClassificationWithTeacher,
+        DeiTForMaskedImageModeling,
         DeiTModel,
     )
     from transformers.models.deit.modeling_deit import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
@@ -67,6 +68,7 @@ class DeiTModelTester:
         initializer_range=0.02,
         num_labels=3,
         scope=None,
+        encoder_stride=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -85,6 +87,7 @@ class DeiTModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
+        self.encoder_stride = encoder_stride
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -111,6 +114,7 @@ class DeiTModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            encoder_stride=self.encoder_stride,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -155,6 +159,7 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
             DeiTModel,
             DeiTForImageClassification,
             DeiTForImageClassificationWithTeacher,
+            DeiTForMaskedImageModeling,
         )
         if is_torch_available()
         else ()

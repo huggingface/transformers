@@ -894,6 +894,7 @@ if is_torch_available():
             "DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DeiTForImageClassification",
             "DeiTForImageClassificationWithTeacher",
+            "DeiTForMaskedImageModeling",
             "DeiTModel",
             "DeiTPreTrainedModel",
         ]
@@ -3016,6 +3017,7 @@ if TYPE_CHECKING:
             DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DeiTForImageClassification,
             DeiTForImageClassificationWithTeacher,
+            DeiTForMaskedImageModeling,
             DeiTModel,
             DeiTPreTrainedModel,
         )

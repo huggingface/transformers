@@ -74,6 +74,7 @@ class SwinModelTester:
         scope=None,
         use_labels=True,
         type_sequence_label_size=10,
+        encoder_stride=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -98,6 +99,7 @@ class SwinModelTester:
         self.scope = scope
         self.use_labels = use_labels
         self.type_sequence_label_size = type_sequence_label_size
+        self.encoder_stride = encoder_stride
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -129,6 +131,7 @@ class SwinModelTester:
             path_norm=self.patch_norm,
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
+            encoder_stride=self.encoder_stride,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
