@@ -367,7 +367,7 @@ class BeamSearchScorer(BeamScorer):
                 best_scores[i * self.num_beam_hyps_to_keep + j] = best_score
 
         # prepare for adding eos
-        sent_max_len = min(sent_lengths.max().item() + 1, max_length) 
+        sent_max_len = min(sent_lengths.max().item() + 1, max_length)
         decoded: torch.LongTensor = input_ids.new(batch_size * self.num_beam_hyps_to_keep, sent_max_len)
         # shorter batches are padded if needed
         if sent_lengths.min().item() != sent_lengths.max().item():
@@ -376,7 +376,7 @@ class BeamSearchScorer(BeamScorer):
         # fill with hypotheses and eos_token_id if the latter fits in
         for i, hypo in enumerate(best):
             decoded[i, : sent_lengths[i]] = hypo
-            if sent_lengths[i] < max_length: 
+            if sent_lengths[i] < max_length:
                 decoded[i, sent_lengths[i]] = eos_token_id
 
         return UserDict(
@@ -700,9 +700,9 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             zipped = all_banks * 100 + all_scores
             indices = zipped.sort(descending=True).indices
             sorted_banks = all_banks[indices]
-            
+
             # Then we end up with {sorted among bank C}, {sorted among bank C-1}, ..., {sorted among bank 0}
-            
+
             counter = -1
             cur_bank = sorted_banks[0]
             increments = []
