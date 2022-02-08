@@ -129,6 +129,11 @@ class ProcessorMixin:
                 [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and
                 [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
         """
+        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
+        return cls(*args)
+
+    @classmethod
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         args = []
         for attribute_name in cls.attributes:
             class_name = getattr(cls, f"{attribute_name}_class")
@@ -143,4 +148,4 @@ class ProcessorMixin:
                 attribute_class = getattr(transformers_module, class_name)
 
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
-        return cls(*args)
+        return args

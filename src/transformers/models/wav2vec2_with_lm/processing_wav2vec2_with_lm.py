@@ -23,15 +23,15 @@ from typing import TYPE_CHECKING, Iterable, List, Optional, Union
 
 import numpy as np
 
-from ...feature_extraction_utils import FeatureExtractionMixin
 from ...file_utils import ModelOutput, requires_backends
-from ...tokenization_utils import PreTrainedTokenizer
-from ..wav2vec2.feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
-from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
+from ...processing_utils import ProcessorMixin
 
 
 if TYPE_CHECKING:
     from pyctcdecode import BeamSearchDecoderCTC
+
+    from ...feature_extraction_utils import FeatureExtractionMixin
+    from ...tokenization_utils import PreTrainedTokenizerBase
 
 
 @dataclass
@@ -47,7 +47,7 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
     text: Union[List[str], str]
 
 
-class Wav2Vec2ProcessorWithLM:
+class Wav2Vec2ProcessorWithLM(ProcessorMixin):
     r"""
     Constructs a Wav2Vec2 processor which wraps a Wav2Vec2 feature extractor, a Wav2Vec2 CTC tokenizer and a decoder
     with language model support into a single processor for language model boosted speech recognition decoding.
@@ -60,24 +60,18 @@ class Wav2Vec2ProcessorWithLM:
         decoder (`pyctcdecode.BeamSearchDecoderCTC`):
             An instance of [`pyctcdecode.BeamSearchDecoderCTC`]. The decoder is a required input.
     """
+    feature_extractor_class = "Wav2Vec2FeatureExtractor"
+    tokenizer_class = "Wav2Vec2CTCTokenizer"
 
     def __init__(
         self,
-        feature_extractor: FeatureExtractionMixin,
-        tokenizer: PreTrainedTokenizer,
+        feature_extractor: "FeatureExtractionMixin",
+        tokenizer: "PreTrainedTokenizerBase",
         decoder: "BeamSearchDecoderCTC",
     ):
         from pyctcdecode import BeamSearchDecoderCTC
 
-        if not isinstance(feature_extractor, Wav2Vec2FeatureExtractor):
-            raise ValueError(
-                f"`feature_extractor` has to be of type {Wav2Vec2FeatureExtractor.__class__}, but is {type(feature_extractor)}"
-            )
-        if not isinstance(tokenizer, Wav2Vec2CTCTokenizer):
-            # TODO(PVP) - this can be relaxed in the future to allow other kinds of tokenizers
-            raise ValueError(
-                f"`tokenizer` has to be of type {Wav2Vec2CTCTokenizer.__class__}, but is {type(tokenizer)}"
-            )
+        super().__init__(feature_extractor, tokenizer)
         if not isinstance(decoder, BeamSearchDecoderCTC):
             raise ValueError(f"`decoder` has to be of type {BeamSearchDecoderCTC.__class__}, but is {type(decoder)}")
 
@@ -90,37 +84,11 @@ class Wav2Vec2ProcessorWithLM:
                 f"Make sure to include {missing_decoder_tokens} in the decoder's alphabet."
             )
 
-        self.feature_extractor = feature_extractor
-        self.tokenizer = tokenizer
         self.decoder = decoder
         self.current_processor = self.feature_extractor
 
     def save_pretrained(self, save_directory):
-        """
-        Save the Wav2Vec2 feature_extractor, a tokenizer object and a pyctcdecode decoder to the directory
-        `save_directory`, so that they can be re-loaded using the [`~Wav2Vec2ProcessorWithLM.from_pretrained`] class
-        method.
-
-        <Tip>
-
-        This class method is simply calling [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained,`]
-        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`] and pyctcdecode's
-        [`pyctcdecode.BeamSearchDecoderCTC.save_to_dir`].
-
-        Please refer to the docstrings of the methods above for more information.
-
-        </Tip>
-
-        Args:
-            save_directory (`str` or `os.PathLike`):
-                Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
-                be created if it does not exist).
-        """
-        self.feature_extractor._set_processor_class(self.__class__.__name__)
-        self.feature_extractor.save_pretrained(save_directory)
-
-        self.tokenizer._set_processor_class(self.__class__.__name__)
-        self.tokenizer.save_pretrained(save_directory)
+        super().save_pretrained(save_directory)
         self.decoder.save_to_dir(save_directory)
 
     @classmethod
@@ -157,8 +125,7 @@ class Wav2Vec2ProcessorWithLM:
         requires_backends(cls, "pyctcdecode")
         from pyctcdecode import BeamSearchDecoderCTC
 
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        feature_extractor, tokenizer = super()._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         if os.path.isdir(pretrained_model_name_or_path):
             decoder = BeamSearchDecoderCTC.load_from_dir(pretrained_model_name_or_path)
