@@ -231,7 +231,7 @@ class TFVisionEncoderDecoderMixin:
         self.assertIn("loss", outputs_encoder_decoder)
 
         batch_size, seq_len = decoder_input_ids.shape
-        expected_shape = (batch_size, seq_len - 1, decoder_config.vocab_size)
+        expected_shape = (batch_size, seq_len, decoder_config.vocab_size)
         self.assertEqual(outputs_encoder_decoder["logits"].shape, expected_shape)
         self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[0], pixel_values.shape[0])
         self.assertEqual(outputs_encoder_decoder["encoder_last_hidden_state"].shape[-1], config.hidden_size)

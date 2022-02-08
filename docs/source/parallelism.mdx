@@ -308,8 +308,13 @@ ZeRO stage 3 is not a good choice either for the same reason - more inter-node c
 And since we have ZeRO, the other benefit is ZeRO-Offload. Since this is stage 1 optimizer states can be offloaded to CPU.
 
 Implementations:
-- [Megatron-DeepSpeed](https://github.com/microsoft/Megatron-DeepSpeed)
+- [Megatron-DeepSpeed](https://github.com/microsoft/Megatron-DeepSpeed) and [Megatron-Deepspeed from BigScience](https://github.com/bigscience-workshop/Megatron-DeepSpeed), which is the fork of the former repo.
 - [OSLO](https://github.com/tunib-ai/oslo)
+
+Important papers:
+
+- [Using DeepSpeed and Megatron to Train Megatron-Turing NLG 530B, A Large-Scale Generative Language Model](
+https://arxiv.org/abs/2201.11990)
 
 🤗 Transformers status: not yet implemented, since we have no PP and TP.
 

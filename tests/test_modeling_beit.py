@@ -92,17 +92,20 @@ class BeitModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.out_indices = out_indices
+        self.num_labels = num_labels
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
+        pixel_labels = None
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            pixel_labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
 
         config = self.get_config()
 
-        return config, pixel_values, labels
+        return config, pixel_values, labels, pixel_labels
 
     def get_config(self):
         return BeitConfig(
@@ -122,7 +125,7 @@ class BeitModelTester:
             out_indices=self.out_indices,
         )
 
-    def create_and_check_model(self, config, pixel_values, labels):
+    def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
         model = BeitModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -133,7 +136,7 @@ class BeitModelTester:
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
-    def create_and_check_for_masked_lm(self, config, pixel_values, labels):
+    def create_and_check_for_masked_lm(self, config, pixel_values, labels, pixel_labels):
         model = BeitForMaskedImageModeling(config=config)
         model.to(torch_device)
         model.eval()
@@ -144,7 +147,7 @@ class BeitModelTester:
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches, self.vocab_size))
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+    def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.type_sequence_label_size
         model = BeitForImageClassification(config)
         model.to(torch_device)
@@ -152,13 +155,23 @@ class BeitModelTester:
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
+    def create_and_check_for_image_segmentation(self, config, pixel_values, labels, pixel_labels):
+        config.num_labels = self.num_labels
+        model = BeitForSemanticSegmentation(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size, self.image_size)
+        )
+        result = model(pixel_values, labels=pixel_labels)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size, self.image_size)
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels, pixel_labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -216,6 +229,10 @@ class BeitModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_image_segmentation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_segmentation(*config_and_inputs)
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -435,7 +452,8 @@ class BeitModelIntegrationTest(unittest.TestCase):
         bool_masked_pos = torch.ones((1, 196), dtype=torch.bool).to(torch_device)
 
         # forward pass
-        outputs = model(pixel_values=pixel_values, bool_masked_pos=bool_masked_pos)
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, bool_masked_pos=bool_masked_pos)
         logits = outputs.logits
 
         # verify the logits
@@ -457,7 +475,8 @@ class BeitModelIntegrationTest(unittest.TestCase):
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         logits = outputs.logits
 
         # verify the logits
@@ -482,7 +501,8 @@ class BeitModelIntegrationTest(unittest.TestCase):
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         logits = outputs.logits
 
         # verify the logits
@@ -508,18 +528,19 @@ class BeitModelIntegrationTest(unittest.TestCase):
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         logits = outputs.logits
 
         # verify the logits
-        expected_shape = torch.Size((1, 150, 160, 160))
+        expected_shape = torch.Size((1, 150, 640, 640))
         self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [
-                [[-4.9225, -2.3954, -3.0522], [-2.8822, -1.0046, -1.7561], [-2.9549, -1.3228, -2.1347]],
-                [[-5.8168, -3.4129, -4.0778], [-3.8651, -2.2214, -3.0277], [-3.8356, -2.4643, -3.3535]],
-                [[-0.0078, 3.9952, 4.0754], [2.9856, 4.6944, 5.0035], [3.2413, 4.7813, 4.9969]],
+                [[-4.9225, -4.9225, -4.6066], [-4.9225, -4.9225, -4.6066], [-4.6675, -4.6675, -4.3617]],
+                [[-5.8168, -5.8168, -5.5163], [-5.8168, -5.8168, -5.5163], [-5.5728, -5.5728, -5.2842]],
+                [[-0.0078, -0.0078, 0.4926], [-0.0078, -0.0078, 0.4926], [0.3664, 0.3664, 0.8309]],
             ]
         ).to(torch_device)
 

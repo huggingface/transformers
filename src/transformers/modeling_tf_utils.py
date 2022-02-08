@@ -35,6 +35,7 @@ from huggingface_hub import Repository, list_repo_files
 from requests import HTTPError
 
 from .configuration_utils import PretrainedConfig
+from .dynamic_module_utils import custom_object_save
 from .file_utils import (
     DUMMY_INPUTS,
     TF2_WEIGHTS_NAME,
@@ -219,7 +220,7 @@ class TFTokenClassificationLoss:
         # make sure only labels that are not equal to -100
         # are taken into account as loss
         if tf.math.reduce_any(labels == -1):
-            warnings.warn("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
+            tf.print("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
             active_loss = tf.reshape(labels, (-1,)) != -1
         else:
             active_loss = tf.reshape(labels, (-1,)) != -100
@@ -325,16 +326,6 @@ def booleans_processing(config, **kwargs):
                 kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
             )
     else:
-        if (
-            kwargs["output_attentions"] not in (None, config.output_attentions)
-            or kwargs["output_hidden_states"] not in (None, config.output_hidden_states)
-            or ("use_cache" in kwargs and kwargs["use_cache"] not in (None, config.use_cache))
-        ):
-            tf_logger.warning(
-                "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model. "
-                "They have to be set to True/False in the config object (i.e.: `config=XConfig.from_pretrained('name', output_attentions=True)`)."
-            )
-
         final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
@@ -671,6 +662,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     config_class = None
     base_model_prefix = ""
     main_input_name = "input_ids"
+    _auto_class = None
 
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
@@ -1369,6 +1361,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         # Save configuration file
         self.config.architectures = [self.__class__.__name__[2:]]
+
+        # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self._auto_class is not None:
+            custom_object_save(self, save_directory, config=self.config)
+
         self.config.save_pretrained(save_directory)
 
         # If we save using the predefined names, we can load using `from_pretrained`
@@ -2016,6 +2014,26 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             output = self.last_dropout(output, training=training)
 
         return output
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="TFAutoModel"):
+        """
+        Register this class with a given auto class. This should only be used for custom models as the ones in the
+        library are already mapped with an auto class.
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"TFAutoModel"`):
+                The auto class to register this new model with.
+        """
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
+        cls._auto_class = auto_class
 
 
 def shape_list(tensor: Union[tf.Tensor, np.ndarray]) -> List[int]:
