@@ -12,11 +12,11 @@ specific language governing permissions and limitations under the License.
 
 # Token classification with WNUT emerging entities
 
-Token classification assigns a label to individual tokens in a sentence. One of the most common token classification tasks is Named Entity Recognition (NER). NER attempts to find a label for each entity in a sentence, such as a person, location, or organization. In this guide, learn how to fine-tune a pretrained model on the [WNUT 17](https://huggingface.co/datasets/wnut_17) dataset to detect new entities.
+Token classification assigns a label to individual tokens in a sentence. One of the most common token classification tasks is Named Entity Recognition (NER). NER attempts to find a label for each entity in a sentence, such as a person, location, or organization. This guide teaches you how to fine-tune a pretrained model on the [WNUT 17](https://huggingface.co/datasets/wnut_17) dataset to detect new entities.
 
 <Tip>
 
-See the token classification [task page](https://huggingface.co/tasks/token-classification) for more information about other forms of token classification, models, datasets and metrics.
+See the token classification [task page](https://huggingface.co/tasks/token-classification) for more information about other forms of token classification and their associated models, datasets, and metrics.
 
 </Tip>
 
@@ -40,7 +40,7 @@ A quick look at the dataset shows the labels associated with each word in the se
 }
 ```
 
-Unless you are really familiar with this dataset, the `ner_tags` aren't too informative right now. For more details, access the label names of the `ner_tags`:
+Unless you are very familiar with this dataset, the `ner_tags` aren't too informative right now. For more details, access the label names of the `ner_tags`:
 
 ```py
 >>> label_list = wnut["train"].features[f"ner_tags"].feature.names
@@ -62,7 +62,7 @@ Unless you are really familiar with this dataset, the `ner_tags` aren't too info
 ]
 ```
 
-The `ner_tag` describes what the entity is, such as a corporation, location or person. The letter that prefixes each `ner_tag` indicates the position of the entity the token belongs to:
+The `ner_tag` describes the entity, such as a corporation, location, or person. The letter that prefixes each `ner_tag` indicates the position of the entity the token belongs to:
 
 - `B-` indicates the beginning of an entity.
 - `I-` indicates a token is contained inside the same entity (e.g., the `State` token is a part of an entity like
@@ -88,14 +88,14 @@ Since the input has already been split into words, set `is_split_into_words=True
 ['[CLS]', '@', 'paul', '##walk', 'it', "'", 's', 'the', 'view', 'from', 'where', 'i', "'", 'm', 'living', 'for', 'two', 'weeks', '.', 'empire', 'state', 'building', '=', 'es', '##b', '.', 'pretty', 'bad', 'storm', 'here', 'last', 'evening', '.', '[SEP]']
 ```
 
-The addition of the special tokens `[CLS]` and `[SEP]` and subword tokenization creates a mismatch between the input and labels. There are more words than labels now because a single word corresponding to a single label may now be split into two subwords. You will need to realign the tokens and labels by:
+Adding the special tokens `[CLS]` and `[SEP]` and subword tokenization creates a mismatch between the input and labels. There are more words than labels now because a single word corresponding to a single label may be split into two subwords. You will need to realign the tokens and labels by:
 
 1. Mapping all tokens to their corresponding word with the `word_ids` method.
 2. Assigning the label `-100` to the special tokens `[CLS]` and `[SEP]` so the PyTorch loss function ignores
    them.
 3. Only labeling the first token of a given word. Assign `-100` to the other subtokens from the same word.
 
-Here is how you can create a function that will realign the tokens and labels:
+Here is how you can create a function to realign the tokens and labels:
 
 ```py
 >>> def tokenize_and_align_labels(examples):
@@ -120,7 +120,7 @@ Here is how you can create a function that will realign the tokens and labels:
 ...     return tokenized_inputs
 ```
 
-Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) function to tokenize and align the labels over the entire dataset:
+Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) function to tokenize and align the labels over the entire dataset. You can also set `batched=True` to process multiple elements of the dataset at once for faster preprocessing. You can also set `batched=True` to process multiple elements of the dataset at once for faster preprocessing:
 
 ```py
 >>> tokenized_wnut = wnut.map(tokenize_and_align_labels, batched=True)
@@ -136,7 +136,7 @@ Finally, use [`DataCollatorForTokenClassification`] to pad your text and labels 
 
 ## Fine-tune with `Trainer`
 
-Load DistilBERT with [`AutoModelForTokenClassification`] along with the number of expected labels:
+Load [DistilBERT](https://huggingface.co/distilbert-base-uncased) with [`AutoModelForTokenClassification`] along with the number of expected labels:
 
 ```py
 >>> from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
@@ -177,7 +177,7 @@ At this point, only three steps remain:
 
 To fine-tune a model in TensorFlow is just as easy, with only a few differences.
 
-Start by batching the processed examples - text and labels - together with dynamic padding using the [`DataCollatorForTokenClassification`] function. Make sure you set `return_tensors="tf"` to return `tf.Tensor` outputs instead of PyTorch tensors!
+Start by batching the processed examples - text and labels - together with dynamic padding using the [`DataCollatorForTokenClassification`] function. Make sure you set `return_tensors="tf"` to return `tf.Tensor`'s instead of PyTorch tensors!
 
 ```py
 >>> from transformers import DataCollatorForTokenClassification
@@ -185,7 +185,7 @@ Start by batching the processed examples - text and labels - together with dynam
 >>> data_collator = DataCollatorForTokenClassification(tokenizer, return_tensors="tf")
 ```
 
-Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset), and specify inputs and labels in the `columns` argument:
+Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and labels in the `columns` argument:
 
 ```py
 >>> tf_train_set = tokenized_wnut["train"].to_tf_dataset(
