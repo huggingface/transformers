@@ -73,11 +73,16 @@ def export_pytorch(
     Export a PyTorch model to an ONNX Intermediate Representation (IR)
 
     Args:
-        tokenizer: The pipeline's tokenizer.
-        model: The Pytorch (PreTrainedModel) model that will be converted.
-        config: The ONNX config object associated to the model that will be converted.
-        opset: The actual version of the ONNX operator set to use
-        output: Path where will be stored the generated ONNX model
+        tokenizer ([`PreTrainedTokenizer`]):
+            The tokenizer used for encoding the data.
+        model ([`PreTrainedModel`]):
+            The model to export.
+        config ([`~onnx.config.OnnxConfig`]):
+            The ONNX configuration associated with the exported model.
+        opset (`int`):
+            The version of the ONNX operator set to use.
+        output (`Path`):
+            Directory to store the exported ONNX model.
 
     Returns:
         (matched_inputs, onnx_outputs): The ordered list of the model's inputs, ONNX Config's list of outputs.
