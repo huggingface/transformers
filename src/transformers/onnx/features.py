@@ -7,6 +7,7 @@ from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
+from ..models.electra import ElectraOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.ibert import IBertOnnxConfig
@@ -208,6 +209,15 @@ class FeaturesManager:
             "sequence-classification",
             "token-classification",
             onnx_config_cls=LayoutLMOnnxConfig,
+        ),
+        "electra": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=ElectraOnnxConfig,
         ),
     }
 
