@@ -251,7 +251,8 @@ class FlaxGenerationMixin:
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
+            if model_kwargs.get('encoder_outputs') is None:
+                model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
             # prepare decoder_input_ids for generation
             input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
