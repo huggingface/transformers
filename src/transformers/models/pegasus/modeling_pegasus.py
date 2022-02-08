@@ -17,7 +17,6 @@
 import copy
 import math
 import random
-import warnings
 from typing import Optional, Tuple
 
 import numpy as np
@@ -1383,7 +1382,7 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
 
         if labels is not None:
             if use_cache:
-                warnings.warn("The `use_cache` argument is changed to `False` since `labels` is provided.")
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
             if decoder_input_ids is None:
                 decoder_input_ids = shift_tokens_right(
