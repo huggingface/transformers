@@ -764,8 +764,31 @@ class TFGenerationMixin:
             cur_len < max_length
         ), f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
 
-        if num_beams > 1:
-            output = self._generate_beam_search(
+        if num_beams == 1:
+            return self._generate_no_beam_search(
+                input_ids,
+                cur_len=cur_len,
+                max_length=max_length,
+                min_length=min_length,
+                do_sample=do_sample,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                bad_words_ids=bad_words_ids,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+                batch_size=effective_batch_size,
+                vocab_size=vocab_size,
+                encoder_outputs=encoder_outputs,
+                attention_mask=attention_mask,
+                use_cache=use_cache,
+                return_dict_in_generate=return_dict_in_generate,
+                **model_kwargs,
+            )
+        else:
+            return self._generate_beam_search(
                 input_ids,
                 cur_len=cur_len,
                 max_length=max_length,
@@ -793,31 +816,6 @@ class TFGenerationMixin:
                 return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
             )
-        else:
-            output = self._generate_no_beam_search(
-                input_ids,
-                cur_len=cur_len,
-                max_length=max_length,
-                min_length=min_length,
-                do_sample=do_sample,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty,
-                no_repeat_ngram_size=no_repeat_ngram_size,
-                bad_words_ids=bad_words_ids,
-                pad_token_id=pad_token_id,
-                eos_token_id=eos_token_id,
-                batch_size=effective_batch_size,
-                vocab_size=vocab_size,
-                encoder_outputs=encoder_outputs,
-                attention_mask=attention_mask,
-                use_cache=use_cache,
-                return_dict_in_generate=return_dict_in_generate,
-                **model_kwargs,
-            )
-
-        return output
 
     def _generate_no_beam_search(
         self,
