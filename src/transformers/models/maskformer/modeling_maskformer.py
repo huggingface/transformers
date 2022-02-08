@@ -93,6 +93,17 @@ class MaskFormerPixelDecoderOutput(BaseModelOutput):
 
 
 @dataclass
+class MaskFormerOutput(ModelOutput):
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    pixel_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    transformer_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
+
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    transformer_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
 class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     """
     Base class for MaskFormer's outputs. This class adds two attributes to ModelOutput, the per queries class and mask logits.
@@ -105,6 +116,17 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
 
     class_queries_logits: torch.FloatTensor = None
     masks_queries_logits: torch.FloatTensor = None
+    auxilary_logits: torch.FloatTensor = None
+
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    pixel_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    transformer_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
+
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    transformer_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[Dict[str, torch.FloatTensor]] = None
 
 
 # copied from original implementation
@@ -604,10 +626,10 @@ class FPNModel(nn.Module):
         fpn_features: List[Tensor] = []
         last_feature: Tensor = features[-1]
         other_features: List[Tensor] = features[:-1]
-        x: Tensor = self.stem(last_feature)
+        output: Tensor = self.stem(last_feature)
         for layer, left in zip(self.layers, other_features[::-1]):
-            x = layer(x, left)
-            fpn_features.append(x)
+            x = layer(output, left)
+            fpn_features.append(output)
         return fpn_features
 
 
@@ -755,8 +777,8 @@ class MaskFormerTransformerModule(nn.Module):
             encoder_attention_mask=None,
             position_embeddings=position_embeddings,
             query_position_embeddings=queries_embeddings,
-            output_attentions=output_hidden_states,
-            output_hidden_states=True,
+            output_attentions=False,
+            output_hidden_states=output_hidden_states,
             return_dict=None,
         )
         return transformer_decoder_output
@@ -819,16 +841,6 @@ class MaskFormerPretrainedModel(PreTrainedModel):
                 nn.init.constant_(layer[0].bias, 0)
 
 
-@dataclass
-class MaskFormerOutput(BaseModelOutput):
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    pixel_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    transformer_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    transformer_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
 @add_start_docstrings(
     "The bare MaskFormer Model outputting raw hidden-states without any specific head on top.",
     MASKFORMER_START_DOCSTRING,
@@ -840,7 +852,6 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         self.transformer_module = MaskFormerTransformerModule(
             in_features=self.pixel_level_module.encoder.outputs_shapes[-1], config=config
         )
-        self.segmentation_module = MaskFormerSegmentationModule(config)
 
         self.post_init()
 
@@ -856,7 +867,7 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         self,
         pixel_values: Tensor,
         pixel_mask: Optional[Tensor] = None,
-        output_hidden_states: Option[bool] = None,
+        output_hidden_states: Option[bool] = False,
     ) -> MaskFormerOutput:
 
         if pixel_values is None:
@@ -874,72 +885,28 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         transformer_module_output: DetrDecoderOutput = self.transformer_module(image_features, output_hidden_states)
         queries: Tensor = transformer_module_output.last_hidden_state
 
-        # TODO add all the hidden_states!
         return MaskFormerOutput(
             encoder_last_hidden_state=image_features,
             pixel_decoder_last_hidden_state=pixel_embeddings,
-            transformer_last_hidden_state=queries,
+            transformer_decoder_last_hidden_state=queries,
             encoder_hidden_states=transformer_module_output.hidden_states if output_hidden_states else (),
             pixel_decoder_hidden_states=pixel_level_module_output.decoder_hidden_states
             if output_hidden_states
             else (),
-            transformer_decoder_hidden=pixel_level_module_output.decoder_hidden_states if output_hidden_states else (),
+            transformer_decoder_hidden_states=transformer_module_output.hidden_states if output_hidden_states else (),
         )
 
 
-class MaskFormerSegmentationModule(nn.Module):
+class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
     def __init__(self, config: MaskFormerConfig):
-        super().__init__()
+        super().__init__(config)
+        self.model = MaskFormerModel(config)
         hidden_size: int = config.transformer_decoder.hidden_size
         # + 1 because we add the "null" class
         self.mask_classification = config.mask_classification
         self.class_predictor = nn.Linear(hidden_size, config.num_labels + 1)
         self.mask_embedder = MaskformerMLPPredictionHead(hidden_size, hidden_size, config.mask_feature_size)
 
-    def forward(
-        self, decoder_outputs: Tuple[Tensor], pixel_embeddings: Tensor, use_auxilary_loss: bool = True
-    ) -> Dict[str, Tensor]:
-
-        # TODO add output_hidden_states
-        outputs: Dict[str, Tensor] = self.segmentation_module(queries, pixel_embeddings, self.config.use_auxilary_loss)
-
-        out: Dict[str, Tensor] = {}
-
-        # This code is a little bit cumbersome, an improvement can be to return a list of predictions. If we have auxilary loss then we are going to return more than one element in the list
-        if use_auxilary_loss:
-            stacked_decoder_outputs: Tensor = torch.stack(decoder_outputs)
-            classes: Tensor = self.class_predictor(stacked_decoder_outputs)
-            out.update({"class_queries_logits": classes[-1]})
-            # get the masks
-            mask_embeddings: Tensor = self.mask_embedder(stacked_decoder_outputs)
-            # sum up over the channels for each embedding
-            binaries_masks: Tensor = torch.einsum("lbqc,   bchw -> lbqhw", mask_embeddings, pixel_embeddings)
-            binary_masks: Tensor = binaries_masks[-1]
-            # get the auxilary predictions (one for each decoder's layer)
-            auxilary_predictions: List[str, Tensor] = []
-            # go til [:-1] because the last one is always used
-            for aux_binary_masks, aux_classes in zip(binaries_masks[:-1], classes[:-1]):
-                auxilary_predictions.append(
-                    {"masks_queries_logits": aux_binary_masks, "class_queries_logits": aux_classes}
-                )
-            out.update({"auxilary_predictions": auxilary_predictions})
-
-        else:
-            last_decoder_output: Tensor = decoder_outputs[-1]
-            classes: Tensor = self.class_predictor(last_decoder_output)
-            out.update({"class_queries_logits": classes})
-            # get the masks
-            mask_embeddings: Tensor = self.mask_embedder(last_decoder_output)
-            # sum up over the channels
-            binary_masks: Tensor = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
-        out.update({"masks_queries_logits": binary_masks})
-        return out
-
-
-class MaskFormerForInstanceSegmentation(PreTrainedModel):
-    def __init__(self, config: MaskFormerConfig):
-        super().__init__(config)
-        self.model = MaskFormerModel(config)
         losses = ["labels", "masks"]
         self.matcher = MaskFormerHungarianMatcher(
             cost_class=1.0, cost_dice=config.dice_weight, cost_mask=config.mask_weight
@@ -959,6 +926,8 @@ class MaskFormerForInstanceSegmentation(PreTrainedModel):
             losses=losses,
         )
 
+        self.post_init()
+
     def get_loss_dict(self, outputs: Dict[str, Tensor], labels: Dict[str, Tensor]) -> Dict[str, Tensor]:
         loss_dict: Dict[str, Tensor] = self.criterion(outputs, labels)
         # weight each loss by `self.weight_dict[<LOSS_NAME>]`
@@ -971,12 +940,46 @@ class MaskFormerForInstanceSegmentation(PreTrainedModel):
         # probably an awkward way to reduce it
         return torch.tensor(list(loss_dict.values()), dtype=torch.float).sum()
 
-    # TODO we are missing the labels!
-    @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=MaskFormerOutput, config_class=_CONFIG_FOR_DOC)
+    def get_logits(
+        self,
+        outputs: MaskFormerOutput,
+    ) -> Tuple[Tensor, Tensor, List[str, Tensor]]:
+        pixel_embeddings: Tensor = outputs.pixel_decoder_last_hidden_state
+        # get the auxilary predictions (one for each decoder's layer)
+        auxilary_logits: List[str, Tensor] = []
+        # This code is a little bit cumbersome, an improvement can be to return a list of predictions. If we have auxilary loss then we are going to return more than one element in the list
+        if self.config.use_auxilary_loss:
+            stacked_decoder_outputs: Tensor = torch.stack(outputs.transformer_decoder_hidden_states)
+            classes: Tensor = self.class_predictor(stacked_decoder_outputs)
+            class_queries_logits: Tensor = classes[-1]
+            # get the masks
+            mask_embeddings: Tensor = self.mask_embedder(stacked_decoder_outputs)
+            # sum up over the channels for each embedding
+            binaries_masks: Tensor = torch.einsum("lbqc,   bchw -> lbqhw", mask_embeddings, pixel_embeddings)
+            masks_queries_logits: Tensor = binaries_masks[-1]
+            # go til [:-1] because the last one is always used
+            for aux_binary_masks, aux_classes in zip(binaries_masks[:-1], classes[:-1]):
+                auxilary_logits.append({"masks_queries_logits": aux_binary_masks, "class_queries_logits": aux_classes})
+
+        else:
+            transformer_decoder_hidden_states: Tensor = outputs.transformer_decoder_last_hidden_state
+            classes: Tensor = self.class_predictor(transformer_decoder_hidden_states)
+            class_queries_logits: Tensor = classes
+            # get the masks
+            mask_embeddings: Tensor = self.mask_embedder(transformer_decoder_hidden_states)
+            # sum up over the channels
+            masks_queries_logits: Tensor = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
+
+        return class_queries_logits, masks_queries_logits, auxilary_logits
+
     def forward(
-        self, pixel_values: Tensor, mask_labels: Tensor, class_labels: Tensor, pixel_mask: Optional[Tensor] = None
-    ) -> MaskFormerOutput:
+        self,
+        pixel_values: Tensor,
+        mask_labels: Optional[Tensor] = None,
+        class_labels: Optional[Tensor] = None,
+        pixel_mask: Optional[Tensor] = None,
+        output_hidden_states: Option[bool] = False,
+    ) -> MaskFormerForInstanceSegmentationOutput:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
@@ -1002,10 +1005,22 @@ class MaskFormerForInstanceSegmentation(PreTrainedModel):
         >>> bboxes = outputs.pred_boxes
         """
 
-        outputs: MaskFormerOutput = self.model(pixel_values)
+        outputs: MaskFormerOutput = self.model(pixel_values, pixel_mask, output_hidden_states)
 
-        labels: Dict[str, Tensor] = {"mask_labels": mask_labels, "class_labels": class_labels}
-        loss_dict: Dict[str, Tensor] = self.get_loss_dict(outputs, labels)
-        loss: Tensor = self.get_loss(loss_dict)
+        class_queries_logits, masks_queries_logits, auxilary_logits = self.get_logits(outputs)
 
-        return MaskFormerForInstanceSegmentationOutput(**outputs, loss_dict=loss_dict, loss=loss)
+        we_have_labels: bool = mask_labels is not None and class_labels is not None
+
+        if we_have_labels:
+            labels: Dict[str, Tensor] = {"mask_labels": mask_labels, "class_labels": class_labels}
+            loss_dict: Dict[str, Tensor] = self.get_loss_dict(outputs, labels)
+            loss: Tensor = self.get_loss(loss_dict)
+
+        return MaskFormerForInstanceSegmentationOutput(
+            **outputs,
+            class_queries_logits=class_queries_logits,
+            masks_queries_logits=masks_queries_logits,
+            auxilary_logits=auxilary_logits,
+            loss_dict=loss_dict if we_have_labels else None,
+            loss=loss if we_have_labels else None,
+        )
