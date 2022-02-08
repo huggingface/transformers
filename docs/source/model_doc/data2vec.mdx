@@ -1,4 +1,4 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -10,23 +10,34 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# data2vec
+# Data2Vec
 
 ## Overview
 
-The data2vec model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Data2Vec model was proposed in [data2vec: A General Framework for Self-supervised Learning in Speech, Vision and Language](https://scontent-sjc3-1.xx.fbcdn.net/v/t39.8562-6/271974914_483120576492438_4239522333319653600_n.pdf?_nc_cat=107&ccb=1-5&_nc_sid=ae5e01&_nc_ohc=7huShTb_QZIAX-N7SYx&_nc_ht=scontent-sjc3-1.xx&oh=00_AT_lXXL69mjqmdVWbaLh4Ro6DY17aFeO5vA9I-mIpyNieg&oe=6205C411) by Alexei Baevski, Wei-Ning Hsu, Qiantong Xu, Arun Babu, Jiatao Gu and Michael Auli.
+Data2Vec proposes a unified framework for self-supervised learning across different data modalities - text, audio and images.
+Importantly, predicted targets for pre-training are contextualized latent representations of the inputs, rather than modality-specific, context-independent targets.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*While the general idea of self-supervised learning is identical across modalities, the actual algorithms and
+objectives differ widely because they were developed with a single modality in mind. To get us closer to general
+self-supervised learning, we present data2vec, a framework that uses the same learning method for either speech,
+NLP or computer vision. The core idea is to predict latent representations of the full input data based on a
+masked view of the input in a selfdistillation setup using a standard Transformer architecture.
+Instead of predicting modality-specific targets such as words, visual tokens or units of human speech which
+are local in nature, data2vec predicts contextualized latent representations that contain information from
+the entire input. Experiments on the major benchmarks of speech recognition, image classification, and
+natural language understanding demonstrate a new state of the art or competitive performance to predominant approaches.
+Models and code are available at www.github.com/pytorch/fairseq/tree/master/examples/data2vec.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- This implementation has a shared encoder for all different modalities and different pre-processors for each modality.
+  For example, in the case of text, preprocessing is identical to [`RobertaModel`], including tokenization.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [edugp](https://huggingface.co/edugp).
+The original code can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/data2vec).
 
 
 ## Data2VecConfig
