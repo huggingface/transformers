@@ -35,10 +35,8 @@ if is_torch_available():
     _import_structure["modeling_poolformer"] = [
         "POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PoolFormerForImageClassification",
-        "PoolFormerLayer",
         "PoolFormerModel",
         "PoolFormerPreTrainedModel",
-        "load_tf_weights_in_poolformer",
     ]
 
 
@@ -52,11 +50,9 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_poolformer import (
             POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PoolFormerLayer,
             PoolFormerModel,
             PoolFormerPreTrainedModel,
             PoolFormerForImageClassification,
-            load_tf_weights_in_poolformer,
         )
 
 

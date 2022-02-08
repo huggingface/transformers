@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    poolformer,
     albert,
     auto,
     bart,
@@ -84,6 +83,7 @@ from . import (
     pegasus,
     perceiver,
     phobert,
+    poolformer,
     prophetnet,
     qdqbert,
     rag,

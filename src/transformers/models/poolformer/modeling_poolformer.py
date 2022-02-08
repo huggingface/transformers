@@ -52,7 +52,7 @@ def to_2tuple(x):
 @dataclass
 class PoolFormerModelOutput(ModelOutput):
     """
-    Class for PoolFormer model's outputs, with hidden states.
+    Class for PoolFormerModel's outputs, with potential hidden states.
 
     Args:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
@@ -69,7 +69,7 @@ class PoolFormerModelOutput(ModelOutput):
 @dataclass
 class PoolFormerClassifierOutput(ModelOutput):
     """
-    Output class for PoolFormer Classifier's Output
+    Class for PoolformerForImageClassification's outputs.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
@@ -78,7 +78,7 @@ class PoolFormerClassifierOutput(ModelOutput):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            of shape :obj:`(batch_size, num_channels, height, width)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
     """
@@ -104,7 +104,7 @@ def drop_path(x, drop_prob: float = 0., training: bool = False):
     return output
 
 
-class DropPath(nn.Module):
+class PoolFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob=None):
@@ -168,7 +168,7 @@ class PoolFormerOutput(nn.Module):
         super().__init__()
         self.conv1 = nn.Conv2d(hidden_size, intermediate_size, 1)
         self.conv2 = nn.Conv2d(intermediate_size, hidden_size, 1)
-        self.drop = DropPath(dropout_prob)
+        self.drop = PoolFormerDropPath(dropout_prob)
         if isinstance(config.hidden_act, str):
             self.act_fn = ACT2FN[config.hidden_act]
         else:
@@ -194,7 +194,7 @@ class PoolFormerLayer(nn.Module):
         self.after_norm = PoolFormerGroupNorm(num_channels)
         
         # Useful for training neural nets
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = PoolFormerDropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
             self.layer_scale_1 = nn.Parameter(
@@ -325,10 +325,6 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -362,42 +358,35 @@ POOLFORMER_INPUTS_DOCSTRING = r"""
     POOLFORMER_START_DOCSTRING,
 )
 class PoolFormerModel(PoolFormerPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
         self.encoder = PoolFormerEncoder(config)
 
-        self.pooler = None
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    # @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     @add_start_docstrings_to_model_forward(POOLFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PoolFormerModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+    def forward(self, pixel_values=None, output_hidden_states=None, return_dict=None):
         r"""
         Returns:
 
         Examples::
 
-            >>> from transformers import ViTFeatureExtractor, PoolFormerModel
+            >>> from transformers import PoolFormerFeatureExtractor, PoolFormerModel
             >>> from PIL import Image
             >>> import requests
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
-            >>> model = PoolFormerModel.from_pretrained('seaailabs/poolformer_s12')
+            >>> feature_extractor = PoolFormerFeatureExtractor()
+            >>> model = PoolFormerModel.from_pretrained('sail/poolformer_s12')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -417,10 +406,9 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
+        
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return (sequence_output, None) + encoder_outputs[1:]
 
         return PoolFormerModelOutput(
             last_hidden_state=sequence_output,

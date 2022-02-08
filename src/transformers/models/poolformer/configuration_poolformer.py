@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Sea AI Labs and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Sea AI Labs and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -29,7 +28,7 @@ POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class PoolFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.PoolFormerModel`.
-    It is used to instantiate an PoolFormer model according to the specified arguments, defining the model
+    It is used to instantiate a PoolFormer model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
     the PoolFormer `sail/poolformer_s12 <https://huggingface.co/sail/poolformer_s12>`__ architecture.
 
