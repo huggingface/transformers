@@ -62,15 +62,15 @@ def check_onnxruntime_requirements(minimum_version: Version):
         )
 
 
-def export(
+def export_pytorch(
     tokenizer: PreTrainedTokenizer,
-    model: Union[PreTrainedModel, TFPreTrainedModel],
+    model: PreTrainedModel,
     config: OnnxConfig,
     opset: int,
     output: Path,
 ) -> Tuple[List[str], List[str]]:
     """
-    Export a PyTorch or TensorFlow model to ONNX Intermediate Representation (IR)
+    Export a PyTorch model to an ONNX Intermediate Representation (IR)
 
     Args:
         tokenizer:
@@ -82,14 +82,8 @@ def export(
     Returns:
 
     """
-
-    if not (is_torch_available() or is_tf_available()):
-        raise ImportError(
-            "Cannot convert because neither PyTorch nor TensorFlow are not installed. Please install torch or tensorflow first."
-        )
-
     if is_torch_available():
-        from ..file_utils import torch_version
+        from transformers.file_utils import torch_version
 
         if not is_torch_onnx_dict_inputs_support_available():
             raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
@@ -152,33 +146,87 @@ def export(
 
             config.restore_ops()
 
-        return matched_inputs, onnx_outputs
-    else:
-        import tensorflow as tf
+    return matched_inputs, onnx_outputs
 
-        import onnx
-        import tf2onnx
 
-        model.config.return_dict = True
+def export_tensorflow(
+    tokenizer: PreTrainedTokenizer,
+    model: TFPreTrainedModel,
+    config: OnnxConfig,
+    opset: int,
+    output: Path,
+) -> Tuple[List[str], List[str]]:
+    """
+    Export a Tensorflow model to an ONNX Intermediate Representation (IR)
 
-        # Check if we need to override certain configuration item
-        if config.values_override is not None:
-            logger.info(f"Overriding {len(config.values_override)} configuration item(s)")
-            for override_config_key, override_config_value in config.values_override.items():
-                logger.info(f"\t- {override_config_key} -> {override_config_value}")
-                setattr(model.config, override_config_key, override_config_value)
+    Args:
+        tokenizer:
+        model:
+        config:
+        opset:
+        output:
 
-        # Ensure inputs match
-        model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.TENSORFLOW)
-        inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
-        onnx_outputs = list(config.outputs.keys())
+    Returns:
 
-        input_signature = [tf.TensorSpec.from_tensor(tensor, name=key) for key, tensor in model_inputs.items()]
-        onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature, opset=opset)
-        onnx.save(onnx_model, output.as_posix())
-        config.restore_ops()
+    """
+    import tensorflow as tf
 
-        return matched_inputs, onnx_outputs
+    import onnx
+    import tf2onnx
+
+    model.config.return_dict = True
+
+    # Check if we need to override certain configuration item
+    if config.values_override is not None:
+        logger.info(f"Overriding {len(config.values_override)} configuration item(s)")
+        for override_config_key, override_config_value in config.values_override.items():
+            logger.info(f"\t- {override_config_key} -> {override_config_value}")
+            setattr(model.config, override_config_key, override_config_value)
+
+    # Ensure inputs match
+    model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.TENSORFLOW)
+    inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
+    onnx_outputs = list(config.outputs.keys())
+
+    input_signature = [tf.TensorSpec.from_tensor(tensor, name=key) for key, tensor in model_inputs.items()]
+    onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature, opset=opset)
+    onnx.save(onnx_model, output.as_posix())
+    config.restore_ops()
+
+    return matched_inputs, onnx_outputs
+
+
+def export(
+    tokenizer: PreTrainedTokenizer,
+    model: Union[PreTrainedModel, TFPreTrainedModel],
+    config: OnnxConfig,
+    opset: int,
+    output: Path,
+) -> Tuple[List[str], List[str]]:
+    """
+    Export a PyTorch or TensorFlow model to ONNX Intermediate Representation (IR)
+
+    Args:
+        tokenizer:
+        model:
+        config:
+        opset:
+        output:
+
+    Returns:
+
+    """
+
+    if not (is_torch_available() or is_tf_available()):
+        raise ImportError(
+            "Cannot convert because neither PyTorch nor TensorFlow are not installed. "
+            "Please install torch or tensorflow first."
+        )
+
+    if is_torch_available():
+        return export_pytorch(tokenizer, model, config, opset, output)
+    elif is_tf_available():
+        return export_tensorflow(tokenizer, model, config, opset, output)
 
 
 def validate_model_outputs(
