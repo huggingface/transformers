@@ -88,12 +88,6 @@ def export_pytorch(
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
-    if is_torch_available():
-        from transformers.file_utils import torch_version
-
-        if not is_torch_onnx_dict_inputs_support_available():
-            raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
-
     if issubclass(type(model), PreTrainedModel):
         import torch
         from torch.onnx import export
@@ -239,6 +233,12 @@ def export(
             "Cannot convert because neither PyTorch nor TensorFlow are not installed. "
             "Please install torch or tensorflow first."
         )
+
+    if is_torch_available():
+        from transformers.file_utils import torch_version
+
+        if not is_torch_onnx_dict_inputs_support_available():
+            raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
     if is_torch_available() and issubclass(type(model), PreTrainedModel):
         return export_pytorch(tokenizer, model, config, opset, output)
