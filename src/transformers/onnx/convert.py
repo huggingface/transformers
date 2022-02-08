@@ -73,14 +73,14 @@ def export_pytorch(
     Export a PyTorch model to an ONNX Intermediate Representation (IR)
 
     Args:
-        tokenizer:
-        model:
-        config:
-        opset:
-        output:
+        tokenizer: The pipeline's tokenizer.
+        model: The Pytorch (PreTrainedModel) model that will be converted.
+        config: The ONNX config object associated to the model that will be converted.
+        opset: The actual version of the ONNX operator set to use
+        output: Path where will be stored the generated ONNX model
 
     Returns:
-
+        (matched_inputs, onnx_outputs): The ordered list of the model's inputs, ONNX Config's list of outputs.
     """
     if is_torch_available():
         from transformers.file_utils import torch_version
@@ -157,17 +157,17 @@ def export_tensorflow(
     output: Path,
 ) -> Tuple[List[str], List[str]]:
     """
-    Export a Tensorflow model to an ONNX Intermediate Representation (IR)
+    Export a TensorFlow model to an ONNX Intermediate Representation (IR)
 
     Args:
-        tokenizer:
-        model:
-        config:
-        opset:
-        output:
+        tokenizer: The pipeline's tokenizer.
+        model: The TensorFlow (TFPreTrainedModel) model that will be converted.
+        config: The ONNX config object associated to the model that will be converted.
+        opset: The actual version of the ONNX operator set to use
+        output: Path where will be stored the generated ONNX model
 
     Returns:
-
+        (matched_inputs, onnx_outputs): The ordered list of the model's inputs, ONNX Config's list of outputs.
     """
     import tensorflow as tf
 
@@ -204,19 +204,18 @@ def export(
     output: Path,
 ) -> Tuple[List[str], List[str]]:
     """
-    Export a PyTorch or TensorFlow model to ONNX Intermediate Representation (IR)
+    Export a Pytorch or TensorFlow model to an ONNX Intermediate Representation (IR)
 
     Args:
-        tokenizer:
-        model:
-        config:
-        opset:
-        output:
+        tokenizer: The pipeline's tokenizer.
+        model: The Pytorch or TensorFlow (PreTrainedModel or TFPreTrainedModel) model that will be converted.
+        config: The ONNX config object associated to the model that will be converted.
+        opset: The actual version of the ONNX operator set to use
+        output: Path where will be stored the generated ONNX model
 
     Returns:
-
+        (matched_inputs, onnx_outputs): The ordered list of the model's inputs, ONNX Config's list of outputs.
     """
-
     if not (is_torch_available() or is_tf_available()):
         raise ImportError(
             "Cannot convert because neither PyTorch nor TensorFlow are not installed. "
