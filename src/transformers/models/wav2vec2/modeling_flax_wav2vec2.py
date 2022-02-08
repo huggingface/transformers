@@ -910,7 +910,11 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
     def _get_feat_extract_output_lengths(
         self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None
     ):
+<<<<<<< HEAD
         return self.module._get_feat_extract_output_lengths(input_lengths)
+=======
+        return self.module._get_feat_extract_output_lengths(input_lengths, add_adapter=add_adapter)
+>>>>>>> 521bd9d66a742ff75a16007363780b1045e8175c
 
 
 class FlaxWav2Vec2Module(nn.Module):
@@ -1103,7 +1107,11 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
         return FlaxCausalLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
     def _get_feat_extract_output_lengths(
+<<<<<<< HEAD
         self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None,
+=======
+        self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None
+>>>>>>> 521bd9d66a742ff75a16007363780b1045e8175c
     ):
         """
         Computes the output length of the convolutional layers
