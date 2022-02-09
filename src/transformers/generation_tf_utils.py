@@ -194,6 +194,8 @@ class TFBeamSearchDecoderOnlyOutput(ModelOutput):
             `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
         attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `tf.Tensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
+        hidden_states (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
     """
