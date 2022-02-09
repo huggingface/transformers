@@ -48,9 +48,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "EncoderDecoderConfig"
 
 DEPRECATION_WARNING = (
-    "Version v4.12.0 introduces a better way to train encoder-decoder models by computing the loss inside the "
+    "Version v4.17.0 introduces a better way to train encoder-decoder models by computing the loss inside the "
     "encoder-decoder framework rather than in the decoder itself. You may observe training discrepancies if fine-tuning "
-    "a model trained with versions anterior to 4.12.0. The decoder_input_ids are now created based on the labels, no "
+    "a model trained with versions anterior to 4.17.0. The decoder_input_ids are now created based on the labels, no "
     "need to pass them yourself anymore."
 )
 
