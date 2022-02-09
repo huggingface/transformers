@@ -318,7 +318,7 @@ class ConstrainedBeamSearchTester:
             beam_hyp.add(input_ids[beam_idx], -10.0 + float(beam_idx))
 
         # -10.0 is removed => -9.0 is worst score
-        self.parent.assertAlmostEqual(beam_hyp.worst_score, -9.0 / (self.sequence_length ** beam_hyp.length_penalty))
+        self.parent.assertAlmostEqual(beam_hyp.worst_score, -9.0 / (self.sequence_length**beam_hyp.length_penalty))
 
         # -5.0 is better than worst score => should not be finished
         self.parent.assertFalse(beam_hyp.is_done(-5.0, self.sequence_length))
