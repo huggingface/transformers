@@ -287,7 +287,10 @@ class PoolFormerEncoder(nn.Module):
         self.block = nn.ModuleList(blocks)
 
     def forward(
-        self, pixel_values, output_hidden_states=False, return_dict=True,
+        self,
+        pixel_values,
+        output_hidden_states=False,
+        return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
 
@@ -307,7 +310,10 @@ class PoolFormerEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return PoolFormerModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states,)
+        return PoolFormerModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+        )
 
 
 class PoolFormerPreTrainedModel(PreTrainedModel):
@@ -391,14 +397,19 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         encoder_outputs = self.encoder(
-            pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict,
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
 
         if not return_dict:
             return (sequence_output, None) + encoder_outputs[1:]
 
-        return PoolFormerModelOutput(last_hidden_state=sequence_output, hidden_states=encoder_outputs.hidden_states,)
+        return PoolFormerModelOutput(
+            last_hidden_state=sequence_output,
+            hidden_states=encoder_outputs.hidden_states,
+        )
 
 
 class PoolFormerFinalPooler(nn.Module):
@@ -442,7 +453,11 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
     def forward(
-        self, pixel_values=None, labels=None, output_hidden_states=None, return_dict=None,
+        self,
+        pixel_values=None,
+        labels=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -452,7 +467,11 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.poolformer(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict,)
+        outputs = self.poolformer(
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         sequence_output = outputs[0]
 
@@ -472,4 +491,8 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return PoolFormerClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states,)
+        return PoolFormerClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+        )
