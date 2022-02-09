@@ -14,8 +14,7 @@
 # limitations under the License.
 """ TF 2.0 ConvNext model."""
 
-import collections.abc
-import math
+
 from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -30,8 +29,6 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     get_initializer,
     input_processing,
-    keras_serializable,
-    shape_list,
 )
 from ...utils import logging
 from .configuration_convnext import ConvNextConfig
