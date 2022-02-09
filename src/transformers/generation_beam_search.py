@@ -85,41 +85,6 @@ FINALIZE_INPUTS_DOCSTRING = r"""
 """
 
 
-CONSTRAINT_PROCESS_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size * num_beams, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using any class inheriting from [`PreTrainedTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        next_scores (`torch.FloatTensor` of shape `(batch_size, 2 * num_beams)`):
-            Current scores of the top `2 * num_beams` non-finished beam hypotheses.
-        next_tokens (`torch.LongTensor` of shape `(batch_size, 2 * num_beams)`):
-            `input_ids` of the tokens corresponding to the top `2 * num_beams` non-finished beam hypotheses.
-        next_indices (`torch.LongTensor` of shape `(batch_size, 2 * num_beams)`):
-            Beam indices indicating to which beam hypothesis the `next_tokens` correspond.
-        scores_for_all_vocab (`torch.FloatTensor` of shape `(batch_size * num_beams, sequence_length)`):
-            The scores of all tokens in the vocabulary for each of the beam hypotheses.
-        pad_token_id (`int`, *optional*):
-            The id of the *padding* token.
-        eos_token_id (`int`, *optional*):
-            The id of the *end-of-sequence* token.
-
-    Return:
-        `UserDict`: A dictionary composed of the fields as defined above:
-
-            - **next_beam_scores** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Updated scores of all
-              non-finished beams.
-            - **next_beam_tokens** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Next tokens to be added
-              to the non-finished beam_hypotheses.
-            - **next_beam_indices** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Beam indices
-              indicating to which beam the next tokens shall be added.
-
-"""
-
-
 class BeamScorer(ABC):
     """
     Abstract base class for all beam scorers that are used for [`~PreTrainedModel.beam_search`] and
@@ -481,7 +446,6 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         new_state = new_state.reset(sequence)
         return new_state.completed
 
-    @add_start_docstrings(CONSTRAINT_PROCESS_INPUTS_DOCSTRING)
     def process(
         self,
         input_ids: torch.LongTensor,
@@ -492,6 +456,41 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
     ) -> Tuple[torch.Tensor]:
+        r"""
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size * num_beams, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+
+                Indices can be obtained using any class inheriting from [`PreTrainedTokenizer`]. See
+                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+
+                [What are input IDs?](../glossary#input-ids)
+            next_scores (`torch.FloatTensor` of shape `(batch_size, 2 * num_beams)`):
+                Current scores of the top `2 * num_beams` non-finished beam hypotheses.
+            next_tokens (`torch.LongTensor` of shape `(batch_size, 2 * num_beams)`):
+                `input_ids` of the tokens corresponding to the top `2 * num_beams` non-finished beam hypotheses.
+            next_indices (`torch.LongTensor` of shape `(batch_size, 2 * num_beams)`):
+                Beam indices indicating to which beam hypothesis the `next_tokens` correspond.
+            scores_for_all_vocab (`torch.FloatTensor` of shape `(batch_size * num_beams, sequence_length)`):
+                The scores of all tokens in the vocabulary for each of the beam hypotheses.
+            pad_token_id (`int`, *optional*):
+                The id of the *padding* token.
+            eos_token_id (`int`, *optional*):
+                The id of the *end-of-sequence* token.
+
+        Return:
+            `UserDict`: A dictionary composed of the fields as defined above:
+
+                - **next_beam_scores** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Updated scores of
+                  all
+                non-finished beams.
+                - **next_beam_tokens** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Next tokens to be
+                  added
+                to the non-finished beam_hypotheses.
+                - **next_beam_indices** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Beam indices
+                indicating to which beam the next tokens shall be added.
+        """
+
         cur_len = input_ids.shape[-1]
         batch_size = len(self._beam_hyps)
         if not (batch_size == (input_ids.shape[0] // self.group_size)):
@@ -596,19 +595,16 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         sent_beam_indices: torch.LongTensor,
         push_progress: bool = False,
     ):
-        # from transformers import GPT2Tokenizer
-        # tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        """
-        sent_beam_tokens are the next {num_beams} number of tokens that are under consideration for this beam
-        (candidate next tokens)
+        # sent_beam_tokens are the next {num_beams} number of tokens that are under consideration for this beam
+        # (candidate next tokens)
 
-        1. Adding "advance_tokens"
-            using ConstraintStateList.advance(), we propose new tokens to be added into this "candidate list" that will
-            advance us in fulfilling the constraints.
+        # 1. Adding "advance_tokens"
+        #     using ConstraintStateList.advance(), we propose new tokens to be added into this "candidate list" that will
+        #     advance us in fulfilling the constraints.
 
-        2. Selecting best candidates such that we end up with highest probable candidates
-            that fulfill our constraints.
-        """
+        # 2. Selecting best candidates such that we end up with highest probable candidates
+        #     that fulfill our constraints.
+
         orig_len = sent_beam_indices.size(0)
         device = sent_beam_indices.device
 

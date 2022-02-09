@@ -851,7 +851,6 @@ class GenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-
             inputs (`torch.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length,
             feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
