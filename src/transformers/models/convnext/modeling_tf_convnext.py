@@ -134,7 +134,7 @@ class TFConvNextLayer(tf.keras.layers.Layer):
         )
         self.drop_path = TFConvNextDropPath(drop_path) if drop_path > 0.0 else tf.identity
 
-    def call(self, hidden_states):
+    def call(self, hidden_states, training=False):
         input = hidden_states
         x = self.dwconv(hidden_states)
         x = self.layernorm(x)
@@ -145,7 +145,7 @@ class TFConvNextLayer(tf.keras.layers.Layer):
         if self.layer_scale_parameter is not None:
             x = self.layer_scale_parameter * x
 
-        x = input + self.drop_path(x)
+        x = input + self.drop_path(x, training=training)
         return x
 
 
