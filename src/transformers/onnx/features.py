@@ -7,11 +7,11 @@ from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
+from ..models.electra import ElectraOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.ibert import IBertOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
-from ..models.longformer import LongformerOnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
@@ -154,15 +154,6 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=DistilBertOnnxConfig,
         ),
-        "longformer": supported_features_mapping(
-            "default",
-            "masked-lm",
-            "sequence-classification",
-            # "multiple-choice",
-            "token-classification",
-            "question-answering",
-            onnx_config_cls=LongformerOnnxConfig,
-        ),
         "marian": supported_features_mapping(
             "default",
             "default-with-past",
@@ -218,6 +209,15 @@ class FeaturesManager:
             "sequence-classification",
             "token-classification",
             onnx_config_cls=LayoutLMOnnxConfig,
+        ),
+        "electra": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "causal-lm",
+            "sequence-classification",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls=ElectraOnnxConfig,
         ),
     }
 

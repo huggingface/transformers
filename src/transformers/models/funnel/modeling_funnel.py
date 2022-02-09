@@ -278,7 +278,7 @@ class FunnelAttentionStructure(nn.Module):
 
                 # Second type
                 pos = pooled_pos
-                stride = 2 ** block_index
+                stride = 2**block_index
                 rel_pos = self.relative_pos(pos, stride)
 
                 rel_pos = rel_pos[:, None] + zero_offset
@@ -297,7 +297,7 @@ class FunnelAttentionStructure(nn.Module):
             # the previous block of the 1st real block. Since the 1st real
             # block always has position 1, the position of the previous block
             # will be at `1 - 2 ** block_index`.
-            cls_pos = pos_id.new_tensor([-(2 ** block_index) + 1])
+            cls_pos = pos_id.new_tensor([-(2**block_index) + 1])
             pooled_pos_id = pos_id[1:-1] if self.config.truncate_seq else pos_id[1:]
             return torch.cat([cls_pos, pooled_pos_id[::2]], 0)
         else:
@@ -454,7 +454,7 @@ class FunnelRelMultiheadAttention(nn.Module):
 
         self.post_proj = nn.Linear(n_head * d_head, d_model)
         self.layer_norm = nn.LayerNorm(d_model, eps=config.layer_norm_eps)
-        self.scale = 1.0 / (d_head ** 0.5)
+        self.scale = 1.0 / (d_head**0.5)
 
     def relative_positional_attention(self, position_embeds, q_head, context_len, cls_mask=None):
         """Relative attention score for the positional encodings"""
@@ -1469,16 +1469,7 @@ class FunnelForTokenClassification(FunnelPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            # Only keep active parts of the loss
-            if attention_mask is not None:
-                active_loss = attention_mask.view(-1) == 1
-                active_logits = logits.view(-1, self.num_labels)
-                active_labels = torch.where(
-                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
-                )
-                loss = loss_fct(active_logits, active_labels)
-            else:
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[1:]

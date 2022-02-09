@@ -20,6 +20,7 @@ import random
 from typing import Optional, Tuple
 
 import torch
+import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -213,7 +214,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
             position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
         # expand embeddings if needed
-        max_pos = self.padding_idx + 1 + seq_len
+        max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
@@ -260,7 +261,7 @@ class XGLMAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)

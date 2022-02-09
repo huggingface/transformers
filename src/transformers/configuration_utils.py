@@ -21,13 +21,14 @@ import json
 import os
 import re
 import warnings
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from packaging import version
 
 from requests import HTTPError
 
 from . import __version__
+from .dynamic_module_utils import custom_object_save
 from .file_utils import (
     CONFIG_NAME,
     EntryNotFoundError,
@@ -238,6 +239,7 @@ class PretrainedConfig(PushToHubMixin):
     model_type: str = ""
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
+    _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
         if key in super().__getattribute__("attribute_map"):
@@ -280,6 +282,7 @@ class PretrainedConfig(PushToHubMixin):
         self.temperature = kwargs.pop("temperature", 1.0)
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
+        self.typical_p = kwargs.pop("typical_p", 1.0)
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
@@ -366,7 +369,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @property
     def name_or_path(self) -> str:
-        return self._name_or_path
+        return getattr(self, "_name_or_path", None)
 
     @name_or_path.setter
     def name_or_path(self, value):
@@ -423,6 +426,12 @@ class PretrainedConfig(PushToHubMixin):
             repo = self._create_or_get_repo(save_directory, **kwargs)
 
         os.makedirs(save_directory, exist_ok=True)
+
+        # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self._auto_class is not None:
+            custom_object_save(self, save_directory, config=self)
+
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 
@@ -509,7 +518,7 @@ class PretrainedConfig(PushToHubMixin):
         ```"""
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warn(
+            logger.warning(
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
@@ -753,6 +762,8 @@ class PretrainedConfig(PushToHubMixin):
         output = copy.deepcopy(self.__dict__)
         if hasattr(self.__class__, "model_type"):
             output["model_type"] = self.__class__.model_type
+        if "_auto_class" in output:
+            del output["_auto_class"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
@@ -849,6 +860,26 @@ class PretrainedConfig(PushToHubMixin):
         """
         if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="AutoConfig"):
+        """
+        Register this class with a given auto class. This should only be used for custom configurations as the ones in
+        the library are already mapped with `AutoConfig`.
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"AutoConfig"`):
+                The auto class to register this new configuration with.
+        """
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
+        cls._auto_class = auto_class
 
 
 def get_configuration_file(configuration_files: List[str]) -> str:

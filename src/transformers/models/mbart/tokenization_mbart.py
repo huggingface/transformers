@@ -110,7 +110,7 @@ class MBartTokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            tokenizer_file=tokenizer_file,
+            tokenizer_file=None,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             additional_special_tokens=additional_special_tokens,

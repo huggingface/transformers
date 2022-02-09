@@ -134,7 +134,7 @@ class ViTMAEModelTester:
         patch_size = to_2tuple(self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         expected_seq_len = num_patches
-        expected_num_channels = self.patch_size ** 2 * self.num_channels
+        expected_num_channels = self.patch_size**2 * self.num_channels
         self.parent.assertEqual(result.logits.shape, (self.batch_size, expected_seq_len, expected_num_channels))
 
     def prepare_config_and_inputs_for_common(self):

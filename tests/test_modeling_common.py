@@ -20,9 +20,11 @@ import json
 import os
 import os.path
 import random
+import sys
 import tempfile
 import unittest
 import warnings
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -55,10 +57,16 @@ from transformers.testing_utils import (
 )
 
 
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
+
+from test_module.custom_configuration import CustomConfig, NoSuperInitConfig  # noqa E402
+
+
 if is_torch_available():
     import torch
     from torch import nn
 
+    from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
@@ -108,8 +116,7 @@ class ModelTesterMixin:
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
-    fx_ready_model_classes = ()
-    fx_dynamic_ready_model_classes = ()
+    fx_compatible = False
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
@@ -658,19 +665,14 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
-    def test_torch_fx_dynamic_axes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self._create_and_check_torch_fx_tracing(config, inputs_dict, dynamic_axes=True)
-
-    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False, dynamic_axes=False):
-        if not is_torch_fx_available():
+    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
+        if not is_torch_fx_available() or not self.fx_compatible:
             return
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
 
-        model_classes = self.fx_ready_model_classes if not dynamic_axes else self.fx_dynamic_ready_model_classes
-        for model_class in model_classes:
+        for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()
@@ -679,8 +681,6 @@ class ModelTesterMixin:
             try:
                 if model.config.is_encoder_decoder:
                     model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                    input_ids = inputs["input_ids"]
-                    decoder_attention_mask = inputs["decoder_attention_mask"]
                     labels = inputs.get("labels", None)
                     input_names = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask"]
                     if labels is not None:
@@ -689,17 +689,7 @@ class ModelTesterMixin:
 
                     model_output = model(**filtered_inputs)
 
-                    batch_size = input_ids.shape[0]
-                    encoder_sequence_length = input_ids.shape[1]
-                    decoder_sequence_length = decoder_attention_mask.shape[1]
-
-                    traced_model = symbolic_trace(
-                        model,
-                        input_names,
-                        batch_size=batch_size if not dynamic_axes else -1,
-                        sequence_length=[encoder_sequence_length, decoder_sequence_length] if not dynamic_axes else -1,
-                    )
-
+                    traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
                 else:
                     input_names = ["input_ids", "attention_mask", "token_type_ids"]
@@ -721,23 +711,12 @@ class ModelTesterMixin:
                     model_output = model(**filtered_inputs)
 
                     rank = len(input_ids.shape)
-                    if rank == 2:
-                        batch_size, sequence_length = input_ids.shape
-                        num_choices = -1
-                    elif rank == 3:
-                        batch_size, num_choices, sequence_length = input_ids.shape
-                    else:
+                    if rank not in [2, 3]:
                         raise NotImplementedError(
                             f"symbolic_trace automatic parameters inference not implemented for input of rank {rank}."
                         )
 
-                    traced_model = symbolic_trace(
-                        model,
-                        input_names,
-                        batch_size=batch_size if not dynamic_axes else -1,
-                        sequence_length=sequence_length if not dynamic_axes else -1,
-                        num_choices=num_choices,
-                    )
+                    traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
 
             except RuntimeError:
@@ -1499,6 +1478,8 @@ class ModelTesterMixin:
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
                 elif key == "pixel_values":
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                elif key == "input_features":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
                 else:
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.int32)
 
@@ -1549,6 +1530,8 @@ class ModelTesterMixin:
                 elif key == "input_values":
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
                 elif key == "pixel_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                elif key == "input_features":
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
                 else:
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.int32)
@@ -2108,60 +2091,14 @@ class ModelUtilsTest(TestCasePlus):
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
 
+    def test_no_super_init_config_and_model(self):
+        config = NoSuperInitConfig(attribute=32)
+        model = NoSuperInitModel(config)
 
-class FakeConfig(PretrainedConfig):
-    def __init__(self, attribute=1, **kwargs):
-        self.attribute = attribute
-        super().__init__(**kwargs)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
 
-
-# Make sure this is synchronized with the config above.
-FAKE_CONFIG_CODE = """
-from transformers import PretrainedConfig
-
-class FakeConfig(PretrainedConfig):
-    def __init__(self, attribute=1, **kwargs):
-        self.attribute = attribute
-        super().__init__(**kwargs)
-"""
-
-
-if is_torch_available():
-
-    class FakeModel(PreTrainedModel):
-        config_class = BertConfig
-        base_model_prefix = "fake"
-
-        def __init__(self, config):
-            super().__init__(config)
-            self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
-
-        def forward(self, x):
-            return self.linear(x)
-
-        def _init_weights(self, module):
-            pass
-
-
-# Make sure this is synchronized with the model above.
-FAKE_MODEL_CODE = """
-import torch
-from transformers import BertConfig, PreTrainedModel
-
-class FakeModel(PreTrainedModel):
-    config_class = BertConfig
-    base_model_prefix = "fake"
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
-
-    def forward(self, x):
-        return self.linear(x)
-
-    def _init_weights(self, module):
-        pass
-"""
+            model = NoSuperInitModel.from_pretrained(tmp_dir)
 
 
 @require_torch
@@ -2223,62 +2160,29 @@ class ModelPushToHubTester(unittest.TestCase):
                 self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_dynamic_model(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        config.auto_map = {"AutoModel": "modeling.FakeModel"}
-        model = FakeModel(config)
+        CustomConfig.register_for_auto_class()
+        CustomModel.register_for_auto_class()
+
+        config = CustomConfig(hidden_size=32)
+        model = CustomModel(config)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-model", use_auth_token=self._token)
             model.save_pretrained(tmp_dir)
-            with open(os.path.join(tmp_dir, "modeling.py"), "w") as f:
-                f.write(FAKE_MODEL_CODE)
+            # checks
+            self.assertDictEqual(
+                config.auto_map,
+                {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
+            )
 
             repo.push_to_hub()
 
         new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
-        # Can't make an isinstance check because the new_model is from the FakeModel class of a dynamic module
-        self.assertEqual(new_model.__class__.__name__, "FakeModel")
+        # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module
+        self.assertEqual(new_model.__class__.__name__, "CustomModel")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model")
+        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
         new_model = AutoModel.from_config(config, trust_remote_code=True)
-        self.assertEqual(new_model.__class__.__name__, "FakeModel")
-
-    def test_push_to_hub_dynamic_model_and_config(self):
-        config = FakeConfig(
-            attribute=42,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-        )
-        config.auto_map = {"AutoConfig": "configuration.FakeConfig", "AutoModel": "modeling.FakeModel"}
-        model = FakeModel(config)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-model-config", use_auth_token=self._token)
-            model.save_pretrained(tmp_dir)
-            with open(os.path.join(tmp_dir, "configuration.py"), "w") as f:
-                f.write(FAKE_CONFIG_CODE)
-            with open(os.path.join(tmp_dir, "modeling.py"), "w") as f:
-                f.write(FAKE_MODEL_CODE)
-
-            repo.push_to_hub()
-
-        new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model-config", trust_remote_code=True)
-        # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
-        self.assertEqual(new_model.config.__class__.__name__, "FakeConfig")
-        self.assertEqual(new_model.config.attribute, 42)
-
-        # Can't make an isinstance check because the new_model is from the FakeModel class of a dynamic module
-        self.assertEqual(new_model.__class__.__name__, "FakeModel")
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
-
-        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model")
-        new_model = AutoModel.from_config(config, trust_remote_code=True)
-        self.assertEqual(new_model.__class__.__name__, "FakeModel")
+        self.assertEqual(new_model.__class__.__name__, "CustomModel")
