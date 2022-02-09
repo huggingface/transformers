@@ -52,7 +52,7 @@ class Constraint(ABC):
         """
         When called, returns the token that would take this constraint one step closer to being fulfilled.
 
-        returns:
+        Return:
             token_ids(`torch.tensor`): Must be a tensor of a list of indexable tokens, not some integer.
         """
         raise NotImplementedError(
@@ -81,7 +81,7 @@ class Constraint(ABC):
         Args:
             token_id(`int`):
                 The id of a newly generated token in the beam search.
-        returns:
+        Return:
             stepped(`bool`):
                 Whether this constraint has become one step closer to being fulfuilled.
             completed(`bool`):
@@ -119,7 +119,8 @@ class Constraint(ABC):
 
         Args:
             stateful(`bool`): Whether to not only copy the constraint for new instance, but also its state.
-        Returns:
+
+        Return:
             constraint(`Constraint`): The same constraint as the one being called from.
         """
         raise NotImplementedError(
@@ -237,13 +238,13 @@ class ConstraintListState:
         """The list of tokens to generate such that we can make progress.
         By "list" we don't mean the list of token that will fully fulfill a constraint.
 
-        Given constraints c_i = {t_ij | j == # of tokens}, If we're not in the middle of progressing through a specific
-        constraint c_i, we return:
+        Given constraints `c_i = {t_ij | j == # of tokens}`, If we're not in the middle of progressing through a
+        specific constraint `c_i`, we return:
 
-            [t_k1 for k in indices of unfulfilled constraints]
+        `[t_k1 for k in indices of unfulfilled constraints]`
 
         If we are in the middle of a constraint, then we return:
-            [t_ij], where i == index of the inprogress constraint, j == the next step for the constraint.
+            `[t_ij]`, where `i` is the index of the inprogress constraint, `j` is the next step for the constraint.
 
         Though we don't care which constraint is fulfilled first, if we are in the progress of fulfilling a constraint,
         that's the only one we'll return.
