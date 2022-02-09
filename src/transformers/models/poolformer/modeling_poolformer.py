@@ -12,22 +12,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PoolFormer model. """
+""" PyTorch PoolFormer model."""
 
 
 import collections.abc
-import math
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-from torch.functional import block_diag, norm
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_poolformer import PoolFormerConfig
@@ -35,13 +38,23 @@ from .configuration_poolformer import PoolFormerConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "seaailabs/poolformer_s12"
+# General docstring
 _CONFIG_FOR_DOC = "PoolFormerConfig"
+_FEAT_EXTRACTOR_FOR_DOC = "PoolFormerFeatureExtractor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "sail/poolformer_s12"
+_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "sail/poolformer_s12"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "'Egyptian cat'"
 
 POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sail/poolformer_s12",
     # See all PoolFormer models at https://huggingface.co/models?filter=poolformer
 ]
+
 
 # Copied from transformers.models.vit.modeling_vit.to_2tuple
 def to_2tuple(x):
@@ -49,22 +62,25 @@ def to_2tuple(x):
         return x
     return (x, x)
 
+
 @dataclass
 class PoolFormerModelOutput(ModelOutput):
     """
     Class for PoolFormerModel's outputs, with potential hidden states.
 
     Args:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
     """
+
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
 
 @dataclass
 class PoolFormerClassifierOutput(ModelOutput):
@@ -72,29 +88,30 @@ class PoolFormerClassifierOutput(ModelOutput):
     Class for PoolformerForImageClassification's outputs.
 
     Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Classification (or regression if config.num_labels==1) loss.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, num_channels, height, width)`.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, num_channels, height, width)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
     """
+
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
-def drop_path(x, drop_prob: float = 0., training: bool = False):
+
+def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
+    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
+    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
+    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
     """
-    if drop_prob == 0. or not training:
+    if drop_prob == 0.0 or not training:
         return x
     keep_prob = 1 - drop_prob
     shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
@@ -117,21 +134,16 @@ class PoolFormerDropPath(nn.Module):
 
 class PoolFormerEmbeddings(nn.Module):
     """
-    Construct Patch Embeddings
+    Construct Patch Embeddings.
     """
+
     def __init__(self, hidden_size, num_channels, patch_size, stride, padding, norm_layer=None):
         super().__init__()
         patch_size = to_2tuple(patch_size)
         stride = to_2tuple(stride)
         padding = to_2tuple(padding)
 
-        self.projection = nn.Conv2d(
-            num_channels,
-            hidden_size,
-            kernel_size=patch_size,
-            stride=stride,
-            padding=padding
-        )
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=stride, padding=padding)
         self.norm = norm_layer(hidden_size) if norm_layer else nn.Identity()
 
     def forward(self, pixel_values):
@@ -142,9 +154,9 @@ class PoolFormerEmbeddings(nn.Module):
 
 class PoolFormerGroupNorm(nn.GroupNorm):
     """
-    Group Normalization with 1 group.
-    Input: tensor in shape [B, C, H, W]
+    Group Normalization with 1 group. Input: tensor in shape [B, C, H, W]
     """
+
     def __init__(self, num_channels, **kwargs):
         super().__init__(1, num_channels, **kwargs)
 
@@ -152,12 +164,7 @@ class PoolFormerGroupNorm(nn.GroupNorm):
 class PoolFormerPooling(nn.Module):
     def __init__(self, pool_size):
         super().__init__()
-        self.pool = nn.AvgPool2d(
-            pool_size,
-            stride=1, 
-            padding=pool_size//2,
-            count_include_pad=False
-        )
+        self.pool = nn.AvgPool2d(pool_size, stride=1, padding=pool_size // 2, count_include_pad=False)
 
     def forward(self, hidden_states):
         return self.pool(hidden_states) - hidden_states
@@ -173,7 +180,7 @@ class PoolFormerOutput(nn.Module):
             self.act_fn = ACT2FN[config.hidden_act]
         else:
             self.act_fn = config.hidden_act
-    
+
     def forward(self, hidden_states):
         hidden_states = self.conv1(hidden_states)
         hidden_states = self.act_fn(hidden_states)
@@ -182,6 +189,7 @@ class PoolFormerOutput(nn.Module):
         hidden_states = self.drop(hidden_states)
 
         return hidden_states
+
 
 class PoolFormerLayer(nn.Module):
     """This corresponds to the 'PoolFormerBlock' class in the original implementation."""
@@ -192,9 +200,9 @@ class PoolFormerLayer(nn.Module):
         self.output = PoolFormerOutput(config, drop_path, hidden_size, intermediate_size)
         self.before_norm = PoolFormerGroupNorm(num_channels)
         self.after_norm = PoolFormerGroupNorm(num_channels)
-        
+
         # Useful for training neural nets
-        self.drop_path = PoolFormerDropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = PoolFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
             self.layer_scale_1 = nn.Parameter(
@@ -219,7 +227,7 @@ class PoolFormerLayer(nn.Module):
 
             outputs = (output,) + outputs
             return outputs
-        
+
         else:
             pooling_output = self.drop_path(self.pooling(self.before_norm(hidden_states)))
             # First residual connection
@@ -229,7 +237,7 @@ class PoolFormerLayer(nn.Module):
             # Second residual connection inside the PoolFormerOutput block
             layer_output = self.drop_path(self.output(self.after_norm(hidden_states)))
             output = hidden_states + layer_output
-            
+
             outputs = (output,) + outputs
             return outputs
 
@@ -295,10 +303,10 @@ class PoolFormerEncoder(nn.Module):
             for i, blk in enumerate(block_layer):
                 layer_outputs = blk(hidden_states)
                 hidden_states = layer_outputs[0]
-            
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-        
+
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
@@ -335,14 +343,14 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
 
 
 POOLFORMER_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
-        config (:class:`~transformers.PoolFormerConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+        config ([`PoolFormerConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 POOLFORMER_INPUTS_DOCSTRING = r"""
@@ -371,27 +379,15 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         return self.embeddings.patch_embeddings
 
     @add_start_docstrings_to_model_forward(POOLFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PoolFormerModelOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=PoolFormerModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     def forward(self, pixel_values=None, output_hidden_states=None, return_dict=None):
-        r"""
-        Returns:
-
-        Examples::
-
-            >>> from transformers import PoolFormerFeatureExtractor, PoolFormerModel
-            >>> from PIL import Image
-            >>> import requests
-
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
-
-            >>> feature_extractor = PoolFormerFeatureExtractor()
-            >>> model = PoolFormerModel.from_pretrained('sail/poolformer_s12')
-
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -406,7 +402,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        
+
         if not return_dict:
             return (sequence_output, None) + encoder_outputs[1:]
 
@@ -441,13 +437,21 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         # Final norm
         self.norm = PoolFormerGroupNorm(config.hidden_sizes[-1])
         # Classifier head
-        self.classifier = nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.classifier = (
+            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(POOLFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PoolFormerClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=PoolFormerClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
     def forward(
         self,
         pixel_values=None,
@@ -456,31 +460,10 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Examples::
-
-            >>> from transformers import ViTFeatureExtractor, PoolFormerForImageClassification
-            >>> from PIL import Image
-            >>> import requests
-
-            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-            >>> image = Image.open(requests.get(url, stream=True).raw)
-
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
-            >>> model = PoolFormerForImageClassification.from_pretrained('seaailabs/poolformer_s12')
-
-            >>> inputs = feature_extractor(images=image, return_tensors="pt")
-            >>> outputs = model(**inputs)
-            >>> logits = outputs.logits
-            >>> # model predicts one of the 1000 ImageNet classes
-            >>> predicted_class_idx = logits.argmax(-1).item()
-            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -491,7 +474,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        
+
         logits = self.classifier(self.norm(sequence_output).mean([-2, -1]))
 
         loss = None

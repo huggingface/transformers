@@ -14,28 +14,23 @@
 # limitations under the License.
 """Convert PoolFormer checkpoints from the original repository. URL: https://github.com/sail-sg/poolformer"""
 
-import math
 import argparse
 import json
 from collections import OrderedDict
 from pathlib import Path
-from stat import ST_SIZE
 
 import torch
 from PIL import Image
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import (
-    PoolFormerConfig,
-    PoolFormerForImageClassification,
-    PoolFormerFeatureExtractor,
-)
+from transformers import PoolFormerConfig, PoolFormerFeatureExtractor, PoolFormerForImageClassification
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
 
 def replace_key_with_offset(key, offset, original_name, new_name):
     """
@@ -43,15 +38,13 @@ def replace_key_with_offset(key, offset, original_name, new_name):
     """
     to_find = original_name.split(".")[0]
     key_list = key.split(".")
-    orig_block_num = int(key_list[key_list.index(to_find)-2])
-    layer_num = int(key_list[key_list.index(to_find)-1])
+    orig_block_num = int(key_list[key_list.index(to_find) - 2])
+    layer_num = int(key_list[key_list.index(to_find) - 1])
     new_block_num = orig_block_num - offset
-    
-    key = key.replace(
-        f"{orig_block_num}.{layer_num}.{original_name}", 
-        f"block.{new_block_num}.{layer_num}.{new_name}"
-    )
+
+    key = key.replace(f"{orig_block_num}.{layer_num}.{original_name}", f"block.{new_block_num}.{layer_num}.{new_name}")
     return key
+
 
 def rename_keys(state_dict):
     new_state_dict = OrderedDict()
@@ -63,7 +56,7 @@ def rename_keys(state_dict):
             # Works for the first embedding as well as the internal embedding layers
             if key.endswith("bias") and "patch_embed" not in key:
                 patch_emb_offset += 1
-            to_replace = key[:key.find("proj")]
+            to_replace = key[: key.find("proj")]
             key = key.replace(to_replace, f"patch_embeddings.{total_embed_found}.")
             key = key.replace("proj", "projection")
             if key.endswith("bias"):
@@ -87,12 +80,14 @@ def rename_keys(state_dict):
         new_state_dict[key] = value
     return new_state_dict
 
+
 # We will verify our results on a COCO image
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
 
     return image
+
 
 @torch.no_grad()
 def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path):
@@ -119,41 +114,35 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
         config.depths = [2, 2, 6, 2]
         config.hidden_sizes = [64, 128, 320, 512]
         config.mlp_ratio = 4.0
-        crop_pcent = 0.9
+        crop_pct = 0.9
     elif size == "s24":
         config.depths = [4, 4, 12, 4]
         config.hidden_sizes = [64, 128, 320, 512]
         config.mlp_ratio = 4.0
-        crop_pcent = 0.9
+        crop_pct = 0.9
     elif size == "s36":
         config.depths = [6, 6, 18, 6]
         config.hidden_sizes = [64, 128, 320, 512]
         config.mlp_ratio = 4.0
         config.layer_scale_init_value = 1e-6
-        crop_pcent = 0.9
+        crop_pct = 0.9
     elif size == "m36":
         config.depths = [6, 6, 18, 6]
         config.hidden_sizes = [96, 192, 384, 768]
         config.mlp_ratio = 4.0
         config.layer_scale_init_value = 1e-6
-        crop_pcent = 0.95
+        crop_pct = 0.95
     elif size == "m48":
         config.depths = [8, 8, 24, 8]
         config.hidden_sizes = [96, 192, 384, 768]
         config.mlp_ratio = 4.0
         config.layer_scale_init_value = 1e-6
-        crop_pcent = 0.95
+        crop_pct = 0.95
     else:
         raise ValueError(f"Size {size} not supported")
 
-    print(size)
-    # load feature extractor (only resize + normalize)
-    img_size = (224, 224)
-    feature_extractor = DeiTFeatureExtractor(
-        size=img_size,
-        resample=Image.BILINEAR,
-        crop_size=224,
-    )
+    # load feature extractor
+    feature_extractor = PoolFormerFeatureExtractor(crop_pct=crop_pct)
 
     # Prepare image
     image = prepare_img()
@@ -166,31 +155,31 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
 
     # rename keys
     state_dict = rename_keys(state_dict)
-    
+
     # create HuggingFace model and load state dict
     model = PoolFormerForImageClassification(config)
     model.load_state_dict(state_dict)
     model.eval()
 
     # Define feature extractor
-    feature_extractor = PoolFormerFeatureExtractor(size=size)
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    feature_extractor = PoolFormerFeatureExtractor(crop_pct=crop_pct)
+    pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
 
     # forward pass
     outputs = model(pixel_values)
     logits = outputs.logits
 
-    # define expected logit slices for different models 
+    # define expected logit slices for different models
     if size == "s12":
         expected_slice = torch.tensor([-0.3045, -0.6758, -0.4869])
     elif size == "s24":
-        expected_slice = torch.tensor([ 0.4402, -0.1374, -0.8045])
+        expected_slice = torch.tensor([0.4402, -0.1374, -0.8045])
     elif size == "s36":
         expected_slice = torch.tensor([-0.6080, -0.5133, -0.5898])
     elif size == "m36":
-        expected_slice = torch.tensor([ 0.3952,  0.2263, -1.2668])
+        expected_slice = torch.tensor([0.3952, 0.2263, -1.2668])
     elif size == "m48":
-        expected_slice = torch.tensor([ 0.1167, -0.0656, -0.3423])
+        expected_slice = torch.tensor([0.1167, -0.0656, -0.3423])
     else:
         raise ValueError(f"Size {size} not supported")
 

@@ -161,7 +161,6 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
-
         ("yoso", "YosoForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
         ("qdqbert", "QDQBertForMaskedLM"),
@@ -277,6 +276,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ),
         ("swin", "SwinForImageClassification"),
         ("convnext", "ConvNextForImageClassification"),
+        ("poolformer", "PoolFormerForImageClassification"),
     ]
 )
 
@@ -352,7 +352,6 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
-
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("m2m_100", "M2M100ForConditionalGeneration"),
         ("led", "LEDForConditionalGeneration"),

@@ -513,7 +513,6 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
-    _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.clip"].append("CLIPProcessor")
@@ -525,6 +524,7 @@ if is_vision_available():
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
     _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
+    _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
     _import_structure["models.vilt"].append("ViltFeatureExtractor")
     _import_structure["models.vilt"].append("ViltProcessor")
@@ -1219,9 +1219,9 @@ if is_torch_available():
     _import_structure["models.poolformer"].extend(
         [
             "POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PoolFormerForImageClassification",
             "PoolFormerModel",
             "PoolFormerPreTrainedModel",
-            "PoolFormerForImageClassification",
         ]
     )
     _import_structure["models.prophetnet"].extend(
@@ -2491,9 +2491,9 @@ if TYPE_CHECKING:
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
-    from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
+    from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
@@ -3286,9 +3286,9 @@ if TYPE_CHECKING:
         )
         from .models.poolformer import (
             POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PoolFormerForImageClassification,
             PoolFormerModel,
             PoolFormerPreTrainedModel,
-            PoolFormerForImageClassification,
         )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -17,8 +17,7 @@
 
 import inspect
 import unittest
-
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
 from transformers import is_torch_available, is_vision_available
 from transformers.models.auto import get_values
@@ -31,12 +30,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MODEL_MAPPING,
-        PoolFormerConfig,
-        PoolFormerForImageClassification,
-        PoolFormerModel,
-    )
+    from transformers import MODEL_MAPPING, PoolFormerConfig, PoolFormerForImageClassification, PoolFormerModel
     from transformers.models.poolformer.modeling_poolformer import POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 

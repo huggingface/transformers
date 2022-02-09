@@ -14,7 +14,6 @@
 # limitations under the License.
 """Feature extractor class for PoolFormer."""
 
-from email.policy import default
 import math
 from typing import Optional, Union
 
@@ -45,17 +44,18 @@ class PoolFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
     Args:
         do_resize_and_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether to resize and center crop the input to a certain `size`.
+            Whether to resize the shortest edge of the image and center crop the input to a certain `size`.
         size (`int` or `Tuple(int)`, *optional*, defaults to 224):
-            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize_and_center_crop` is
-            set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
+            Center crop the input to the given size. If a tuple is provided, it should be (width, height). If only an
+            integer is provided, then the input will be center cropped to (size, size). Only has an effect if
+            `do_resize_and_center_crop` is set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
-            if `do_resize` is set to `True`.
+            if `do_resize_and_center_crop` is set to `True`.
         crop_pct (`float`, *optional*, defaults to `0.9`):
-            The percentage of the image to crop from the center.
+            The percentage of the image to crop from the center. Only has an effect if `do_resize_and_center_crop` is
+            set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with `image_mean` and `image_std`.
         image_mean (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
@@ -70,7 +70,7 @@ class PoolFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self,
         do_resize_and_center_crop=True,
         size=224,
-        resample=Image.BILINEAR,
+        resample=Image.BICUBIC,
         crop_pct=0.9,
         do_normalize=True,
         image_mean=None,
@@ -144,18 +144,24 @@ class PoolFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             images = [images]
 
         # transformations (resizing + center cropping + normalization)
-        if self.do_resize_and_center_crop and self.size is not None:
+        if self.do_resize_and_center_crop and self.size is not None and self.crop_pct is not None:
             if isinstance(self.size, (tuple, list)):
                 assert len(self.size) == 2
                 if self.size[-1] == self.size[-2]:
-                    # fall-back to older behaviour so Resize scales to shortest edge if target is square
                     scale_size = int(math.floor(self.size[0] / self.crop_pct))
                 else:
                     scale_size = tuple([int(x / self.crop_pct) for x in self.size])
             else:
                 scale_size = int(math.floor(self.size / self.crop_pct))
 
-            images = [self.resize(image=image, size=scale_size, resample=self.resample, default_to_square=False) for image in images]
+            # resize shortest edge of the image
+            images = [
+                self.resize(image=image, size=scale_size, resample=self.resample, default_to_square=False)
+                for image in images
+            ]
+            # center crop
+            images = [self.center_crop(image, size=self.size) for image in images]
+
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
