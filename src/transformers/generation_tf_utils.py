@@ -544,6 +544,38 @@ class TFGenerationMixin:
             input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids
         )  # generate sequences without allowing bad_words to be generated
         ```"""
+        num_beams = num_beams if num_beams is not None else self.config.num_beams
+        do_sample = do_sample if do_sample is not None else self.config.do_sample
+
+        is_greedy_gen_mode = num_beams == 1 and do_sample is False
+
+        if is_greedy_gen_mode:
+            return self._generate(
+                input_ids=input_ids,
+                max_length=max_length,
+                min_length=min_length,
+                do_sample=do_sample,
+                early_stopping=early_stopping,
+                num_beams=num_beams,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                bad_words_ids=bad_words_ids,
+                bos_token_id=bos_token_id,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+                length_penalty=length_penalty,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                num_return_sequences=num_return_sequences,
+                attention_mask=attention_mask,
+                decoder_start_token_id=decoder_start_token_id,
+                use_cache=use_cache,
+                output_scores=output_scores,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict_in_generate=return_dict_in_generate,
+            )
 
         # We cannot generate if the model does not have a LM head
         if self.get_output_embeddings() is None:
@@ -554,12 +586,11 @@ class TFGenerationMixin:
 
         max_length = max_length if max_length is not None else self.config.max_length
         min_length = min_length if min_length is not None else self.config.min_length
-        do_sample = do_sample if do_sample is not None else self.config.do_sample
         early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
-        num_beams = num_beams if num_beams is not None else self.config.num_beams
         temperature = temperature if temperature is not None else self.config.temperature
         top_k = top_k if top_k is not None else self.config.top_k
         top_p = top_p if top_p is not None else self.config.top_p
+
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
@@ -1699,3 +1730,441 @@ class BeamHypotheses(object):
             cur_score = best_sum_logprobs / cur_len ** self.length_penalty
             ret = self.worst_score >= cur_score
             return ret
+
+    def _generate(
+        self,
+        input_ids=None,
+        max_length=None,
+        min_length=None,
+        do_sample=None,
+        early_stopping=None,
+        num_beams=None,
+        temperature=None,
+        top_k=None,
+        top_p=None,
+        repetition_penalty=None,
+        bad_words_ids=None,
+        bos_token_id=None,
+        pad_token_id=None,
+        eos_token_id=None,
+        length_penalty=None,
+        no_repeat_ngram_size=None,
+        num_return_sequences=None,
+        attention_mask=None,
+        decoder_start_token_id=None,
+        use_cache=None,
+        output_scores=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict_in_generate=None,
+        forced_bos_token_id=None,
+        forced_eos_token_id=None,
+        **model_kwargs,
+    ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
+        r"""
+        Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
+        beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
+
+        Adapted in part from [Facebook's XLM beam search
+        code](https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529).
+
+        Apart from `input_ids` and `attention_mask`, all the arguments below will default to the value of the attribute
+        of the same name inside the [`PretrainedConfig`] of the model. The default values indicated are the default
+        values of those config.
+
+        Most of these parameters are explained in more detail in [this blog
+        post](https://huggingface.co/blog/how-to-generate).
+
+        Parameters:
+
+            input_ids (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
+                The sequence used as a prompt for the generation. If `None` the method initializes it with
+                `bos_token_id` and a batch size of 1.
+            max_length (`int`, *optional*, defaults to 20):
+                The maximum length of the sequence to be generated.
+            min_length (`int`, *optional*, defaults to 10):
+                The minimum length of the sequence to be generated.
+            do_sample (`bool`, *optional*, defaults to `False`):
+                Whether or not to use sampling ; use greedy decoding otherwise.
+            early_stopping (`bool`, *optional*, defaults to `False`):
+                Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
+            num_beams (`int`, *optional*, defaults to 1):
+                Number of beams for beam search. 1 means no beam search.
+            temperature (`float`, *optional*, defaults to 1.0):
+                The value used to module the next token probabilities.
+            top_k (`int`, *optional*, defaults to 50):
+                The number of highest probability vocabulary tokens to keep for top-k-filtering.
+            top_p (`float`, *optional*, defaults to 1.0):
+                If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or higher
+                are kept for generation.
+            repetition_penalty (`float`, *optional*, defaults to 1.0):
+                The parameter for repetition penalty. 1.0 means no penalty. See [this
+                paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
+            pad_token_id (`int`, *optional*):
+                The id of the *padding* token.
+            bos_token_id (`int`, *optional*):
+                The id of the *beginning-of-sequence* token.
+            eos_token_id (`int`, *optional*):
+                The id of the *end-of-sequence* token.
+            length_penalty (`float`, *optional*, defaults to 1.0):
+                Exponential penalty to the length. 1.0 means no penalty.
+
+                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
+                order to encourage the model to produce longer sequences.
+            no_repeat_ngram_size (`int`, *optional*, defaults to 0):
+                If set to int > 0, all ngrams of that size can only occur once.
+            bad_words_ids(`List[int]`, *optional*):
+                List of token ids that are not allowed to be generated. In order to get the tokens of the words that
+                should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
+            num_return_sequences(`int`, *optional*, defaults to 1):
+                The number of independently computed returned sequences for each element in the batch.
+            attention_mask (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values are in `[0, 1]`, 1 for tokens
+                that are not masked, and 0 for masked tokens.
+
+                If not provided, will default to a tensor the same shape as `input_ids` that masks the pad token.
+
+                [What are attention masks?](../glossary#attention-mask)
+            decoder_start_token_id (`int`, *optional*):
+                If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
+            use_cache: (`bool`, *optional*, defaults to `True`):
+                Whether or not the model should use the past last key/values attentions (if applicable to the model) to
+                speed up decoding.
+            output_attentions (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more details.
+            output_hidden_states (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more details.
+            output_scores (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
+            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            forced_bos_token_id (`int`, *optional*):
+                The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
+                for multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be
+                the target language token.
+            forced_eos_token_id (`int`, *optional*):
+                The id of the token to force as the last generated token when `max_length` is reached.
+            model_specific_kwargs:
+                Additional model specific kwargs will be forwarded to the `forward` function of the model.
+
+        Return:
+            [`~file_utils.ModelOutput`] or `tf.Tensor`: A [`~file_utils.ModelOutput`] (if
+            `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a `tf.Tensor`.
+
+                If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
+                [`~file_utils.ModelOutput`] types are:
+
+                    - [`~generation_utils.TFGreedySearchDecoderOnlyOutput`],
+                    - [`~generation_utils.TFSampleDecoderOnlyOutput`],
+                    - [`~generation_utils.TFBeamSearchDecoderOnlyOutput`],
+                    - [`~generation_utils.TFBeamSampleDecoderOnlyOutput`]
+
+                If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
+                [`~file_utils.ModelOutput`] types are:
+
+                    - [`~generation_utils.TFGreedySearchEncoderDecoderOutput`],
+                    - [`~generation_utils.TFSampleEncoderDecoderOutput`],
+                    - [`~generation_utils.TFBeamSearchEncoderDecoderOutput`],
+                    - [`~generation_utils.TFBeamSampleEncoderDecoderOutput`]
+
+        Examples:
+
+        ```python
+        tokenizer = AutoTokenizer.from_pretrained("distilgpt2")  # Initialize tokenizer
+        model = TFAutoModelWithLMHead.from_pretrained(
+            "distilgpt2"
+        )  # Download model and configuration from huggingface.co and cache.
+        outputs = model.generate(max_length=40)  # do greedy decoding
+        print(f"Generated: {tokenizer.decode(outputs[0], skip_special_tokens=True)}")
+
+        tokenizer = AutoTokenizer.from_pretrained("openai-gpt")  # Initialize tokenizer
+        model = TFAutoModelWithLMHead.from_pretrained(
+            "openai-gpt"
+        )  # Download model and configuration from huggingface.co and cache.
+        input_context = "The dog"
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
+        outputs = model.generate(
+            input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5
+        )  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
+        for i in range(3):  #  3 output sequences were generated
+            print(f"Generated {i}: {tokenizer.decode(outputs[i], skip_special_tokens=True)}")
+
+        tokenizer = AutoTokenizer.from_pretrained("distilgpt2")  # Initialize tokenizer
+        model = TFAutoModelWithLMHead.from_pretrained(
+            "distilgpt2"
+        )  # Download model and configuration from huggingface.co and cache.
+        input_context = "The dog"
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
+        outputs = model.generate(
+            input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3, do_sample=True
+        )  # generate 3 candidates using sampling
+        for i in range(3):  #  3 output sequences were generated
+            print(f"Generated {i}: {tokenizer.decode(outputs[i], skip_special_tokens=True)}")
+
+        tokenizer = AutoTokenizer.from_pretrained("ctrl")  # Initialize tokenizer
+        model = TFAutoModelWithLMHead.from_pretrained(
+            "ctrl"
+        )  # Download model and configuration from huggingface.co and cache.
+        input_context = "Legal My neighbor is"  # "Legal" is one of the control codes for ctrl
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
+        outputs = model.generate(
+            input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2
+        )  # generate sequences
+        print(f"Generated: {tokenizer.decode(outputs[0], skip_special_tokens=True)}")
+
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")  # Initialize tokenizer
+        model = TFAutoModelWithLMHead.from_pretrained(
+            "gpt2"
+        )  # Download model and configuration from huggingface.co and cache.
+        input_context = "My cute dog"
+        bad_words_ids = [
+            tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ["idiot", "stupid", "shut up"]
+        ]
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
+        outputs = model.generate(
+            input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids
+        )  # generate sequences without allowing bad_words to be generated
+        ```"""
+
+        # We cannot generate if the model does not have a LM head
+        if self.get_output_embeddings() is None:
+            raise AttributeError(
+                "You tried to generate sequences with a model that does not have a LM Head. "
+                "Please use another model class (e.g. `TFOpenAIGPTLMHeadModel`, `TFXLNetLMHeadModel`, `TFGPT2LMHeadModel`, `TFCTRLLMHeadModel`, `TFT5ForConditionalGeneration`, `TFTransfoXLLMHeadModel`)"
+            )
+
+        num_beams = num_beams if num_beams is not None else self.config.num_beams
+        do_sample = do_sample if do_sample is not None else self.config.do_sample
+        max_length = max_length if max_length is not None else self.config.max_length
+        min_length = min_length if min_length is not None else self.config.min_length
+        early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
+        temperature = temperature if temperature is not None else self.config.temperature
+        top_k = top_k if top_k is not None else self.config.top_k
+        top_p = top_p if top_p is not None else self.config.top_p
+
+        repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
+        no_repeat_ngram_size = (
+            no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
+        )
+        bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
+        num_return_sequences = (
+            num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+        )
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
+        )
+        forced_bos_token_id = (
+            forced_bos_token_id if forced_bos_token_id is not None else self.config.forced_bos_token_id
+        )
+        forced_eos_token_id = (
+            forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
+        )
+
+        output_scores = output_scores if output_scores is not None else self.config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict_in_generate = (
+            return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
+        )
+
+        model_kwargs["output_scores"] = output_scores
+        model_kwargs["output_attentions"] = output_attentions
+        model_kwargs["output_hidden_states"] = output_hidden_states
+
+        if self.config.is_encoder_decoder:
+            model_kwargs["encoder_attentions"] = None
+            model_kwargs["encoder_hidden_states"] = None
+
+        if input_ids is not None:
+            batch_size = shape_list(input_ids)[0]  # overridden by the input batch_size
+        else:
+            batch_size = 1
+
+        assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictly positive integer."
+        assert isinstance(min_length, int) and min_length >= 0, "`min_length` should be a positive integer."
+        assert isinstance(do_sample, bool), "`do_sample` should be a boolean."
+        assert isinstance(early_stopping, bool), "`early_stopping` should be a boolean."
+        assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictly positive integer."
+        assert temperature > 0, "`temperature` should be strictly positive."
+        assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
+        assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
+        assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
+        assert input_ids is not None or (
+            isinstance(bos_token_id, int) and bos_token_id >= 0
+        ), "If input_ids is not defined, `bos_token_id` should be a positive integer."
+        assert pad_token_id is None or (
+            isinstance(pad_token_id, int) and (pad_token_id >= 0)
+        ), "`pad_token_id` should be a positive integer."
+        assert (eos_token_id is None) or (
+            isinstance(eos_token_id, int) and (eos_token_id >= 0)
+        ), "`eos_token_id` should be a positive integer."
+        assert length_penalty > 0, "`length_penalty` should be strictly positive."
+        assert (
+            isinstance(num_return_sequences, int) and num_return_sequences > 0
+        ), "`num_return_sequences` should be a strictly positive integer."
+        assert (
+            bad_words_ids is None or isinstance(bad_words_ids, list) and isinstance(bad_words_ids[0], list)
+        ), "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
+
+        # This block corresponds to the following line in `generation_utils`:
+        #   "input_ids = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))"
+        # with the following differences:
+        #   1. In PT, `generate()`'s `model_kwargs` can accept `encoder_outputs`, but not the case in TF.
+        #   2. There is no shape checking in PT.
+        # In both PT/TF, if `input_ids` is `None`, we try to create it as it is for a text model.
+        if input_ids is None:
+            assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
+                "you should either supply a context to complete as `input_ids` input "
+                "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
+            )
+            input_ids = tf.fill((batch_size, 1), bos_token_id)
+
+        # not allow to duplicate outputs when greedy decoding
+        if do_sample is False:
+            if num_beams == 1:
+                # no_beam_search greedy generation conditions
+                assert (
+                    num_return_sequences == 1
+                ), "Greedy decoding will always produce the same output for num_beams == 1 and num_return_sequences > 1. Please set num_return_sequences = 1"
+
+            else:
+                # beam_search greedy generation conditions
+                assert (
+                    num_beams >= num_return_sequences
+                ), "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams >= num_return_sequences"
+
+        # create attention mask if necessary
+        # TODO (PVP): this should later be handled by the forward fn() in each model in the future see PR 3140
+        if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids.numpy()):
+            attention_mask = tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
+        elif attention_mask is None:
+            attention_mask = tf.ones_like(input_ids)
+
+        if pad_token_id is None and eos_token_id is not None:
+            logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
+            pad_token_id = eos_token_id
+
+        # current position and vocab size
+        cur_len = shape_list(input_ids)[1]  # unused
+        vocab_size = getattr(self.config, "vocab_size", None)
+        if vocab_size is None and self.config.is_encoder_decoder:
+            decoder_config = getattr(self.config, "decoder", None)
+            if decoder_config is not None:
+                vocab_size = getattr(self.config.decoder, "vocab_size", None)
+
+        # set effective batch size and effective batch multiplier according to do_sample
+        if do_sample:
+            effective_batch_size = batch_size * num_return_sequences
+            effective_batch_mult = num_return_sequences
+        else:
+            effective_batch_size = batch_size
+            effective_batch_mult = 1
+
+        if self.config.is_encoder_decoder:
+            if decoder_start_token_id is None:
+                decoder_start_token_id = bos_token_id
+
+            assert (
+                decoder_start_token_id is not None
+            ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
+            assert hasattr(self, "get_encoder"), f"{self} should have a 'get_encoder' function defined"
+            assert callable(self.get_encoder), f"{self.get_encoder} should be a method"
+
+            # get encoder and store encoder outputs
+            encoder = self.get_encoder()
+
+            encoder_kwargs = {
+                "attention_mask": attention_mask,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict_in_generate,
+            }
+
+            # vision models don't use `attention_mask`.
+            signature = dict(inspect.signature(encoder.call).parameters)
+            if "attention_mask" not in signature:
+                encoder_kwargs.pop("attention_mask")
+
+            encoder_outputs = encoder(input_ids, **encoder_kwargs)
+            if return_dict_in_generate:
+                if output_attentions:
+                    model_kwargs["encoder_attentions"] = encoder_outputs.attentions
+                if output_hidden_states:
+                    model_kwargs["encoder_hidden_states"] = encoder_outputs.hidden_states
+
+        # The condition `len(shape_list(input_ids)) == 2` is to make this block treats only text inputs.
+        # (vision inputs might occur when the model is an encoder-decoder model)
+        # Expand input ids if num_beams > 1 or num_return_sequences > 1
+        if len(shape_list(input_ids)) == 2 and (num_return_sequences > 1 or num_beams > 1):
+            input_ids_len = shape_list(input_ids)[-1]
+            input_ids = tf.broadcast_to(
+                tf.expand_dims(input_ids, 1), (batch_size, effective_batch_mult * num_beams, input_ids_len)
+            )
+            attention_mask = tf.broadcast_to(
+                tf.expand_dims(attention_mask, 1), (batch_size, effective_batch_mult * num_beams, input_ids_len)
+            )
+            input_ids = tf.reshape(
+                input_ids, (effective_batch_size * num_beams, input_ids_len)
+            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
+            attention_mask = tf.reshape(
+                attention_mask, (effective_batch_size * num_beams, input_ids_len)
+            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
+
+        if self.config.is_encoder_decoder:
+
+            # create empty decoder_input_ids
+            input_ids = (
+                tf.ones(
+                    (effective_batch_size * num_beams, 1),
+                    dtype=tf.int32,
+                )
+                * decoder_start_token_id
+            )
+            cur_len = 1
+
+            assert (
+                batch_size == encoder_outputs[0].shape[0]
+            ), f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[0]} "
+
+            # expand batch_idx to assign correct encoder output for expanded input_ids (due to num_beams > 1 and num_return_sequences > 1)
+            expanded_batch_idxs = tf.reshape(
+                tf.repeat(tf.expand_dims(tf.range(batch_size), -1), repeats=num_beams * effective_batch_mult, axis=1),
+                shape=(-1,),
+            )
+            # expand encoder_outputs
+            encoder_outputs = (tf.gather(encoder_outputs[0], expanded_batch_idxs, axis=0),)
+        else:
+            encoder_outputs = None
+            cur_len = shape_list(input_ids)[-1]
+
+        assert (
+            cur_len < max_length
+        ), f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
+
+        is_greedy_gen_mode = (num_beams == 1) and do_sample is False
+
+        if is_greedy_gen_mode:
+            if num_return_sequences > 1:
+                raise ValueError(
+                    f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
+                )
+
+            # 10. run greedy search
+            return self.greedy_search(
+                input_ids,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+                output_scores=output_scores,
+                return_dict_in_generate=return_dict_in_generate,
+                **model_kwargs,
+            )
