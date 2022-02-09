@@ -131,10 +131,10 @@ def bytes_to_unicode():
     )
     cs = bs[:]
     n = 0
-    for b in range(2 ** 8):
+    for b in range(2**8):
         if b not in bs:
             bs.append(b)
-            cs.append(2 ** 8 + n)
+            cs.append(2**8 + n)
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
@@ -223,7 +223,7 @@ class TapexTokenizer(PreTrainedTokenizer):
     Construct a TAPEX tokenizer. Based on byte-level Byte-Pair-Encoding (BPE).
 
     This tokenizer can be used to flatten one or more table(s) and concatenate them with one or more related sentences
-    to be used by TAPEX models. The format that the TAPEX tokenizer creates is the following:
+    to be used by TAPEX models. The format that the TAPEX tokenizer creates for each table-sentence pair is the following:
 
     sentence col: col1 | col2 | col 3 row 1 : val1 | val2 | val3 row 2 : ...
 
