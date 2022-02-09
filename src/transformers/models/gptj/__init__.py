@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_torch_available
+from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -32,6 +32,12 @@ if is_torch_available():
         "GPTJForSequenceClassification",
         "GPTJModel",
         "GPTJPreTrainedModel",
+    ]
+
+if is_tf_available():
+    _import_structure["modeling_tf_gptj"] = [
+        "TFGPTJModel",
+        "TFGPTJPreTrainedModel",
     ]
 
 if is_flax_available():
@@ -54,6 +60,9 @@ if TYPE_CHECKING:
             GPTJModel,
             GPTJPreTrainedModel,
         )
+
+    if is_tf_available():
+        from .modeling_tf_gptj import TFGPTJModel, TFGPTJPreTrainedModel
 
     if is_flax_available():
         from .modeling_flax_gptj import FlaxGPTJForCausalLM, FlaxGPTJModel, FlaxGPTJPreTrainedModel
