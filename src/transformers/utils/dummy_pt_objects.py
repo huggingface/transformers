@@ -80,6 +80,27 @@ class TextDatasetForNextSentencePrediction(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Constraint(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ConstraintListState(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PhrasalConstraint(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class BeamScorer(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -88,6 +109,13 @@ class BeamScorer(metaclass=DummyObject):
 
 
 class BeamSearchScorer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ConstrainedBeamSearchScorer(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
