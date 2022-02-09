@@ -56,6 +56,54 @@ python run_mim.py \
     --seed 1337
 ```
 
+We can also for instance replicate the pre-training of a Swin Transformer using the same architecture as used by the SimMIM authors. For this, we first create a custom configuration and save it locally:
+
+```python
+from transformers import SwinConfig
+
+IMAGE_SIZE = 192
+PATCH_SIZE = 4
+EMBED_DIM = 128
+DEPTHS = [2, 2, 18, 2]
+NUM_HEADS = [4, 8, 16, 32]
+WINDOW_SIZE = 6
+
+config = SwinConfig(image_size=IMAGE_SIZE,
+                    patch_size=PATCH_SIZE,
+                    embed_dim=EMBED_DIM,
+                    depths=DEPTHS,
+                    num_heads=NUM_HEADS,
+                    window_size=WINDOW_SIZE)
+config.save_pretrained("path_to_config")
+```
+
+Next, we can run the script by providing the path to this custom configuration (replace `path_to_config` below with your path):
+
+```bash
+!python run_mim.py \
+    --config_name_or_path path_to_config \
+    --model_type swin \
+    --output_dir ./outputs/ \
+    --overwrite_output_dir \
+    --remove_unused_columns False \
+    --label_names bool_masked_pos \
+    --do_train \
+    --do_eval \
+    --learning_rate 2e-5 \
+    --num_train_epochs 5 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
+    --logging_strategy steps \
+    --logging_steps 10 \
+    --evaluation_strategy epoch \
+    --save_strategy epoch \
+    --load_best_model_at_end True \
+    --save_total_limit 3 \
+    --seed 1337
+```
+
+This will train a Swin Transformer from scratch.
+
 ## Using your own data
 
 To use your own dataset, the training script expects the following directory structure:
