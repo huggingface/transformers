@@ -25,9 +25,9 @@ NOTE: If you encounter problems/have suggestions for improvement, open an issue 
 
 # SimMIM
 
-The `run_mim.py` script can be used to pre-train any Vision Transformer in the library (concretly, any model supported by the `AutoModelForMaskedImageModeling` API) for masked image modeling (as proposed in [SimMIM: A Simple Framework for Masked Image Modeling](https://arxiv.org/abs/2111.09886)) using PyTorch.
+The `run_mim.py` script can be used to pre-train any Transformer-based vision model in the library (concretly, any model supported by the `AutoModelForMaskedImageModeling` API) for masked image modeling (as proposed in [SimMIM: A Simple Framework for Masked Image Modeling](https://arxiv.org/abs/2111.09886)) using PyTorch.
 
-The goal for the model is to predict raw pixel values for the masked patches. The model is trained using a simple L1 loss.
+The goal for the model is to predict raw pixel values for the masked patches, using just a linear layer as prediction head. The model is trained using a simple L1 loss.
 
 ## Using datasets from 🤗 `datasets`
 
@@ -70,7 +70,7 @@ root/cat/nsdf3.png
 root/cat/[...]/asd932_.png
 ```
 
-Once you've prepared your dataset, you can can run the script like this:
+Note that you can put images in dummy subfolders, whose names will be ignored by default (as labels aren't required). You can also just place all images into a single dummy subfolder. Once you've prepared your dataset, you can run the script like this:
 
 ```bash
 python run_mim.py \

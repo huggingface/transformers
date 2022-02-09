@@ -722,7 +722,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
             self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
         elif config.decoder_type == "simmim":
             self.decoder = nn.Sequential(
-                nn.Conv2d(in_channels=config.hidden_size, out_channels=config.encoder_stride ** 2 * 3, kernel_size=1),
+                nn.Conv2d(in_channels=config.hidden_size, out_channels=config.encoder_stride**2 * 3, kernel_size=1),
                 nn.PixelShuffle(config.encoder_stride),
             )
         else:
@@ -791,7 +791,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
             # Reshape to (batch_size, num_channels, height, width)
             sequence_output = sequence_output[:, 1:]
             B, L, C = sequence_output.shape
-            H = W = int(L ** 0.5)
+            H = W = int(L**0.5)
             sequence_output = sequence_output.permute(0, 2, 1).reshape(B, C, H, W)
             # Reconstruct pixel values
             prediction_scores = self.decoder(sequence_output)

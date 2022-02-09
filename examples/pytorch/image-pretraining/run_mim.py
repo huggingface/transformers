@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,14 +41,14 @@ from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
-""" Pre-training a 🤗 Transformers model for masked image modeling.
-Any model supported by AutoModelForMaskedImageModeling can be used.
+""" Pre-training a 🤗 Transformers model for simple masked image modeling (SimMIM).
+Any model supported by the AutoModelForMaskedImageModeling API can be used.
 """
 
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.16.0.dev0")
+check_min_version("4.17.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-pretraining/requirements.txt")
 
@@ -70,6 +70,9 @@ class DataTrainingArguments:
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    )
+    image_column_name: Optional[str] = field(
+        default=None, metadata={"help": "The column name of the images in the files."}
     )
     train_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the training data."})
     validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."})
@@ -177,7 +180,7 @@ class MaskGenerator:
         self.rand_size = self.input_size // self.mask_patch_size
         self.scale = self.mask_patch_size // self.model_patch_size
 
-        self.token_count = self.rand_size ** 2
+        self.token_count = self.rand_size**2
         self.mask_count = int(np.ceil(self.token_count * self.mask_ratio))
 
     def __call__(self):
@@ -319,6 +322,20 @@ def main():
         logger.info("Training new model from scratch")
         model = AutoModelForMaskedImageModeling.from_config(config)
 
+    if training_args.do_train:
+        column_names = ds["train"].column_names
+    else:
+        column_names = ds["validation"].column_names
+
+    if data_args.image_column_name is not None:
+        image_column_name = data_args.image_column_name
+    elif "image" in column_names:
+        image_column_name = "image"
+    elif "img" in column_names:
+        image_column_name = "img"
+    else:
+        image_column_name = column_names[0]
+
     # transformations as done in original SimMIM paper
     # source: https://github.com/microsoft/SimMIM/blob/main/data/data_simmim.py
     transforms = Compose(
@@ -343,8 +360,8 @@ def main():
         """Preprocess a batch of images by applying transforms + creating a corresponding mask, indicating
         which patches to mask."""
 
-        examples["pixel_values"] = [transforms(image) for image in examples["img"]]
-        examples["mask"] = [mask_generator() for i in range(len(examples["img"]))]
+        examples["pixel_values"] = [transforms(image) for image in examples[image_column_name]]
+        examples["mask"] = [mask_generator() for i in range(len(examples[image_column_name]))]
 
         return examples
 

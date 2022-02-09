@@ -783,7 +783,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
 
         num_features = int(config.embed_dim * 2 ** (config.num_layers - 1))
         self.decoder = nn.Sequential(
-            nn.Conv2d(in_channels=num_features, out_channels=config.encoder_stride ** 2 * 3, kernel_size=1),
+            nn.Conv2d(in_channels=num_features, out_channels=config.encoder_stride**2 * 3, kernel_size=1),
             nn.PixelShuffle(config.encoder_stride),
         )
 
@@ -840,7 +840,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         # Reshape to (batch_size, num_channels, height, width)
         sequence_output = sequence_output.transpose(1, 2)
         B, C, L = sequence_output.shape
-        H = W = int(L ** 0.5)
+        H = W = int(L**0.5)
         sequence_output = sequence_output.reshape(B, C, H, W)
 
         # Reconstruct pixel values
