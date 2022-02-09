@@ -184,8 +184,10 @@ class MaskGenerator:
         self.model_patch_size = model_patch_size
         self.mask_ratio = mask_ratio
 
-        assert self.input_size % self.mask_patch_size == 0
-        assert self.mask_patch_size % self.model_patch_size == 0
+        if self.input_size % self.mask_patch_size != 0:
+            raise ValueError("Input size must be divisible by mask patch size")
+        if self.mask_patch_size % self.model_patch_size != 0:
+            raise ValueError("Mask patch size must be divisible by model patch size")
 
         self.rand_size = self.input_size // self.mask_patch_size
         self.scale = self.mask_patch_size // self.model_patch_size

@@ -23,13 +23,18 @@ This directory contains Python scripts that allow you to pre-train Transformers 
 NOTE: If you encounter problems/have suggestions for improvement, open an issue on Github and tag @NielsRogge.
 
 
-# SimMIM
+# SimMIM: A Simple Framework for Masked Image Modeling
 
 The `run_mim.py` script can be used to pre-train any Transformer-based vision model in the library (concretly, any model supported by the `AutoModelForMaskedImageModeling` API) for masked image modeling (as proposed in [SimMIM: A Simple Framework for Masked Image Modeling](https://arxiv.org/abs/2111.09886)) using PyTorch.
 
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/simmim_architecture.jpg"
+alt="drawing" width="300"/> 
+
+<small> SimMIM framework. Taken from the <a href="https://arxiv.org/abs/2111.09886">original paper</a>. </small>
+
 The goal for the model is to predict raw pixel values for the masked patches, using just a linear layer as prediction head. The model is trained using a simple L1 loss.
 
-## Using datasets from 🤗 `datasets`
+## Using datasets from 🤗 datasets
 
 Here we show how to pre-train a `ViT` from scratch for masked image modeling on the [cifar10](https://huggingface.co/datasets/cifar10) dataset. To pre-train a `BEiT` model (which is a Vision Transformer with relative position embeddings instead of absolute ones) from scratch, just change the `model_type` argument to "beit". 
 
@@ -73,7 +78,8 @@ config = SwinConfig(image_size=IMAGE_SIZE,
                     embed_dim=EMBED_DIM,
                     depths=DEPTHS,
                     num_heads=NUM_HEADS,
-                    window_size=WINDOW_SIZE)
+                    window_size=WINDOW_SIZE
+)
 config.save_pretrained("path_to_config")
 ```
 
