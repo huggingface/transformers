@@ -622,19 +622,6 @@ The following is an example configuration for ZeRO stage 2:
   the slower the communication, and the more GPU RAM will be available to other tasks. So if a bigger batch size is
   important, getting a slightly slower training time could be a good trade.
 
-Additionally, `deepspeed==0.4.4` added a new option ``round_robin_gradients`` which you can enable with:
-
-.. code-block:: json
-
-    {
-        "zero_optimization": {
-            "round_robin_gradients": true
-        }
-    }
-
-This Stage 2 optimization for CPU offloading that parallelizes gradient copying to CPU memory among ranks by
-fine-grained gradient partitioning. Performance benefit grows with gradient accumulation steps (more copying between
-optimizer steps) or GPU count (increased parallelism).
 
 
 .. _deepspeed-zero3-config:
