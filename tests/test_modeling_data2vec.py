@@ -38,7 +38,7 @@ if is_torch_available():
     )
     from transformers.models.data2vec.modeling_data2vec import (
         DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST,
-        Data2VecEmbeddings,
+        Data2VecForTextEmbeddings,
         create_position_ids_from_input_ids,
     )
 
@@ -438,10 +438,10 @@ class Data2VecModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
-        first available non-padding position index is Data2VecEmbeddings.padding_idx + 1
+        first available non-padding position index is Data2VecForTextEmbeddings.padding_idx + 1
         """
         config = self.model_tester.prepare_config_and_inputs()[0]
-        model = Data2VecEmbeddings(config=config)
+        model = Data2VecForTextEmbeddings(config=config)
 
         input_ids = torch.as_tensor([[12, 31, 13, model.padding_idx]])
         expected_positions = torch.as_tensor(
@@ -457,10 +457,10 @@ class Data2VecModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
-        first available non-padding position index is Data2VecEmbeddings.padding_idx + 1
+        first available non-padding position index is Data2VecForTextEmbeddings.padding_idx + 1
         """
         config = self.model_tester.prepare_config_and_inputs()[0]
-        embeddings = Data2VecEmbeddings(config=config)
+        embeddings = Data2VecForTextEmbeddings(config=config)
 
         inputs_embeds = torch.empty(2, 4, 30)
         expected_single_positions = [

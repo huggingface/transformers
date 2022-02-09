@@ -62,7 +62,7 @@ DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Data2Vec
-class Data2VecEmbeddings(nn.Module):
+class Data2VecForTextEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -687,7 +687,6 @@ DATA2VEC_INPUTS_DOCSTRING = r"""
     "The bare Data2Vec Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaModel with ROBERTA->DATA2VEC,Roberta->Data2Vec
 class Data2VecForTextModel(Data2VecPreTrainedModel):
     """
 
@@ -706,12 +705,11 @@ class Data2VecForTextModel(Data2VecPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Data2Vec
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = Data2VecEmbeddings(config)
+        self.embeddings = Data2VecForTextEmbeddings(config)
         self.encoder = Data2VecEncoder(config)
 
         self.pooler = Data2VecPooler(config) if add_pooling_layer else None
