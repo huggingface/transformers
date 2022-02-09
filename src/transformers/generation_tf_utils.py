@@ -949,7 +949,7 @@ class TFGenerationMixin:
 
             if no_repeat_ngram_size > 0:
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams
-                # from fairseq: https://github.com/pytf/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
                 banned_tokens = calc_banned_ngram_tokens(input_ids, batch_size, no_repeat_ngram_size, cur_len)
                 # create banned_tokens boolean mask
                 banned_tokens_indices_mask = []
@@ -1146,7 +1146,7 @@ class TFGenerationMixin:
 
         # cache compute states
         past = encoder_outputs
-        # to stay similar to tf : past = (encoder_outputs, None) if encoder_outputs is not None else None
+        # to stay similar to torch : past = (encoder_outputs, None) if encoder_outputs is not None else None
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and kwargs["output_scores"]) else None
@@ -1219,7 +1219,7 @@ class TFGenerationMixin:
 
             if no_repeat_ngram_size > 0:
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams
-                # from fairseq: https://github.com/pytf/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
                 num_batch_hypotheses = batch_size * num_beams
                 banned_tokens = calc_banned_ngram_tokens(
                     input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
