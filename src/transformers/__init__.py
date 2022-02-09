@@ -179,10 +179,7 @@ _import_structure = {
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
     "models.big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig"],
-    "models.bigbird_pegasus": [
-        "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BigBirdPegasusConfig",
-    ],
+    "models.bigbird_pegasus": ["BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdPegasusConfig",],
     "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
     "models.blenderbot_small": [
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -255,10 +252,7 @@ _import_structure = {
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
-    "models.nystromformer": [
-        "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "NystromformerConfig",
-    ],
+    "models.nystromformer": ["NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "NystromformerConfig",],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
@@ -277,10 +271,7 @@ _import_structure = {
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
-    "models.speech_to_text": [
-        "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Speech2TextConfig",
-    ],
+    "models.speech_to_text": ["SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Speech2TextConfig",],
     "models.speech_to_text_2": [
         "SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2Text2Config",
@@ -298,19 +289,9 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
-    "models.trocr": [
-        "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "TrOCRConfig",
-        "TrOCRProcessor",
-    ],
-    "models.unispeech": [
-        "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "UniSpeechConfig",
-    ],
-    "models.unispeech_sat": [
-        "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "UniSpeechSatConfig",
-    ],
+    "models.trocr": ["TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP", "TrOCRConfig", "TrOCRProcessor",],
+    "models.unispeech": ["UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP", "UniSpeechConfig",],
+    "models.unispeech_sat": ["UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "UniSpeechSatConfig",],
     "models.vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig", "ViltFeatureExtractor", "ViltProcessor"],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
@@ -327,10 +308,7 @@ _import_structure = {
     ],
     "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
     "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
-    "models.wavlm": [
-        "WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "WavLMConfig",
-    ],
+    "models.wavlm": ["WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "WavLMConfig",],
     "models.xglm": ["XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XGLMConfig"],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
@@ -826,13 +804,7 @@ if is_torch_available():
         ]
     )
     _import_structure["models.clip"].extend(
-        [
-            "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CLIPModel",
-            "CLIPPreTrainedModel",
-            "CLIPTextModel",
-            "CLIPVisionModel",
-        ]
+        ["CLIP_PRETRAINED_MODEL_ARCHIVE_LIST", "CLIPModel", "CLIPPreTrainedModel", "CLIPTextModel", "CLIPVisionModel",]
     )
     _import_structure["models.convbert"].extend(
         [
@@ -1372,12 +1344,7 @@ if is_torch_available():
         ]
     )
     _import_structure["models.swin"].extend(
-        [
-            "SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SwinForImageClassification",
-            "SwinModel",
-            "SwinPreTrainedModel",
-        ]
+        ["SWIN_PRETRAINED_MODEL_ARCHIVE_LIST", "SwinForImageClassification", "SwinModel", "SwinPreTrainedModel",]
     )
     _import_structure["models.t5"].extend(
         [
@@ -1453,12 +1420,7 @@ if is_torch_available():
         ]
     )
     _import_structure["models.vit"].extend(
-        [
-            "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ViTForImageClassification",
-            "ViTModel",
-            "ViTPreTrainedModel",
-        ]
+        ["VIT_PRETRAINED_MODEL_ARCHIVE_LIST", "ViTForImageClassification", "ViTModel", "ViTPreTrainedModel",]
     )
     _import_structure["models.vit_mae"].extend(
         [
@@ -1494,12 +1456,7 @@ if is_torch_available():
         ]
     )
     _import_structure["models.xglm"].extend(
-        [
-            "XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "XGLMForCausalLM",
-            "XGLMModel",
-            "XGLMPreTrainedModel",
-        ]
+        ["XGLM_PRETRAINED_MODEL_ARCHIVE_LIST", "XGLMForCausalLM", "XGLMModel", "XGLMPreTrainedModel",]
     )
     _import_structure["models.xlm"].extend(
         [
@@ -1833,12 +1790,7 @@ if is_tf_available():
         ]
     )
     _import_structure["models.hubert"].extend(
-        [
-            "TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFHubertForCTC",
-            "TFHubertModel",
-            "TFHubertPreTrainedModel",
-        ]
+        ["TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST", "TFHubertForCTC", "TFHubertModel", "TFHubertPreTrainedModel",]
     )
     _import_structure["models.layoutlm"].extend(
         [
@@ -1923,12 +1875,7 @@ if is_tf_available():
         ["TFPegasusForConditionalGeneration", "TFPegasusModel", "TFPegasusPreTrainedModel"]
     )
     _import_structure["models.rag"].extend(
-        [
-            "TFRagModel",
-            "TFRagPreTrainedModel",
-            "TFRagSequenceForGeneration",
-            "TFRagTokenForGeneration",
-        ]
+        ["TFRagModel", "TFRagPreTrainedModel", "TFRagSequenceForGeneration", "TFRagTokenForGeneration",]
     )
     _import_structure["models.rembert"].extend(
         [
@@ -2012,11 +1959,7 @@ if is_tf_available():
     )
     _import_structure["models.vision_encoder_decoder"].extend(["TFVisionEncoderDecoderModel"])
     _import_structure["models.vit"].extend(
-        [
-            "TFViTForImageClassification",
-            "TFViTModel",
-            "TFViTPreTrainedModel",
-        ]
+        ["TFViTForImageClassification", "TFViTModel", "TFViTPreTrainedModel",]
     )
     _import_structure["models.wav2vec2"].extend(
         [
@@ -2224,11 +2167,7 @@ if is_flax_available():
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
     _import_structure["models.marian"].extend(
-        [
-            "FlaxMarianModel",
-            "FlaxMarianMTModel",
-            "FlaxMarianPreTrainedModel",
-        ]
+        ["FlaxMarianModel", "FlaxMarianMTModel", "FlaxMarianPreTrainedModel",]
     )
     _import_structure["models.mbart"].extend(
         [
@@ -2241,11 +2180,7 @@ if is_flax_available():
     )
     _import_structure["models.mt5"].extend(["FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
     _import_structure["models.pegasus"].extend(
-        [
-            "FlaxPegasusForConditionalGeneration",
-            "FlaxPegasusModel",
-            "FlaxPegasusPreTrainedModel",
-        ]
+        ["FlaxPegasusForConditionalGeneration", "FlaxPegasusModel", "FlaxPegasusPreTrainedModel",]
     )
     _import_structure["models.roberta"].extend(
         [
@@ -2277,11 +2212,7 @@ if is_flax_available():
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
     )
     _import_structure["models.xglm"].extend(
-        [
-            "FlaxXGLMForCausalLM",
-            "FlaxXGLMModel",
-            "FlaxXGLMPreTrainedModel",
-        ]
+        ["FlaxXGLMForCausalLM", "FlaxXGLMModel", "FlaxXGLMPreTrainedModel",]
     )
 else:
     from .utils import dummy_flax_objects
