@@ -30,9 +30,16 @@ class TFMT5ModelTest(unittest.TestCase):  # no mixin with common tests -> most c
     @slow
     def test_resize_embeddings(self):
         model = TFMT5ForConditionalGeneration.from_pretrained("google/mt5-small")
+        original_vocab_size = model.get_input_embeddings().weight.shape[0]
+        # the vocab size is defined in the model config
+        self.assertEqual(original_vocab_size, model.config.vocab_size)
+
         tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
         tokenizer.add_special_tokens({"bos_token": "", "eos_token": ""})
         model._resize_token_embeddings(len(tokenizer))
+        # the vocab size is now resized to the length of the tokenizer, which is different from the original size
+        self.assertEqual(model.get_input_embeddings().weight.shape[0], len(tokenizer))
+        self.assertNotEqual(model.get_input_embeddings().weight.shape[0], original_vocab_size)
 
 
 @require_tf
