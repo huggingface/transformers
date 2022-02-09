@@ -16,10 +16,18 @@
 
 import inspect
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
 
 import numpy as np
 import tensorflow as tf
+
+from .generation_tf_logits_process import (
+    TFLogitsProcessorList,
+    TFMinLengthLogitsProcessor,
+    TFNoBadWordsLogitsProcessor,
+    TFNoRepeatNGramLogitsProcessor,
+    TFRepetitionPenaltyLogitsProcessor,
+)
 
 from .file_utils import ModelOutput
 from .utils import logging
@@ -186,8 +194,6 @@ class TFBeamSearchDecoderOnlyOutput(ModelOutput):
             `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
         attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `tf.Tensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
     """
@@ -941,7 +947,7 @@ class TFGenerationMixin:
 
             if no_repeat_ngram_size > 0:
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams
-                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+                # from fairseq: https://github.com/pytf/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
                 banned_tokens = calc_banned_ngram_tokens(input_ids, batch_size, no_repeat_ngram_size, cur_len)
                 # create banned_tokens boolean mask
                 banned_tokens_indices_mask = []
@@ -1138,7 +1144,7 @@ class TFGenerationMixin:
 
         # cache compute states
         past = encoder_outputs
-        # to stay similar to torch : past = (encoder_outputs, None) if encoder_outputs is not None else None
+        # to stay similar to tf : past = (encoder_outputs, None) if encoder_outputs is not None else None
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and kwargs["output_scores"]) else None
@@ -1211,7 +1217,7 @@ class TFGenerationMixin:
 
             if no_repeat_ngram_size > 0:
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams
-                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+                # from fairseq: https://github.com/pytf/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
                 num_batch_hypotheses = batch_size * num_beams
                 banned_tokens = calc_banned_ngram_tokens(
                     input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
@@ -2151,6 +2157,15 @@ class BeamHypotheses(object):
 
         is_greedy_gen_mode = (num_beams == 1) and do_sample is False
 
+        # prepare distribution pre_processing samplers
+        logits_processor = self._get_logits_processor(
+            repetition_penalty=repetition_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            bad_words_ids=bad_words_ids,
+            min_length=min_length,
+            eos_token_id=eos_token_id,
+        )
+
         if is_greedy_gen_mode:
             if num_return_sequences > 1:
                 raise ValueError(
@@ -2160,11 +2175,260 @@ class BeamHypotheses(object):
             # 10. run greedy search
             return self.greedy_search(
                 input_ids,
-                logits_processor=logits_processor,
-                stopping_criteria=stopping_criteria,
+                max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                logits_processor=logits_processor,
                 output_scores=output_scores,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
             )
+
+    def _get_logits_processor(
+        self,
+        repetition_penalty: float,
+        no_repeat_ngram_size: int,
+        bad_words_ids: List[List[int]],
+        min_length: int,
+        eos_token_id: int,
+    ) -> TFLogitsProcessorList:
+        """
+        This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
+        instances used to modify the scores of the language model head.
+        """
+        processors = TFLogitsProcessorList()
+
+        repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
+        no_repeat_ngram_size = (
+            no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
+        )
+        bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+
+        # instantiate processors list
+        if repetition_penalty is not None and repetition_penalty != 1.0:
+            processors.append(TFRepetitionPenaltyLogitsProcessor(penalty=repetition_penalty))
+        if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
+            processors.append(TFNoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
+        if bad_words_ids is not None:
+            processors.append(TFNoBadWordsLogitsProcessor(bad_words_ids, eos_token_id))
+        if min_length is not None and eos_token_id is not None and min_length > -1:
+            processors.append(TFMinLengthLogitsProcessor(min_length, eos_token_id))
+
+        return processors
+
+    def greedy_search(
+        self,
+        input_ids: tf.Tensor,
+        max_length: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        logits_processor: Optional[TFLogitsProcessorList] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_scores: Optional[bool] = None,
+        return_dict_in_generate: Optional[bool] = None,
+        **model_kwargs,
+    ) -> Union[TFGreedySearchOutput, tf.Tensor]:
+        r"""
+        Generates sequences for models with a language modeling head using greedy decoding.
+
+        Parameters:
+
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
+                The sequence used as a prompt for the generation.
+            logits_processor (`LogitsProcessorList`, *optional*):
+                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
+                used to modify the prediction scores of the language modeling head applied at each generation step.
+            stopping_criteria (`StoppingCriteriaList`, *optional*):
+                An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
+                used to tell if the generation loop should stop.
+
+            max_length (`int`, *optional*, defaults to 20):
+                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
+                tokens. The maximum length of the sequence to be generated.
+            pad_token_id (`int`, *optional*):
+                The id of the *padding* token.
+            eos_token_id (`int`, *optional*):
+                The id of the *end-of-sequence* token.
+            output_attentions (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more details.
+            output_hidden_states (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more details.
+            output_scores (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
+            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            synced_gpus (`bool`, *optional*, defaults to `False`):
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            model_kwargs:
+                Additional model specific keyword arguments will be forwarded to the `forward` function of the model.
+                If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
+
+        Return:
+            [`~generation_utils.GreedySearchDecoderOnlyOutput`], [`~generation_utils.GreedySearchEncoderDecoderOutput`]
+            or `tf.Tensor`: A `tf.Tensor` containing the generated tokens (default behaviour) or a
+            [`~generation_utils.GreedySearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation_utils.GreedySearchEncoderDecoderOutput`] if
+            `model.config.is_encoder_decoder=True`.
+
+        Examples:
+
+        ```python
+        >>> from transformers import (
+        ...     AutoTokenizer,
+        ...     AutoModelForCausalLM,
+        ...     LogitsProcessorList,
+        ...     MinLengthLogitsProcessor,
+        ... )
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+
+        >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
+        >>> model.config.pad_token_id = model.config.eos_token_id
+
+        >>> input_prompt = "Today is a beautiful day, and"
+        >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
+
+        >>> # instantiate logits processors
+        >>> logits_processor = LogitsProcessorList(
+        ...     [
+        ...         MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
+        ...     ]
+        ... )
+
+        >>> outputs = model.greedy_search(input_ids, logits_processor=logits_processor)
+
+        >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        ```"""
+        # init values
+        logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
+
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        output_scores = output_scores if output_scores is not None else self.config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict_in_generate = (
+            return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
+        )
+
+        # init attention / hidden states / scores tuples
+        scores = () if (return_dict_in_generate and output_scores) else None
+        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
+        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+
+        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        if return_dict_in_generate and self.config.is_encoder_decoder:
+            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+            encoder_hidden_states = (
+                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
+            )
+
+        # keep track of which sequences are already finished
+        unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
+        cur_len = input_ids.shape[-1]
+
+        while cur_len < max_length:
+            # prepare model inputs
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            # forward pass to get next token
+            outputs = self(
+                **model_inputs,
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+
+            next_token_logits = outputs.logits[:, -1, :]
+
+            # Store scores, attentions and hidden_states when required
+            if return_dict_in_generate:
+                if output_scores:
+                    scores += (next_token_logits,)
+                if output_attentions:
+                    decoder_attentions += (
+                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
+                    )
+                    if self.config.is_encoder_decoder:
+                        cross_attentions += (outputs.cross_attentions,)
+
+                if output_hidden_states:
+                    decoder_hidden_states += (
+                        (outputs.decoder_hidden_states,)
+                        if self.config.is_encoder_decoder
+                        else (outputs.hidden_states,)
+                    )
+
+            # pre-process distribution
+            next_tokens_scores = logits_processor(input_ids, next_token_logits)
+
+            # argmax
+            next_tokens = tf.argmax(next_tokens_scores, dim=-1)
+
+            # finished sentences should have their next token be a padding token
+            if eos_token_id is not None:
+                if pad_token_id is None:
+                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+
+            # update generated ids, model inputs, and length for next step
+            input_ids = tf.cat([input_ids, next_tokens[:, None]], dim=-1)
+            model_kwargs = self._update_model_kwargs_for_generation(
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+            )
+            cur_len = cur_len + 1
+
+            # if eos_token was found in one sentence, set sentence to finished
+#            if eos_token_id is not None:
+#                unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
+
+            if eos_token_id is not None:
+                eos_in_sents = next_tokens == eos_token_id
+                # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
+                is_sents_unfinished_and_token_to_add_is_eos = tf.math.multiply(
+                    unfinished_sents, tf.cast(eos_in_sents, tf.int32)
+                )
+                sent_lengths = (
+                    sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
+                    + cur_len * is_sents_unfinished_and_token_to_add_is_eos
+                )
+
+                # unfinished_sents is set to zero if eos in sentence
+                unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
+
+            # stop when each sentence is finished, or if we exceed the maximum length
+            if tf.math.reduce_max(unfinished_sents) == 0:
+                break
+#            if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
+#                break
+
+        if return_dict_in_generate:
+            if self.config.is_encoder_decoder:
+                return TFGreedySearchEncoderDecoderOutput(
+                    sequences=input_ids,
+                    scores=scores,
+                    encoder_attentions=encoder_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
+                    decoder_hidden_states=decoder_hidden_states,
+                )
+            else:
+                return TFGreedySearchDecoderOnlyOutput(
+                    sequences=input_ids,
+                    scores=scores,
+                    attentions=decoder_attentions,
+                    hidden_states=decoder_hidden_states,
+                )
+        else:
+            return input_ids
