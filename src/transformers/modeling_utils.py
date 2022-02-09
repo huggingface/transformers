@@ -388,7 +388,7 @@ class ModuleUtilsMixin:
         if self.main_input_name in input_dict:
             return input_dict[self.main_input_name].numel()
         else:
-            logger.warn(
+            logger.warning(
                 "Could not estimate the number of tokens of the input, floating-point operations will not be computed"
             )
             return 0
