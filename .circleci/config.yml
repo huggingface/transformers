@@ -231,7 +231,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest --timeout 300 -n 3 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
+                    python -m pytest -n 3 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
