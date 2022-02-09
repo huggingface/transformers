@@ -204,6 +204,10 @@ class PhrasalConstraint(Constraint):
 class ConstraintListState:
     r"""
     A class for beam scorers to track its progress through a list of constraints.
+
+    Args:
+        constraints (`List[Constraint]`):
+            A list of [`Constraint`] objects that must be fulfilled by the beam scorer.
     """
 
     def __init__(self, constraints: List[Constraint]):
