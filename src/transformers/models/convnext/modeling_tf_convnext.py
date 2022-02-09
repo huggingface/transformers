@@ -484,6 +484,9 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         if "input_ids" in inputs:
             inputs["pixel_values"] = inputs.pop("input_ids")
 
+        if inputs["pixel_values"] is None:
+            raise ValueError("You have to specify pixel_values")
+
         outputs = self.convnext(
             inputs["pixel_values"], output_hidden_states=output_hidden_states, return_dict=return_dict
         )
