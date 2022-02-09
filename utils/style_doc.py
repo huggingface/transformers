@@ -147,9 +147,8 @@ def format_code_example(code: str, max_len: int, in_docstring: bool = False):
     for k, v in BLACK_AVOID_PATTERNS.items():
         full_code = full_code.replace(k, v)
     try:
-        formatted_code = black.format_str(
-            full_code, mode=black.FileMode([black.TargetVersion.PY37], line_length=line_length)
-        )
+        mode = black.Mode(target_versions={black.TargetVersion.PY37}, line_length=line_length)
+        formatted_code = black.format_str(full_code, mode=mode)
         error = ""
     except Exception as e:
         formatted_code = full_code

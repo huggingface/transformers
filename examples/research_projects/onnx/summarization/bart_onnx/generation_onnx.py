@@ -442,7 +442,7 @@ class BeamSearchScorerTS(torch.nn.Module):
         elif self.do_early_stopping:
             return True
         else:
-            cur_score = best_sum_logprobs / cur_len ** self.length_penalty
+            cur_score = best_sum_logprobs / cur_len**self.length_penalty
             ret = self._beam_hyps_worst_scores[hypo_idx].item() >= cur_score
             return ret
 
