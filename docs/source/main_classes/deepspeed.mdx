@@ -613,6 +613,17 @@ The following is an example of configuration for ZeRO stage 2:
   the slower the communication gets, and the more GPU RAM will be available to other tasks. So if a bigger batch size is
   important, getting a slightly slower training time could be a good trade.
 
+Additionally, `deepspeed==0.4.4` added a new option ``round_robin_gradients`` which you can enable with:
+
+```json
+{
+    "zero_optimization": {
+        "round_robin_gradients": true
+    }
+}
+```
+
+This is a stage 2 optimization for CPU offloading that parallelizes gradient copying to CPU memory among ranks by fine-grained gradient partitioning. Performance benefit grows with gradient accumulation steps (more copying between optimizer steps) or GPU count (increased parallelism).
 
 
 <a id='deepspeed-zero3-config'></a>
@@ -1805,7 +1816,7 @@ Please note that if you're not using the [`Trainer`] integration, you're complet
 [[autodoc]] deepspeed.HfDeepSpeedConfig
     - all
 
-### DeepSpeed ZeRO Inference
+### Custom DeepSpeed ZeRO Inference
 
 Here is an example of how one could do DeepSpeed ZeRO Inference without using [`Trainer`] when one can't fit a model onto a single GPU. The solution includes using additional GPUs or/and offloading GPU memory to CPU memory.
 
