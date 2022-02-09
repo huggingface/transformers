@@ -231,7 +231,7 @@ class TFFunnelAttentionStructure:
 
                 # Second type
                 pos = pooled_pos
-                stride = 2 ** block_index
+                stride = 2**block_index
                 rel_pos = self.relative_pos(pos, stride)
 
                 # rel_pos = tf.expand_dims(rel_pos,1) + zero_offset
@@ -252,7 +252,7 @@ class TFFunnelAttentionStructure:
             # the previous block of the 1st real block. Since the 1st real
             # block always has position 1, the position of the previous block
             # will be at `1 - 2 ** block_index`.
-            cls_pos = tf.constant([-(2 ** block_index) + 1], dtype=pos_id.dtype)
+            cls_pos = tf.constant([-(2**block_index) + 1], dtype=pos_id.dtype)
             pooled_pos_id = pos_id[1:-1] if self.truncate_seq else pos_id[1:]
             return tf.concat([cls_pos, pooled_pos_id[::2]], 0)
         else:
@@ -400,7 +400,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
 
         self.post_proj = tf.keras.layers.Dense(d_model, kernel_initializer=initializer, name="post_proj")
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-        self.scale = 1.0 / (d_head ** 0.5)
+        self.scale = 1.0 / (d_head**0.5)
 
     def build(self, input_shape):
         n_head, d_head, d_model = self.n_head, self.d_head, self.d_model
