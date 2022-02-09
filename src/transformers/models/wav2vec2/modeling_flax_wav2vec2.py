@@ -826,7 +826,7 @@ class FlaxWav2Vec2AdapterLayersCollection(nn.Module):
             for i in range(self.config.num_adapter_layers)
         ]
 
-    def __call__(self, hidden_states, deterministic=True):
+    def __call__(self, hidden_states):
         for conv_layer in self.layers:
             hidden_states = conv_layer(hidden_states)
 
@@ -929,7 +929,7 @@ class FlaxWav2Vec2Module(nn.Module):
         else:
             raise NotImplementedError("``config.do_stable_layer_norm is False`` is currently not supported.")
 
-        self.adapter = FlaxWav2Vec2Adapter(self.config) if self.config.add_adapter else None
+        self.adapter = FlaxWav2Vec2Adapter(self.config, dtype=self.dtype) if self.config.add_adapter else None
 
     def __call__(
         self,
