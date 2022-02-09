@@ -148,6 +148,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.encoder_decoder.modeling_tf_encoder_decoder.shift_tokens_right
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
 
     if pad_token_id is None:
