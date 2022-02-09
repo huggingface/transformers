@@ -18,109 +18,31 @@ Processor class for LayoutLMv2.
 from typing import List, Optional, Union
 
 from ...file_utils import TensorType
+from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
-from .tokenization_layoutlmv2 import LayoutLMv2Tokenizer
-from .tokenization_layoutlmv2_fast import LayoutLMv2TokenizerFast
 
 
-class LayoutLMv2Processor:
+class LayoutLMv2Processor(ProcessorMixin):
     r"""
     Constructs a LayoutLMv2 processor which combines a LayoutLMv2 feature extractor and a LayoutLMv2 tokenizer into a
     single processor.
 
-    :class:`~transformers.LayoutLMv2Processor` offers all the functionalities you need to prepare data for the model.
+    [`LayoutLMv2Processor`] offers all the functionalities you need to prepare data for the model.
 
-    It first uses :class:`~transformers.LayoutLMv2FeatureExtractor` to resize document images to a fixed size, and
-    optionally applies OCR to get words and normalized bounding boxes. These are then provided to
-    :class:`~transformers.LayoutLMv2Tokenizer` or :class:`~transformers.LayoutLMv2TokenizerFast`, which turns the words
-    and bounding boxes into token-level :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`, :obj:`bbox`.
-    Optionally, one can provide integer :obj:`word_labels`, which are turned into token-level :obj:`labels` for token
-    classification tasks (such as FUNSD, CORD).
+    It first uses [`LayoutLMv2FeatureExtractor`] to resize document images to a fixed size, and optionally applies OCR
+    to get words and normalized bounding boxes. These are then provided to [`LayoutLMv2Tokenizer`] or
+    [`LayoutLMv2TokenizerFast`], which turns the words and bounding boxes into token-level `input_ids`,
+    `attention_mask`, `token_type_ids`, `bbox`. Optionally, one can provide integer `word_labels`, which are turned
+    into token-level `labels` for token classification tasks (such as FUNSD, CORD).
 
     Args:
-        feature_extractor (:obj:`LayoutLMv2FeatureExtractor`):
-            An instance of :class:`~transformers.LayoutLMv2FeatureExtractor`. The feature extractor is a required
-            input.
-        tokenizer (:obj:`LayoutLMv2Tokenizer` or :obj:`LayoutLMv2TokenizerFast`):
-            An instance of :class:`~transformers.LayoutLMv2Tokenizer` or
-            :class:`~transformers.LayoutLMv2TokenizerFast`. The tokenizer is a required input.
+        feature_extractor (`LayoutLMv2FeatureExtractor`):
+            An instance of [`LayoutLMv2FeatureExtractor`]. The feature extractor is a required input.
+        tokenizer (`LayoutLMv2Tokenizer` or `LayoutLMv2TokenizerFast`):
+            An instance of [`LayoutLMv2Tokenizer`] or [`LayoutLMv2TokenizerFast`]. The tokenizer is a required input.
     """
-
-    def __init__(self, feature_extractor, tokenizer):
-        if not isinstance(feature_extractor, LayoutLMv2FeatureExtractor):
-            raise ValueError(
-                f"`feature_extractor` has to be of type {LayoutLMv2FeatureExtractor.__class__}, but is {type(feature_extractor)}"
-            )
-        if not isinstance(tokenizer, (LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast)):
-            raise ValueError(
-                f"`tokenizer` has to be of type {LayoutLMv2Tokenizer.__class__} or {LayoutLMv2TokenizerFast.__class__}, but is {type(tokenizer)}"
-            )
-
-        self.feature_extractor = feature_extractor
-        self.tokenizer = tokenizer
-
-    def save_pretrained(self, save_directory):
-        """
-        Save a LayoutLMv2 feature_extractor object and LayoutLMv2 tokenizer object to the directory ``save_directory``,
-        so that it can be re-loaded using the :func:`~transformers.LayoutLMv2Processor.from_pretrained` class method.
-
-        .. note::
-
-            This class method is simply calling
-            :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained` and
-            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.save_pretrained`. Please refer to the
-            docstrings of the methods above for more information.
-
-        Args:
-            save_directory (:obj:`str` or :obj:`os.PathLike`):
-                Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
-                be created if it does not exist).
-        """
-
-        self.feature_extractor.save_pretrained(save_directory)
-        self.tokenizer.save_pretrained(save_directory)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, use_fast=True, **kwargs):
-        r"""
-        Instantiate a :class:`~transformers.LayoutLMv2Processor` from a pretrained LayoutLMv2 processor.
-
-        .. note::
-
-            This class method is simply calling LayoutLMv2FeatureExtractor's
-            :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.from_pretrained` and
-            LayoutLMv2TokenizerFast's
-            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`. Please refer to the
-            docstrings of the methods above for more information.
-
-        Args:
-            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
-                This can be either:
-
-                - a string, the `model id` of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
-                  namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing a feature extractor file saved using the
-                  :meth:`~transformers.SequenceFeatureExtractor.save_pretrained` method, e.g.,
-                  ``./my_model_directory/``.
-                - a path or url to a saved feature extractor JSON `file`, e.g.,
-                  ``./my_model_directory/preprocessor_config.json``.
-
-            use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to instantiate a fast tokenizer.
-
-            **kwargs
-                Additional keyword arguments passed along to both :class:`~transformers.SequenceFeatureExtractor` and
-                :class:`~transformers.PreTrainedTokenizer`
-        """
-        feature_extractor = LayoutLMv2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        if use_fast:
-            tokenizer = LayoutLMv2TokenizerFast.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        else:
-            tokenizer = LayoutLMv2Tokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    feature_extractor_class = "LayoutLMv2FeatureExtractor"
+    tokenizer_class = ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast")
 
     def __call__(
         self,
@@ -146,14 +68,12 @@ class LayoutLMv2Processor:
         **kwargs
     ) -> BatchEncoding:
         """
-        This method first forwards the :obj:`images` argument to
-        :meth:`~transformers.LayoutLMv2FeatureExtractor.__call__`. In case :class:`~LayoutLMv2FeatureExtractor` was
-        initialized with :obj:`apply_ocr` set to ``True``, it passes the obtained words and bounding boxes along with
-        the additional arguments to :meth:`~transformers.LayoutLMv2Tokenizer.__call__` and returns the output, together
-        with resized :obj:`images`. In case :class:`~LayoutLMv2FeatureExtractor` was initialized with :obj:`apply_ocr`
-        set to ``False``, it passes the words (:obj:`text`/:obj:`text_pair`) and :obj:`boxes` specified by the user
-        along with the additional arguments to :meth:`~transformers.LayoutLMv2Tokenizer.__call__` and returns the
-        output, together with resized :obj:`images`.
+        This method first forwards the `images` argument to [`~LayoutLMv2FeatureExtractor.__call__`]. In case
+        [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
+        bounding boxes along with the additional arguments to [`~LayoutLMv2Tokenizer.__call__`] and returns the output,
+        together with resized `images`. In case [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to
+        `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the additional
+        arguments to [`~LayoutLMv2Tokenizer.__call__`] and returns the output, together with resized `images``.
 
         Please refer to the docstring of the above two methods for more information.
         """

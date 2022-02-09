@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 LayoutLM model. """
+""" TF 2.0 LayoutLM model."""
 
 import math
 import warnings
@@ -68,7 +68,6 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         self.max_position_embeddings = config.max_position_embeddings
         self.max_2d_position_embeddings = config.max_2d_position_embeddings
         self.initializer_range = config.initializer_range
-        self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
@@ -137,7 +136,7 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
+            final_embeddings (`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
 
@@ -163,25 +162,22 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
             right_position_embeddings = tf.gather(self.x_position_embeddings, bbox[:, :, 2])
             lower_position_embeddings = tf.gather(self.y_position_embeddings, bbox[:, :, 3])
         except IndexError as e:
-            raise IndexError("The :obj:`bbox`coordinate values should be within 0-1000 range.") from e
+            raise IndexError("The `bbox`coordinate values should be within 0-1000 range.") from e
         h_position_embeddings = tf.gather(self.h_position_embeddings, bbox[:, :, 3] - bbox[:, :, 1])
         w_position_embeddings = tf.gather(self.w_position_embeddings, bbox[:, :, 2] - bbox[:, :, 0])
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
-        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
         token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
-        final_embeddings = self.embeddings_sum(
-            inputs=[
-                inputs_embeds,
-                position_embeds,
-                token_type_embeds,
-                left_position_embeddings,
-                upper_position_embeddings,
-                right_position_embeddings,
-                lower_position_embeddings,
-                h_position_embeddings,
-                w_position_embeddings,
-            ]
+        final_embeddings = (
+            inputs_embeds
+            + position_embeds
+            + token_type_embeds
+            + left_position_embeddings
+            + upper_position_embeddings
+            + right_position_embeddings
+            + lower_position_embeddings
+            + h_position_embeddings
+            + w_position_embeddings
         )
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -827,92 +823,92 @@ class TFLayoutLMPreTrainedModel(TFPreTrainedModel):
 
 LAYOUTLM_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
 
-    .. note::
+    <Tip>
 
-        TF 2.0 models accepts two formats as inputs:
+    TF 2.0 models accepts two formats as inputs:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    tensors in the first argument of the model call function: `model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
+    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
+    first positional argument :
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    </Tip>
 
     Args:
-        config (:class:`~transformers.LayoutLMConfig`): Model configuration class with all the parameters of the model.
+        config ([`LayoutLMConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
-            model weights.
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 LAYOUTLM_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
+        input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.LayoutLMTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
-            details.
+            Indices can be obtained using [`LayoutLMTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            [`PreTrainedTokenizer.encode`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        bbox (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0}, 4)`, `optional`):
-            Bounding Boxes of each input sequence tokens. Selected in the range ``[0,
-            config.max_2d_position_embeddings- 1]``.
-        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        bbox (`Numpy array` or `tf.Tensor` of shape `({0}, 4)`, *optional*):
+            Bounding Boxes of each input sequence tokens. Selected in the range `[0, config.max_2d_position_embeddings-
+            1]`.
+        attention_mask (`Numpy array` or `tf.Tensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`Numpy array` or `tf.Tensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`Numpy array` or `tf.Tensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`__
-        head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`Numpy array` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        inputs_embeds (`tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+        training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
@@ -952,34 +948,37 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         r"""
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LayoutLMTokenizer, TFLayoutLMModel
-            >>> import tensorflow as tf
+        ```python
+        >>> from transformers import LayoutLMTokenizer, TFLayoutLMModel
+        >>> import tensorflow as tf
 
-            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> model = TFLayoutLMModel.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> model = TFLayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
 
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+        >>> words = ["Hello", "world"]
+        >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+        >>> token_boxes = []
+        >>> for word, box in zip(words, normalized_word_boxes):
+        ...     word_tokens = tokenizer.tokenize(word)
+        ...     token_boxes.extend([box] * len(word_tokens))
+        >>> # add bounding boxes of cls + sep tokens
+        >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = tf.convert_to_tensor([token_boxes])
+        >>> encoding = tokenizer(" ".join(words), return_tensors="tf")
+        >>> input_ids = encoding["input_ids"]
+        >>> attention_mask = encoding["attention_mask"]
+        >>> token_type_ids = encoding["token_type_ids"]
+        >>> bbox = tf.convert_to_tensor([token_boxes])
 
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
+        >>> outputs = model(
+        ...     input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids
+        ... )
 
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1036,7 +1035,7 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         )
 
 
-@add_start_docstrings("""LayoutLM Model with a `language modeling` head on top. """, LAYOUTLM_START_DOCSTRING)
+@add_start_docstrings("""LayoutLM Model with a `language modeling` head on top.""", LAYOUTLM_START_DOCSTRING)
 class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1084,44 +1083,50 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         **kwargs,
     ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LayoutLMTokenizer, TFLayoutLMForMaskedLM
-            >>> import tensorflow as tf
+        ```python
+        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForMaskedLM
+        >>> import tensorflow as tf
 
-            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> model = TFLayoutLMForMaskedLM.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> model = TFLayoutLMForMaskedLM.from_pretrained("microsoft/layoutlm-base-uncased")
 
-            >>> words = ["Hello", "[MASK]"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+        >>> words = ["Hello", "[MASK]"]
+        >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+        >>> token_boxes = []
+        >>> for word, box in zip(words, normalized_word_boxes):
+        ...     word_tokens = tokenizer.tokenize(word)
+        ...     token_boxes.extend([box] * len(word_tokens))
+        >>> # add bounding boxes of cls + sep tokens
+        >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = tf.convert_to_tensor([token_boxes])
+        >>> encoding = tokenizer(" ".join(words), return_tensors="tf")
+        >>> input_ids = encoding["input_ids"]
+        >>> attention_mask = encoding["attention_mask"]
+        >>> token_type_ids = encoding["token_type_ids"]
+        >>> bbox = tf.convert_to_tensor([token_boxes])
 
-            >>> labels = tokenizer("Hello world", return_tensors="tf")["input_ids"]
+        >>> labels = tokenizer("Hello world", return_tensors="tf")["input_ids"]
 
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-            ...                 labels=labels)
+        >>> outputs = model(
+        ...     input_ids=input_ids,
+        ...     bbox=bbox,
+        ...     attention_mask=attention_mask,
+        ...     token_type_ids=token_type_ids,
+        ...     labels=labels,
+        ... )
 
-            >>> loss = outputs.loss
-        """
+        >>> loss = outputs.loss
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1155,7 +1160,9 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output=sequence_output, training=inputs["training"])
         loss = (
-            None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=prediction_scores)
+            None
+            if inputs["labels"] is None
+            else self.hf_compute_loss(labels=inputs["labels"], logits=prediction_scores)
         )
 
         if not inputs["return_dict"]:
@@ -1220,44 +1227,50 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
         **kwargs,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LayoutLMTokenizer, TFLayoutLMForSequenceClassification
-            >>> import tensorflow as tf
+        ```python
+        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForSequenceClassification
+        >>> import tensorflow as tf
 
-            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> model = TFLayoutLMForSequenceClassification.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> model = TFLayoutLMForSequenceClassification.from_pretrained("microsoft/layoutlm-base-uncased")
 
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+        >>> words = ["Hello", "world"]
+        >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+        >>> token_boxes = []
+        >>> for word, box in zip(words, normalized_word_boxes):
+        ...     word_tokens = tokenizer.tokenize(word)
+        ...     token_boxes.extend([box] * len(word_tokens))
+        >>> # add bounding boxes of cls + sep tokens
+        >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = tf.convert_to_tensor([token_boxes])
-            >>> sequence_label = tf.convert_to_tensor([1])
+        >>> encoding = tokenizer(" ".join(words), return_tensors="tf")
+        >>> input_ids = encoding["input_ids"]
+        >>> attention_mask = encoding["attention_mask"]
+        >>> token_type_ids = encoding["token_type_ids"]
+        >>> bbox = tf.convert_to_tensor([token_boxes])
+        >>> sequence_label = tf.convert_to_tensor([1])
 
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-            ...                 labels=sequence_label)
+        >>> outputs = model(
+        ...     input_ids=input_ids,
+        ...     bbox=bbox,
+        ...     attention_mask=attention_mask,
+        ...     token_type_ids=token_type_ids,
+        ...     labels=sequence_label,
+        ... )
 
-            >>> loss = outputs.loss
-            >>> logits = outputs.logits
-        """
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1291,7 +1304,7 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
         pooled_output = outputs[1]
         pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
         logits = self.classifier(inputs=pooled_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(labels=inputs["labels"], logits=logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
@@ -1361,43 +1374,48 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         **kwargs,
     ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
-            1]``.
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import LayoutLMTokenizer, TFLayoutLMForTokenClassification
-            >>> import torch
+        ```python
+        >>> import tensorflow as tf
+        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForTokenClassification
 
-            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
-            >>> model = TFLayoutLMForTokenClassification.from_pretrained('microsoft/layoutlm-base-uncased')
+        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> model = TFLayoutLMForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased")
 
-            >>> words = ["Hello", "world"]
-            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+        >>> words = ["Hello", "world"]
+        >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> token_boxes = []
-            >>> for word, box in zip(words, normalized_word_boxes):
-            ...     word_tokens = tokenizer.tokenize(word)
-            ...     token_boxes.extend([box] * len(word_tokens))
-            >>> # add bounding boxes of cls + sep tokens
-            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+        >>> token_boxes = []
+        >>> for word, box in zip(words, normalized_word_boxes):
+        ...     word_tokens = tokenizer.tokenize(word)
+        ...     token_boxes.extend([box] * len(word_tokens))
+        >>> # add bounding boxes of cls + sep tokens
+        >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
-            >>> input_ids = encoding["input_ids"]
-            >>> attention_mask = encoding["attention_mask"]
-            >>> token_type_ids = encoding["token_type_ids"]
-            >>> bbox = tf.convert_to_tensor([token_boxes])
-            >>> token_labels = tf.convert_to_tensor([1,1,0,0])
+        >>> encoding = tokenizer(" ".join(words), return_tensors="tf")
+        >>> input_ids = encoding["input_ids"]
+        >>> attention_mask = encoding["attention_mask"]
+        >>> token_type_ids = encoding["token_type_ids"]
+        >>> bbox = tf.convert_to_tensor([token_boxes])
+        >>> token_labels = tf.convert_to_tensor([1, 1, 0, 0])
 
-            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-            ...                 labels=token_labels)
+        >>> outputs = model(
+        ...     input_ids=input_ids,
+        ...     bbox=bbox,
+        ...     attention_mask=attention_mask,
+        ...     token_type_ids=token_type_ids,
+        ...     labels=token_labels,
+        ... )
 
-            >>> loss = outputs.loss
-            >>> logits = outputs.logits
-        """
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1431,7 +1449,7 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         sequence_output = outputs[0]
         sequence_output = self.dropout(inputs=sequence_output, training=inputs["training"])
         logits = self.classifier(inputs=sequence_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(labels=inputs["labels"], logits=logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]

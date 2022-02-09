@@ -35,6 +35,7 @@ from dataclasses import fields
 from enum import Enum
 from functools import partial, wraps
 from hashlib import sha256
+from itertools import chain
 from pathlib import Path
 from types import ModuleType
 from typing import Any, BinaryIO, ContextManager, Dict, List, Optional, Tuple, Union
@@ -44,11 +45,12 @@ from zipfile import ZipFile, is_zipfile
 
 import numpy as np
 from packaging import version
-from tqdm.auto import tqdm
 
 import requests
 from filelock import FileLock
-from huggingface_hub import HfApi, HfFolder, Repository
+from huggingface_hub import HfFolder, Repository, create_repo, list_repo_files, whoami
+from requests.exceptions import HTTPError
+from transformers.utils.logging import tqdm
 from transformers.utils.versions import importlib_metadata
 
 from . import __version__
@@ -173,12 +175,12 @@ except importlib_metadata.PackageNotFoundError:
     _sympy_available = False
 
 
-_keras2onnx_available = importlib.util.find_spec("keras2onnx") is not None
+_tf2onnx_available = importlib.util.find_spec("tf2onnx") is not None
 try:
-    _keras2onnx_version = importlib_metadata.version("keras2onnx")
-    logger.debug(f"Successfully imported keras2onnx version {_keras2onnx_version}")
+    _tf2onnx_version = importlib_metadata.version("tf2onnx")
+    logger.debug(f"Successfully imported tf2onnx version {_tf2onnx_version}")
 except importlib_metadata.PackageNotFoundError:
-    _keras2onnx_available = False
+    _tf2onnx_available = False
 
 _onnx_available = importlib.util.find_spec("onnxruntime") is not None
 try:
@@ -196,12 +198,28 @@ except importlib_metadata.PackageNotFoundError:
     _scatter_available = False
 
 
+_pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
+try:
+    _pytorch_quantization_version = importlib_metadata.version("pytorch_quantization")
+    logger.debug(f"Successfully imported pytorch-quantization version {_pytorch_quantization_version}")
+except importlib_metadata.PackageNotFoundError:
+    _pytorch_quantization_available = False
+
+
 _soundfile_available = importlib.util.find_spec("soundfile") is not None
 try:
     _soundfile_version = importlib_metadata.version("soundfile")
     logger.debug(f"Successfully imported soundfile version {_soundfile_version}")
 except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
+
+
+_tensorflow_probability_available = importlib.util.find_spec("tensorflow_probability") is not None
+try:
+    _tensorflow_probability_version = importlib_metadata.version("tensorflow_probability")
+    logger.debug(f"Successfully imported tensorflow-probability version {_tensorflow_probability_version}")
+except importlib_metadata.PackageNotFoundError:
+    _tensorflow_probability_available = False
 
 
 _timm_available = importlib.util.find_spec("timm") is not None
@@ -218,6 +236,30 @@ try:
     logger.debug(f"Successfully imported torchaudio version {_torchaudio_version}")
 except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
+
+
+_phonemizer_available = importlib.util.find_spec("phonemizer") is not None
+try:
+    _phonemizer_version = importlib_metadata.version("phonemizer")
+    logger.debug(f"Successfully imported phonemizer version {_phonemizer_version}")
+except importlib_metadata.PackageNotFoundError:
+    _phonemizer_available = False
+
+
+_pyctcdecode_available = importlib.util.find_spec("pyctcdecode") is not None
+try:
+    _pyctcdecode_version = importlib_metadata.version("pyctcdecode")
+    logger.debug(f"Successfully imported pyctcdecode version {_pyctcdecode_version}")
+except importlib_metadata.PackageNotFoundError:
+    _pyctcdecode_available = False
+
+
+_librosa_available = importlib.util.find_spec("librosa") is not None
+try:
+    _librosa_version = importlib_metadata.version("librosa")
+    logger.debug(f"Successfully imported librosa version {_librosa_version}")
+except importlib_metadata.PackageNotFoundError:
+    _librosa_available = False
 
 
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
@@ -280,7 +322,7 @@ HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOIN
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
-TORCH_FX_REQUIRED_VERSION = version.parse("1.9")
+TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
@@ -294,6 +336,14 @@ def is_torch_available():
     return _torch_available
 
 
+def is_pyctcdecode_available():
+    return _pyctcdecode_available
+
+
+def is_librosa_available():
+    return _librosa_available
+
+
 def is_torch_cuda_available():
     if is_torch_available():
         import torch
@@ -301,6 +351,55 @@ def is_torch_cuda_available():
         return torch.cuda.is_available()
     else:
         return False
+
+
+def is_torch_bf16_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    # since currently no utility function is available we build our own.
+    # some bits come from https://github.com/pytorch/pytorch/blob/2289a12f21c54da93bf5d696e3f9aea83dd9c10d/torch/testing/_internal/common_cuda.py#L51
+    # with additional check for torch version
+    # to succeed:
+    # 1. the hardware needs to support bf16 (arch >= Ampere)
+    # 2. torch >= 1.10 (1.9 should be enough for AMP API has changed in 1.10, so using 1.10 as minimal)
+    # 3. CUDA >= 11
+    # 4. torch.autocast exists
+    # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
+    # really only correct for the 0th gpu (or currently set default device if different from 0)
+
+    if not torch.cuda.is_available() or torch.version.cuda is None:
+        return False
+    if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
+        return False
+    if int(torch.version.cuda.split(".")[0]) < 11:
+        return False
+    if version.parse(torch.__version__) < version.parse("1.10"):
+        return False
+    if not hasattr(torch, "autocast"):
+        return False
+
+    return True
+
+
+def is_torch_tf32_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if not torch.cuda.is_available() or torch.version.cuda is None:
+        return False
+    if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
+        return False
+    if int(torch.version.cuda.split(".")[0]) < 11:
+        return False
+    if version.parse(torch.__version__) < version.parse("1.7"):
+        return False
+
+    return True
 
 
 _torch_fx_available = _torch_onnx_dict_inputs_support_available = False
@@ -330,8 +429,8 @@ def is_coloredlogs_available():
     return _coloredlogs_available
 
 
-def is_keras2onnx_available():
-    return _keras2onnx_available
+def is_tf2onnx_available():
+    return _tf2onnx_available
 
 
 def is_onnx_available():
@@ -413,6 +512,14 @@ def is_pytesseract_available():
     return importlib.util.find_spec("pytesseract") is not None
 
 
+def is_spacy_available():
+    return importlib.util.find_spec("spacy") is not None
+
+
+def is_ftfy_available():
+    return importlib.util.find_spec("ftfy") is not None
+
+
 def is_in_notebook():
     try:
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
@@ -429,6 +536,14 @@ def is_in_notebook():
 
 def is_scatter_available():
     return _scatter_available
+
+
+def is_pytorch_quantization_available():
+    return _pytorch_quantization_available
+
+
+def is_tensorflow_probability_available():
+    return _tensorflow_probability_available
 
 
 def is_pandas_available():
@@ -492,6 +607,10 @@ def is_torchaudio_available():
 def is_speech_available():
     # For now this depends on torchaudio but the exact dependency might evolve in the future.
     return _torchaudio_available
+
+
+def is_phonemizer_available():
+    return _phonemizer_available
 
 
 def torch_only_method(fn):
@@ -610,11 +729,30 @@ SCATTER_IMPORT_ERROR = """
 explained here: https://github.com/rusty1s/pytorch_scatter.
 """
 
+# docstyle-ignore
+PYTORCH_QUANTIZATION_IMPORT_ERROR = """
+{0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
+`pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
+"""
+
+# docstyle-ignore
+TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
+{0} requires the tensorflow_probability library but it was not found in your environment. You can install it with pip as
+explained here: https://github.com/tensorflow/probability.
+"""
+
 
 # docstyle-ignore
 PANDAS_IMPORT_ERROR = """
 {0} requires the pandas library but it was not found in your environment. You can install it with pip as
 explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/install.html.
+"""
+
+
+# docstyle-ignore
+PHONEMIZER_IMPORT_ERROR = """
+{0} requires the phonemizer library but it was not found in your environment. You can install it with pip:
+`pip install phonemizer`
 """
 
 
@@ -650,6 +788,12 @@ PYTESSERACT_IMPORT_ERROR = """
 `pip install pytesseract`
 """
 
+# docstyle-ignore
+PYCTCDECODE_IMPORT_ERROR = """
+{0} requires the pyctcdecode library but it was not found in your environment. You can install it with pip:
+`pip install pyctcdecode`
+"""
+
 
 BACKENDS_MAPPING = OrderedDict(
     [
@@ -658,12 +802,16 @@ BACKENDS_MAPPING = OrderedDict(
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
+        ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
+        ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
+        ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
+        ("tensorflow_probability", (is_tensorflow_probability_available, TENSORFLOW_PROBABILITY_IMPORT_ERROR)),
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
@@ -683,6 +831,18 @@ def requires_backends(obj, backends):
         raise ImportError("".join([BACKENDS_MAPPING[backend][1].format(name) for backend in backends]))
 
 
+class DummyObject(type):
+    """
+    Metaclass for the dummy objects. Any class inheriting from it will return the ImportError generated by
+    `requires_backend` each time a user tries to access any method of that class.
+    """
+
+    def __getattr__(cls, key):
+        if key.startswith("_"):
+            return super().__getattr__(cls, key)
+        requires_backends(cls, cls._backends)
+
+
 def add_start_docstrings(*docstr):
     def docstring_decorator(fn):
         fn.__doc__ = "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
@@ -693,16 +853,21 @@ def add_start_docstrings(*docstr):
 
 def add_start_docstrings_to_model_forward(*docstr):
     def docstring_decorator(fn):
-        class_name = f":class:`~transformers.{fn.__qualname__.split('.')[0]}`"
-        intro = f"   The {class_name} forward method, overrides the :func:`__call__` special method."
+        docstring = "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
+        class_name = f"[`{fn.__qualname__.split('.')[0]}`]"
+        intro = f"   The {class_name} forward method, overrides the `__call__` special method."
         note = r"""
 
-    .. note::
-        Although the recipe for forward pass needs to be defined within this function, one should call the
-        :class:`Module` instance afterwards instead of this since the former takes care of running the pre and post
-        processing steps while the latter silently ignores them.
-        """
-        fn.__doc__ = intro + note + "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
+    <Tip>
+
+    Although the recipe for forward pass needs to be defined within this function, one should call the [`Module`]
+    instance afterwards instead of this since the former takes care of running the pre and post processing steps while
+    the latter silently ignores them.
+
+    </Tip>
+"""
+
+        fn.__doc__ = intro + note + docstring
         return fn
 
     return docstring_decorator
@@ -710,7 +875,7 @@ def add_start_docstrings_to_model_forward(*docstr):
 
 def add_end_docstrings(*docstr):
     def docstring_decorator(fn):
-        fn.__doc__ = fn.__doc__ + "".join(docstr)
+        fn.__doc__ = (fn.__doc__ if fn.__doc__ is not None else "") + "".join(docstr)
         return fn
 
     return docstring_decorator
@@ -718,18 +883,18 @@ def add_end_docstrings(*docstr):
 
 PT_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`: A :class:`~{full_output_type}` or a tuple of
-        :obj:`torch.FloatTensor` (if ``return_dict=False`` is passed or when ``config.return_dict=False``) comprising
-        various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
+        [`{full_output_type}`] or `tuple(torch.FloatTensor)`: A [`{full_output_type}`] or a tuple of
+        `torch.FloatTensor` (if `return_dict=False` is passed or when `config.return_dict=False`) comprising various
+        elements depending on the configuration ([`{config_class}`]) and inputs.
 
 """
 
 
 TF_RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`: A :class:`~{full_output_type}` or a tuple of
-        :obj:`tf.Tensor` (if ``return_dict=False`` is passed or when ``config.return_dict=False``) comprising various
-        elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs.
+        [`{full_output_type}`] or `tuple(tf.Tensor)`: A [`{full_output_type}`] or a tuple of `tf.Tensor` (if
+        `return_dict=False` is passed or when `config.return_dict=False`) comprising various elements depending on the
+        configuration ([`{config_class}`]) and inputs.
 
 """
 
@@ -766,220 +931,412 @@ def _convert_output_args_doc(output_args_doc):
     return "\n".join(blocks)
 
 
-def _prepare_output_docstrings(output_type, config_class):
+def _prepare_output_docstrings(output_type, config_class, min_indent=None):
     """
     Prepares the return part of the docstring using `output_type`.
     """
-    docstrings = output_type.__doc__
+    output_docstring = output_type.__doc__
 
     # Remove the head of the docstring to keep the list of args only
-    lines = docstrings.split("\n")
+    lines = output_docstring.split("\n")
     i = 0
     while i < len(lines) and re.search(r"^\s*(Args|Parameters):\s*$", lines[i]) is None:
         i += 1
     if i < len(lines):
-        docstrings = "\n".join(lines[(i + 1) :])
-        docstrings = _convert_output_args_doc(docstrings)
+        params_docstring = "\n".join(lines[(i + 1) :])
+        params_docstring = _convert_output_args_doc(params_docstring)
 
     # Add the return introduction
     full_output_type = f"{output_type.__module__}.{output_type.__name__}"
     intro = TF_RETURN_INTRODUCTION if output_type.__name__.startswith("TF") else PT_RETURN_INTRODUCTION
     intro = intro.format(full_output_type=full_output_type, config_class=config_class)
-    return intro + docstrings
+    result = intro + params_docstring
+
+    # Apply minimum indent if necessary
+    if min_indent is not None:
+        lines = result.split("\n")
+        # Find the indent of the first nonempty line
+        i = 0
+        while len(lines[i]) == 0:
+            i += 1
+        indent = len(_get_indent(lines[i]))
+        # If too small, add indentation to all nonempty lines
+        if indent < min_indent:
+            to_add = " " * (min_indent - indent)
+            lines = [(f"{to_add}{line}" if len(line) > 0 else line) for line in lines]
+            result = "\n".join(lines)
+
+    return result
 
 
 PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import torch
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> labels = torch.tensor([1] * inputs["input_ids"].size(1)).unsqueeze(0)  # Batch size 1
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+    >>> labels = torch.tensor([1] * inputs["input_ids"].size(1)).unsqueeze(0)  # Batch size 1
 
-        >>> outputs = model(**inputs, labels=labels)
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
+    >>> outputs = model(**inputs, labels=labels)
+    >>> loss = outputs.loss
+    >>> logits = outputs.logits
+    ```
 """
 
 PT_QUESTION_ANSWERING_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import torch
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        >>> inputs = tokenizer(question, text, return_tensors='pt')
-        >>> start_positions = torch.tensor([1])
-        >>> end_positions = torch.tensor([3])
+    >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+    >>> inputs = tokenizer(question, text, return_tensors="pt")
+    >>> start_positions = torch.tensor([1])
+    >>> end_positions = torch.tensor([3])
 
-        >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
-        >>> loss = outputs.loss
-        >>> start_scores = outputs.start_logits
-        >>> end_scores = outputs.end_logits
+    >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
+    >>> loss = outputs.loss
+    >>> start_scores = outputs.start_logits
+    >>> end_scores = outputs.end_logits
+    ```
 """
 
 PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
-    Example::
+    Example of single-label classification:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import torch
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(**inputs, labels=labels)
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+    >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+    >>> outputs = model(**inputs, labels=labels)
+    >>> loss = outputs.loss
+    >>> logits = outputs.logits
+    ```
+
+    Example of multi-label classification:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
+
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}", problem_type="multi_label_classification")
+
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+    >>> labels = torch.tensor([[1, 1]], dtype=torch.float)  # need dtype=float for BCEWithLogitsLoss
+    >>> outputs = model(**inputs, labels=labels)
+    >>> loss = outputs.loss
+    >>> logits = outputs.logits
+    ```
 """
 
+
 PT_MASKED_LM_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import torch
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
-        >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt")["input_ids"]
+    >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
+    >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt")["input_ids"]
 
-        >>> outputs = model(**inputs, labels=labels)
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
+    >>> outputs = model(**inputs, labels=labels)
+    >>> loss = outputs.loss
+    >>> logits = outputs.logits
+    ```
 """
 
 PT_BASE_MODEL_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import torch
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+    >>> outputs = model(**inputs)
 
-        >>> last_hidden_states = outputs.last_hidden_state
+    >>> last_hidden_states = outputs.last_hidden_state
+    ```
 """
 
 PT_MULTIPLE_CHOICE_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import torch
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> choice0 = "It is eaten with a fork and a knife."
-        >>> choice1 = "It is eaten while held in the hand."
-        >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
+    >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+    >>> choice0 = "It is eaten with a fork and a knife."
+    >>> choice1 = "It is eaten while held in the hand."
+    >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
 
-        >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors='pt', padding=True)
-        >>> outputs = model(**{{k: v.unsqueeze(0) for k,v in encoding.items()}}, labels=labels)  # batch size is 1
+    >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors="pt", padding=True)
+    >>> outputs = model(**{{k: v.unsqueeze(0) for k, v in encoding.items()}}, labels=labels)  # batch size is 1
 
-        >>> # the linear classifier still needs to be trained
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
+    >>> # the linear classifier still needs to be trained
+    >>> loss = outputs.loss
+    >>> logits = outputs.logits
+    ```
 """
 
 PT_CAUSAL_LM_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> import torch
-        >>> from transformers import {processor_class}, {model_class}
+    ```python
+    >>> import torch
+    >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs, labels=inputs["input_ids"])
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+    >>> outputs = model(**inputs, labels=inputs["input_ids"])
+    >>> loss = outputs.loss
+    >>> logits = outputs.logits
+    ```
 """
 
 PT_SPEECH_BASE_MODEL_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> from datasets import load_dataset
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
+    >>> from datasets import load_dataset
 
-        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
-        >>> sampling_rate = dataset.features["audio"].sampling_rate
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-        >>> processor = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> # audio file is decoded on the fly
-        >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
-        >>> outputs = model(**inputs)
+    >>> # audio file is decoded on the fly
+    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+    >>> with torch.no_grad():
+    ...     outputs = model(**inputs)
 
-        >>> last_hidden_states = outputs.last_hidden_state
+    >>> last_hidden_states = outputs.last_hidden_state
+    >>> list(last_hidden_states.shape)
+    {expected_output}
+    ```
 """
 
 PT_SPEECH_CTC_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> from datasets import load_dataset
-        >>> import torch
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+    >>> import torch
 
-        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
-        >>> sampling_rate = dataset.features["audio"].sampling_rate
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-        >>> processor = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> processor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> # audio file is decoded on the fly
-        >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
-        >>> logits = model(**inputs).logits
-        >>> predicted_ids = torch.argmax(logits, dim=-1)
+    >>> # audio file is decoded on the fly
+    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+    >>> predicted_ids = torch.argmax(logits, dim=-1)
 
-        >>> # transcribe speech
-        >>> transcription = processor.batch_decode(predicted_ids)
+    >>> # transcribe speech
+    >>> transcription = processor.batch_decode(predicted_ids)
+    >>> transcription[0]
+    {expected_output}
+    ```
 
-        >>> # compute loss
-        >>> with processor.as_target_processor():
-        ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="pt").input_ids
+    ```python
+    >>> with processor.as_target_processor():
+    ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="pt").input_ids
 
-        >>> loss = model(**inputs).loss
+    >>> # compute loss
+    >>> loss = model(**inputs).loss
+    >>> round(loss.item(), 2)
+    {expected_loss}
+    ```
 """
 
 PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> from datasets import load_dataset
-        >>> import torch
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+    >>> import torch
 
-        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
-        >>> sampling_rate = dataset.features["audio"].sampling_rate
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-        >>> feature_extractor = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> # audio file is decoded on the fly
-        >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt")
-        >>> logits = model(**inputs).logits
-        >>> predicted_class_ids = torch.argmax(logits, dim=-1)
-        >>> predicted_label = model.config.id2label[predicted_class_ids]
+    >>> # audio file is decoded on the fly
+    >>> inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
 
-        >>> # compute loss - target_label is e.g. "down"
-        >>> target_label = model.config.id2label[0]
-        >>> inputs["labels"] = torch.tensor([model.config.label2id[target_label]])
-        >>> loss = model(**inputs).loss
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
+    >>> predicted_class_ids = torch.argmax(logits, dim=-1).item()
+    >>> predicted_label = model.config.id2label[predicted_class_ids]
+    >>> predicted_label
+    {expected_output}
+    ```
+
+    ```python
+    >>> # compute loss - target_label is e.g. "down"
+    >>> target_label = model.config.id2label[0]
+    >>> inputs["labels"] = torch.tensor([model.config.label2id[target_label]])
+    >>> loss = model(**inputs).loss
+    >>> round(loss.item(), 2)
+    {expected_loss}
+    ```
+"""
+
+
+PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+    >>> import torch
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = feature_extractor(dataset[0]["audio"]["array"], return_tensors="pt", sampling_rate=sampling_rate)
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
+    >>> probabilities = torch.sigmoid(logits[0])
+    >>> # labels is a one-hot array of shape (num_frames, num_speakers)
+    >>> labels = (probabilities > 0.5).long()
+    >>> labels[0].tolist()
+    {expected_output}
+    ```
+"""
+
+
+PT_SPEECH_XVECTOR_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> from datasets import load_dataset
+    >>> import torch
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = feature_extractor(
+    ...     [d["array"] for d in dataset[:2]["audio"]], sampling_rate=sampling_rate, return_tensors="pt", padding=True
+    ... )
+    >>> with torch.no_grad():
+    ...     embeddings = model(**inputs).embeddings
+
+    >>> embeddings = torch.nn.functional.normalize(embeddings, dim=-1).cpu()
+
+    >>> # the resulting embeddings can be used for cosine similarity-based retrieval
+    >>> cosine_sim = torch.nn.CosineSimilarity(dim=-1)
+    >>> similarity = cosine_sim(embeddings[0], embeddings[1])
+    >>> threshold = 0.7  # the optimal threshold is dataset-dependent
+    >>> if similarity < threshold:
+    ...     print("Speakers are not the same!")
+    >>> round(similarity.item(), 2)
+    {expected_output}
+    ```
+"""
+
+PT_VISION_BASE_MODEL_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
+    >>> from datasets import load_dataset
+
+    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> image = dataset["test"]["image"][0]
+
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> inputs = feature_extractor(image, return_tensors="pt")
+
+    >>> with torch.no_grad():
+    ...     outputs = model(**inputs)
+
+    >>> last_hidden_states = outputs.last_hidden_state
+    >>> list(last_hidden_states.shape)
+    {expected_output}
+    ```
+"""
+
+PT_VISION_SEQ_CLASS_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
+    >>> from datasets import load_dataset
+
+    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> image = dataset["test"]["image"][0]
+
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> inputs = feature_extractor(image, return_tensors="pt")
+
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
+    >>> # model predicts one of the 1000 ImageNet classes
+    >>> predicted_label = logits.argmax(-1).item()
+    >>> print(model.config.id2label[predicted_label])
+    {expected_output}
+    ```
 """
 
 
@@ -994,128 +1351,148 @@ PT_SAMPLE_DOCSTRINGS = {
     "SpeechBaseModel": PT_SPEECH_BASE_MODEL_SAMPLE,
     "CTC": PT_SPEECH_CTC_SAMPLE,
     "AudioClassification": PT_SPEECH_SEQ_CLASS_SAMPLE,
+    "AudioFrameClassification": PT_SPEECH_FRAME_CLASS_SAMPLE,
+    "AudioXVector": PT_SPEECH_XVECTOR_SAMPLE,
+    "VisionBaseModel": PT_VISION_BASE_MODEL_SAMPLE,
+    "ImageClassification": PT_VISION_SEQ_CLASS_SAMPLE,
 }
 
 
 TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import tensorflow as tf
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import tensorflow as tf
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-        >>> input_ids = inputs["input_ids"]
-        >>> inputs["labels"] = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+    >>> input_ids = inputs["input_ids"]
+    >>> inputs["labels"] = tf.reshape(
+    ...     tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))
+    >>> )  # Batch size 1
 
-        >>> outputs = model(inputs)
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
+    >>> outputs = model(inputs)
+    >>> loss = outputs.loss
+    >>> logits = outputs.logits
+    ```
 """
 
 TF_QUESTION_ANSWERING_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import tensorflow as tf
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import tensorflow as tf
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        >>> input_dict = tokenizer(question, text, return_tensors='tf')
-        >>> outputs = model(input_dict)
-        >>> start_logits = outputs.start_logits
-        >>> end_logits = outputs.end_logits
+    >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+    >>> input_dict = tokenizer(question, text, return_tensors="tf")
+    >>> outputs = model(input_dict)
+    >>> start_logits = outputs.start_logits
+    >>> end_logits = outputs.end_logits
 
-        >>> all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-        >>> answer = ' '.join(all_tokens[tf.math.argmax(start_logits, 1)[0] : tf.math.argmax(end_logits, 1)[0]+1])
+    >>> all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
+    >>> answer = " ".join(all_tokens[tf.math.argmax(start_logits, 1)[0] : tf.math.argmax(end_logits, 1)[0] + 1])
+    ```
 """
 
 TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import tensorflow as tf
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import tensorflow as tf
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-        >>> inputs["labels"] = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+    >>> inputs["labels"] = tf.reshape(tf.constant(1), (-1, 1))  # Batch size 1
 
-        >>> outputs = model(inputs)
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
+    >>> outputs = model(inputs)
+    >>> loss = outputs.loss
+    >>> logits = outputs.logits
+    ```
 """
 
 TF_MASKED_LM_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import tensorflow as tf
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import tensorflow as tf
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="tf")
-        >>> inputs["labels"] = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
+    >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="tf")
+    >>> inputs["labels"] = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
 
-        >>> outputs = model(inputs)
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
+    >>> outputs = model(inputs)
+    >>> loss = outputs.loss
+    >>> logits = outputs.logits
+    ```
 """
 
 TF_BASE_MODEL_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import tensorflow as tf
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import tensorflow as tf
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-        >>> outputs = model(inputs)
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+    >>> outputs = model(inputs)
 
-        >>> last_hidden_states = outputs.last_hidden_state
+    >>> last_hidden_states = outputs.last_hidden_state
+    ```
 """
 
 TF_MULTIPLE_CHOICE_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import tensorflow as tf
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import tensorflow as tf
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> choice0 = "It is eaten with a fork and a knife."
-        >>> choice1 = "It is eaten while held in the hand."
+    >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+    >>> choice0 = "It is eaten with a fork and a knife."
+    >>> choice1 = "It is eaten while held in the hand."
 
-        >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors='tf', padding=True)
-        >>> inputs = {{k: tf.expand_dims(v, 0) for k, v in encoding.items()}}
-        >>> outputs = model(inputs)  # batch size is 1
+    >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors="tf", padding=True)
+    >>> inputs = {{k: tf.expand_dims(v, 0) for k, v in encoding.items()}}
+    >>> outputs = model(inputs)  # batch size is 1
 
-        >>> # the linear classifier still needs to be trained
-        >>> logits = outputs.logits
+    >>> # the linear classifier still needs to be trained
+    >>> logits = outputs.logits
+    ```
 """
 
 TF_CAUSAL_LM_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
-        >>> import tensorflow as tf
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import tensorflow as tf
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-        >>> outputs = model(inputs)
-        >>> logits = outputs.logits
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+    >>> outputs = model(inputs)
+    >>> logits = outputs.logits
+    ```
 """
 
 TF_SAMPLE_DOCSTRINGS = {
@@ -1130,108 +1507,122 @@ TF_SAMPLE_DOCSTRINGS = {
 
 
 FLAX_TOKEN_CLASSIFICATION_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
 
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
+    >>> outputs = model(**inputs)
+    >>> logits = outputs.logits
+    ```
 """
 
 FLAX_QUESTION_ANSWERING_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        >>> inputs = tokenizer(question, text, return_tensors='jax')
+    >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+    >>> inputs = tokenizer(question, text, return_tensors="jax")
 
-        >>> outputs = model(**inputs)
-        >>> start_scores = outputs.start_logits
-        >>> end_scores = outputs.end_logits
+    >>> outputs = model(**inputs)
+    >>> start_scores = outputs.start_logits
+    >>> end_scores = outputs.end_logits
+    ```
 """
 
 FLAX_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
 
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
+    >>> outputs = model(**inputs)
+    >>> logits = outputs.logits
+    ```
 """
 
 FLAX_MASKED_LM_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors='jax')
+    >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="jax")
 
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
+    >>> outputs = model(**inputs)
+    >>> logits = outputs.logits
+    ```
 """
 
 FLAX_BASE_MODEL_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors='jax')
-        >>> outputs = model(**inputs)
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
+    >>> outputs = model(**inputs)
 
-        >>> last_hidden_states = outputs.last_hidden_state
+    >>> last_hidden_states = outputs.last_hidden_state
+    ```
 """
 
 FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> choice0 = "It is eaten with a fork and a knife."
-        >>> choice1 = "It is eaten while held in the hand."
+    >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+    >>> choice0 = "It is eaten with a fork and a knife."
+    >>> choice1 = "It is eaten while held in the hand."
 
-        >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors='jax', padding=True)
-        >>> outputs = model(**{{k: v[None, :] for k,v in encoding.items()}})
+    >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors="jax", padding=True)
+    >>> outputs = model(**{{k: v[None, :] for k, v in encoding.items()}})
 
-        >>> logits = outputs.logits
+    >>> logits = outputs.logits
+    ```
 """
 
 FLAX_CAUSAL_LM_SAMPLE = r"""
-    Example::
+    Example:
 
-        >>> from transformers import {processor_class}, {model_class}
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
 
-        >>> tokenizer = {processor_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
-        >>> outputs = model(**inputs)
+    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
+    >>> outputs = model(**inputs)
 
-        >>> # retrieve logts for next token
-        >>> next_token_logits = outputs.logits[:, -1]
+    >>> # retrieve logts for next token
+    >>> next_token_logits = outputs.logits[:, -1]
+    ```
 """
 
 FLAX_SAMPLE_DOCSTRINGS = {
@@ -1251,9 +1642,11 @@ def add_code_sample_docstrings(
     checkpoint=None,
     output_type=None,
     config_class=None,
-    mask=None,
+    mask="[MASK]",
     model_cls=None,
-    modality=None
+    modality=None,
+    expected_output="",
+    expected_loss="",
 ):
     def docstring_decorator(fn):
         # model_class defaults to function's class if not specified otherwise
@@ -1266,7 +1659,17 @@ def add_code_sample_docstrings(
         else:
             sample_docstrings = PT_SAMPLE_DOCSTRINGS
 
-        doc_kwargs = dict(model_class=model_class, processor_class=processor_class, checkpoint=checkpoint)
+        # putting all kwargs for docstrings in a dict to be used
+        # with the `.format(**doc_kwargs)`. Note that string might
+        # be formatted with non-existing keys, which is fine.
+        doc_kwargs = dict(
+            model_class=model_class,
+            processor_class=processor_class,
+            checkpoint=checkpoint,
+            mask=mask,
+            expected_output=expected_output,
+            expected_loss=expected_loss,
+        )
 
         if "SequenceClassification" in model_class and modality == "audio":
             code_sample = sample_docstrings["AudioClassification"]
@@ -1279,22 +1682,30 @@ def add_code_sample_docstrings(
         elif "MultipleChoice" in model_class:
             code_sample = sample_docstrings["MultipleChoice"]
         elif "MaskedLM" in model_class or model_class in ["FlaubertWithLMHeadModel", "XLMWithLMHeadModel"]:
-            doc_kwargs["mask"] = "[MASK]" if mask is None else mask
             code_sample = sample_docstrings["MaskedLM"]
         elif "LMHead" in model_class or "CausalLM" in model_class:
             code_sample = sample_docstrings["LMHead"]
         elif "CTC" in model_class:
             code_sample = sample_docstrings["CTC"]
+        elif "AudioFrameClassification" in model_class:
+            code_sample = sample_docstrings["AudioFrameClassification"]
+        elif "XVector" in model_class and modality == "audio":
+            code_sample = sample_docstrings["AudioXVector"]
         elif "Model" in model_class and modality == "audio":
             code_sample = sample_docstrings["SpeechBaseModel"]
+        elif "Model" in model_class and modality == "vision":
+            code_sample = sample_docstrings["VisionBaseModel"]
         elif "Model" in model_class or "Encoder" in model_class:
             code_sample = sample_docstrings["BaseModel"]
+        elif "ImageClassification" in model_class:
+            code_sample = sample_docstrings["ImageClassification"]
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")
 
-        output_doc = _prepare_output_docstrings(output_type, config_class) if output_type is not None else ""
+        func_doc = (fn.__doc__ or "") + "".join(docstr)
+        output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
         built_doc = code_sample.format(**doc_kwargs)
-        fn.__doc__ = (fn.__doc__ or "") + "".join(docstr) + output_doc + built_doc
+        fn.__doc__ = func_doc + output_doc + built_doc
         return fn
 
     return docstring_decorator
@@ -1302,19 +1713,21 @@ def add_code_sample_docstrings(
 
 def replace_return_docstrings(output_type=None, config_class=None):
     def docstring_decorator(fn):
-        docstrings = fn.__doc__
-        lines = docstrings.split("\n")
+        func_doc = fn.__doc__
+        lines = func_doc.split("\n")
         i = 0
         while i < len(lines) and re.search(r"^\s*Returns?:\s*$", lines[i]) is None:
             i += 1
         if i < len(lines):
-            lines[i] = _prepare_output_docstrings(output_type, config_class)
-            docstrings = "\n".join(lines)
+            indent = len(_get_indent(lines[i]))
+            lines[i] = _prepare_output_docstrings(output_type, config_class, min_indent=indent)
+            func_doc = "\n".join(lines)
         else:
             raise ValueError(
-                f"The function {fn} should have an empty 'Return:' or 'Returns:' in its docstring as placeholder, current docstring is:\n{docstrings}"
+                f"The function {fn} should have an empty 'Return:' or 'Returns:' in its docstring as placeholder, "
+                f"current docstring is:\n{func_doc}"
             )
-        fn.__doc__ = docstrings
+        fn.__doc__ = func_doc
         return fn
 
     return docstring_decorator
@@ -1383,8 +1796,8 @@ def url_to_filename(url: str, etag: Optional[str] = None) -> str:
 
 def filename_to_url(filename, cache_dir=None):
     """
-    Return the url and etag (which may be ``None``) stored for `filename`. Raise ``EnvironmentError`` if `filename` or
-    its stored metadata do not exist.
+    Return the url and etag (which may be `None`) stored for *filename*. Raise `EnvironmentError` if *filename* or its
+    stored metadata do not exist.
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
@@ -1409,16 +1822,16 @@ def filename_to_url(filename, cache_dir=None):
 
 def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
     """
-    Returns a list of tuples representing model binaries that are cached locally. Each tuple has shape
-    :obj:`(model_url, etag, size_MB)`. Filenames in :obj:`cache_dir` are use to get the metadata for each model, only
-    urls ending with `.bin` are added.
+    Returns a list of tuples representing model binaries that are cached locally. Each tuple has shape `(model_url,
+    etag, size_MB)`. Filenames in `cache_dir` are use to get the metadata for each model, only urls ending with *.bin*
+    are added.
 
     Args:
-        cache_dir (:obj:`Union[str, Path]`, `optional`):
+        cache_dir (`Union[str, Path]`, *optional*):
             The cache directory to search for models within. Will default to the transformers cache if unset.
 
     Returns:
-        List[Tuple]: List of tuples each with shape :obj:`(model_url, etag, size_MB)`
+        List[Tuple]: List of tuples each with shape `(model_url, etag, size_MB)`
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
@@ -1591,6 +2004,37 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     return ua
 
 
+class RepositoryNotFoundError(HTTPError):
+    """
+    Raised when trying to access a hf.co URL with an invalid repository name, or with a private repo name the user does
+    not have access to.
+    """
+
+
+class EntryNotFoundError(HTTPError):
+    """Raised when trying to access a hf.co URL with a valid repository and revision but an invalid filename."""
+
+
+class RevisionNotFoundError(HTTPError):
+    """Raised when trying to access a hf.co URL with a valid repository but an invalid revision."""
+
+
+def _raise_for_status(request):
+    """
+    Internal version of `request.raise_for_status()` that will refine a potential HTTPError.
+    """
+    if "X-Error-Code" in request.headers:
+        error_code = request.headers["X-Error-Code"]
+        if error_code == "RepoNotFound":
+            raise RepositoryNotFoundError(f"404 Client Error: Repository Not Found for url: {request.url}")
+        elif error_code == "EntryNotFound":
+            raise EntryNotFoundError(f"404 Client Error: Entry Not Found for url: {request.url}")
+        elif error_code == "RevisionNotFound":
+            raise RevisionNotFoundError((f"404 Client Error: Revision Not Found for url: {request.url}"))
+
+    request.raise_for_status()
+
+
 def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers: Optional[Dict[str, str]] = None):
     """
     Download remote file. Do not gobble up errors.
@@ -1599,9 +2043,11 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
     if resume_size > 0:
         headers["Range"] = f"bytes={resume_size}-"
     r = requests.get(url, stream=True, proxies=proxies, headers=headers)
-    r.raise_for_status()
+    _raise_for_status(r)
     content_length = r.headers.get("Content-Length")
     total = resume_size + int(content_length) if content_length is not None else None
+    # `tqdm` behavior is determined by `utils.logging.is_progress_bar_enabled()`
+    # and can be set using `utils.logging.enable/disable_progress_bar()`
     progress = tqdm(
         unit="B",
         unit_scale=True,
@@ -1609,7 +2055,6 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
         total=total,
         initial=resume_size,
         desc="Downloading",
-        disable=bool(logging.get_verbosity() == logging.NOTSET),
     )
     for chunk in r.iter_content(chunk_size=1024):
         if chunk:  # filter out keep-alive new chunks
@@ -1660,7 +2105,7 @@ def get_from_cache(
     if not local_files_only:
         try:
             r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=etag_timeout)
-            r.raise_for_status()
+            _raise_for_status(r)
             etag = r.headers.get("X-Linked-Etag") or r.headers.get("ETag")
             # We favor a custom header indicating the etag of the linked resource, and
             # we fallback to the regular etag header.
@@ -1771,6 +2216,162 @@ def get_from_cache(
     return cache_path
 
 
+def get_file_from_repo(
+    path_or_repo: Union[str, os.PathLike],
+    filename: str,
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    force_download: bool = False,
+    resume_download: bool = False,
+    proxies: Optional[Dict[str, str]] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+    revision: Optional[str] = None,
+    local_files_only: bool = False,
+):
+    """
+    Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
+
+    Args:
+        path_or_repo (`str` or `os.PathLike`):
+            This can be either:
+
+            - a string, the *model id* of a model repo on huggingface.co.
+            - a path to a *directory* potentially containing the file.
+        filename (`str`):
+            The name of the file to locate in `path_or_repo`.
+        cache_dir (`str` or `os.PathLike`, *optional*):
+            Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
+            cache should not be used.
+        force_download (`bool`, *optional*, defaults to `False`):
+            Whether or not to force to (re-)download the configuration files and override the cached versions if they
+            exist.
+        resume_download (`bool`, *optional*, defaults to `False`):
+            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
+        proxies (`Dict[str, str]`, *optional*):
+            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+        use_auth_token (`str` or *bool*, *optional*):
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+            when running `transformers-cli login` (stored in `~/.huggingface`).
+        revision(`str`, *optional*, defaults to `"main"`):
+            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+            identifier allowed by git.
+        local_files_only (`bool`, *optional*, defaults to `False`):
+            If `True`, will only try to load the tokenizer configuration from local files.
+
+    <Tip>
+
+    Passing `use_auth_token=True` is required when you want to use a private model.
+
+    </Tip>
+
+    Returns:
+        `Optional[str]`: Returns the resolved file (to the cache folder if downloaded from a repo) or `None` if the
+        file does not exist.
+
+    Examples:
+
+    ```python
+    # Download a tokenizer configuration from huggingface.co and cache.
+    tokenizer_config = get_file_from_repo("bert-base-uncased", "tokenizer_config.json")
+    # This model does not have a tokenizer config so the result will be None.
+    tokenizer_config = get_file_from_repo("xlm-roberta-base", "tokenizer_config.json")
+    ```"""
+    if is_offline_mode() and not local_files_only:
+        logger.info("Offline mode: forcing local_files_only=True")
+        local_files_only = True
+
+    path_or_repo = str(path_or_repo)
+    if os.path.isdir(path_or_repo):
+        resolved_file = os.path.join(path_or_repo, filename)
+        return resolved_file if os.path.isfile(resolved_file) else None
+    else:
+        resolved_file = hf_bucket_url(path_or_repo, filename=filename, revision=revision, mirror=None)
+
+    try:
+        # Load from URL or cache if already cached
+        resolved_file = cached_path(
+            resolved_file,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            proxies=proxies,
+            resume_download=resume_download,
+            local_files_only=local_files_only,
+            use_auth_token=use_auth_token,
+        )
+
+    except RepositoryNotFoundError as err:
+        logger.error(err)
+        raise EnvironmentError(
+            f"{path_or_repo} is not a local folder and is not a valid model identifier "
+            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
+            "pass a token having permission to this repo with `use_auth_token` or log in with "
+            "`huggingface-cli login` and pass `use_auth_token=True`."
+        )
+    except RevisionNotFoundError as err:
+        logger.error(err)
+        raise EnvironmentError(
+            f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
+            "for this model name. Check the model page at "
+            f"'https://huggingface.co/{path_or_repo}' for available revisions."
+        )
+    except EnvironmentError:
+        # The repo and revision exist, but the file does not or there was a connection error fetching it.
+        return None
+
+    return resolved_file
+
+
+def has_file(
+    path_or_repo: Union[str, os.PathLike],
+    filename: str,
+    revision: Optional[str] = None,
+    mirror: Optional[str] = None,
+    proxies: Optional[Dict[str, str]] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+):
+    """
+    Checks if a repo contains a given file wihtout downloading it. Works for remote repos and local folders.
+
+    <Tip warning={false}>
+
+    This function will raise an error if the repository `path_or_repo` is not valid or if `revision` does not exist for
+    this repo, but will return False for regular connection errors.
+
+    </Tip>
+    """
+    if os.path.isdir(path_or_repo):
+        return os.path.isfile(os.path.join(path_or_repo, filename))
+
+    url = hf_bucket_url(path_or_repo, filename=filename, revision=revision, mirror=mirror)
+
+    headers = {"user-agent": http_user_agent()}
+    if isinstance(use_auth_token, str):
+        headers["authorization"] = f"Bearer {use_auth_token}"
+    elif use_auth_token:
+        token = HfFolder.get_token()
+        if token is None:
+            raise EnvironmentError("You specified use_auth_token=True, but a huggingface token was not found.")
+        headers["authorization"] = f"Bearer {token}"
+
+    r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=10)
+    try:
+        _raise_for_status(r)
+        return True
+    except RepositoryNotFoundError as e:
+        logger.error(e)
+        raise EnvironmentError(f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'.")
+    except RevisionNotFoundError as e:
+        logger.error(e)
+        raise EnvironmentError(
+            f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
+            "model name. Check the model page at 'https://huggingface.co/{path_or_repo}' for available revisions."
+        )
+    except requests.HTTPError:
+        # We return false for EntryNotFoundError (logical) as well as any connection error.
+        return False
+
+
 def get_list_of_files(
     path_or_repo: Union[str, os.PathLike],
     revision: Optional[str] = None,
@@ -1778,23 +2379,29 @@ def get_list_of_files(
     local_files_only: bool = False,
 ) -> List[str]:
     """
-    Gets the list of files inside :obj:`path_or_repo`.
+    Gets the list of files inside `path_or_repo`.
 
     Args:
-        path_or_repo (:obj:`str` or :obj:`os.PathLike`):
-            Can be either the id of a repo on huggingface.co or a path to a `directory`.
-        revision (:obj:`str`, `optional`, defaults to :obj:`"main"`):
+        path_or_repo (`str` or `os.PathLike`):
+            Can be either the id of a repo on huggingface.co or a path to a *directory*.
+        revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
-        use_auth_token (:obj:`str` or `bool`, `optional`):
-            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
-            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
-        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        use_auth_token (`str` or *bool*, *optional*):
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+            when running `transformers-cli login` (stored in `~/.huggingface`).
+        local_files_only (`bool`, *optional*, defaults to `False`):
             Whether or not to only rely on local files and not to attempt to download any files.
 
+    <Tip warning={true}>
+
+    This API is not optimized, so calling it a lot may result in connection errors.
+
+    </Tip>
+
     Returns:
-        :obj:`List[str]`: The list of files available in :obj:`path_or_repo`.
+        `List[str]`: The list of files available in `path_or_repo`.
     """
     path_or_repo = str(path_or_repo)
     # If path_or_repo is a folder, we just return what is inside (subdirectories included).
@@ -1808,17 +2415,20 @@ def get_list_of_files(
     if is_offline_mode() or local_files_only:
         return []
 
-    # Otherwise we grab the token and use the model_info method.
+    # Otherwise we grab the token and use the list_repo_files method.
     if isinstance(use_auth_token, str):
         token = use_auth_token
     elif use_auth_token is True:
         token = HfFolder.get_token()
     else:
         token = None
-    model_info = HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).model_info(
-        path_or_repo, revision=revision, token=token
-    )
-    return [f.rfilename for f in model_info.siblings]
+
+    try:
+        return list_repo_files(path_or_repo, revision=revision, token=token)
+    except HTTPError as e:
+        raise ValueError(
+            f"{path_or_repo} is not a local path or a model identifier on the model Hub. Did you make a typo?"
+        ) from e
 
 
 class cached_property(property):
@@ -1878,8 +2488,7 @@ def is_torch_fx_proxy(x):
 
 def is_tensor(x):
     """
-    Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor`, obj:`jaxlib.xla_extension.DeviceArray` or
-    :obj:`np.ndarray`.
+    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray`.
     """
     if is_torch_fx_proxy(x):
         return True
@@ -1972,13 +2581,16 @@ def to_numpy(obj):
 
 class ModelOutput(OrderedDict):
     """
-    Base class for all model outputs as dataclass. Has a ``__getitem__`` that allows indexing by integer or slice (like
-    a tuple) or strings (like a dictionary) that will ignore the ``None`` attributes. Otherwise behaves like a regular
+    Base class for all model outputs as dataclass. Has a `__getitem__` that allows indexing by integer or slice (like a
+    tuple) or strings (like a dictionary) that will ignore the `None` attributes. Otherwise behaves like a regular
     python dictionary.
 
-    .. warning::
-        You can't unpack a :obj:`ModelOutput` directly. Use the :meth:`~transformers.file_utils.ModelOutput.to_tuple`
-        method to convert it to a tuple before.
+    <Tip warning={true}>
+
+    You can't unpack a `ModelOutput` directly. Use the [`~file_utils.ModelOutput.to_tuple`] method to convert it to a
+    tuple before.
+
+    </Tip>
     """
 
     def __post_init__(self):
@@ -2058,7 +2670,7 @@ class ModelOutput(OrderedDict):
 
     def to_tuple(self) -> Tuple[Any]:
         """
-        Convert self to a tuple containing all the attributes/keys that are not ``None``.
+        Convert self to a tuple containing all the attributes/keys that are not `None`.
         """
         return tuple(self[k] for k in self.keys())
 
@@ -2077,8 +2689,8 @@ class ExplicitEnum(Enum):
 
 class PaddingStrategy(ExplicitEnum):
     """
-    Possible values for the ``padding`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for tab-completion
-    in an IDE.
+    Possible values for the `padding` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for tab-completion in an
+    IDE.
     """
 
     LONGEST = "longest"
@@ -2088,7 +2700,7 @@ class PaddingStrategy(ExplicitEnum):
 
 class TensorType(ExplicitEnum):
     """
-    Possible values for the ``return_tensors`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for
+    Possible values for the `return_tensors` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for
     tab-completion in an IDE.
     """
 
@@ -2113,7 +2725,7 @@ class _LazyModule(ModuleType):
             for value in values:
                 self._class_to_module[value] = key
         # Needed for autocompletion in an IDE
-        self.__all__ = list(import_structure.keys()) + sum(import_structure.values(), [])
+        self.__all__ = list(import_structure.keys()) + list(chain(*import_structure.values()))
         self.__file__ = module_file
         self.__spec__ = module_spec
         self.__path__ = [os.path.dirname(module_file)]
@@ -2204,58 +2816,60 @@ class PushToHubMixin:
         organization: Optional[str] = None,
         private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
+        **model_card_kwargs
     ) -> str:
         """
         Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
-        :obj:`repo_path_or_name`.
+        `repo_path_or_name`.
 
         Parameters:
-            repo_path_or_name (:obj:`str`, `optional`):
+            repo_path_or_name (`str`, *optional*):
                 Can either be a repository name for your {object} in the Hub or a path to a local folder (in which case
                 the repository will have the name of that local folder). If not specified, will default to the name
-                given by :obj:`repo_url` and a local directory with that name will be created.
-            repo_url (:obj:`str`, `optional`):
+                given by `repo_url` and a local directory with that name will be created.
+            repo_url (`str`, *optional*):
                 Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
-                repository will be created in your namespace (unless you specify an :obj:`organization`) with
-                :obj:`repo_name`.
-            use_temp_dir (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to clone the distant repo in a temporary directory or in :obj:`repo_path_or_name` inside
-                the current working directory. This will slow things down if you are making changes in an existing repo
+                repository will be created in your namespace (unless you specify an `organization`) with `repo_name`.
+            use_temp_dir (`bool`, *optional*, defaults to `False`):
+                Whether or not to clone the distant repo in a temporary directory or in `repo_path_or_name` inside the
+                current working directory. This will slow things down if you are making changes in an existing repo
                 since you will need to clone the repo before every push.
-            commit_message (:obj:`str`, `optional`):
-                Message to commit while pushing. Will default to :obj:`"add {object}"`.
-            organization (:obj:`str`, `optional`):
+            commit_message (`str`, *optional*):
+                Message to commit while pushing. Will default to `"add {object}"`.
+            organization (`str`, *optional*):
                 Organization in which you want to push your {object} (you must be a member of this organization).
-            private (:obj:`bool`, `optional`):
+            private (`bool`, *optional*):
                 Whether or not the repository created should be private (requires a paying subscription).
-            use_auth_token (:obj:`bool` or :obj:`str`, `optional`):
-                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
-                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`). Will default to
-                :obj:`True` if :obj:`repo_url` is not specified.
+            use_auth_token (`bool` or `str`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `transformers-cli login` (stored in `~/.huggingface`). Will default to `True` if
+                `repo_url` is not specified.
 
 
         Returns:
-            :obj:`str`: The url of the commit of your {object} in the given repository.
+            `str`: The url of the commit of your {object} in the given repository.
 
-        Examples::
+        Examples:
 
-            from transformers import {object_class}
+        ```python
+        from transformers import {object_class}
 
-            {object} = {object_class}.from_pretrained("bert-base-cased")
+        {object} = {object_class}.from_pretrained("bert-base-cased")
 
-            # Push the {object} to your namespace with the name "my-finetuned-bert" and have a local clone in the
-            # `my-finetuned-bert` folder.
-            {object}.push_to_hub("my-finetuned-bert")
+        # Push the {object} to your namespace with the name "my-finetuned-bert" and have a local clone in the
+        # *my-finetuned-bert* folder.
+        {object}.push_to_hub("my-finetuned-bert")
 
-            # Push the {object} to your namespace with the name "my-finetuned-bert" with no local clone.
-            {object}.push_to_hub("my-finetuned-bert", use_temp_dir=True)
+        # Push the {object} to your namespace with the name "my-finetuned-bert" with no local clone.
+        {object}.push_to_hub("my-finetuned-bert", use_temp_dir=True)
 
-            # Push the {object} to an organization with the name "my-finetuned-bert" and have a local clone in the
-            # `my-finetuned-bert` folder.
-            {object}.push_to_hub("my-finetuned-bert", organization="huggingface")
+        # Push the {object} to an organization with the name "my-finetuned-bert" and have a local clone in the
+        # *my-finetuned-bert* folder.
+        {object}.push_to_hub("my-finetuned-bert", organization="huggingface")
 
-            # Make a change to an existing repo that has been cloned locally in `my-finetuned-bert`.
-            {object}.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
+        # Make a change to an existing repo that has been cloned locally in *my-finetuned-bert*.
+        {object}.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
+        ```
         """
         if use_temp_dir:
             # Make sure we use the right `repo_name` for the `repo_url` before replacing it.
@@ -2278,6 +2892,14 @@ class PushToHubMixin:
         )
         # Save the files in the cloned repo
         self.save_pretrained(repo_path_or_name)
+        if hasattr(self, "history") and hasattr(self, "create_model_card"):
+            # This is a Keras model and we might be able to fish out its History and make a model card out of it
+            base_model_card_args = {
+                "output_dir": repo_path_or_name,
+                "model_name": Path(repo_path_or_name).name,
+            }
+            base_model_card_args.update(model_card_kwargs)
+            self.create_model_card(**base_model_card_args)
         # Commit and push!
         url = self._push_to_hub(repo, commit_message=commit_message)
 
@@ -2308,7 +2930,7 @@ class PushToHubMixin:
             token = None
 
         # Special provision for the test endpoint (CI)
-        return HfApi(endpoint=HUGGINGFACE_CO_RESOLVE_ENDPOINT).create_repo(
+        return create_repo(
             token,
             repo_name,
             organization=organization,
@@ -2366,7 +2988,7 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
     if token is None:
         token = HfFolder.get_token()
     if organization is None:
-        username = HfApi().whoami(token)["name"]
+        username = whoami(token)["name"]
         return f"{username}/{model_id}"
     else:
         return f"{organization}/{model_id}"

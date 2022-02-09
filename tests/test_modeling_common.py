@@ -20,21 +20,29 @@ import json
 import os
 import os.path
 import random
+import sys
 import tempfile
 import unittest
 import warnings
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
 
 import transformers
-from huggingface_hub import HfApi, Repository
+from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
-from transformers import AutoModel, AutoModelForSequenceClassification, is_torch_available, logging
+from transformers import (
+    AutoConfig,
+    AutoModel,
+    AutoModelForSequenceClassification,
+    PretrainedConfig,
+    is_torch_available,
+    logging,
+)
 from transformers.file_utils import WEIGHTS_NAME, is_flax_available, is_torch_fx_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    ENDPOINT_STAGING,
     PASS,
     USER,
     CaptureLogger,
@@ -49,12 +57,19 @@ from transformers.testing_utils import (
 )
 
 
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
+
+from test_module.custom_configuration import CustomConfig, NoSuperInitConfig  # noqa E402
+
+
 if is_torch_available():
     import torch
     from torch import nn
 
+    from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
@@ -68,7 +83,6 @@ if is_torch_available():
         AdaptiveEmbedding,
         BertConfig,
         BertModel,
-        PretrainedConfig,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -102,8 +116,7 @@ class ModelTesterMixin:
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
-    fx_ready_model_classes = ()
-    fx_dynamic_ready_model_classes = ()
+    fx_compatible = False
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
@@ -145,6 +158,7 @@ class ModelTesterMixin:
             elif model_class in [
                 *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
                 *get_values(MODEL_FOR_CAUSAL_LM_MAPPING),
+                *get_values(MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
             ]:
@@ -207,6 +221,17 @@ class ModelTesterMixin:
                     or set(load_result.missing_keys) == set(model._keys_to_ignore_on_save)
                 )
                 self.assertTrue(len(load_result.unexpected_keys) == 0)
+
+    def test_gradient_checkpointing_backward_compatibility(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if not model_class.supports_gradient_checkpointing:
+                continue
+
+            config.gradient_checkpointing = True
+            model = model_class(config)
+            self.assertTrue(model.is_gradient_checkpointing)
 
     def test_gradient_checkpointing_enable_disable(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -413,6 +438,7 @@ class ModelTesterMixin:
                 continue
             model = model_class(config)
             model.to(torch_device)
+            model.gradient_checkpointing_enable()
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
@@ -639,19 +665,14 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
-    def test_torch_fx_dynamic_axes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self._create_and_check_torch_fx_tracing(config, inputs_dict, dynamic_axes=True)
-
-    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False, dynamic_axes=False):
-        if not is_torch_fx_available():
+    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
+        if not is_torch_fx_available() or not self.fx_compatible:
             return
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
 
-        model_classes = self.fx_ready_model_classes if not dynamic_axes else self.fx_dynamic_ready_model_classes
-        for model_class in model_classes:
+        for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()
@@ -660,8 +681,6 @@ class ModelTesterMixin:
             try:
                 if model.config.is_encoder_decoder:
                     model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                    input_ids = inputs["input_ids"]
-                    decoder_attention_mask = inputs["decoder_attention_mask"]
                     labels = inputs.get("labels", None)
                     input_names = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask"]
                     if labels is not None:
@@ -670,17 +689,7 @@ class ModelTesterMixin:
 
                     model_output = model(**filtered_inputs)
 
-                    batch_size = input_ids.shape[0]
-                    encoder_sequence_length = input_ids.shape[1]
-                    decoder_sequence_length = decoder_attention_mask.shape[1]
-
-                    traced_model = symbolic_trace(
-                        model,
-                        input_names,
-                        batch_size=batch_size if not dynamic_axes else -1,
-                        sequence_length=[encoder_sequence_length, decoder_sequence_length] if not dynamic_axes else -1,
-                    )
-
+                    traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
                 else:
                     input_names = ["input_ids", "attention_mask", "token_type_ids"]
@@ -702,23 +711,12 @@ class ModelTesterMixin:
                     model_output = model(**filtered_inputs)
 
                     rank = len(input_ids.shape)
-                    if rank == 2:
-                        batch_size, sequence_length = input_ids.shape
-                        num_choices = -1
-                    elif rank == 3:
-                        batch_size, num_choices, sequence_length = input_ids.shape
-                    else:
+                    if rank not in [2, 3]:
                         raise NotImplementedError(
                             f"symbolic_trace automatic parameters inference not implemented for input of rank {rank}."
                         )
 
-                    traced_model = symbolic_trace(
-                        model,
-                        input_names,
-                        batch_size=batch_size if not dynamic_axes else -1,
-                        sequence_length=sequence_length if not dynamic_axes else -1,
-                        num_choices=num_choices,
-                    )
+                    traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
 
             except RuntimeError:
@@ -1296,6 +1294,13 @@ class ModelTesterMixin:
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
+    def test_model_main_input_name(self):
+        for model_class in self.all_model_classes:
+            model_signature = inspect.signature(getattr(model_class, "forward"))
+            # The main input is the name of the argument after `self`
+            observed_main_input_name = list(model_signature.parameters.keys())[1]
+            self.assertEqual(model_class.main_input_name, observed_main_input_name)
+
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
             return
@@ -1471,6 +1476,10 @@ class ModelTesterMixin:
                     tf_inputs_dict[key] = tensor
                 elif key == "input_values":
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                elif key == "pixel_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                elif key == "input_features":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
                 else:
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.int32)
 
@@ -1519,6 +1528,10 @@ class ModelTesterMixin:
                     tensor = np.array(tensor, dtype=bool)
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor, dtype=tf.int32)
                 elif key == "input_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                elif key == "pixel_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                elif key == "input_features":
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
                 else:
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.int32)
@@ -2078,43 +2091,14 @@ class ModelUtilsTest(TestCasePlus):
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
 
+    def test_no_super_init_config_and_model(self):
+        config = NoSuperInitConfig(attribute=32)
+        model = NoSuperInitModel(config)
 
-if is_torch_available():
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
 
-    class FakeModel(PreTrainedModel):
-        config_class = BertConfig
-        base_model_prefix = "fake"
-
-        def __init__(self, config):
-            super().__init__(config)
-            self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
-
-        def forward(self, x):
-            return self.linear(x)
-
-        def _init_weights(self, module):
-            pass
-
-
-# Make sure this is synchronized with the model above.
-FAKE_MODEL_CODE = """
-import torch
-from transformers import BertConfig, PreTrainedModel
-
-class FakeModel(PreTrainedModel):
-    config_class = BertConfig
-    base_model_prefix = "fake"
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
-
-    def forward(self, x):
-        return self.linear(x)
-
-    def _init_weights(self, module):
-        pass
-"""
+            model = NoSuperInitModel.from_pretrained(tmp_dir)
 
 
 @require_torch
@@ -2122,23 +2106,27 @@ class FakeModel(PreTrainedModel):
 class ModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model")
+            delete_repo(token=cls._token, name="test-model")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-model-org", organization="valid_org")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-dynamic-model")
+            delete_repo(token=cls._token, name="test-dynamic-model")
+        except HTTPError:
+            pass
+
+        try:
+            delete_repo(token=cls._token, name="test-dynamic-model-config")
         except HTTPError:
             pass
 
@@ -2172,20 +2160,29 @@ class ModelPushToHubTester(unittest.TestCase):
                 self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_dynamic_model(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        config.auto_map = {"AutoModel": "modeling.FakeModel"}
-        model = FakeModel(config)
+        CustomConfig.register_for_auto_class()
+        CustomModel.register_for_auto_class()
+
+        config = CustomConfig(hidden_size=32)
+        model = CustomModel(config)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-model", use_auth_token=self._token)
             model.save_pretrained(tmp_dir)
-            with open(os.path.join(tmp_dir, "modeling.py"), "w") as f:
-                f.write(FAKE_MODEL_CODE)
+            # checks
+            self.assertDictEqual(
+                config.auto_map,
+                {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
+            )
 
             repo.push_to_hub()
 
         new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
+        # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module
+        self.assertEqual(new_model.__class__.__name__, "CustomModel")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
+
+        config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
+        new_model = AutoModel.from_config(config, trust_remote_code=True)
+        self.assertEqual(new_model.__class__.__name__, "CustomModel")

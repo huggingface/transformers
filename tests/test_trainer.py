@@ -21,12 +21,15 @@ import random
 import re
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import numpy as np
 
-from huggingface_hub import HfApi, Repository
+from huggingface_hub import Repository, delete_repo, login
+from parameterized import parameterized
 from requests.exceptions import HTTPError
 from transformers import (
     AutoTokenizer,
@@ -36,7 +39,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.file_utils import WEIGHTS_NAME
+from transformers.file_utils import WEIGHTS_NAME, is_apex_available
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     PASS,
@@ -46,20 +49,23 @@ from transformers.testing_utils import (
     get_gpu_count,
     get_tests_dir,
     is_staging_test,
-    require_datasets,
     require_optuna,
     require_ray,
     require_sentencepiece,
     require_sigopt,
     require_tokenizers,
     require_torch,
+    require_torch_bf16,
     require_torch_gpu,
     require_torch_multi_gpu,
     require_torch_non_multi_gpu,
+    require_torch_tf32,
     require_torch_up_to_2_gpus,
+    require_wandb,
     slow,
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+from transformers.training_args import OptimizerNames
 from transformers.utils.hp_naming import TrialShortNamer
 
 
@@ -68,6 +74,7 @@ if is_torch_available():
     from torch import nn
     from torch.utils.data import IterableDataset
 
+    import transformers.optimization
     from transformers import (
         AutoModelForSequenceClassification,
         EarlyStoppingCallback,
@@ -172,6 +179,16 @@ if is_torch_available():
             for i in range(len(self.dataset)):
                 yield self.dataset[i]
 
+    class FiniteIterableDataset(SampleIterableDataset):
+        def __init__(self, a=2, b=3, length=64, seed=42, label_names=None):
+            super().__init__(a, b, length, seed, label_names)
+            self.current_sample = 0
+
+        def __iter__(self):
+            while self.current_sample < len(self.dataset):
+                yield self.dataset[self.current_sample]
+                self.current_sample += 1
+
     class RegressionModel(nn.Module):
         def __init__(self, a=0, b=0, double_output=False):
             super().__init__()
@@ -273,6 +290,7 @@ if is_torch_available():
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
         output_dir = kwargs.pop("output_dir", "./regression")
+        preprocess_logits_for_metrics = kwargs.pop("preprocess_logits_for_metrics", None)
 
         args = RegressionTrainingArguments(output_dir, a=a, b=b, **kwargs)
         return Trainer(
@@ -284,6 +302,7 @@ if is_torch_available():
             compute_metrics=compute_metrics,
             optimizers=optimizers,
             model_init=model_init,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         )
 
 
@@ -379,7 +398,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.check_trained_model(trainer.model, alternate_seed=True)
 
-    @require_datasets
     def test_trainer_with_datasets(self):
         import datasets
 
@@ -434,6 +452,27 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.check_trained_model(trainer.model)
 
+    def test_training_loss(self):
+        n_gpus = max(1, get_gpu_count())
+
+        # With even logs
+        trainer = get_regression_trainer(logging_steps=64 / (8 * n_gpus))
+        trainer.train()
+        log_history = trainer.state.log_history
+
+        losses = [log["loss"] for log in log_history if "loss" in log]
+        train_loss = log_history[-1]["train_loss"]
+        self.assertAlmostEqual(sum(losses) / len(losses), train_loss, places=4)
+
+        # With uneven logs
+        trainer = get_regression_trainer(logging_steps=5)
+        trainer.train()
+        log_history = trainer.state.log_history
+
+        # Training loss should be the same as before
+        new_train_loss = log_history[-1]["train_loss"]
+        self.assertAlmostEqual(train_loss, new_train_loss, places=4)
+
     def test_custom_optimizer(self):
         train_dataset = RegressionDataset()
         args = TrainingArguments("./regression")
@@ -465,6 +504,30 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(torch.allclose(trainer.model.a, a))
         self.assertFalse(torch.allclose(trainer.model.b, b))
         self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
+
+    @require_torch_gpu
+    @require_torch_bf16
+    def test_mixed_bf16(self):
+
+        # very basic test
+        trainer = get_regression_trainer(learning_rate=0.1, bf16=True)
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+        # --bf16 --half_precision_backend apex can't be used together
+        with self.assertRaises(ValueError):
+            trainer = get_regression_trainer(learning_rate=0.1, bf16=True, half_precision_backend="apex")
+
+        # will add more specific tests once there are some bugs to fix
+
+    @require_torch_gpu
+    @require_torch_tf32
+    def test_tf32(self):
+
+        # very basic test
+        trainer = get_regression_trainer(learning_rate=0.1, tf32=True)
+        trainer.train()
+        self.check_trained_model(trainer.model)
 
 
 @require_torch
@@ -622,6 +685,22 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         expected_loss = ((pred - y) ** 2).mean()
         self.assertAlmostEqual(results["eval_loss"], expected_loss)
         expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+        # With logits preprocess
+        trainer = get_regression_trainer(
+            a=1.5,
+            b=2.5,
+            compute_metrics=AlmostAccuracy(),
+            preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
+        )
+        results = trainer.evaluate()
+
+        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
         self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
     def test_predict(self):
@@ -856,7 +935,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(b, b1, delta=1e-8)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
-    def test_training_with_resume_from_checkpoint_flase(self):
+    def test_training_with_resume_from_checkpoint_false(self):
         train_dataset = RegressionDataset(length=128)
         eval_dataset = RegressionDataset()
 
@@ -1057,6 +1136,26 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         loader = trainer.get_train_dataloader()
         self.assertIsInstance(loader, torch.utils.data.DataLoader)
         self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
+
+    def test_training_finite_iterable_dataset(self):
+        config = RegressionModelConfig()
+        model = RegressionPreTrainedModel(config)
+
+        batch_size = 1
+        num_samples = 10
+
+        available_steps = num_samples // batch_size
+
+        data = FiniteIterableDataset(length=num_samples)
+        train_args = TrainingArguments(
+            ".",
+            max_steps=available_steps + 1,  # set a higher number than actually available
+            per_device_train_batch_size=batch_size,
+        )
+        trainer = Trainer(model, train_dataset=data, args=train_args)
+        with self.assertLogs("transformers.trainer", level="WARNING") as logs:
+            trainer.train()
+        self.assertIn(f"stopping training at step {available_steps}!", logs.output[0])
 
     def test_evaluation_iterable_dataset(self):
         config = RegressionModelConfig(a=1.5, b=2.5)
@@ -1289,6 +1388,66 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
+    @require_torch_gpu
+    @require_torch_bf16
+    def test_bf16_full_eval(self):
+        # note: most of the logic is the same as test_fp16_full_eval
+
+        # this is a sensitive test so let's keep debugging printouts in place for quick diagnosis.
+        # it's using pretty large safety margins, but small enough to detect broken functionality.
+        debug = 0
+        n_gpus = get_gpu_count()
+
+        bs = 8
+        eval_len = 16 * n_gpus
+        # make the params somewhat big so that there will be enough RAM consumed to be able to
+        # measure things. We should get about 64KB for a+b in fp32
+        a = torch.ones(1000, bs) + 0.001
+        b = torch.ones(1000, bs) - 0.001
+
+        # 1. with mem metrics enabled
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, skip_memory_metrics=False)
+        metrics = trainer.evaluate()
+        del trainer
+        gc.collect()
+
+        fp32_init = metrics["init_mem_gpu_alloc_delta"]
+        fp32_eval = metrics["eval_mem_gpu_alloc_delta"]
+
+        if debug:
+            print(f"fp32_init {fp32_init}")
+            print(f"fp32_eval {fp32_eval}")
+
+        # here we expect the model to be preloaded in trainer.__init__ and consume around 64K gpu ram.
+        # perfect world: fp32_init == 64<<10
+        self.assertGreater(fp32_init, 59_000)
+        # after eval should be no extra memory allocated - with a small margin (other than the peak
+        # memory consumption for the forward calculation that gets recovered)
+        # perfect world: fp32_eval == close to zero
+        self.assertLess(fp32_eval, 5_000)
+
+        # 2. with mem metrics disabled
+        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, bf16_full_eval=True, skip_memory_metrics=False)
+        metrics = trainer.evaluate()
+        bf16_init = metrics["init_mem_gpu_alloc_delta"]
+        bf16_eval = metrics["eval_mem_gpu_alloc_delta"]
+
+        if debug:
+            print(f"bf16_init {bf16_init}")
+            print(f"bf16_eval {bf16_eval}")
+
+        # here we expect the model to not be preloaded in trainer.__init__, so with a small margin it should be close to 0
+        # perfect world: bf16_init == close to zero
+        self.assertLess(bf16_init, 5_000)
+        # here we put the model on device in eval and only `half()` of it, i.e. about 32K,(again we ignore the peak margin which gets returned back)
+        # perfect world: fp32_init == 32<<10
+        self.assertGreater(bf16_eval, 27_000)
+
+        # 3. relative comparison fp32 vs full bf16
+        # should be about half of bf16_init
+        # perfect world: fp32_init/2 == bf16_eval
+        self.assertAlmostEqual(bf16_eval, fp32_init / 2, delta=5_000)
+
     def test_no_wd_param_group(self):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
         trainer = Trainer(model=model)
@@ -1307,19 +1466,18 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         for model in ["test-trainer", "test-trainer-epoch", "test-trainer-step"]:
             try:
-                cls._api.delete_repo(token=cls._token, name=model)
+                delete_repo(token=cls._token, name=model)
             except HTTPError:
                 pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-trainer-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-trainer-org", organization="valid_org")
         except HTTPError:
             pass
 
@@ -1387,15 +1545,23 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             )
             trainer.train()
 
+            # Wait for the async pushes to be finished
+            while trainer.push_in_progress is not None and not trainer.push_in_progress.is_done:
+                time.sleep(0.5)
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-epoch", use_auth_token=self._token)
             commits = self.get_commit_history(tmp_dir)
-            expected_commits = [f"Training in progress, epoch {i}" for i in range(3, 0, -1)]
-            expected_commits.append("initial commit")
-            self.assertListEqual(commits, expected_commits)
-            print(commits, len(commits))
+            self.assertIn("initial commit", commits)
+            # We can't test that epoch 2 and 3 are in the commits without being flaky as those might be skipped if
+            # the push for epoch 1 wasn't finished at the time.
+            self.assertIn("Training in progress, epoch 1", commits)
 
     def test_push_to_hub_with_saves_each_n_steps(self):
+        num_gpus = max(1, get_gpu_count())
+        if num_gpus > 2:
+            return
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
                 output_dir=os.path.join(tmp_dir, "test-trainer-step"),
@@ -1406,13 +1572,17 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             )
             trainer.train()
 
+            # Wait for the async pushes to be finished
+            while trainer.push_in_progress is not None and not trainer.push_in_progress.is_done:
+                time.sleep(0.5)
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-step", use_auth_token=self._token)
             commits = self.get_commit_history(tmp_dir)
-            expected_commits = [f"Training in progress, step {i}" for i in range(20, 0, -5)]
-            expected_commits.append("initial commit")
-            self.assertListEqual(commits, expected_commits)
-            print(commits, len(commits))
+            self.assertIn("initial commit", commits)
+            # We can't test that epoch 2 and 3 are in the commits without being flaky as those might be skipped if
+            # the push for epoch 1 wasn't finished at the time.
+            self.assertIn("Training in progress, step 5", commits)
 
 
 @require_torch
@@ -1573,4 +1743,155 @@ class TrainerHyperParameterSigOptIntegrationTest(unittest.TestCase):
             )
             trainer.hyperparameter_search(
                 direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="sigopt", n_trials=4
+            )
+
+
+optim_test_params = []
+if is_torch_available():
+    default_adam_kwargs = {
+        "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
+        "eps": TrainingArguments.adam_epsilon,
+        "lr": TrainingArguments.learning_rate,
+    }
+
+    optim_test_params = [
+        (
+            OptimizerNames.ADAMW_HF,
+            transformers.optimization.AdamW,
+            default_adam_kwargs,
+        ),
+        (
+            OptimizerNames.ADAMW_HF.value,
+            transformers.optimization.AdamW,
+            default_adam_kwargs,
+        ),
+        (
+            OptimizerNames.ADAMW_TORCH,
+            torch.optim.AdamW,
+            default_adam_kwargs,
+        ),
+        (
+            OptimizerNames.ADAFACTOR,
+            transformers.optimization.Adafactor,
+            {
+                "scale_parameter": False,
+                "relative_step": False,
+                "lr": TrainingArguments.learning_rate,
+            },
+        ),
+    ]
+    if is_apex_available():
+        import apex
+
+        optim_test_params.append(
+            (
+                OptimizerNames.ADAMW_APEX_FUSED,
+                apex.optimizers.FusedAdam,
+                default_adam_kwargs,
+            )
+        )
+
+
+@require_torch
+class TrainerOptimizerChoiceTest(unittest.TestCase):
+    def check_optim_and_kwargs(self, optim: OptimizerNames, mandatory_kwargs, expected_cls):
+        args = TrainingArguments(optim=optim, output_dir="None")
+        actual_cls, optim_kwargs = Trainer.get_optimizer_cls_and_kwargs(args)
+        self.assertEqual(expected_cls, actual_cls)
+        self.assertIsNotNone(optim_kwargs)
+
+        for p, v in mandatory_kwargs.items():
+            self.assertTrue(p in optim_kwargs)
+            actual_v = optim_kwargs[p]
+            self.assertTrue(actual_v == v, f"Failed check for {p}. Expected {v}, but got {actual_v}.")
+
+    @parameterized.expand(optim_test_params, skip_on_empty=True)
+    def test_optim_supported(self, name: str, expected_cls, mandatory_kwargs):
+        # exercises all the valid --optim options
+        self.check_optim_and_kwargs(name, mandatory_kwargs, expected_cls)
+
+        trainer = get_regression_trainer(optim=name)
+        trainer.train()
+
+    def test_fused_adam(self):
+        # Pretend that apex is installed and mock apex.optimizers.FusedAdam exists.
+        # Trainer.get_optimizer_cls_and_kwargs does not use FusedAdam, but only has to return a
+        # class called, so mocking apex.optimizers.FusedAdam should be fine for testing and allow
+        # the test to run without requiring an apex installation.
+        mock = Mock()
+        modules = {
+            "apex": mock,
+            "apex.optimizers": mock.optimizers,
+            "apex.optimizers.FusedAdam": mock.optimizers.FusedAdam,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                OptimizerNames.ADAMW_APEX_FUSED,
+                default_adam_kwargs,
+                mock.optimizers.FusedAdam,
+            )
+
+    def test_fused_adam_no_apex(self):
+        args = TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir="None")
+
+        # Pretend that apex does not exist, even if installed. By setting apex to None, importing
+        # apex will fail even if apex is installed.
+        with patch.dict("sys.modules", {"apex.optimizers": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+
+@require_torch
+@require_wandb
+class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        args = TrainingArguments(".")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
+
+    def test_hyperparameter_search(self):
+        class MyTrialShortNamer(TrialShortNamer):
+            DEFAULTS = {"a": 0, "b": 0}
+
+        def hp_space(trial):
+
+            return {
+                "method": "random",
+                "metric": {},
+                "parameters": {
+                    "a": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
+                    "b": {"distribution": "int_uniform", "min": 1, "max": 6},
+                },
+            }
+
+        def model_init(config):
+            if config is None:
+                a = 0
+                b = 0
+            else:
+                a = config["a"]
+                b = config["b"]
+            model_config = RegressionModelConfig(a=a, b=b, double_output=False)
+
+            return RegressionPreTrainedModel(model_config)
+
+        def hp_name(params):
+            return MyTrialShortNamer.shortname(params)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                learning_rate=0.1,
+                logging_steps=1,
+                evaluation_strategy=IntervalStrategy.EPOCH,
+                save_strategy=IntervalStrategy.EPOCH,
+                num_train_epochs=4,
+                disable_tqdm=True,
+                load_best_model_at_end=True,
+                logging_dir="runs",
+                run_name="test",
+                model_init=model_init,
+            )
+            trainer.hyperparameter_search(
+                direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="wandb", n_trials=4, anonymous="must"
             )

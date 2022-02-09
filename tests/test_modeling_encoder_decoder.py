@@ -142,6 +142,48 @@ class EncoderDecoderMixin:
             outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
         )
 
+    def check_encoder_decoder_model_from_pretrained_using_model_paths(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        **kwargs
+    ):
+        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+            encoder_model.save_pretrained(encoder_tmp_dirname)
+            decoder_model.save_pretrained(decoder_tmp_dirname)
+            model_kwargs = {"encoder_hidden_dropout_prob": 0.0}
+
+            # BartConfig has no hidden_dropout_prob.
+            if not hasattr(decoder_config, "hidden_dropout_prob"):
+                model_kwargs["decoder_activation_function"] = "gelu"
+            else:
+                model_kwargs["decoder_hidden_dropout_prob"] = 0.0
+
+            enc_dec_model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+                encoder_tmp_dirname, decoder_tmp_dirname, **model_kwargs
+            )
+        enc_dec_model.to(torch_device)
+        outputs_encoder_decoder = enc_dec_model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+            return_dict=True,
+        )
+
+        self.assertEqual(
+            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+        )
+        self.assertEqual(
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+        )
+
     def check_encoder_decoder_model_from_pretrained(
         self,
         config,
@@ -353,6 +395,9 @@ class EncoderDecoderMixin:
     def check_encoder_decoder_model_generate(self, input_ids, config, decoder_config, **kwargs):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+
+        # Generate until max length
+        enc_dec_model.config.decoder.eos_token_id = None
         enc_dec_model.to(torch_device)
 
         # Bert does not have a bos token id, so use pad_token_id instead
@@ -458,6 +503,10 @@ class EncoderDecoderMixin:
     def test_encoder_decoder_model_from_pretrained_return_dict(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=True)
+
+    def test_encoder_decoder_model_from_pretrained_using_model_paths(self):
+        input_ids_dict = self.prepare_config_and_inputs()
+        self.check_encoder_decoder_model_from_pretrained_using_model_paths(**input_ids_dict, return_dict=False)
 
     def test_save_and_load_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -566,6 +615,24 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             "encoder_hidden_states": encoder_hidden_states,
             "labels": decoder_token_labels,
         }
+
+    def test_relative_position_embeds(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+
+        encoder_config = config_and_inputs["config"]
+        decoder_config = config_and_inputs["decoder_config"]
+
+        encoder_config.position_embedding_type = "relative_key_query"
+        decoder_config.position_embedding_type = "relative_key_query"
+
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+        model = EncoderDecoderModel(config).eval().to(torch_device)
+
+        logits = model(
+            input_ids=config_and_inputs["input_ids"], decoder_input_ids=config_and_inputs["decoder_input_ids"]
+        ).logits
+
+        self.assertTrue(logits.shape, (13, 7))
 
     @slow
     def test_bert2bert_summarization(self):

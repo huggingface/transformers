@@ -34,6 +34,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         BertLMHeadModel,
         DeiTModel,
         TrOCRForCausalLM,
@@ -48,7 +49,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import TrOCRProcessor
+    from transformers import TrOCRProcessor, ViTFeatureExtractor
 
 
 @require_torch
@@ -63,14 +64,7 @@ class EncoderDecoderMixin:
         pass
 
     def check_encoder_decoder_model_from_pretrained_configs(
-        self,
-        config,
-        attention_mask,
-        decoder_config,
-        decoder_input_ids,
-        decoder_attention_mask,
-        pixel_values=None,
-        **kwargs
+        self, config, decoder_config, decoder_input_ids, decoder_attention_mask, pixel_values=None, **kwargs
     ):
         encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
@@ -83,7 +77,6 @@ class EncoderDecoderMixin:
 
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
-            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
         )
@@ -93,14 +86,7 @@ class EncoderDecoderMixin:
         )
 
     def check_encoder_decoder_model(
-        self,
-        config,
-        attention_mask,
-        decoder_config,
-        decoder_input_ids,
-        decoder_attention_mask,
-        pixel_values=None,
-        **kwargs
+        self, config, decoder_config, decoder_input_ids, decoder_attention_mask, pixel_values=None, **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -110,7 +96,6 @@ class EncoderDecoderMixin:
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
-            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             output_hidden_states=True,
@@ -121,7 +106,6 @@ class EncoderDecoderMixin:
         encoder_outputs = BaseModelOutput(last_hidden_state=outputs_encoder_decoder.encoder_hidden_states[-1])
         outputs_encoder_decoder = enc_dec_model(
             encoder_outputs=encoder_outputs,
-            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
         )
@@ -133,7 +117,6 @@ class EncoderDecoderMixin:
     def check_encoder_decoder_model_from_pretrained(
         self,
         config,
-        attention_mask,
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
@@ -147,7 +130,6 @@ class EncoderDecoderMixin:
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
-            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             output_hidden_states=True,
@@ -159,14 +141,7 @@ class EncoderDecoderMixin:
         )
 
     def check_save_and_load(
-        self,
-        config,
-        attention_mask,
-        decoder_config,
-        decoder_input_ids,
-        decoder_attention_mask,
-        pixel_values=None,
-        **kwargs
+        self, config, decoder_config, decoder_input_ids, decoder_attention_mask, pixel_values=None, **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -175,7 +150,6 @@ class EncoderDecoderMixin:
         with torch.no_grad():
             outputs = enc_dec_model(
                 pixel_values=pixel_values,
-                attention_mask=attention_mask,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
             )
@@ -189,7 +163,6 @@ class EncoderDecoderMixin:
 
                 after_outputs = enc_dec_model(
                     pixel_values=pixel_values,
-                    attention_mask=attention_mask,
                     decoder_input_ids=decoder_input_ids,
                     decoder_attention_mask=decoder_attention_mask,
                 )
@@ -199,14 +172,7 @@ class EncoderDecoderMixin:
                 self.assertLessEqual(max_diff, 1e-5)
 
     def check_save_and_load_encoder_decoder_model(
-        self,
-        config,
-        attention_mask,
-        decoder_config,
-        decoder_input_ids,
-        decoder_attention_mask,
-        pixel_values=None,
-        **kwargs
+        self, config, decoder_config, decoder_input_ids, decoder_attention_mask, pixel_values=None, **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -215,7 +181,6 @@ class EncoderDecoderMixin:
         with torch.no_grad():
             outputs = enc_dec_model(
                 pixel_values=pixel_values,
-                attention_mask=attention_mask,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
             )
@@ -232,7 +197,6 @@ class EncoderDecoderMixin:
 
                 after_outputs = enc_dec_model(
                     pixel_values=pixel_values,
-                    attention_mask=attention_mask,
                     decoder_input_ids=decoder_input_ids,
                     decoder_attention_mask=decoder_attention_mask,
                 )
@@ -244,7 +208,6 @@ class EncoderDecoderMixin:
     def check_encoder_decoder_model_output_attentions(
         self,
         config,
-        attention_mask,
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
@@ -260,7 +223,6 @@ class EncoderDecoderMixin:
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
-            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             output_attentions=True,
@@ -381,13 +343,10 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
             ]
         )
         # for DEiT, the sequence length is equal to the number of patches + 2 (for the [CLS] and distillation tokens)
-        seq_len = (model.encoder.config.image_size // model.encoder.config.patch_size) ** 2 + 2
-        attention_mask = random_attention_mask([batch_size, seq_len])
         decoder_input_ids = ids_tensor([batch_size, 4], model.decoder.config.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
         inputs = {
             "pixel_values": pixel_values,
-            "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
         }
@@ -397,7 +356,6 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
     def check_encoder_decoder_model_output_attentions(
         self,
         config,
-        attention_mask,
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
@@ -413,7 +371,6 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             pixel_values=pixel_values,
-            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             output_attentions=True,
@@ -462,7 +419,6 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
         encoder_config_and_inputs = deit_model_tester.prepare_config_and_inputs()
         decoder_config_and_inputs = bert_model_tester.prepare_config_and_inputs_for_decoder()
         config, pixel_values, _ = encoder_config_and_inputs
-        input_mask = None  # TODO add once attention_mask is supported for vision models
         (
             decoder_config,
             decoder_input_ids,
@@ -480,7 +436,6 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
         return {
             "config": config,
             "pixel_values": pixel_values,
-            "attention_mask": input_mask,
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
             "decoder_token_type_ids": decoder_token_type_ids,
@@ -508,13 +463,10 @@ class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
             ]
         )
         # for ViT, the sequence length is equal to the number of patches + 1 (for the [CLS] token)
-        seq_len = (model.encoder.config.image_size // model.encoder.config.patch_size) ** 2 + 1
-        attention_mask = random_attention_mask([batch_size, seq_len])
         decoder_input_ids = ids_tensor([batch_size, 4], model.decoder.config.vocab_size)
         decoder_attention_mask = random_attention_mask([batch_size, 4])
         inputs = {
             "pixel_values": pixel_values,
-            "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
         }
@@ -533,7 +485,6 @@ class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
         decoder_config_and_inputs = bert_model_tester.prepare_config_and_inputs_for_decoder()
 
         config, pixel_values, _ = encoder_config_and_inputs
-        input_mask = None  # TODO add once attention_mask is supported for vision models
 
         (
             decoder_config,
@@ -552,7 +503,6 @@ class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
         return {
             "config": config,
             "pixel_values": pixel_values,
-            "attention_mask": input_mask,
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
             "decoder_token_type_ids": decoder_token_type_ids,
@@ -579,7 +529,6 @@ class ViT2TrOCR(EncoderDecoderMixin, unittest.TestCase):
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
         config, pixel_values, _ = encoder_config_and_inputs
-        input_mask = None  # TODO add once attention_mask is supported for vision models
         (decoder_config, decoder_input_ids, decoder_attention_mask, _) = decoder_config_and_inputs
 
         # make sure that cross attention layers are added
@@ -589,7 +538,6 @@ class ViT2TrOCR(EncoderDecoderMixin, unittest.TestCase):
         return {
             "config": config,
             "pixel_values": pixel_values,
-            "attention_mask": input_mask,
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
@@ -656,3 +604,69 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-4))
+
+
+@require_vision
+@require_torch
+class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_coco_en(self):
+
+        loc = "ydshieh/vit-gpt2-coco-en"
+
+        feature_extractor = ViTFeatureExtractor.from_pretrained(loc)
+        tokenizer = AutoTokenizer.from_pretrained(loc)
+        model = VisionEncoderDecoderModel.from_pretrained(loc)
+        model.to(torch_device)
+        model.eval()
+
+        # We will verify our results on an image of cute cats
+        img = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        pixel_values = feature_extractor(images=img, return_tensors="pt").pixel_values.to(torch_device)
+
+        decoder_input_ids = torch.tensor([[model.config.decoder_start_token_id]]).to(torch_device)
+
+        with torch.no_grad():
+            logits = model(pixel_values, decoder_input_ids)[0].detach().cpu().numpy()
+
+        # verify the logits
+        expected_shape = (1, 1, model.config.decoder.vocab_size)
+        self.assertEqual(logits.shape, expected_shape)
+
+        EXPECTED_LOGIT_SLICE = np.array(
+            [
+                -38.705807,
+                -30.639929,
+                -31.41903,
+                -39.012012,
+                -38.38696,
+                -34.887207,
+                -33.290855,
+                -35.68447,
+                -38.508484,
+                -36.124645,
+            ]
+        )
+        max_diff = np.amax(np.abs(logits[0, 0, :10] - EXPECTED_LOGIT_SLICE))
+        self.assertLessEqual(max_diff, 1e-4)
+
+        def generate_step(pixel_values):
+
+            outputs = model.generate(
+                pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True, output_scores=True
+            )
+            output_ids = outputs.sequences
+            preds = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+            preds = [pred.strip() for pred in preds]
+
+            return preds, outputs.sequences_scores.detach().cpu().numpy()
+
+        preds, scores = generate_step(pixel_values)
+
+        EXPECTED_SCORES = np.array([-0.59562886])
+        max_diff = np.amax(np.abs(scores - EXPECTED_SCORES))
+        self.assertLessEqual(max_diff, 1e-4)
+
+        # should produce
+        # ["a cat laying on top of a couch next to another cat"]
+        self.assertEqual(preds, ["a cat laying on top of a couch next to another cat"])

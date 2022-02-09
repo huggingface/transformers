@@ -1264,7 +1264,7 @@ class Res5ROIHeads(nn.Module):
         self.feature_strides = {k: v.stride for k, v in input_shape.items()}
         self.feature_channels = {k: v.channels for k, v in input_shape.items()}
         self.cls_agnostic_bbox_reg = cfg.ROI_BOX_HEAD.CLS_AGNOSTIC_BBOX_REG
-        self.stage_channel_factor = 2 ** 3  # res5 is 8x res2
+        self.stage_channel_factor = 2**3  # res5 is 8x res2
         self.out_channels = cfg.RESNETS.RES2_OUT_CHANNELS * self.stage_channel_factor
 
         # self.proposal_matcher = Matcher(
@@ -1419,7 +1419,7 @@ class AnchorGenerator(nn.Module):
 
         anchors = []
         for size in sizes:
-            area = size ** 2.0
+            area = size**2.0
             for aspect_ratio in aspect_ratios:
                 w = math.sqrt(area / aspect_ratio)
                 h = aspect_ratio * w

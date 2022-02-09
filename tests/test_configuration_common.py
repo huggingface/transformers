@@ -16,14 +16,23 @@
 import copy
 import json
 import os
+import shutil
+import sys
 import tempfile
 import unittest
+import unittest.mock
+from pathlib import Path
 
-from huggingface_hub import HfApi
+from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
-from transformers import BertConfig, GPT2Config, is_torch_available
+from transformers import AutoConfig, BertConfig, GPT2Config, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
-from transformers.testing_utils import ENDPOINT_STAGING, PASS, USER, is_staging_test
+from transformers.testing_utils import PASS, USER, is_staging_test
+
+
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
+
+from test_module.custom_configuration import CustomConfig  # noqa E402
 
 
 config_common_kwargs = {
@@ -49,6 +58,7 @@ config_common_kwargs = {
     "temperature": 2.0,
     "top_k": 10,
     "top_p": 0.7,
+    "typical_p": 0.2,
     "repetition_penalty": 0.8,
     "length_penalty": 0.8,
     "no_repeat_ngram_size": 5,
@@ -178,7 +188,7 @@ class ConfigTester(object):
 
         if len(wrong_values) > 0:
             errors = "\n".join([f"- {v[0]}: got {v[1]} instead of {v[2]}" for v in wrong_values])
-            raise ValueError(f"The following keys were not properly sey in the config:\n{errors}")
+            raise ValueError(f"The following keys were not properly set in the config:\n{errors}")
 
     def run_common_tests(self):
         self.create_and_test_config_common_properties()
@@ -194,18 +204,22 @@ class ConfigTester(object):
 class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._api = HfApi(endpoint=ENDPOINT_STAGING)
-        cls._token = cls._api.login(username=USER, password=PASS)
+        cls._token = login(username=USER, password=PASS)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            cls._api.delete_repo(token=cls._token, name="test-config")
+            delete_repo(token=cls._token, name="test-config")
         except HTTPError:
             pass
 
         try:
-            cls._api.delete_repo(token=cls._token, name="test-config-org", organization="valid_org")
+            delete_repo(token=cls._token, name="test-config-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+        try:
+            delete_repo(token=cls._token, name="test-dynamic-config")
         except HTTPError:
             pass
 
@@ -239,6 +253,26 @@ class ConfigPushToHubTester(unittest.TestCase):
                 if k != "transformers_version":
                     self.assertEqual(v, getattr(new_config, k))
 
+    def test_push_to_hub_dynamic_config(self):
+        CustomConfig.register_for_auto_class()
+        config = CustomConfig(attribute=42)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-config", use_auth_token=self._token)
+            config.save_pretrained(tmp_dir)
+
+            # This has added the proper auto_map field to the config
+            self.assertDictEqual(config.auto_map, {"AutoConfig": "custom_configuration.CustomConfig"})
+            # The code has been copied from fixtures
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_configuration.py")))
+
+            repo.push_to_hub()
+
+        new_config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-config", trust_remote_code=True)
+        # Can't make an isinstance check because the new_config is from the FakeConfig class of a dynamic module
+        self.assertEqual(new_config.__class__.__name__, "CustomConfig")
+        self.assertEqual(new_config.attribute, 42)
+
 
 class ConfigTestUtils(unittest.TestCase):
     def test_config_from_string(self):
@@ -268,3 +302,44 @@ class ConfigTestUtils(unittest.TestCase):
                 "The following keys are set with the default values in `test_configuration_common.config_common_kwargs` "
                 f"pick another value for them: {', '.join(keys_with_defaults)}."
             )
+
+
+class ConfigurationVersioningTest(unittest.TestCase):
+    def test_local_versioning(self):
+        configuration = AutoConfig.from_pretrained("bert-base-cased")
+        configuration.configuration_files = ["config.4.0.0.json"]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            configuration.save_pretrained(tmp_dir)
+            configuration.hidden_size = 2
+            json.dump(configuration.to_dict(), open(os.path.join(tmp_dir, "config.4.0.0.json"), "w"))
+
+            # This should pick the new configuration file as the version of Transformers is > 4.0.0
+            new_configuration = AutoConfig.from_pretrained(tmp_dir)
+            self.assertEqual(new_configuration.hidden_size, 2)
+
+            # Will need to be adjusted if we reach v42 and this test is still here.
+            # Should pick the old configuration file as the version of Transformers is < 4.42.0
+            configuration.configuration_files = ["config.42.0.0.json"]
+            configuration.hidden_size = 768
+            configuration.save_pretrained(tmp_dir)
+            shutil.move(os.path.join(tmp_dir, "config.4.0.0.json"), os.path.join(tmp_dir, "config.42.0.0.json"))
+            new_configuration = AutoConfig.from_pretrained(tmp_dir)
+            self.assertEqual(new_configuration.hidden_size, 768)
+
+    def test_repo_versioning_before(self):
+        # This repo has two configuration files, one for v4.0.0 and above with a different hidden size.
+        repo = "hf-internal-testing/test-two-configs"
+
+        import transformers as new_transformers
+
+        new_transformers.configuration_utils.__version__ = "v4.0.0"
+        new_configuration = new_transformers.models.auto.AutoConfig.from_pretrained(repo)
+        self.assertEqual(new_configuration.hidden_size, 2)
+
+        # Testing an older version by monkey-patching the version in the module it's used.
+        import transformers as old_transformers
+
+        old_transformers.configuration_utils.__version__ = "v3.0.0"
+        old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
+        self.assertEqual(old_configuration.hidden_size, 768)

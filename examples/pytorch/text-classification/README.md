@@ -168,3 +168,34 @@ This command is the same and will work for:
 - a training on TPUs
 
 Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
+
+## XNLI
+
+Based on the script [`run_xnli.py`](https://github.com/huggingface/transformers/examples/pytorch/text-classification/run_xnli.py).
+
+[XNLI](https://www.nyu.edu/projects/bowman/xnli/) is a crowd-sourced dataset based on [MultiNLI](http://www.nyu.edu/projects/bowman/multinli/). It is an evaluation benchmark for cross-lingual text representations. Pairs of text are labeled with textual entailment annotations for 15 different languages (including both high-resource language such as English and low-resource languages such as Swahili).
+
+#### Fine-tuning on XNLI
+
+This example code fine-tunes mBERT (multi-lingual BERT) on the XNLI dataset. It runs in 106 mins on a single tesla V100 16GB.
+
+```bash
+python run_xnli.py \
+  --model_name_or_path bert-base-multilingual-cased \
+  --language de \
+  --train_language en \
+  --do_train \
+  --do_eval \
+  --per_device_train_batch_size 32 \
+  --learning_rate 5e-5 \
+  --num_train_epochs 2.0 \
+  --max_seq_length 128 \
+  --output_dir /tmp/debug_xnli/ \
+  --save_steps -1
+```
+
+Training with the previously defined hyper-parameters yields the following results on the **test** set:
+
+```bash
+acc = 0.7093812375249501
+```

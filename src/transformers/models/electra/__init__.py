@@ -22,7 +22,7 @@ from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_to
 
 
 _import_structure = {
-    "configuration_electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig"],
+    "configuration_electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraOnnxConfig"],
     "tokenization_electra": ["ElectraTokenizer"],
 }
 
@@ -32,6 +32,7 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_electra"] = [
         "ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ElectraForCausalLM",
         "ElectraForMaskedLM",
         "ElectraForMultipleChoice",
         "ElectraForPreTraining",
@@ -70,7 +71,7 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
+    from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraOnnxConfig
     from .tokenization_electra import ElectraTokenizer
 
     if is_tokenizers_available():
@@ -79,6 +80,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ElectraForCausalLM,
             ElectraForMaskedLM,
             ElectraForMultipleChoice,
             ElectraForPreTraining,
@@ -118,4 +120,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

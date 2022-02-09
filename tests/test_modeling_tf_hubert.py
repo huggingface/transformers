@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 from transformers import is_tf_available
-from transformers.testing_utils import require_datasets, require_soundfile, require_tf, slow
+from transformers.testing_utils import require_soundfile, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -184,7 +184,7 @@ class TFHubertModelTester:
         model = TFHubertForCTC(config)
 
         # freeze feature encoder
-        model.freeze_feature_extractor()
+        model.freeze_feature_encoder()
 
         input_values = input_values[:3]
 
@@ -473,7 +473,6 @@ class TFHubertUtilsTest(unittest.TestCase):
 
 @require_tf
 @slow
-@require_datasets
 @require_soundfile
 class TFHubertModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):

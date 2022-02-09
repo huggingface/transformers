@@ -50,6 +50,12 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
         )
         self.assertEqual(outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
+        outputs = question_answerer(
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
+            handle_impossible_answer=True,
+        )
+        self.assertEqual(outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
 
         outputs = question_answerer(
             question=["In what field is HuggingFace working ?", "In what field is HuggingFace working ?"],

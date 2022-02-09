@@ -206,7 +206,7 @@ class MultiHeadSelfAttention(nn.Module):
         mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
         scores = scores.masked_fill(mask, -float("inf"))  # (bs, n_heads, q_length, k_length)
 
-        weights = nn.Softmax(dim=-1)(scores)  # (bs, n_heads, q_length, k_length)
+        weights = nn.functional.softmax(scores, dim=-1)  # (bs, n_heads, q_length, k_length)
         weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
 
         # Mask heads if we want to
@@ -377,56 +377,54 @@ class DistilBertPreTrainedModel(PreTrainedModel):
 
 DISTILBERT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
-        config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model.
+        config ([`DistilBertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 DISTILBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
+        input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.DistilBertTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`DistilBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -441,7 +439,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
@@ -451,11 +450,10 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
-        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
-        config.max_position_embeddings`.
+        Resizes position embeddings of the model if `new_num_position_embeddings != config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`):
+            new_num_position_embeddings (`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
                 will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
                 end. If position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the
@@ -559,7 +557,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """DistilBert Model with a `masked language modeling` head on top. """,
+    """DistilBert Model with a `masked language modeling` head on top.""",
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
@@ -571,7 +569,8 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         self.vocab_layer_norm = nn.LayerNorm(config.dim, eps=1e-12)
         self.vocab_projector = nn.Linear(config.dim, config.vocab_size)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
         self.mlm_loss_fct = nn.CrossEntropyLoss()
 
@@ -583,11 +582,10 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
-        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
-        config.max_position_embeddings`.
+        Resizes position embeddings of the model if `new_num_position_embeddings != config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`):
+            new_num_position_embeddings (`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
                 will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
                 end. If position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the
@@ -621,10 +619,10 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -677,7 +675,8 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         self.classifier = nn.Linear(config.dim, config.num_labels)
         self.dropout = nn.Dropout(config.seq_classif_dropout)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
@@ -687,11 +686,10 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
-        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
-        config.max_position_embeddings`.
+        Resizes position embeddings of the model if `new_num_position_embeddings != config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`):
+            new_num_position_embeddings (`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
                 will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
                 end. If position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the
@@ -719,10 +717,10 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -793,7 +791,8 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         assert config.num_labels == 2
         self.dropout = nn.Dropout(config.qa_dropout)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
@@ -803,11 +802,10 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
-        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
-        config.max_position_embeddings`.
+        Resizes position embeddings of the model if `new_num_position_embeddings != config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`):
+            new_num_position_embeddings (`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
                 will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
                 end. If position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the
@@ -836,14 +834,14 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -910,7 +908,8 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         self.dropout = nn.Dropout(config.dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
@@ -920,11 +919,10 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
-        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
-        config.max_position_embeddings`.
+        Resizes position embeddings of the model if `new_num_position_embeddings != config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`):
+            new_num_position_embeddings (`int`):
                 The number of new position embedding matrix. If position embeddings are learned, increasing the size
                 will add newly initialized vectors at the end, whereas reducing the size will remove vectors from the
                 end. If position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the
@@ -952,9 +950,8 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
-            1]``.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -976,16 +973,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            # Only keep active parts of the loss
-            if attention_mask is not None:
-                active_loss = attention_mask.view(-1) == 1
-                active_logits = logits.view(-1, self.num_labels)
-                active_labels = torch.where(
-                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
-                )
-                loss = loss_fct(active_logits, active_labels)
-            else:
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1015,7 +1003,8 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         self.classifier = nn.Linear(config.dim, 1)
         self.dropout = nn.Dropout(config.seq_classif_dropout)
 
-        self.init_weights()
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_position_embeddings(self) -> nn.Embedding:
         """
@@ -1025,11 +1014,10 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
-        Resizes position embeddings of the model if :obj:`new_num_position_embeddings !=
-        config.max_position_embeddings`.
+        Resizes position embeddings of the model if `new_num_position_embeddings != config.max_position_embeddings`.
 
         Arguments:
-            new_num_position_embeddings (:obj:`int`)
+            new_num_position_embeddings (`int`)
                 The number of new position embeddings. If position embeddings are learned, increasing the size will add
                 newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
                 position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
@@ -1054,33 +1042,34 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
-            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
-            :obj:`input_ids` above)
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
+            `input_ids` above)
 
         Returns:
 
-        Examples::
+        Examples:
 
-            >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
-            >>> import torch
+        ```python
+        >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
+        >>> import torch
 
-            >>> tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-            >>> model = DistilBertForMultipleChoice.from_pretrained('distilbert-base-cased')
+        >>> tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
+        >>> model = DistilBertForMultipleChoice.from_pretrained("distilbert-base-cased")
 
-            >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-            >>> choice0 = "It is eaten with a fork and a knife."
-            >>> choice1 = "It is eaten while held in the hand."
-            >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> choice0 = "It is eaten with a fork and a knife."
+        >>> choice1 = "It is eaten while held in the hand."
+        >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
 
-            >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors='pt', padding=True)
-            >>> outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels) # batch size is 1
+        >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors="pt", padding=True)
+        >>> outputs = model(**{k: v.unsqueeze(0) for k, v in encoding.items()}, labels=labels)  # batch size is 1
 
-            >>> # the linear classifier still needs to be trained
-            >>> loss = outputs.loss
-            >>> logits = outputs.logits
-        """
+        >>> # the linear classifier still needs to be trained
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 

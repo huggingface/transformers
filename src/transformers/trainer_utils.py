@@ -49,11 +49,10 @@ if is_tf_available():
 
 def set_seed(seed: int):
     """
-    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf`` (if
-    installed).
+    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
 
     Args:
-        seed (:obj:`int`): The seed to set.
+        seed (`int`): The seed to set.
     """
     random.seed(seed)
     np.random.seed(seed)
@@ -70,24 +69,24 @@ class EvalPrediction(NamedTuple):
     Evaluation output (always contains labels), to be used to compute metrics.
 
     Parameters:
-        predictions (:obj:`np.ndarray`): Predictions of the model.
-        label_ids (:obj:`np.ndarray`): Targets to be matched.
+        predictions (`np.ndarray`): Predictions of the model.
+        label_ids (`np.ndarray`): Targets to be matched.
     """
 
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: np.ndarray
+    label_ids: Union[np.ndarray, Tuple[np.ndarray]]
 
 
 class EvalLoopOutput(NamedTuple):
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Optional[np.ndarray]
+    label_ids: Optional[Union[np.ndarray, Tuple[np.ndarray]]]
     metrics: Optional[Dict[str, float]]
     num_samples: Optional[int]
 
 
 class PredictionOutput(NamedTuple):
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Optional[np.ndarray]
+    label_ids: Optional[Union[np.ndarray, Tuple[np.ndarray]]]
     metrics: Optional[Dict[str, float]]
 
 
@@ -134,15 +133,15 @@ class HubStrategy(ExplicitEnum):
 
 class BestRun(NamedTuple):
     """
-    The best run found by an hyperparameter search (see :class:`~transformers.Trainer.hyperparameter_search`).
+    The best run found by an hyperparameter search (see [`~Trainer.hyperparameter_search`]).
 
     Parameters:
-        run_id (:obj:`str`):
+        run_id (`str`):
             The id of the best run (if models were saved, the corresponding checkpoint will be in the folder ending
             with run-{run_id}).
-        objective (:obj:`float`):
+        objective (`float`):
             The objective that was obtained for this run.
-        hyperparameters (:obj:`Dict[str, Any]`):
+        hyperparameters (`Dict[str, Any]`):
             The hyperparameters picked to get this run.
     """
 
@@ -154,13 +153,13 @@ class BestRun(NamedTuple):
 def default_compute_objective(metrics: Dict[str, float]) -> float:
     """
     The default objective to maximize/minimize when doing an hyperparameter search. It is the evaluation loss if no
-    metrics are provided to the :class:`~transformers.Trainer`, the sum of all metrics otherwise.
+    metrics are provided to the [`Trainer`], the sum of all metrics otherwise.
 
     Args:
-        metrics (:obj:`Dict[str, float]`): The metrics returned by the evaluate method.
+        metrics (`Dict[str, float]`): The metrics returned by the evaluate method.
 
     Return:
-        :obj:`float`: The objective to minimize or maximize
+        `float`: The objective to minimize or maximize
     """
     metrics = copy.deepcopy(metrics)
     loss = metrics.pop("eval_loss", None)
@@ -211,16 +210,36 @@ def default_hp_space_sigopt(trial):
     ]
 
 
+def default_hp_space_wandb(trial) -> Dict[str, float]:
+    from .integrations import is_wandb_available
+
+    if not is_wandb_available():
+        raise ImportError("This function needs wandb installed: `pip install wandb`")
+
+    return {
+        "method": "random",
+        "metric": {"name": "objective", "goal": "minimize"},
+        "parameters": {
+            "learning_rate": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
+            "num_train_epochs": {"distribution": "int_uniform", "min": 1, "max": 6},
+            "seed": {"distribution": "int_uniform", "min": 1, "max": 40},
+            "per_device_train_batch_size": {"values": [4, 8, 16, 32, 64]},
+        },
+    }
+
+
 class HPSearchBackend(ExplicitEnum):
     OPTUNA = "optuna"
     RAY = "ray"
     SIGOPT = "sigopt"
+    WANDB = "wandb"
 
 
 default_hp_space = {
     HPSearchBackend.OPTUNA: default_hp_space_optuna,
     HPSearchBackend.RAY: default_hp_space_ray,
     HPSearchBackend.SIGOPT: default_hp_space_sigopt,
+    HPSearchBackend.WANDB: default_hp_space_wandb,
 }
 
 
@@ -292,22 +311,23 @@ class TrainerMemoryTracker:
     """
     A helper class that tracks cpu and gpu memory.
 
-    This class will silently skip unless ``psutil`` is available. Install with ``pip install psutil``.
+    This class will silently skip unless `psutil` is available. Install with `pip install psutil`.
 
     When a stage completes, it can pass metrics dict to update with the memory metrics gathered during this stage.
 
-    Example ::
+    Example :
 
-        self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
-        self._memory_tracker.start()
-        code ...
-        metrics = {"train_runtime": 10.5}
-        self._memory_tracker.stop_and_update_metrics(metrics)
+    ```python
+    self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
+    self._memory_tracker.start()
+    # code ...
+    metrics = {"train_runtime": 10.5}
+    self._memory_tracker.stop_and_update_metrics(metrics)
+    ```
 
-    At the moment GPU tracking is only for ``pytorch``, but can be extended to support ``tensorflow``.
+    At the moment GPU tracking is only for `pytorch`, but can be extended to support `tensorflow`.
 
-    To understand this class' intricacies please read the documentation of :meth:`~transformers.Trainer.log_metrics`.
-
+    To understand this class' intricacies please read the documentation of [`~Trainer.log_metrics`].
     """
 
     # map trainer methods to metrics prefix
@@ -497,6 +517,17 @@ class TrainerMemoryTracker:
         # init doesn't have metrics to update so we just save that data for later stages to retrieve
         if metrics is not None:
             self.update_metrics(stage, metrics)
+
+
+def has_length(dataset):
+    """
+    Checks if the dataset implements __len__() and it doesn't raise an error
+    """
+    try:
+        return len(dataset) is not None
+    except TypeError:
+        # TypeError: len() of unsized object
+        return False
 
 
 def denumpify_detensorize(metrics):

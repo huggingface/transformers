@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available
+from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -28,13 +28,25 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_vision_encoder_decoder"] = ["VisionEncoderDecoderModel"]
 
+if is_tf_available():
+    _import_structure["modeling_tf_vision_encoder_decoder"] = ["TFVisionEncoderDecoderModel"]
+
+if is_flax_available():
+    _import_structure["modeling_flax_vision_encoder_decoder"] = ["FlaxVisionEncoderDecoderModel"]
+
 if TYPE_CHECKING:
     from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
 
     if is_torch_available():
         from .modeling_vision_encoder_decoder import VisionEncoderDecoderModel
 
+    if is_tf_available():
+        from .modeling_tf_vision_encoder_decoder import TFVisionEncoderDecoderModel
+
+    if is_flax_available():
+        from .modeling_flax_vision_encoder_decoder import FlaxVisionEncoderDecoderModel
+
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

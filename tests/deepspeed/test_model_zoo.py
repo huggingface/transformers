@@ -41,6 +41,9 @@ with ExtendSysPath(tests_dir):
 
 set_seed(42)
 
+# default torch.distributed port
+DEFAULT_MASTER_PORT = "10999"
+
 T5_SMALL = "t5-small"
 
 # *** Working Models ***
@@ -139,7 +142,8 @@ def get_launcher(distributed=False):
     # 2. for now testing with just 2 gpus max (since some quality tests may give different
     # results with mode gpus because we use very little data)
     num_gpus = min(2, get_gpu_count()) if distributed else 1
-    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+    master_port = os.environ.get("DS_TEST_PORT", DEFAULT_MASTER_PORT)
+    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus} --master_port {master_port}".split()
 
 
 def make_task_cmds():
@@ -236,6 +240,7 @@ def make_task_cmds():
         --train_file {data_dir_xsum}/sample.json
         --max_source_length 12
         --max_target_length 12
+        --lang en
         """,
         clm=f"""
         {scripts_dir}/language-modeling/run_clm.py

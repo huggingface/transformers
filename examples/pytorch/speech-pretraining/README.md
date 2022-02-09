@@ -88,6 +88,7 @@ The results of this run can be seen [here](https://wandb.ai/patrickvonplaten/wav
 To pre-train `"base-sized"` Wav2Vec2 model, *e.g.* [facebook/wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base) 
 on [librispeech_asr](https://huggingface.co/datasets/librispeech_asr), the following command can be run:
 
+```bash
 accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--dataset_name=librispeech_asr \
 	--dataset_config_names clean clean other \
@@ -109,6 +110,7 @@ accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--adam_beta2="0.98" \
 	--adam_epsilon="1e-06" \
 	--gradient_checkpointing \
+```
 
 The experiment was run on 8 GPU V100 (16 GB RAM each) for 4 days. 
 In case you have more than 8 GPUs available for a higher effective `batch_size`,

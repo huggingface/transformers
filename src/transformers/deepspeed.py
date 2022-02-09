@@ -41,16 +41,16 @@ class HfDeepSpeedConfig:
     """
     This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage.
 
-    A ``weakref`` of this object is stored in the module's globals to be able to access the config from areas where
-    things like the Trainer object is not available (e.g. ``from_pretrained`` and ``_get_resized_embeddings``).
-    Therefore it's important that this object remains alive while the program is still running.
+    A `weakref` of this object is stored in the module's globals to be able to access the config from areas where
+    things like the Trainer object is not available (e.g. `from_pretrained` and `_get_resized_embeddings`). Therefore
+    it's important that this object remains alive while the program is still running.
 
-    :class:`~transformers.Trainer` uses the ``HfTrainerDeepSpeedConfig`` subclass instead. That subclass has logic to
-    sync the configuration with values of :class:`~transformers.TrainingArguments` by replacing special placeholder
-    values: ``"auto"``. Without this special logic the DeepSpeed configuration is not modified in any way.
+    [`Trainer`] uses the `HfTrainerDeepSpeedConfig` subclass instead. That subclass has logic to sync the configuration
+    with values of [`TrainingArguments`] by replacing special placeholder values: `"auto"`. Without this special logic
+    the DeepSpeed configuration is not modified in any way.
 
     Args:
-        config_file_or_dict (:obj:`Union[str, Dict]`): path to DeepSpeed config file or dict.
+        config_file_or_dict (`Union[str, Dict]`): path to DeepSpeed config file or dict.
 
     """
 
@@ -104,18 +104,40 @@ class HfDeepSpeedConfig:
 
     def get_value(self, ds_key_long, default=None):
         """
-        Returns the set value or ``default`` if no value is set
+        Returns the set value or `default` if no value is set
         """
         config, ds_key = self.find_config_node(ds_key_long)
         if config is None:
             return default
         return config.get(ds_key, default)
 
+    def del_config_sub_tree(self, ds_key_long, must_exist=False):
+        """
+        Deletes a sub-section of the config file if it's found.
+
+        Unless `must_exist` is `True` the section doesn't have to exist.
+        """
+        config = self.config
+
+        # find the config node of interest if it exists
+        nodes = ds_key_long.split(".")
+        for node in nodes:
+            parent_config = config
+            config = config.get(node)
+            if config is None:
+                if must_exist:
+                    raise ValueError(f"Can't find {ds_key_long} entry in the config: {self.config}")
+                else:
+                    return
+
+        # if found remove it
+        if parent_config is not None:
+            parent_config.pop(node)
+
     def is_true(self, ds_key_long):
         """
-        Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
-        ask the very specific question of whether the value is set to :obj:`True` (and it's not set to :obj:`False` or
-        isn't set).
+        Returns `True`/``False` only if the value is set, always `False` otherwise. So use this method to ask the very
+        specific question of whether the value is set to `True` (and it's not set to `False`` or isn't set).
 
         """
         value = self.get_value(ds_key_long)
@@ -123,9 +145,8 @@ class HfDeepSpeedConfig:
 
     def is_false(self, ds_key_long):
         """
-        Returns :obj:`True`/:obj:`False` only if the value is set, always :obj:`False` otherwise. So use this method to
-        ask the very specific question of whether the value is set to :obj:`False` (and it's not set to :obj:`True` or
-        isn't set).
+        Returns `True`/``False` only if the value is set, always `False` otherwise. So use this method to ask the very
+        specific question of whether the value is set to `False` (and it's not set to `True`` or isn't set).
         """
         value = self.get_value(ds_key_long)
         return False if value is None else not bool(value)
@@ -142,8 +163,8 @@ class HfDeepSpeedConfig:
 
 class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
     """
-    The ``HfTrainerDeepSpeedConfig`` object is meant to be created during ``TrainingArguments`` object creation and has
-    the same lifespan as the latter.
+    The `HfTrainerDeepSpeedConfig` object is meant to be created during `TrainingArguments` object creation and has the
+    same lifespan as the latter.
     """
 
     def __init__(self, config_file_or_dict):
@@ -158,11 +179,11 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         """
         A utility method that massages the config file and can optionally verify that the values match.
 
-        1. Replace "auto" values with ``TrainingArguments`` value.
+        1. Replace "auto" values with `TrainingArguments` value.
 
-        2. If it wasn't "auto" and ``must_match`` is true, then check that DS config matches Trainer
-        config values and if mismatched add the entry to ``self.mismatched`` - will assert during
-        ``trainer_config_finalize`` for one or more mismatches.
+        2. If it wasn't "auto" and `must_match` is true, then check that DS config matches Trainer
+        config values and if mismatched add the entry to `self.mismatched` - will assert during
+        `trainer_config_finalize` for one or more mismatches.
 
         """
         config, ds_key = self.find_config_node(ds_key_long)
@@ -184,7 +205,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
     def trainer_config_process(self, args):
         """
-        Adjust the config with ``TrainingArguments`` values. This stage is run during ``TrainingArguments`` object
+        Adjust the config with `TrainingArguments` values. This stage is run during `TrainingArguments` object
         creation.
         """
         # DeepSpeed does:
@@ -280,30 +301,10 @@ def deepspeed_config():
         return None
 
 
-def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
+def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps):
     """
-    Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
-
-    If ``resume_from_checkpoint`` was passed then an attempt to resume from a previously saved checkpoint will be made.
-
-    Args:
-        trainer: Trainer object
-        num_training_steps: per single gpu
-        resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
-
-    Returns: model, optimizer, lr_scheduler
-
+    A convenience wrapper that deals with optimizer and lr scheduler configuration.
     """
-    import deepspeed
-    from deepspeed.utils import logger as ds_logger
-
-    model = trainer.model
-    args = trainer.args
-
-    hf_deepspeed_config = args.hf_deepspeed_config
-    hf_deepspeed_config.trainer_config_finalize(args, model, num_training_steps)
-
-    # resume config update - some bits like `model` and `num_training_steps` only become available during train
     config = hf_deepspeed_config.config
 
     # Optimizer + Scheduler
@@ -351,21 +352,79 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
         else:
             lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
+    return optimizer, lr_scheduler
+
+
+def deepspeed_reinit(trainer):
+    """
+    this is a temp hack based on: https://github.com/microsoft/DeepSpeed/issues/1394#issuecomment-937405374 until
+    Deepspeed fixes a bug where it can't resume from a checkpoint after it did some stepping
+    https://github.com/microsoft/DeepSpeed/issues/1612
+    """
+    import deepspeed
+
+    deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**trainer.deepspeed_initialize_kwargs)
+    return deepspeed_engine, optimizer, lr_scheduler
+
+
+def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inference=False):
+    """
+    Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
+
+    If `resume_from_checkpoint` was passed then an attempt to resume from a previously saved checkpoint will be made.
+
+    Args:
+        trainer: Trainer object
+        num_training_steps: per single gpu
+        resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
+        inference: launch in inference mode (no optimizer and no lr scheduler)
+
+    Returns: model, optimizer, lr_scheduler
+
+    """
+    import deepspeed
+    from deepspeed.utils import logger as ds_logger
+
+    model = trainer.model
+    args = trainer.args
+
+    # resume config update - some bits like `model` and `num_training_steps` only become available during train
+    hf_deepspeed_config = args.hf_deepspeed_config
+    hf_deepspeed_config.trainer_config_finalize(args, model, num_training_steps)
+    config = hf_deepspeed_config.config
+
+    # set the Deepspeed log level consistent with the Trainer
+    ds_logger.setLevel(args.get_process_log_level())
+
+    if inference:
+        # only Z3 makes sense for the inference
+        if not hf_deepspeed_config.is_zero3():
+            raise ValueError("ZeRO inference only makes sense with ZeRO Stage 3 - please adjust your config")
+
+        # in case the training config is re-used for inference
+        hf_deepspeed_config.del_config_sub_tree("optimizer")
+        hf_deepspeed_config.del_config_sub_tree("lr_scheduler")
+        optimizer, lr_scheduler = None, None
+        model_parameters = None
+    else:
+        optimizer, lr_scheduler = deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps)
+        model_parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
+
     # keep for quick debug:
     # from pprint import pprint; pprint(config)
 
-    # set the Deepspeed log level consistent with the trainer
-    ds_logger.setLevel(args.get_process_log_level())
-
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-
-    model, optimizer, _, lr_scheduler = deepspeed.initialize(
+    kwargs = dict(
         model=model,
         model_parameters=model_parameters,
         config_params=config,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
     )
+
+    deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
+
+    # stash kwargs to enabled a later deepspeed_reinit
+    trainer.deepspeed_initialize_kwargs = kwargs
 
     if resume_from_checkpoint is not None:
 
@@ -380,7 +439,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
         if len(deepspeed_checkpoint_dirs) > 0:
             logger.info(f"Attempting to resume from {resume_from_checkpoint}")
             # this magically updates self.optimizer and self.lr_scheduler
-            load_path, _ = model.load_checkpoint(
+            load_path, _ = deepspeed_engine.load_checkpoint(
                 resume_from_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
             )
             if load_path is None:
@@ -388,4 +447,4 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
         else:
             logger.info(f"{resume_from_checkpoint} doesn't have deepspeed checkpoints, doing nothing")
 
-    return model, optimizer, lr_scheduler
+    return deepspeed_engine, optimizer, lr_scheduler

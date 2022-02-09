@@ -104,6 +104,32 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             ],
         )
 
+        outputs = unmasker("My name is <mask> <mask>", top_k=2)
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                [
+                    {
+                        "score": 2.2e-05,
+                        "token": 35676,
+                        "token_str": " Maul",
+                        "sequence": "<s>My name is Maul<mask></s>",
+                    },
+                    {"score": 2.2e-05, "token": 16416, "token_str": "ELS", "sequence": "<s>My name isELS<mask></s>"},
+                ],
+                [
+                    {
+                        "score": 2.2e-05,
+                        "token": 35676,
+                        "token_str": " Maul",
+                        "sequence": "<s>My name is<mask> Maul</s>",
+                    },
+                    {"score": 2.2e-05, "token": 16416, "token_str": "ELS", "sequence": "<s>My name is<mask>ELS</s>"},
+                ],
+            ],
+        )
+
     @slow
     @require_torch
     def test_large_model_pt(self):
@@ -231,9 +257,6 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
 
         with self.assertRaises(ValueError):
             fill_masker([None])
-        # Multiple masks
-        with self.assertRaises(PipelineException):
-            fill_masker(f"This is {tokenizer.mask_token} {tokenizer.mask_token}")
         # No mask_token is not supported
         with self.assertRaises(PipelineException):
             fill_masker("This is")
@@ -242,6 +265,7 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         self.run_test_targets(model, tokenizer)
         self.run_test_top_k_targets(model, tokenizer)
         self.fill_mask_with_duplicate_targets_and_top_k(model, tokenizer)
+        self.fill_mask_with_multiple_masks(model, tokenizer)
 
     def run_test_targets(self, model, tokenizer):
         vocab = tokenizer.get_vocab()
@@ -340,3 +364,27 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         # The target list contains duplicates, so we can't output more
         # than them
         self.assertEqual(len(outputs), 3)
+
+    def fill_mask_with_multiple_masks(self, model, tokenizer):
+        fill_masker = FillMaskPipeline(model=model, tokenizer=tokenizer)
+
+        outputs = fill_masker(
+            f"This is a {tokenizer.mask_token} {tokenizer.mask_token} {tokenizer.mask_token}", top_k=2
+        )
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
+                    {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
+                ],
+                [
+                    {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
+                    {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
+                ],
+                [
+                    {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
+                    {"sequence": ANY(str), "score": ANY(float), "token": ANY(int), "token_str": ANY(str)},
+                ],
+            ],
+        )

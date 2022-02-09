@@ -904,6 +904,10 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname)
 
+    @unittest.skip("Not implemented")
+    def test_right_and_left_truncation(self):
+        pass
+
     def test_right_and_left_padding(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:

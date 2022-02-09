@@ -526,6 +526,7 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     all_generative_model_classes = (
         (XLNetLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+
     test_pruning = False
 
     # XLNet has 2 QA models -> need to manually set the correct labels for one of them here
@@ -556,7 +557,7 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         self.model_tester.create_and_check_xlnet_base_model(*config_and_inputs)
 
     def test_xlnet_base_model_use_mems(self):
-        # checking that in auto-regressive mode, :obj:`use_mems` gives the same results
+        # checking that in auto-regressive mode, `use_mems` gives the same results
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_model_use_mems(*config_and_inputs)
