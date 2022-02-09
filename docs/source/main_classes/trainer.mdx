@@ -199,12 +199,17 @@ When using [`DistributedDataParallel`](https://pytorch.org/docs/stable/generated
 python -m torch.distributed.launch --nproc_per_node=2  trainer-program.py ...
 ```
 
-You can do the same with the `deepspeed` launcher if you have it installed:
+if you have either [`accelerate`](https://github.com/huggingface/accelerate) or [`deepspeed`](https://github.com/microsoft/DeepSpeed) installed you can also accomplish the same by using one of:
+```bash
+accelerate launch --num_processes 2 trainer-program.py ...
+```
 
 ```bash
 deepspeed --num_gpus 2 trainer-program.py ...
 ```
-You don't need to use [the Deepspeed integration](deepspeed) to use the `deepspeed` launcher:
+
+You don't need to use the Accelerate or [the Deepspeed integration](Deepspeed) features to use these launchers.
+
 
 Until now you were able to tell the program how many GPUs to use. Now let's discuss how to select specific GPUs and control their order.
 
