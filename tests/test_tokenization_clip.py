@@ -173,7 +173,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.rust_tokenizer_class.from_pretrained("robot-test/old-clip-tokenizer")
 
         self.assertTrue(
-            context.exception.args[0].startswith("The backend_tokenizer provided does not match the expected format.")
+            context.exception.args[0].startswith("The `backend_tokenizer` provided does not match the expected format.")
         )
 
     @require_ftfy
