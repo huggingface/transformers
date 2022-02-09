@@ -952,7 +952,7 @@ class Trainer:
 
         for key, value in params.items():
             if not hasattr(self.args, key):
-                logger.warn(
+                logger.warning(
                     f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
                 )
                 continue
@@ -1165,7 +1165,7 @@ class Trainer:
                 config = PretrainedConfig.from_json_file(os.path.join(resume_from_checkpoint, CONFIG_NAME))
                 checkpoint_version = config.transformers_version
                 if checkpoint_version is not None and checkpoint_version != __version__:
-                    logger.warn(
+                    logger.warning(
                         f"You are resuming training from a checkpoint trained with {checkpoint_version} of "
                         f"Transformers but your current version is {__version__}. This is not recommended and could "
                         "yield to errors or unwanted behaviors."
@@ -1534,7 +1534,7 @@ class Trainer:
                     # If the model is on the GPU, it still works!
                     self._load_state_dict_in_model(state_dict)
             else:
-                logger.warn(
+                logger.warning(
                     f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
                     "on multiple nodes, you should activate `--save_on_each_node`."
                 )
@@ -1567,9 +1567,11 @@ class Trainer:
             ):
                 self.model.tie_weights()
             else:
-                logger.warn(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
+                logger.warning(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
         if len(load_result.unexpected_keys) != 0:
-            logger.warn(f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}.")
+            logger.warning(
+                f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}."
+            )
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, ignore_keys_for_eval):
         if self.control.should_log:
