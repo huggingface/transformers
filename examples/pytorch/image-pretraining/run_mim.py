@@ -299,13 +299,17 @@ def main():
         config.decoder_type = "simmim"
 
     # adapt config
+    model_args.image_size = model_args.image_size if model_args.image_size is not None else config.image_size
+    model_args.patch_size = model_args.patch_size if model_args.patch_size is not None else config.patch_size
+    model_args.encoder_stride = (
+        model_args.encoder_stride if model_args.encoder_stride is not None else config.encoder_stride
+    )
+
     config.update(
         {
-            "image_size": model_args.image_size if model_args.image_size is not None else config.image_size,
-            "patch_size": model_args.patch_size if model_args.patch_size is not None else config.patch_size,
-            "encoder_stride": model_args.encoder_stride
-            if model_args.encoder_stride is not None
-            else config.encoder_stride,
+            "image_size": model_args.image_size,
+            "patch_size": model_args.patch_size,
+            "encoder_stride": model_args.encoder_stride,
         }
     )
 
