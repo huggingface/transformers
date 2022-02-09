@@ -97,7 +97,7 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
 
         if not isinstance(self.backend_tokenizer.pre_tokenizer, pre_tokenizers.Sequence):
             raise ValueError(
-                "The backend_tokenizer provided does not match the expected format. The CLIP tokenizer has been "
+                "The `backend_tokenizer` provided does not match the expected format. The CLIP tokenizer has been "
                 "heavily modified from transformers version 4.17.0. If you want to use the new fast version of the "
                 "CLIP tokenizer, the easiest way for you is probably to do: "
                 '`CLIPTokenizerFast.from_pretrained("Path to local folder or Hub repo with slow tokenizer files", from_slow=True)`.'
