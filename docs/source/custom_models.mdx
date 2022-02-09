@@ -39,8 +39,8 @@ from typing import List
 
 
 class ResnetConfig(PretrainedConfig):
-    model_type="resnet"
-    
+    model_type = "resnet"
+
     def __init__(
         self,
         block_type="bottleneck",
@@ -61,8 +61,8 @@ class ResnetConfig(PretrainedConfig):
 
         self.block_type = block_type
         self.layers = layers
-        self.num_classes=num_classes
-        self.input_channels=input_channels
+        self.num_classes = num_classes
+        self.input_channels = input_channels
         self.cardinality = cardinality
         self.base_width = base_width
         self.stem_width = stem_width
@@ -88,7 +88,7 @@ With this done, you can easily create and save your configuration like you would
 library. Here is how we can create a resnet50d config and save it:
 
 ```py
-resnet50d_config = ResnetConfig(block_type="bottleneck", stem_width=32, stem_type='deep', avg_down=True)
+resnet50d_config = ResnetConfig(block_type="bottleneck", stem_width=32, stem_type="deep", avg_down=True)
 resnet50d_config.save_pretrained("custom-resnet")
 ```
 
@@ -123,7 +123,7 @@ BLOCK_MAPPING = {"basic": BasicBlock, "bottleneck": Bottleneck}
 
 class ResnetModel(PreTrainedModel):
     config_class = ResnetConfig
-    
+
     def __init__(self, config):
         super().__init__(config)
         block_layer = BLOCK_MAPPING[config.block_type]
@@ -138,7 +138,7 @@ class ResnetModel(PreTrainedModel):
             stem_type=config.stem_type,
             avg_down=config.avg_down,
         )
-    
+
     def forward(self, tensor):
         return self.model.forward_features(tensor)
 ```
@@ -148,7 +148,7 @@ For the model that will classify images, we just change the forward method:
 ```py
 class ResnetModelForImageClassification(PreTrainedModel):
     config_class = ResnetConfig
-    
+
     def __init__(self, config):
         super().__init__(config)
         block_layer = BLOCK_MAPPING[config.block_type]
@@ -163,7 +163,7 @@ class ResnetModelForImageClassification(PreTrainedModel):
             stem_type=config.stem_type,
             avg_down=config.avg_down,
         )
-    
+
     def forward(self, tensor, labels=None):
         logits = self.model(tensor)
         if labels is not None:
@@ -262,7 +262,7 @@ have to specify which one of the auto classes is the correct one for your model.
 Next, let's create the config and models as we did before:
 
 ```py
-resnet50d_config = ResnetConfig(block_type="bottleneck", stem_width=32, stem_type='deep', avg_down=True)
+resnet50d_config = ResnetConfig(block_type="bottleneck", stem_width=32, stem_type="deep", avg_down=True)
 resnet50d = ResnetModelForImageClassification(resnet50d_config)
 
 pretrained_model = timm.create_model("resnet50d", pretrained=True)
