@@ -637,6 +637,16 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
             rngs, input_ids, attention_mask, token_type_ids, position_ids, head_mask, return_dict=False
         )["params"]
 
+    def init_head(self, rng: jax.random.PRNGKey):
+        def _init(module):
+            head_module, inputs = module._get_head_module_and_inputs(rng)
+            return head_module(*inputs)
+
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        return self.module.init(rngs, method=_init)["params"]
+
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
         self,
@@ -771,6 +781,14 @@ class FlaxBertForPreTrainingModule(nn.Module):
         self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
         self.cls = FlaxBertPreTrainingHeads(config=self.config, dtype=self.dtype)
 
+    def _get_head_module_and_inputs(self, rng):
+        head_module = self.cls
+        inputs = (
+            jax.random.uniform(rng, (1, 1, self.config.hidden_size)),
+            jax.random.uniform(rng, (1, self.config.hidden_size)),
+        )
+        return head_module, inputs
+
     def __call__(
         self,
         input_ids,
@@ -867,6 +885,11 @@ class FlaxBertForMaskedLMModule(nn.Module):
         self.bert = FlaxBertModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
         self.cls = FlaxBertOnlyMLMHead(config=self.config, dtype=self.dtype)
 
+    def _get_head_module_and_inputs(self, rng):
+        head_module = self.cls
+        inputs = (jax.random.uniform(rng, (1, 1, self.config.hidden_size)),)
+        return head_module, inputs
+
     def __call__(
         self,
         input_ids,
@@ -928,6 +951,11 @@ class FlaxBertForNextSentencePredictionModule(nn.Module):
     def setup(self):
         self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
         self.cls = FlaxBertOnlyNSPHead(dtype=self.dtype)
+
+    def _get_head_module_and_inputs(self, rng):
+        head_module = self.cls
+        inputs = (jax.random.uniform(rng, (1, self.config.hidden_size)),)
+        return head_module, inputs
 
     def __call__(
         self,
@@ -1025,6 +1053,11 @@ class FlaxBertForSequenceClassificationModule(nn.Module):
             dtype=self.dtype,
         )
 
+    def _get_head_module_and_inputs(self, rng):
+        head_module = self.classifier
+        inputs = (jax.random.uniform(rng, (1, self.config.hidden_size)),)
+        return head_module, inputs
+
     def __call__(
         self,
         input_ids,
@@ -1092,6 +1125,11 @@ class FlaxBertForMultipleChoiceModule(nn.Module):
         self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(1, dtype=self.dtype)
+
+    def _get_head_module_and_inputs(self, rng):
+        head_module = self.classifier
+        inputs = (jax.random.uniform(rng, (1, self.config.hidden_size)),)
+        return head_module, inputs
 
     def __call__(
         self,
@@ -1173,6 +1211,11 @@ class FlaxBertForTokenClassificationModule(nn.Module):
         self.dropout = nn.Dropout(rate=classifier_dropout)
         self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
+    def _get_head_module_and_inputs(self, rng):
+        head_module = self.classifier
+        inputs = (jax.random.uniform(rng, (1, 1, self.config.hidden_size)),)
+        return head_module, inputs
+
     def __call__(
         self,
         input_ids,
@@ -1236,6 +1279,11 @@ class FlaxBertForQuestionAnsweringModule(nn.Module):
         self.bert = FlaxBertModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
         self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
+    def _get_head_module_and_inputs(self, rng):
+        head_moduel = self.qa_outputs
+        inputs = (jax.random.uniform(rng, (1, 1, self.config.hidden_size)),)
+        return head_moduel, inputs
+
     def __call__(
         self,
         input_ids,
@@ -1288,17 +1336,6 @@ class FlaxBertForQuestionAnsweringModule(nn.Module):
 )
 class FlaxBertForQuestionAnswering(FlaxBertPreTrainedModel):
     module_class = FlaxBertForQuestionAnsweringModule
-
-    def init_head(self, rng):
-        def _init(module, inputs):
-            return module.qa_outputs(inputs)
-        
-        params_rng, dropout_rng = jax.random.split(rng)
-        rngs = {"params": params_rng, "dropout": dropout_rng}
-
-        hidden_states = jax.random.uniform(rng, (1, 1, self.config.hidden_size))
-        params = self.module.init(rngs, hidden_states, method=_init)["params"]
-        return params
 
 
 append_call_sample_docstring(

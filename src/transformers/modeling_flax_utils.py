@@ -95,7 +95,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         input_shape: Tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
-        abstract_init: bool = False,
+        _abstract_init: bool = False,
     ):
         if config is None:
             raise ValueError("config cannot be None")
@@ -110,11 +110,11 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # Those are public as their type is generic to every derived classes.
         self.key = PRNGKey(seed)
         self.dtype = dtype
+        self.input_shape = input_shape
 
         # randomly initialized parameters
-        if abstract_init:
-            init_fn = jax.jit(self.init_weights, static_argnums=(1,))
-            init_fn = partial(init_fn, input_shape=input_shape)
+        if _abstract_init:
+            init_fn = partial(self.init_weights, input_shape=input_shape)
             random_params = jax.eval_shape(init_fn, self.key)
         else:
             random_params = self.init_weights(self.key, input_shape)
@@ -420,6 +420,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         revision = kwargs.pop("revision", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+        abstract_init = kwargs.pop("_abstract_init", True)
 
         user_agent = {"file_type": "model", "framework": "flax", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -557,7 +558,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             resolved_archive_file = None
 
         # init random models
-        model = cls(config, *model_args, **model_kwargs)
+        model = cls(config, *model_args, _abstract_init=abstract_init, **model_kwargs)
 
         if from_pt:
             state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file)
@@ -595,19 +596,19 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # flatten dicts
         state = flatten_dict(state)
 
-        # random_state = flatten_dict(unfreeze(model.params))
-
         missing_keys = model.required_params - set(state.keys())
         unexpected_keys = set(state.keys()) - model.required_params
 
-        # Assuming that if we have missing keys then that means that we are loading a model with a head.
-        # This won't work if other weights from the base model are missing.
-        # Here we only initialize the head weights.
-
-        # TODO: It's not starightforward to init other missing weights, maybe just raise an error
-        #  when we have other missing keys and abstract_init is True
-        if len(missing_keys) > 0 and kwargs.get("abstract_init", False):
-            random_state = flatten_dict(unfreeze(model.init_head(model.key)))
+        # This can't handle mismatched keys.
+        if len(missing_keys) > 0 and abstract_init:
+            base_key_missing = any(cls.base_model_prefix in key for key in missing_keys)
+            is_base_model = cls.base_model_prefix not in dict(model.params)
+            # if base key is missing or if model is base model and any key is missing then init the whole model
+            if base_key_missing or is_base_model:
+                random_state = flatten_dict(unfreeze(model.init_weights(model.key, model.input_shape)))
+            else:
+                # init the head only
+                random_state = flatten_dict(unfreeze(model.init_head(model.key)))
         else:
             random_state = flatten_dict(unfreeze(model.params))
 
