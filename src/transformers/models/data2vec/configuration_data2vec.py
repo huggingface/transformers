@@ -24,14 +24,14 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "data2vec": "https://huggingface.co/data2vec/resolve/main/config.json",
+    "edugp/data2vec-nlp-base": "https://huggingface.co/data2vec/resolve/main/config.json",
 }
 
 
 class Data2VecConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Data2VecModel`], identical to [`BertConfig].
-    It is used to instantiate a Data2Vec model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`Data2VecModel`], identical to [`BertConfig]. It
+    is used to instantiate a Data2Vec model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Data2Vec
     [edugp/data2vec-nlp-base](https://huggingface.co/edugp/data2vec-nlp-base) architecture.
 
