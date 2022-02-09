@@ -26,7 +26,7 @@ We will illustrate all of this on a ResNet model, by wrapping the ResNet class o
 ## Writing a custom configuration
 
 Before we dive into the model, let's first write its configuration. The configuration of a model is an object that
-will contain all the necssary information to build the model. As we will see in the next section, the model can only
+will contain all the necessary information to build the model. As we will see in the next section, the model can only
 take a `config` to be initialized, so we really need that object to be as complete as possible.
 
 In our example, we will take a couple of arguments of the ResNet class that we might want to tweak. Different
@@ -77,7 +77,7 @@ The three important things to remember when writing you own configuration are th
 - those `kwargs` need to be passed to the superclass `__init__`.
 
 The inheritance is to make sure you get all the functionality from the 🤗 Transformers library, while the two other
-constraints come from the fact a `PretrainedConfig` has more fields than the ones you are setting. When relaoding a
+constraints come from the fact a `PretrainedConfig` has more fields than the ones you are setting. When reloading a
 config with the `from_pretrained` method, those fields need to be accepted by your config and then sent to the
 superclass.
 
@@ -208,7 +208,7 @@ pretrained_model = timm.create_model("resnet50d", pretrained=True)
 resnet50d.model.load_state_dict(pretrained_model.state_dict())
 ```
 
-Now let's see how to make sure than we do [`~PreTrainedModel.save_pretrained`] or [`~PreTrainedModel.push_to_hub`], the
+Now let's see how to make sure that when we do [`~PreTrainedModel.save_pretrained`] or [`~PreTrainedModel.push_to_hub`], the
 code of the model is saved.
 
 ## Sending the code to the Hub
