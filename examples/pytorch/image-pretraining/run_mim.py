@@ -60,9 +60,8 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
-    Using `HfArgumentParser` we can turn this class
-    into argparse arguments to be able to specify them on
-    the command line.
+    Using `HfArgumentParser` we can turn this class into argparse arguments to be able to
+    specify them on the command line.
     """
 
     dataset_name: Optional[str] = field(
@@ -72,7 +71,8 @@ class DataTrainingArguments:
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
     image_column_name: Optional[str] = field(
-        default=None, metadata={"help": "The column name of the images in the files."}
+        default=None,
+        metadata={"help": "The column name of the images in the files. If not set, will try to use 'image' or 'img'."},
     )
     train_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the training data."})
     validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."})
@@ -117,7 +117,8 @@ class ModelArguments:
     model_name_or_path: str = field(
         default=None,
         metadata={
-            "help": "The model checkpoint for weights initialization."
+            "help": "The model checkpoint for weights initialization. Can be a local path to a pytorch_model.bin or a "
+            "checkpoint identifier on the hub. "
             "Don't set if you want to train a model from scratch."
         },
     )
@@ -125,7 +126,7 @@ class ModelArguments:
         default=None,
         metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
     )
-    config_name: Optional[str] = field(
+    config_name_or_path: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
     config_overrides: Optional[str] = field(
@@ -136,7 +137,8 @@ class ModelArguments:
         },
     )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None,
+        metadata={"help": "Where do you want to store (cache) the pretrained models/datasets downloaded from the hub"},
     )
     model_revision: str = field(
         default="main",
@@ -151,12 +153,20 @@ class ModelArguments:
         },
     )
     image_size: Optional[int] = field(
-        default=224,
-        metadata={"help": "The size (resolution) of each image."},
+        default=None,
+        metadata={
+            "help": "The size (resolution) of each image. If not specified, will use `image_size` of the configuration."
+        },
     )
     patch_size: Optional[int] = field(
-        default=16,
-        metadata={"help": "The size (resolution) of each patch."},
+        default=None,
+        metadata={
+            "help": "The size (resolution) of each patch. If not specified, will use `patch_size` of the configuration."
+        },
+    )
+    encoder_stride: Optional[int] = field(
+        default=None,
+        metadata={"help": "Stride to use for the encoder."},
     )
 
 
@@ -272,8 +282,8 @@ def main():
         "revision": model_args.model_revision,
         "use_auth_token": True if model_args.use_auth_token else None,
     }
-    if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
+    if model_args.config_name_or_path:
+        config = AutoConfig.from_pretrained(model_args.config_name_or_path, **config_kwargs)
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
@@ -291,8 +301,11 @@ def main():
     # adapt config
     config.update(
         {
-            "image_size": model_args.image_size,
-            "patch_size": model_args.patch_size,
+            "image_size": model_args.image_size if model_args.image_size is not None else config.image_size,
+            "patch_size": model_args.patch_size if model_args.patch_size is not None else config.patch_size,
+            "encoder_stride": model_args.encoder_stride
+            if model_args.encoder_stride is not None
+            else config.encoder_stride,
         }
     )
 
@@ -352,7 +365,7 @@ def main():
     mask_generator = MaskGenerator(
         input_size=model_args.image_size,
         mask_patch_size=data_args.mask_patch_size,
-        model_patch_size=model.config.patch_size,
+        model_patch_size=model_args.patch_size,
         mask_ratio=data_args.mask_ratio,
     )
 
