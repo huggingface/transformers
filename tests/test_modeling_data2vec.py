@@ -15,7 +15,6 @@
 
 
 import unittest
-from copy import deepcopy
 
 from transformers import Data2VecConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
@@ -34,16 +33,14 @@ if is_torch_available():
         Data2VecForMultipleChoice,
         Data2VecForQuestionAnswering,
         Data2VecForSequenceClassification,
+        Data2VecForTextModel,
         Data2VecForTokenClassification,
-        Data2VecModel,
     )
     from transformers.models.data2vec.modeling_data2vec import (
         DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST,
         Data2VecEmbeddings,
         create_position_ids_from_input_ids,
     )
-
-DATA2VEC_TINY = "sshleifer/tiny-distildata2vec"
 
 
 class Data2VecModelTester:
@@ -142,7 +139,7 @@ class Data2VecModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = Data2VecModel(config=config)
+        model = Data2VecForTextModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
@@ -165,7 +162,7 @@ class Data2VecModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = Data2VecModel(config)
+        model = Data2VecForTextModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -346,7 +343,7 @@ class Data2VecModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         (
             Data2VecForCausalLM,
             Data2VecForMaskedLM,
-            Data2VecModel,
+            Data2VecForTextModel,
             Data2VecForSequenceClassification,
             Data2VecForTokenClassification,
             Data2VecForMultipleChoice,
@@ -433,7 +430,7 @@ class Data2VecModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     @slow
     def test_model_from_pretrained(self):
         for model_name in DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Data2VecModel.from_pretrained(model_name)
+            model = Data2VecForTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
@@ -502,7 +499,7 @@ class Data2VecModelIntegrationTest(TestCasePlus):
 
     @slow
     def test_inference_no_head(self):
-        model = Data2VecModel.from_pretrained("data2vec")
+        model = Data2VecForTextModel.from_pretrained("data2vec")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
@@ -534,23 +531,3 @@ class Data2VecModelIntegrationTest(TestCasePlus):
         # expected_tensor = data2vec.predict("mnli", input_ids, return_logits=True).detach()
 
         self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
-
-    # XXX: this might be a candidate for common tests if we have many of those
-    def test_lm_head_ignore_keys(self):
-        keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-        keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
-        config = Data2VecConfig.from_pretrained(DATA2VEC_TINY)
-        config_tied = deepcopy(config)
-        config_tied.tie_word_embeddings = True
-        config_untied = deepcopy(config)
-        config_untied.tie_word_embeddings = False
-        for cls in [Data2VecForMaskedLM, Data2VecForCausalLM]:
-            model = cls(config_tied)
-            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_tied, cls)
-
-            # the keys should be different when embeddings aren't tied
-            model = cls(config_untied)
-            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_untied, cls)
-
-            # test that saving works with updated ignore keys - just testing that it doesn't fail
-            model.save_pretrained(self.get_auto_remove_tmp_dir())

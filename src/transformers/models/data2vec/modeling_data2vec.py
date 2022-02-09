@@ -152,7 +152,6 @@ class Data2VecEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Data2Vec
 class Data2VecSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -253,7 +252,7 @@ class Data2VecSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in Data2VecModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in Data2VecForTextModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -689,7 +688,7 @@ DATA2VEC_INPUTS_DOCSTRING = r"""
     DATA2VEC_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaModel with ROBERTA->DATA2VEC,Roberta->Data2Vec
-class Data2VecModel(Data2VecPreTrainedModel):
+class Data2VecForTextModel(Data2VecPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -875,7 +874,6 @@ class Data2VecModel(Data2VecPreTrainedModel):
 @add_start_docstrings(
     """Data2Vec Model with a `language modeling` head on top for CLM fine-tuning.""", DATA2VEC_START_DOCSTRING
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec,roberta-base->data2vec
 class Data2VecForCausalLM(Data2VecPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
@@ -887,7 +885,7 @@ class Data2VecForCausalLM(Data2VecPreTrainedModel):
         if not config.is_decoder:
             logger.warning("If you want to use `Data2VecLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.data2vec = Data2VecModel(config, add_pooling_layer=False)
+        self.data2vec = Data2VecForTextModel(config, add_pooling_layer=False)
         self.lm_head = Data2VecLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
@@ -1028,7 +1026,6 @@ class Data2VecForCausalLM(Data2VecPreTrainedModel):
 
 
 @add_start_docstrings("""data2vec Model with a `language modeling` head on top.""", DATA2VEC_START_DOCSTRING)
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec
 class Data2VecForMaskedLM(Data2VecPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
@@ -1043,7 +1040,7 @@ class Data2VecForMaskedLM(Data2VecPreTrainedModel):
                 "bi-directional self-attention."
             )
 
-        self.data2vec = Data2VecModel(config, add_pooling_layer=False)
+        self.data2vec = Data2VecForTextModel(config, add_pooling_layer=False)
         self.lm_head = Data2VecLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
@@ -1159,7 +1156,6 @@ class Data2VecLMHead(nn.Module):
     """,
     DATA2VEC_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec
 class Data2VecForSequenceClassification(Data2VecPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1168,7 +1164,7 @@ class Data2VecForSequenceClassification(Data2VecPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.data2vec = Data2VecModel(config, add_pooling_layer=False)
+        self.data2vec = Data2VecForTextModel(config, add_pooling_layer=False)
         self.classifier = Data2VecClassificationHead(config)
 
         # Initialize weights and apply final processing
@@ -1258,14 +1254,13 @@ class Data2VecForSequenceClassification(Data2VecPreTrainedModel):
     """,
     DATA2VEC_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec
 class Data2VecForMultipleChoice(Data2VecPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.data2vec = Data2VecModel(config)
+        self.data2vec = Data2VecForTextModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
@@ -1354,7 +1349,6 @@ class Data2VecForMultipleChoice(Data2VecPreTrainedModel):
     """,
     DATA2VEC_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec
 class Data2VecForTokenClassification(Data2VecPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1363,7 +1357,7 @@ class Data2VecForTokenClassification(Data2VecPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.data2vec = Data2VecModel(config, add_pooling_layer=False)
+        self.data2vec = Data2VecForTextModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1463,7 +1457,6 @@ class Data2VecClassificationHead(nn.Module):
     """,
     DATA2VEC_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec
 class Data2VecForQuestionAnswering(Data2VecPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1472,7 +1465,7 @@ class Data2VecForQuestionAnswering(Data2VecPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.data2vec = Data2VecModel(config, add_pooling_layer=False)
+        self.data2vec = Data2VecForTextModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing

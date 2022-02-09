@@ -1249,14 +1249,14 @@ class Data2VecForSequenceClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Data2VecForTokenClassification(metaclass=DummyObject):
+class Data2VecForTextModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class Data2VecModel(metaclass=DummyObject):
+class Data2VecForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -30,10 +30,10 @@ DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Data2VecConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Data2VecModel`], identical to [`BertConfig]. It
-    is used to instantiate a Data2Vec model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Data2Vec
-    [edugp/data2vec-nlp-base](https://huggingface.co/edugp/data2vec-nlp-base) architecture.
+    This is the configuration class to store the configuration of a [`Data2VecForTextModel`], identical to
+    [`BertConfig]. It is used to instantiate a Data2Vec model according to the specified arguments, defining the model
+    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    Data2Vec [edugp/data2vec-nlp-base](https://huggingface.co/edugp/data2vec-nlp-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -82,18 +82,19 @@ class Data2VecConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import Data2VecModel, Data2VecConfig
+    >>> from transformers import Data2VecForTextModel, Data2VecConfig
 
     >>> # Initializing a Data2Vec edugp/data2vec-nlp-base style configuration
     >>> configuration = Data2VecConfig()
 
     >>> # Initializing a model from the edugp/data2vec-nlp-base style configuration
-    >>> model = Data2VecModel(configuration)
+    >>> model = Data2VecForTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
     model_type = "data2vec"
+
     def __init__(
         self,
         vocab_size=30522,
