@@ -14,22 +14,26 @@
 # limitations under the License.
 """ AutoFeatureExtractor class."""
 import importlib
+import json
 import os
 from collections import OrderedDict
+from typing import Dict, Optional, Union
 
 # Build the list of all feature extractors
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME
+from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo
+from ...utils import logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
-    config_class_to_model_type,
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
 
+
+logger = logging.get_logger(__name__)
 
 FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
@@ -64,6 +68,96 @@ def feature_extractor_class_from_name(class_name: str):
             break
 
     return None
+
+
+def get_feature_extractor_config(
+    pretrained_model_name_or_path: Union[str, os.PathLike],
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    force_download: bool = False,
+    resume_download: bool = False,
+    proxies: Optional[Dict[str, str]] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+    revision: Optional[str] = None,
+    local_files_only: bool = False,
+    **kwargs,
+):
+    """
+    Loads the tokenizer configuration from a pretrained model tokenizer configuration.
+
+    Args:
+        pretrained_model_name_or_path (`str` or `os.PathLike`):
+            This can be either:
+
+            - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
+              huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced
+              under a user or organization name, like `dbmdz/bert-base-german-cased`.
+            - a path to a *directory* containing a configuration file saved using the
+              [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
+
+        cache_dir (`str` or `os.PathLike`, *optional*):
+            Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
+            cache should not be used.
+        force_download (`bool`, *optional*, defaults to `False`):
+            Whether or not to force to (re-)download the configuration files and override the cached versions if they
+            exist.
+        resume_download (`bool`, *optional*, defaults to `False`):
+            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
+        proxies (`Dict[str, str]`, *optional*):
+            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+        use_auth_token (`str` or *bool*, *optional*):
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+            when running `transformers-cli login` (stored in `~/.huggingface`).
+        revision(`str`, *optional*, defaults to `"main"`):
+            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+            identifier allowed by git.
+        local_files_only (`bool`, *optional*, defaults to `False`):
+            If `True`, will only try to load the tokenizer configuration from local files.
+
+    <Tip>
+
+    Passing `use_auth_token=True` is required when you want to use a private model.
+
+    </Tip>
+
+    Returns:
+        `Dict`: The configuration of the tokenizer.
+
+    Examples:
+
+    ```python
+    # Download configuration from huggingface.co and cache.
+    tokenizer_config = get_tokenizer_config("bert-base-uncased")
+    # This model does not have a tokenizer config so the result will be an empty dict.
+    tokenizer_config = get_tokenizer_config("xlm-roberta-base")
+
+    # Save a pretrained tokenizer locally and you can reload its config
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    tokenizer.save_pretrained("tokenizer-test")
+    tokenizer_config = get_tokenizer_config("tokenizer-test")
+    ```"""
+    resolved_config_file = get_file_from_repo(
+        pretrained_model_name_or_path,
+        FEATURE_EXTRACTOR_NAME,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        resume_download=resume_download,
+        proxies=proxies,
+        use_auth_token=use_auth_token,
+        revision=revision,
+        local_files_only=local_files_only,
+    )
+    if resolved_config_file is None:
+        logger.info(
+            "Could not locate the feature extractor configuration file, will try to use the model config instead."
+        )
+        return {}
+
+    with open(resolved_config_file, encoding="utf-8") as reader:
+        return json.load(reader)
 
 
 class AutoFeatureExtractor:
@@ -153,33 +247,26 @@ class AutoFeatureExtractor:
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 
-        is_feature_extraction_file = os.path.isfile(pretrained_model_name_or_path)
-        is_directory = os.path.isdir(pretrained_model_name_or_path) and os.path.exists(
-            os.path.join(pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME)
-        )
+        config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
+        feature_extractor_class = config_dict.get("feature_extractor_type", None)
 
-        has_local_config = (
-            os.path.exists(os.path.join(pretrained_model_name_or_path, CONFIG_NAME)) if is_directory else False
-        )
-
-        # load config, if it can be loaded
-        if not is_feature_extraction_file and (has_local_config or not is_directory):
+        # If we don't find the feature extractor class in the feature extractor config, let's try the model config.
+        if feature_extractor_class is None:
             if not isinstance(config, PretrainedConfig):
                 config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            # It could be in `config.feature_extractor_type``
+            feature_extractor_class = getattr(config, "feature_extractor_type", None)
 
-        kwargs["_from_auto"] = True
-        config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
-
-        model_type = config_class_to_model_type(type(config).__name__)
-
-        if "feature_extractor_type" in config_dict:
-            feature_extractor_class = feature_extractor_class_from_name(config_dict["feature_extractor_type"])
+        if feature_extractor_class is not None:
+            feature_extractor_class = feature_extractor_class_from_name(feature_extractor_class)
             return feature_extractor_class.from_dict(config_dict, **kwargs)
-        elif model_type is not None:
-            return FEATURE_EXTRACTOR_MAPPING[type(config)].from_dict(config_dict, **kwargs)
+        # Last try: we use the FEATURE_EXTRACTOR_MAPPING.
+        elif type(config) in FEATURE_EXTRACTOR_MAPPING:
+            feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[type(config)]
+            return feature_extractor_class.from_dict(config_dict, **kwargs)
 
         raise ValueError(
-            f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a `feature_extractor_type` key in "
-            f"its {FEATURE_EXTRACTOR_NAME}, or one of the following `model_type` keys in its {CONFIG_NAME}: "
-            f"{', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES.keys())}"
+            f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a "
+            f"`feature_extractor_type` key in its {FEATURE_EXTRACTOR_NAME} of {CONFIG_NAME}, or one of the following "
+            "`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES.keys())}"
         )
