@@ -328,15 +328,10 @@ def prepare_img():
 class PoolFormerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification_head(self):
+        feature_extractor = PoolFormerFeatureExtractor()
         model = PoolFormerForImageClassification.from_pretrained("sail/poolformer_s12").to(torch_device)
 
-        img_size = (224, 224)
-        feature_extractor = PoolFormerFeatureExtractor(
-            size=img_size,
-        )
-
-        image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = feature_extractor(images=prepare_img(), return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -346,6 +341,5 @@ class PoolFormerModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.3045, -0.6758, -0.4869]).to(torch_device)
-
+        expected_slice = torch.tensor([-0.6113, 0.1685, -0.0492]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

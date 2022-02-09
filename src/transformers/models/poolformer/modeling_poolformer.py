@@ -48,7 +48,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "sail/poolformer_s12"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'Egyptian cat'"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sail/poolformer_s12",
