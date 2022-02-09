@@ -626,7 +626,7 @@ class AutoConfig:
                     "the option `trust_remote_code=True` to remove this error."
                 )
             if kwargs.get("revision", None) is None:
-                logger.warn(
+                logger.warning(
                     "Explicitly passing a `revision` is encouraged when loading a configuration with custom code to "
                     "ensure no malicious code has been contributed in a newer revision."
                 )
