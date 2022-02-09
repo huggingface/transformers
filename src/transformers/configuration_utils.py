@@ -368,7 +368,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @property
     def name_or_path(self) -> str:
-        return self._name_or_path
+        return getattr(self, "_name_or_path", None)
 
     @name_or_path.setter
     def name_or_path(self, value):
