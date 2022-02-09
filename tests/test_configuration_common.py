@@ -58,6 +58,7 @@ config_common_kwargs = {
     "temperature": 2.0,
     "top_k": 10,
     "top_p": 0.7,
+    "typical_p": 0.2,
     "repetition_penalty": 0.8,
     "length_penalty": 0.8,
     "no_repeat_ngram_size": 5,
