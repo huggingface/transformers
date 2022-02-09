@@ -2338,6 +2338,7 @@ class TFLEDModel(TFLEDPreTrainedModel):
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
         enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
         enc_g_attns = tf.convert_to_tensor(output.encoder_global_attentions) if self.config.output_attentions else None
@@ -2347,6 +2348,7 @@ class TFLEDModel(TFLEDPreTrainedModel):
             past_key_values=pkv,
             decoder_hidden_states=dec_hs,
             decoder_attentions=dec_attns,
+            cross_attentions=cross_attns,
             encoder_last_hidden_state=output.encoder_last_hidden_state,
             encoder_hidden_states=enc_hs,
             encoder_attentions=enc_attns,
@@ -2494,7 +2496,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             past_key_values=outputs.past_key_values,  # index 1 of d outputs
             decoder_hidden_states=outputs.decoder_hidden_states,  # index 2 of d outputs
             decoder_attentions=outputs.decoder_attentions,  # index 3 of d outputs
-            cross_attentions=outputs.cross_attentions,
+            cross_attentions=outputs.cross_attentions,  # index 4 of d outputs
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,  # index 0 of encoder outputs
             encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
@@ -2505,6 +2507,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
         enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
         enc_g_attns = tf.convert_to_tensor(output.encoder_global_attentions) if self.config.output_attentions else None
@@ -2514,6 +2517,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             past_key_values=pkv,
             decoder_hidden_states=dec_hs,
             decoder_attentions=dec_attns,
+            cross_attentions=cross_attns,
             encoder_last_hidden_state=output.encoder_last_hidden_state,
             encoder_hidden_states=enc_hs,
             encoder_attentions=enc_attns,
