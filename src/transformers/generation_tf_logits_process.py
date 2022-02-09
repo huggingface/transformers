@@ -14,9 +14,9 @@
 # limitations under the License.
 
 import inspect
-import tensorflow as tf
 from abc import ABC
 
+import tensorflow as tf
 
 from .file_utils import add_start_docstrings
 from .utils.logging import get_logger
@@ -59,9 +59,9 @@ class TFLogitsProcessor(ABC):
 
 class TFLogitsProcessorList(list):
     """
-    This class can be used to create a list of [`TFLogitsProcessor`] to subsequently process
-    a `scores` input tensor. This class inherits from list and adds a specific *__call__* method to apply each
-    [`TFLogitsProcessor`] to the inputs.
+    This class can be used to create a list of [`TFLogitsProcessor`] to subsequently process a `scores` input tensor.
+    This class inherits from list and adds a specific *__call__* method to apply each [`TFLogitsProcessor`] to the
+    inputs.
     """
 
     @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)

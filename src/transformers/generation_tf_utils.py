@@ -16,11 +16,12 @@
 
 import inspect
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union, List
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
 
+from .file_utils import ModelOutput
 from .generation_tf_logits_process import (
     TFLogitsProcessorList,
     TFMinLengthLogitsProcessor,
@@ -28,8 +29,6 @@ from .generation_tf_logits_process import (
     TFNoRepeatNGramLogitsProcessor,
     TFRepetitionPenaltyLogitsProcessor,
 )
-
-from .file_utils import ModelOutput
 from .utils import logging
 
 
@@ -2188,6 +2187,30 @@ class BeamHypotheses(object):
                 **model_kwargs,
             )
 
+    @staticmethod
+    def _update_model_kwargs_for_generation(
+        outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
+    ) -> Dict[str, Any]:
+        # update past
+        if "past_key_values" in outputs:
+            model_kwargs["past"] = outputs.past_key_values
+        elif "mems" in outputs:
+            model_kwargs["past"] = outputs.mems
+        elif "past_buckets_states" in outputs:
+            model_kwargs["past"] = outputs.past_buckets_states
+        else:
+            model_kwargs["past"] = None
+
+        # update attention mask
+        if not is_encoder_decoder:
+            if "attention_mask" in model_kwargs:
+                attention_mask = model_kwargs["attention_mask"]
+                model_kwargs["attention_mask"] = tf.concat(
+                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                )
+
+        return model_kwargs
+
     def _get_logits_processor(
         self,
         repetition_penalty: float,
@@ -2336,7 +2359,7 @@ class BeamHypotheses(object):
             )
 
         # keep track of which sequences are already finished
-        unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
+        unfinished_sequences = tf.ones_like(input_ids[:, 0])
         cur_len = input_ids.shape[-1]
 
         while cur_len < max_length:
@@ -2375,7 +2398,7 @@ class BeamHypotheses(object):
             next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
             # argmax
-            next_tokens = tf.argmax(next_tokens_scores, dim=-1)
+            next_tokens = tf.argmax(next_tokens_scores, axis=-1)
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
@@ -2384,35 +2407,26 @@ class BeamHypotheses(object):
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update generated ids, model inputs, and length for next step
-            input_ids = tf.cat([input_ids, next_tokens[:, None]], dim=-1)
+            input_ids = tf.concat([input_ids, next_tokens[:, None]], axis=-1)
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             cur_len = cur_len + 1
 
             # if eos_token was found in one sentence, set sentence to finished
-#            if eos_token_id is not None:
-#                unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
-
             if eos_token_id is not None:
                 eos_in_sents = next_tokens == eos_token_id
-                # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
+                # if sentence is unfinished and the token to add is eos
                 is_sents_unfinished_and_token_to_add_is_eos = tf.math.multiply(
-                    unfinished_sents, tf.cast(eos_in_sents, tf.int32)
-                )
-                sent_lengths = (
-                    sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
-                    + cur_len * is_sents_unfinished_and_token_to_add_is_eos
+                    unfinished_sequences, tf.cast(eos_in_sents, tf.int32)
                 )
 
-                # unfinished_sents is set to zero if eos in sentence
-                unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
+                # unfinished_sequences is set to zero if eos in sentence
+                unfinished_sequences -= is_sents_unfinished_and_token_to_add_is_eos
 
             # stop when each sentence is finished, or if we exceed the maximum length
-            if tf.math.reduce_max(unfinished_sents) == 0:
+            if tf.math.reduce_max(unfinished_sequences) == 0:
                 break
-#            if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
-#                break
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
