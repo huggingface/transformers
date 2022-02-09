@@ -80,7 +80,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bart", "BartModel"),
         ("longformer", "LongformerModel"),
         ("roberta", "RobertaModel"),
-        ("data2vec", "Data2VecModel"),
+        ("data2vec", "Data2VecForTextModel"),
         ("layoutlm", "LayoutLMModel"),
         ("squeezebert", "SqueezeBertModel"),
         ("bert", "BertModel"),

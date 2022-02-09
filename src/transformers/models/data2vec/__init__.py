@@ -33,8 +33,8 @@ if is_torch_available():
         "Data2VecForMultipleChoice",
         "Data2VecForQuestionAnswering",
         "Data2VecForSequenceClassification",
+        "Data2VecForTextModel",
         "Data2VecForTokenClassification",
-        "Data2VecModel",
         "Data2VecPreTrainedModel",
     ]
 
@@ -49,8 +49,8 @@ if TYPE_CHECKING:
             Data2VecForMultipleChoice,
             Data2VecForQuestionAnswering,
             Data2VecForSequenceClassification,
+            Data2VecForTextModel,
             Data2VecForTokenClassification,
-            Data2VecModel,
             Data2VecPreTrainedModel,
         )
 
