@@ -297,7 +297,7 @@ class BigBirdEmbeddings(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
 
         if self.rescale_embeddings:
-            inputs_embeds = inputs_embeds * (self.hidden_size ** 0.5)
+            inputs_embeds = inputs_embeds * (self.hidden_size**0.5)
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
