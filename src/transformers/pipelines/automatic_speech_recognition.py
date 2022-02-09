@@ -265,10 +265,19 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # it here.
             # Consume values so we can let extra information flow freely through
             # the pipeline (important for `partial` in microphone)
-            input_features = model_inputs.pop("input_features")
-            attention_mask = model_inputs.pop("attention_mask")
+            if "input_features" in model_inputs:
+                inputs = model_inputs.pop("input_features")
+            elif "input_values" in model_inputs:
+                inputs = model_inputs.pop("input_values")
+            else:
+                raise ValueError(
+                    "Seq2Seq speech recognition model requires either a "
+                    f"`input_features` or `input_values` key, but only has {model_inputs.keys()}"
+                )
+
+            attention_mask = model_inputs.pop("attention_mask", None)
             tokens = self.model.generate(
-                encoder_outputs=encoder(input_features=input_features, attention_mask=attention_mask),
+                encoder_outputs=encoder(inputs, attention_mask=attention_mask),
                 attention_mask=attention_mask,
             )
             out = {"tokens": tokens}

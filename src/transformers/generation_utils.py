@@ -49,6 +49,7 @@ from .generation_stopping_criteria import (
     StoppingCriteriaList,
     validate_stopping_criteria,
 )
+from .pytorch_utils import torch_int_div
 from .utils import logging
 
 
@@ -2074,7 +2075,7 @@ class GenerationMixin:
                 next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
             )
 
-            next_indices = (next_tokens / vocab_size).long()
+            next_indices = torch_int_div(next_tokens, vocab_size)
             next_tokens = next_tokens % vocab_size
 
             # stateless
@@ -2395,7 +2396,7 @@ class GenerationMixin:
             next_token_scores, _indices = torch.sort(next_token_scores, descending=True, dim=1)
             next_tokens = torch.gather(next_tokens, -1, _indices)
 
-            next_indices = next_tokens // vocab_size
+            next_indices = torch_int_div(next_tokens, vocab_size)
             next_tokens = next_tokens % vocab_size
 
             # stateless
@@ -2728,7 +2729,7 @@ class GenerationMixin:
                     next_token_scores, 2 * group_size, dim=1, largest=True, sorted=True
                 )
 
-                next_indices = next_tokens // vocab_size
+                next_indices = torch_int_div(next_tokens, vocab_size)
                 next_tokens = next_tokens % vocab_size
 
                 # stateless
@@ -2756,7 +2757,7 @@ class GenerationMixin:
                 # (beam_idx // group_size) -> batch_idx
                 # (beam_idx % group_size) -> offset of idx inside the group
                 reordering_indices[batch_group_indices] = (
-                    num_beams * (beam_idx // group_size) + group_start_idx + (beam_idx % group_size)
+                    num_beams * torch_int_div(beam_idx, group_size) + group_start_idx + (beam_idx % group_size)
                 )
 
             # Store scores, attentions and hidden_states when required
