@@ -120,7 +120,7 @@ def export_pytorch(
             if parse(torch.__version__) <= parse("1.10.99"):
                 # export can work with named args but the dict containing named args
                 # has to be the last element of the args tuple.
-                export(
+                onnx_export(
                     model,
                     (model_inputs,),
                     f=output.as_posix(),
@@ -133,7 +133,7 @@ def export_pytorch(
                     opset_version=opset,
                 )
             else:
-                export(
+                onnx_export(
                     model,
                     (model_inputs,),
                     f=output.as_posix(),
