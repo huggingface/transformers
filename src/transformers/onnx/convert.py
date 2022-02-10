@@ -21,7 +21,7 @@ import numpy as np
 from packaging.version import Version, parse
 
 from transformers import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
-from transformers.file_utils import is_torch_onnx_dict_inputs_support_available
+from transformers.file_utils import is_tf_available, is_torch_onnx_dict_inputs_support_available
 from transformers.onnx.config import OnnxConfig
 from transformers.utils import logging
 
@@ -62,88 +62,188 @@ def check_onnxruntime_requirements(minimum_version: Version):
         )
 
 
-def export(
-    tokenizer: PreTrainedTokenizer, model: PreTrainedModel, config: OnnxConfig, opset: int, output: Path
+def export_pytorch(
+    tokenizer: PreTrainedTokenizer,
+    model: PreTrainedModel,
+    config: OnnxConfig,
+    opset: int,
+    output: Path,
 ) -> Tuple[List[str], List[str]]:
     """
-    Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR
+    Export a PyTorch model to an ONNX Intermediate Representation (IR)
 
     Args:
-        tokenizer:
-        model:
-        config:
-        opset:
-        output:
+        tokenizer ([`PreTrainedTokenizer`]):
+            The tokenizer used for encoding the data.
+        model ([`PreTrainedModel`]):
+            The model to export.
+        config ([`~onnx.config.OnnxConfig`]):
+            The ONNX configuration associated with the exported model.
+        opset (`int`):
+            The version of the ONNX operator set to use.
+        output (`Path`):
+            Directory to store the exported ONNX model.
 
     Returns:
-
+        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
+        the ONNX configuration.
     """
-    if not is_torch_available():
-        raise ImportError("Cannot convert because PyTorch is not installed. Please install torch first.")
+    if issubclass(type(model), PreTrainedModel):
+        import torch
+        from torch.onnx import export as onnx_export
 
-    import torch
-    from torch.onnx import export
+        logger.info(f"Using framework PyTorch: {torch.__version__}")
+        with torch.no_grad():
+            model.config.return_dict = True
+            model.eval()
 
-    from ..file_utils import torch_version
+            # Check if we need to override certain configuration item
+            if config.values_override is not None:
+                logger.info(f"Overriding {len(config.values_override)} configuration item(s)")
+                for override_config_key, override_config_value in config.values_override.items():
+                    logger.info(f"\t- {override_config_key} -> {override_config_value}")
+                    setattr(model.config, override_config_key, override_config_value)
 
-    if not is_torch_onnx_dict_inputs_support_available():
-        raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
+            # Ensure inputs match
+            # TODO: Check when exporting QA we provide "is_pair=True"
+            model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
+            inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
+            onnx_outputs = list(config.outputs.keys())
 
-    logger.info(f"Using framework PyTorch: {torch.__version__}")
-    with torch.no_grad():
-        model.config.return_dict = True
-        model.eval()
+            if not inputs_match:
+                raise ValueError("Model and config inputs doesn't match")
 
-        # Check if we need to override certain configuration item
-        if config.values_override is not None:
-            logger.info(f"Overriding {len(config.values_override)} configuration item(s)")
-            for override_config_key, override_config_value in config.values_override.items():
-                logger.info(f"\t- {override_config_key} -> {override_config_value}")
-                setattr(model.config, override_config_key, override_config_value)
+            config.patch_ops()
 
-        # Ensure inputs match
-        # TODO: Check when exporting QA we provide "is_pair=True"
-        model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
-        inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
-        onnx_outputs = list(config.outputs.keys())
+            # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
+            # so we check the torch version for backwards compatibility
+            if parse(torch.__version__) <= parse("1.10.99"):
+                # export can work with named args but the dict containing named args
+                # has to be the last element of the args tuple.
+                onnx_export(
+                    model,
+                    (model_inputs,),
+                    f=output.as_posix(),
+                    input_names=list(config.inputs.keys()),
+                    output_names=onnx_outputs,
+                    dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
+                    do_constant_folding=True,
+                    use_external_data_format=config.use_external_data_format(model.num_parameters()),
+                    enable_onnx_checker=True,
+                    opset_version=opset,
+                )
+            else:
+                onnx_export(
+                    model,
+                    (model_inputs,),
+                    f=output.as_posix(),
+                    input_names=list(config.inputs.keys()),
+                    output_names=onnx_outputs,
+                    dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
+                    do_constant_folding=True,
+                    opset_version=opset,
+                )
 
-        if not inputs_match:
-            raise ValueError("Model and config inputs doesn't match")
-
-        config.patch_ops()
-
-        # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
-        # so we check the torch version for backwards compatibility
-        if parse(torch.__version__) <= parse("1.10.99"):
-            # export can work with named args but the dict containing named args
-            # has to be the last element of the args tuple.
-            export(
-                model,
-                (model_inputs,),
-                f=output.as_posix(),
-                input_names=list(config.inputs.keys()),
-                output_names=onnx_outputs,
-                dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
-                do_constant_folding=True,
-                use_external_data_format=config.use_external_data_format(model.num_parameters()),
-                enable_onnx_checker=True,
-                opset_version=opset,
-            )
-        else:
-            export(
-                model,
-                (model_inputs,),
-                f=output.as_posix(),
-                input_names=list(config.inputs.keys()),
-                output_names=onnx_outputs,
-                dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
-                do_constant_folding=True,
-                opset_version=opset,
-            )
-
-        config.restore_ops()
+            config.restore_ops()
 
     return matched_inputs, onnx_outputs
+
+
+def export_tensorflow(
+    tokenizer: PreTrainedTokenizer,
+    model: TFPreTrainedModel,
+    config: OnnxConfig,
+    opset: int,
+    output: Path,
+) -> Tuple[List[str], List[str]]:
+    """
+    Export a TensorFlow model to an ONNX Intermediate Representation (IR)
+
+    Args:
+        tokenizer ([`PreTrainedTokenizer`]):
+            The tokenizer used for encoding the data.
+        model ([`TFPreTrainedModel`]):
+            The model to export.
+        config ([`~onnx.config.OnnxConfig`]):
+            The ONNX configuration associated with the exported model.
+        opset (`int`):
+            The version of the ONNX operator set to use.
+        output (`Path`):
+            Directory to store the exported ONNX model.
+
+    Returns:
+        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
+        the ONNX configuration.
+    """
+    import tensorflow as tf
+
+    import onnx
+    import tf2onnx
+
+    model.config.return_dict = True
+
+    # Check if we need to override certain configuration item
+    if config.values_override is not None:
+        logger.info(f"Overriding {len(config.values_override)} configuration item(s)")
+        for override_config_key, override_config_value in config.values_override.items():
+            logger.info(f"\t- {override_config_key} -> {override_config_value}")
+            setattr(model.config, override_config_key, override_config_value)
+
+    # Ensure inputs match
+    model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.TENSORFLOW)
+    inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
+    onnx_outputs = list(config.outputs.keys())
+
+    input_signature = [tf.TensorSpec.from_tensor(tensor, name=key) for key, tensor in model_inputs.items()]
+    onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature, opset=opset)
+    onnx.save(onnx_model, output.as_posix())
+    config.restore_ops()
+
+    return matched_inputs, onnx_outputs
+
+
+def export(
+    tokenizer: PreTrainedTokenizer,
+    model: Union[PreTrainedModel, TFPreTrainedModel],
+    config: OnnxConfig,
+    opset: int,
+    output: Path,
+) -> Tuple[List[str], List[str]]:
+    """
+    Export a Pytorch or TensorFlow model to an ONNX Intermediate Representation (IR)
+
+    Args:
+        tokenizer ([`PreTrainedTokenizer`]):
+            The tokenizer used for encoding the data.
+        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
+            The model to export.
+        config ([`~onnx.config.OnnxConfig`]):
+            The ONNX configuration associated with the exported model.
+        opset (`int`):
+            The version of the ONNX operator set to use.
+        output (`Path`):
+            Directory to store the exported ONNX model.
+
+    Returns:
+        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
+        the ONNX configuration.
+    """
+    if not (is_torch_available() or is_tf_available()):
+        raise ImportError(
+            "Cannot convert because neither PyTorch nor TensorFlow are not installed. "
+            "Please install torch or tensorflow first."
+        )
+
+    if is_torch_available():
+        from transformers.file_utils import torch_version
+
+        if not is_torch_onnx_dict_inputs_support_available():
+            raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
+
+    if is_torch_available() and issubclass(type(model), PreTrainedModel):
+        return export_pytorch(tokenizer, model, config, opset, output)
+    elif is_tf_available() and issubclass(type(model), TFPreTrainedModel):
+        return export_tensorflow(tokenizer, model, config, opset, output)
 
 
 def validate_model_outputs(
@@ -160,7 +260,10 @@ def validate_model_outputs(
 
     # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
     # dynamic input shapes.
-    reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
+    if issubclass(type(reference_model), PreTrainedModel):
+        reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
+    else:
+        reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.TENSORFLOW)
 
     # Create ONNX Runtime session
     options = SessionOptions()
@@ -210,7 +313,10 @@ def validate_model_outputs(
 
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):
-        ref_value = ref_outputs_dict[name].detach().numpy()
+        if issubclass(type(reference_model), PreTrainedModel):
+            ref_value = ref_outputs_dict[name].detach().numpy()
+        else:
+            ref_value = ref_outputs_dict[name].numpy()
         logger.info(f'\t- Validating ONNX Model output "{name}":')
 
         # Shape
@@ -241,7 +347,10 @@ def ensure_model_and_config_inputs_match(
 
     :param model_inputs: :param config_inputs: :return:
     """
-    forward_parameters = signature(model.forward).parameters
+    if issubclass(type(model), PreTrainedModel):
+        forward_parameters = signature(model.forward).parameters
+    else:
+        forward_parameters = signature(model.call).parameters
     model_inputs_set = set(model_inputs)
 
     # We are fine if config_inputs has more keys than model_inputs
