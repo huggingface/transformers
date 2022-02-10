@@ -917,7 +917,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 raise tf.errors.InvalidArgumentError(
                     node_def=exc.node_def,
                     op=exc.op,
-                    message=exc.message + (
+                    message=exc.message
+                    + (
                         f"\n\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. "
                         "Please try training/fine-tunning with other kinds of hardware devices if you are using a CPU."
                     ),
