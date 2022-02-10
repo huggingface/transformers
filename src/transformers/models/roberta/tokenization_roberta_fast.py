@@ -14,13 +14,13 @@
 # limitations under the License.
 """Fast Tokenization classes for RoBERTa."""
 import json
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-from tokenizers import processors
+from tokenizers import pre_tokenizers, processors
 
-from ...tokenization_utils_base import AddedToken
+from ...tokenization_utils_base import AddedToken, BatchEncoding
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from ..gpt2.tokenization_gpt2_fast import GPT2TokenizerFast
 from .tokenization_roberta import RobertaTokenizer
 
 
@@ -65,7 +65,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class RobertaTokenizerFast(GPT2TokenizerFast):
+class RobertaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" RoBERTa tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2
     tokenizer, using byte-level Byte-Pair-Encoding.
@@ -184,7 +184,14 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             **kwargs,
         )
 
-        # the pre_tokenizer is already updated in the GPT2TokenizerFast `__init__`
+        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
+        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
+            pre_tok_state["add_prefix_space"] = add_prefix_space
+            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
+
+        self.add_prefix_space = add_prefix_space
+
         tokenizer_component = "post_processor"
         tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
         if tokenizer_component_instance:
@@ -236,6 +243,29 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         # So we set lstrip to True
         value = AddedToken(value, lstrip=True, rstrip=False) if isinstance(value, str) else value
         self._mask_token = value
+
+    def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
+        is_split_into_words = kwargs.get("is_split_into_words", False)
+        assert self.add_prefix_space or not is_split_into_words, (
+            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+            "to use it with pretokenized inputs."
+        )
+
+        return super()._batch_encode_plus(*args, **kwargs)
+
+    def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
+        is_split_into_words = kwargs.get("is_split_into_words", False)
+
+        assert self.add_prefix_space or not is_split_into_words, (
+            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+            "to use it with pretokenized inputs."
+        )
+
+        return super()._encode_plus(*args, **kwargs)
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
+        return tuple(files)
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]

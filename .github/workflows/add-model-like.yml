@@ -30,6 +30,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip!=21.3
+          pip install -U click  # Click 7 is installed in the environment by default, but we need at least version 8 for Black
           sudo apt -y update && sudo apt install -y libsndfile1-dev
           pip install .[dev]
 

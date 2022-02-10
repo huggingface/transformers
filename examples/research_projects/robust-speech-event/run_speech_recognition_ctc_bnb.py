@@ -677,6 +677,7 @@ def main():
     ]
     optimizer = bnb.optim.Adam8bit(
         params=optimizer_grouped_parameters,
+        lr=training_args.learning_rate,
         betas=(training_args.adam_beta1, training_args.adam_beta2),
         eps=training_args.adam_epsilon,
     )

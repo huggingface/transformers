@@ -202,6 +202,17 @@ class Wav2Vec2ModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
         )
 
+    def create_and_check_model_with_adapter_for_ctc(self, config, input_values, attention_mask):
+        config.add_adapter = True
+        config.output_hidden_size = 2 * config.hidden_size
+        model = Wav2Vec2ForCTC(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
+        )
+
     def create_and_check_model_with_adapter_proj_dim(self, config, input_values, attention_mask):
         config.add_adapter = True
         config.output_hidden_size = 8
@@ -413,6 +424,10 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_with_adapter(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_adapter(*config_and_inputs)
+
+    def test_model_with_adapter_for_ctc(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_adapter_for_ctc(*config_and_inputs)
 
     def test_model_with_adapter_proj_dim(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -989,6 +1004,23 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
             self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
 
         self.assertTrue(mask[:2, sequence_length // 2 :].sum() == 0)
+
+    def test_compute_mask_indices_short_audio(self):
+        batch_size = 4
+        sequence_length = 100
+        mask_prob = 0.05
+        mask_length = 10
+
+        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
+        # force one example to be heavily padded
+        attention_mask[0, 5:] = 0
+
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask, min_masks=2
+        )
+
+        # make sure that non-padded examples cannot be padded
+        self.assertFalse(mask[0][attention_mask[0].to(torch.bool).cpu()].any())
 
     def test_compute_perplexity(self):
         probs = torch.arange(100, device=torch_device).reshape(2, 5, 10) / 100

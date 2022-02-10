@@ -21,6 +21,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
+from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...file_utils import get_file_from_repo, is_sentencepiece_available, is_tokenizers_available
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
@@ -35,7 +36,6 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
-from .dynamic import get_class_from_dynamic_module
 
 
 logger = logging.get_logger(__name__)
@@ -492,7 +492,7 @@ class AutoTokenizer:
                         "the option `trust_remote_code=True` to remove this error."
                     )
                 if kwargs.get("revision", None) is None:
-                    logger.warn(
+                    logger.warning(
                         "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
                         "no malicious code has been contributed in a newer revision."
                     )

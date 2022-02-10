@@ -118,8 +118,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PerceiverForMultimodalAutoencoding",
     "PerceiverForOpticalFlow",
     "SegformerDecodeHead",
-    "SegformerForSemanticSegmentation",
-    "BeitForSemanticSegmentation",
     "FlaxBeitForMaskedImageModeling",
     "BeitForMaskedImageModeling",
     "CLIPTextModel",

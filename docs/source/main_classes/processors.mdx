@@ -12,10 +12,22 @@ specific language governing permissions and limitations under the License.
 
 # Processors
 
-This library includes processors for several traditional tasks. These processors can be used to process a dataset into
-examples that can be fed to a model.
+Processors can mean two different things in the Transformers library:
+- the objects that pre-process inputs for multi-modal models such as [Wav2Vec2](../model_doc/wav2vec2) (speech and text)
+  or [CLIP](../model_doc/clip) (text and vision)
+- deprecated objects that were used in older versions of the library to preprocess data for GLUE or SQUAD.
 
-## Processors
+## Multi-modal processors
+
+Any multi-modal model will require an object to encode or decode the data that groups several modalities (among text,
+vision and audio). This is handled by objects called processors, which group tokenizers (for the text modality) and
+feature extractors (for vision and audio).
+
+Those processors inherit from the following base class that implements the saving and loading functionality:
+
+[[autodoc]] ProcessorMixin
+
+## Deprecated processors
 
 All processors follow the same architecture which is that of the
 [`~data.processors.utils.DataProcessor`]. The processor returns a list of
