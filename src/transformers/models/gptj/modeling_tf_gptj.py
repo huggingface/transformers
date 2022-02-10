@@ -35,14 +35,17 @@ def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] =
     dim = x.shape[-1]
     if seq_len is None:
         seq_len = x.shape[seq_dim]
-    inv_freq = 1.0 / (10000 ** (tf.range(0, dim, 2) / dim))
-    sinusoid_inp = tf.cast(tf.einsum("i , j -> i j", tf.range(seq_len), inv_freq), tf.float32)
+    inv_freq = tf.cast(1.0 / (10000 ** (tf.range(0, dim, 2) / dim)), tf.float32)
+    seq_len_range = tf.cast(tf.range(seq_len), tf.float32)
+    sinusoid_inp = tf.cast(tf.einsum("i , j -> i j", seq_len_range, inv_freq), tf.float32)
     return tf.sin(sinusoid_inp), tf.cos(sinusoid_inp)
 
 
 def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
     rotate_half_tensor = tf.stack((x[:, :, :, 1::2], x[:, :, :, ::2]), axis=-1)
-    rotate_half_tensor = tf.reshape(rotate_half_tensor, rotate_half_tensor.shape[:-2] + (-1,))
+    rotate_half_tensor = tf.reshape(
+        rotate_half_tensor, rotate_half_tensor.shape[:-2] + tf.math.reduce_prod(rotate_half_tensor.shape[-2:])
+    )
     return rotate_half_tensor
 
 
@@ -64,7 +67,9 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             raise ValueError(
                 f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and `num_attention_heads`: {self.num_attention_heads})."
             )
-        self.scale_attn = tf.Variable(tf.sqrt(self.head_dim), dtype=tf.float32, trainable=False, name="scale_attn")
+        self.scale_attn = tf.Variable(
+            tf.sqrt(float(self.head_dim)), dtype=tf.float32, trainable=False, name="scale_attn"
+        )
 
         self.rotary_dim = config.rotary_dim
 
@@ -88,6 +93,12 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
             name="v_proj",
+        )
+        self.out_proj = tf.keras.layers.Dense(
+            self.embed_dim,
+            use_bias=False,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="out_proj",
         )
 
         max_positions = config.max_position_embeddings
@@ -130,7 +141,7 @@ class TFGPTJAttention(tf.keras.layers.Layer):
 
         if attention_mask is not None:
             # Apply the attention mask
-            attn_weights = attn_weights + attention_mask
+            attn_weights = tf.einsum("bs...,biis->bs...", attn_weights, attention_mask)
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
         attn_weights = tf.cast(attn_weights, value.dtype)
@@ -168,9 +179,6 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             offset = layer_past[0].shape[-2]
             seq_len += offset
 
-        sincos = tf.experimental.numpy.take(
-            self.embed_positions,
-        )
         if self.rotary_dim is not None:
             k_rot = key[:, :, :, : self.rotary_dim]
             k_pass = key[:, :, :, self.rotary_dim :]
@@ -189,9 +197,6 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             key = apply_rotary_pos_emb(key, sincos, offset=offset)
             query = apply_rotary_pos_emb(query, sincos, offset=offset)
 
-        key = tf.transpose(key, [0, 2, 1, 3])
-        query = tf.transpose(query, [0, 2, 1, 3])
-
         if layer_past is not None:
             past_key = layer_past[0]
             past_value = layer_past[1]
@@ -206,7 +211,7 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         # compute self-attention: V x Softmax(QK^T)
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
-        attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
+        attn_output = self._merge_heads(attn_output)
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
@@ -230,20 +235,21 @@ class TFGPTJMLP(tf.keras.layers.Layer):
         )
 
         self.act = get_tf_activation(config.activation_function)
-        self.dropout = tf.keras.layers.Layer(config.resid_pdrop)
+        self.dropout = tf.keras.layers.Dropout(config.embd_pdrop)
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.fc_in(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.fc_out(hidden_states)
-        hidden_states = self.fc_dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
 
 
 class TFGPTJBlock(tf.keras.layers.Layer):
     def __init__(self, config: GPTJConfig, **kwargs):
         super().__init__(**kwargs)
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
-        self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=self.config.layer_norm_epsilon)
+        self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon)
         self.attn = TFGPTJAttention(config)
         self.mlp = TFGPTJMLP(inner_dim, config)
 
@@ -303,7 +309,7 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
             config.vocab_size, config.hidden_size, initializer_range=config.initializer_range, name="wte"
         )
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
-        self.h = [TFGPTJBlock(config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
+        self.h = [TFGPTJBlock(config, name=f"h_._{i}") for i in range(config.n_layer)]
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
 
     def build(self, input_shape):
