@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team
+# Copyright 2022 The HuggingFace Inc. team
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 
 import inspect
 from abc import ABC
-from typing import Iterable, List, Optional
+from typing import List
 
 import numpy as np
 import tensorflow as tf
@@ -44,8 +44,15 @@ TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 
     Return:
         `tf.Tensor` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
-
 """
+
+
+# TODO(Patrick) - this function is copied from `generation_tf_utils.py`
+# it should be moved into a `tf_utils.py` file.
+def set_tensor_by_indices_to_value(tensor, indices, value):
+    # create value_tensor since tensor value assignment is not possible in TF
+    value_tensor = tf.zeros_like(tensor) + value
+    return tf.where(indices, value_tensor, tensor)
 
 
 class TFLogitsProcessor(ABC):
@@ -111,7 +118,7 @@ class TFMinLengthLogitsProcessor(TFLogitsProcessor):
         # generate is not XLA - compileable anyways
         if apply_penalty:
             eos_token_id_mask = tf.broadcast_to(tf.range(scores.shape[-1]) == self.eos_token_id, scores.shape)
-            scores = tf.where(eos_token_id_mask, tf.ones_like(scores) * float("-inf"), scores)
+            scores = set_tensor_by_indices_to_value(scores, eos_token_id_mask, float("-inf"))
 
         return scores
 
@@ -132,13 +139,25 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
 
         self.penalty = penalty
 
+    def _create_score_penalties(self, input_ids, logits):
+        # create logit penalties for already seen input_ids
+        token_penalties = np.ones(logits.shape)
+        prev_input_ids = [np.unique(input_id) for input_id in input_ids.numpy()]
+        for i, prev_input_id in enumerate(prev_input_ids):
+            logit_penalized = logits[i].numpy()[prev_input_id]
+            logit_penalties = np.zeros(logit_penalized.shape)
+            # if previous logit score is < 0 then multiply repetition penalty else divide
+            logit_penalties[logit_penalized < 0] = self.penalty
+            logit_penalties[logit_penalized > 0] = 1 / self.penalty
+            np.put(token_penalties[i], prev_input_id, logit_penalties)
+        return tf.convert_to_tensor(token_penalties, dtype=tf.float32)
+
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-        score = tf.gather(scores, 1, input_ids)
 
-        # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
-        score = tf.where(score < 0, score * self.penalty, score / self.penalty)
+        score_penalties = self._create_score_penalties(input_ids, scores)
 
-        scores.scatter_(1, input_ids, score)
+        scores = tf.math.multiply(scores, score_penalties)
+
         return scores
 
 
@@ -168,135 +187,61 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
                 f"Each list in `bad_words_ids` has to be a list of positive integers, but is {bad_words_ids}."
             )
 
-        bad_words_ids = list(filter(lambda bad_token_seq: bad_token_seq != [eos_token_id], bad_words_ids))
-        self.bad_words_id_length_1 = []
-        self.bad_words_id_length_greater_than_1 = []
-        for word in bad_words_ids:
-            if len(word) == 1:
-                self.bad_words_id_length_1.append(word[0])
-            else:
-                self.bad_words_id_length_greater_than_1.append(word)
+        self.bad_words_ids = bad_words_ids
 
-        self.static_bad_words_mask: Optional[tf.Tensor] = None
-
-        for banned_token_seq in self.bad_words_id_length_greater_than_1:
-            if len(banned_token_seq) == 0:
-                raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
-
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-        if self.static_bad_words_mask is None and len(self.bad_words_id_length_1) > 0:
-            self.static_bad_words_mask = self._calc_static_bad_word_mask(scores)
-
-        dynamic_banned_tokens = self._calc_banned_bad_words_ids(input_ids.tolist())
-        scores = self._set_scores_to_inf_for_banned_tokens(scores, dynamic_banned_tokens)
-
-        return scores
-
-    def _calc_static_bad_word_mask(self, scores: tf.Tensor) -> tf.Tensor:
-        static_bad_words_mask = tf.zeros(scores.shape[1])
-        static_bad_words_mask[self.bad_words_id_length_1] = 1
-        return static_bad_words_mask.unsqueeze(0).to(scores.device).bool()
-
-    def _tokens_match(self, prev_tokens: List[int], tokens: List[int]) -> bool:
-        if len(tokens) == 0:
-            # if bad word tokens is just one token always ban it
-            return True
-        elif len(tokens) > len(prev_tokens):
-            # if bad word tokens are longer then prev input_ids they can't be equal
-            return False
-        else:
-            return prev_tokens[-len(tokens) :] == tokens
-
-    def _calc_banned_bad_words_ids(self, prev_input_ids: List[List[int]]) -> Iterable[int]:
+    def calc_banned_bad_words_ids(self, prev_input_ids):
         banned_tokens = []
+
+        def _tokens_match(prev_tokens, tokens):
+            if len(tokens) == 0:
+                # if bad word tokens is just one token always ban it
+                return True
+            if len(tokens) > len(prev_tokens):
+                # if bad word tokens are longer than prev tokens they can't be equal
+                return False
+
+            if prev_tokens[-len(tokens) :] == tokens:
+                # if tokens match
+                return True
+            else:
+                return False
+
         for prev_input_ids_slice in prev_input_ids:
             banned_tokens_slice = []
-            for banned_token_seq in self.bad_words_id_length_greater_than_1:
-                if self._tokens_match(prev_input_ids_slice, banned_token_seq[:-1]):
-                    banned_tokens_slice.append(banned_token_seq[-1])
+
+            for banned_token_seq in self.bad_words_ids:
+                assert (
+                    len(banned_token_seq) > 0
+                ), f"Banned words token sequences {self.bad_words_ids} cannot have an empty list"
+
+                if _tokens_match(prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
+                    # if tokens do not match continue
+                    continue
+
+                banned_tokens_slice.append(banned_token_seq[-1])
 
             banned_tokens.append(banned_tokens_slice)
 
         return banned_tokens
 
-    def _set_scores_to_inf_for_banned_tokens(self, scores: tf.Tensor, banned_tokens: List[List[int]]) -> tf.Tensor:
-        """
-        Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be a
-        list of list of banned tokens to ban in the format [[batch index, vocabulary position],...
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
 
-        Args:
-            scores: logits distribution of shape (batch size, vocabulary size)
-            banned_tokens: list of list of tokens to ban of length (batch_size)
-        """
-        banned_mask_list = []
-        for idx, batch_banned_tokens in enumerate(banned_tokens):
-            for token in batch_banned_tokens:
-                # Eliminates invalid bad word IDs that are over the vocabulary size.
-                if token <= scores.shape[1]:
-                    banned_mask_list.append([idx, token])
-                else:
-                    logger.error(
-                        f"An invalid bad word ID is defined: {token}. This ID is not contained in the "
-                        f"vocabulary, and is therefore ignored."
-                    )
-        if not banned_mask_list and self.static_bad_words_mask is None:
-            return scores
+        vocab_size = scores.shape[-1]
 
-        else:
-            if banned_mask_list:
-                banned_mask = tf.Tensor(banned_mask_list)
-                indices = tf.ones(len(banned_mask))
-                # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
-                # [ 0  1  1 ]
-                # [ 0  0  0 ]
-                # [ 1  0  0 ]
+        # calculate a list of banned tokens according to bad words
+        banned_tokens = self.calc_banned_bad_words_ids(input_ids)
 
-                banned_mask = (
-                    tf.sparse.Tensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
-                )
+        banned_tokens_indices_mask = []
+        for banned_tokens_slice in banned_tokens:
+            banned_tokens_indices_mask.append(
+                [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+            )
 
-                if self.static_bad_words_mask is not None:
-                    banned_mask = tf.bitwise_or(banned_mask, self.static_bad_words_mask)
-            else:
-                banned_mask = self.static_bad_words_mask
+        scores = set_tensor_by_indices_to_value(
+            scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
+        )
 
-            scores = scores.masked_fill(banned_mask, -float("inf"))
-            return scores
-
-
-def _get_ngrams(ngram_size: int, prev_input_ids: tf.Tensor, num_hypos: int):
-    generated_ngrams = [{} for _ in range(num_hypos)]
-    for idx in range(num_hypos):
-        gen_tokens = prev_input_ids[idx].tolist()
-        generated_ngram = generated_ngrams[idx]
-        for ngram in zip(*[gen_tokens[i:] for i in range(ngram_size)]):
-            prev_ngram_tuple = tuple(ngram[:-1])
-            generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
-    return generated_ngrams
-
-
-def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
-    # Before decoding the next token, prevent decoding of ngrams that have already appeared
-    start_idx = cur_len + 1 - ngram_size
-    ngram_idx = tuple(prev_input_ids[start_idx:cur_len].tolist())
-    return banned_ngrams.get(ngram_idx, [])
-
-
-def _calc_banned_ngram_tokens(
-    ngram_size: int, prev_input_ids: tf.Tensor, num_hypos: int, cur_len: int
-) -> List[Iterable[int]]:
-    """Copied from fairseq for no_repeat_ngram in beam_search"""
-    if cur_len + 1 < ngram_size:
-        # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
-        return [[] for _ in range(num_hypos)]
-
-    generated_ngrams = _get_ngrams(ngram_size, prev_input_ids, num_hypos)
-
-    banned_tokens = [
-        _get_generated_ngrams(generated_ngrams[hypo_idx], prev_input_ids[hypo_idx], ngram_size, cur_len)
-        for hypo_idx in range(num_hypos)
-    ]
-    return banned_tokens
+        return scores
 
 
 class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
@@ -314,12 +259,43 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
         self.ngram_size = ngram_size
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-        num_batch_hypotheses = scores.shape[0]
-        cur_len = input_ids.shape[-1]
-        banned_batch_tokens = _calc_banned_ngram_tokens(self.ngram_size, input_ids, num_batch_hypotheses, cur_len)
+    def calc_banned_ngram_tokens(self, prev_input_ids, num_hypos, cur_len):
+        # Copied from fairseq for no_repeat_ngram in beam_search
+        if cur_len + 1 < self.ngram_size:
+            # return no banned tokens if we haven't generated ngram_size tokens yet
+            return [[] for _ in range(num_hypos)]
+        generated_ngrams = [{} for _ in range(num_hypos)]
+        for idx in range(num_hypos):
+            gen_tokens = prev_input_ids[idx].numpy().tolist()
+            generated_ngram = generated_ngrams[idx]
+            for ngram in zip(*[gen_tokens[i:] for i in range(self.ngram_size)]):
+                prev_ngram_tuple = tuple(ngram[:-1])
+                generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
 
-        for i, banned_tokens in enumerate(banned_batch_tokens):
-            scores[i, banned_tokens] = -float("inf")
+        def _get_generated_ngrams(hypo_idx):
+            # Before decoding the next token, prevent decoding of ngrams that have already appeared
+            start_idx = cur_len + 1 - self.ngram_size
+            ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].numpy().tolist())
+            return generated_ngrams[hypo_idx].get(ngram_idx, [])
+
+        banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
+
+        return banned_tokens
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+
+        batch_size, vocab_size = scores.shape
+        banned_tokens = self.calc_banned_ngram_tokens(input_ids, batch_size, cur_len)
+
+        # create banned_tokens boolean mask
+        banned_tokens_indices_mask = []
+        for banned_tokens_slice in banned_tokens:
+            banned_tokens_indices_mask.append(
+                [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+            )
+
+        scores = set_tensor_by_indices_to_value(
+            scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
+        )
 
         return scores
