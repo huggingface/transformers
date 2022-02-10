@@ -52,7 +52,6 @@ example of such a model (only for translation), T5 is an example that can be fin
 
 Multimodal models mix text inputs with other kinds (e.g. images) and are more specific to a given task.
 
-<a id='autoregressive-models'></a>
 
 ## Decoders or autoregressive models
 
@@ -163,7 +162,6 @@ adjustments in the way attention scores are computed.
 
 The library provides a version of the model for language modeling only.
 
-<a id='reformer'></a>
 
 ### Reformer
 
@@ -234,7 +232,6 @@ XLNet also uses the same recurrence mechanism as Transformer-XL to build long-te
 The library provides a version of the model for language modeling, token classification, sentence classification,
 multiple choice classification and question answering.
 
-<a id='autoencoding-models'></a>
 
 ## Encoders or autoencoding models
 
@@ -540,7 +537,6 @@ The pretrained models available use the same pretraining objective as ELECTRA.
 The library provides a version of the model for masked language modeling, token classification, sentence
 classification, multiple choice classification and question answering.
 
-<a id='longformer'></a>
 
 ### Longformer
 
@@ -576,7 +572,6 @@ pretraining yet, though.
 The library provides a version of the model for masked language modeling, token classification, sentence
 classification, multiple choice classification and question answering.
 
-<a id='seq-to-seq-models'></a>
 
 ## Sequence-to-sequence models
 
@@ -811,7 +806,6 @@ on the cross-lingual dataset [XGLUE](https://arxiv.org/abs/2004.01401).
 The library provides a pre-trained version of this model for multi-lingual conditional generation and fine-tuned
 versions for headline generation and question generation, respectively.
 
-<a id='multimodal-models'></a>
 
 ## Multimodal models
 
@@ -836,7 +830,6 @@ The pretrained model only works for classification.
 <!--More information in this [model documentation](model_doc/mmbt). TODO: write this page
 -->
 
-<a id='retrieval-based-models'></a>
 
 ## Retrieval-based models
 
@@ -905,7 +898,6 @@ Most transformer models use full attention in the sense that the attention matri
 computational bottleneck when you have long texts. Longformer and reformer are models that try to be more efficient and
 use a sparse version of the attention matrix to speed up training.
 
-<a id='lsh-attention'></a>
 
 **LSH attention**
 
@@ -916,7 +908,6 @@ modified to mask the current token (except at the first position), because it wi
 very similar to each other). Since the hash can be a bit random, several hash functions are used in practice
 (determined by a n_rounds parameter) and then are averaged together.
 
-<a id='local-attention'></a>
 
 **Local attention**
 
@@ -936,7 +927,6 @@ length.
 
 ### Other tricks
 
-<a id='axial-pos-encoding'></a>
 
 **Axial positional encodings**
 

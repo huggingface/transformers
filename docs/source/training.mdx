@@ -20,7 +20,6 @@ There are significant benefits to using a pretrained model. It reduces computati
 * Fine-tune a pretrained model in TensorFlow with Keras.
 * Fine-tune a pretrained model in native PyTorch.
 
-<a id='data-processing'></a>
 
 ## Prepare a dataset
 
@@ -61,7 +60,6 @@ If you like, you can create a smaller subset of the full dataset to fine-tune on
 >>> small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(1000))
 ```
 
-<a id='trainer'></a>
 
 ## Fine-tune with `Trainer`
 
@@ -144,7 +142,6 @@ Then fine-tune your model by calling [`~transformers.Trainer.train`]:
 >>> trainer.train()
 ```
 
-<a id='keras'></a>
 
 ## Fine-tune with Keras
 
@@ -211,7 +208,6 @@ Then compile and fine-tune your model with [`fit`](https://keras.io/api/models/m
 >>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3)
 ```
 
-<a id='pytorch_native'></a>
 
 ## Fine-tune in native PyTorch
 
@@ -355,7 +351,6 @@ Just like how you need to add an evaluation function to [`Trainer`], you need to
 >>> metric.compute()
 ```
 
-<a id='additional-resources'></a>
 
 ## Additional resources
 

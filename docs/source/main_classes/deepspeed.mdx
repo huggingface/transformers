@@ -56,13 +56,11 @@ ZeRO (coming soon).
 
 
 
-<a id='deepspeed-trainer-integration'></a>
 
 
 ## Trainer Deepspeed Integration
 
 
-<a id='deepspeed-installation'></a>
 
 ### Installation
 
@@ -158,7 +156,6 @@ If after trying everything suggested you still encounter build issues, please, p
 
 
 
-<a id='deepspeed-multi-gpu'></a>
 
 ### Deployment with multiple GPUs
 
@@ -210,7 +207,6 @@ For some practical usage examples, please, see this [post](https://github.com/hu
 
 
 
-<a id='deepspeed-one-gpu'></a>
 
 ### Deployment with one GPU
 
@@ -282,7 +278,6 @@ Notes:
 
 
 
-<a id='deepspeed-notebook'></a>
 
 ### Deployment in Notebooks
 
@@ -406,7 +401,6 @@ completes.
 
 
 
-<a id='deepspeed-config'></a>
 
 ### Configuration
 
@@ -494,7 +488,6 @@ to the console, so you can see exactly what was the final configuration passed t
 
 
 
-<a id='deepspeed-config-passing'></a>
 
 ### Passing Configuration
 
@@ -517,7 +510,6 @@ ds_config_dict = dict(scheduler=scheduler_params, optimizer=optimizer_params)
 TrainingArguments(..., deepspeed=ds_config_dict)
 ```
 
-<a id='deepspeed-config-shared'></a>
 
 ### Shared Configuration
 
@@ -555,7 +547,6 @@ and configure [`TrainingArguments`] based on that. The steps are:
 Do note that some values, such as `scheduler.params.total_num_steps` are calculated by
 [`Trainer`] during `train`, but you can of course do the math yourself.
 
-<a id='deepspeed-zero'></a>
 
 ### ZeRO
 
@@ -577,7 +568,6 @@ going to use.
 
 
 
-<a id='deepspeed-zero2-config'></a>
 
 #### ZeRO-2 Config
 
@@ -615,7 +605,6 @@ The following is an example of configuration for ZeRO stage 2:
 
 
 
-<a id='deepspeed-zero3-config'></a>
 
 #### ZeRO-3 Config
 
@@ -704,7 +693,6 @@ default value in the following cases:
    the increased data buffers.
 
 
-<a id='deepspeed-nvme'></a>
 
 ### NVMe Support
 
@@ -769,7 +757,6 @@ In order to figure out the optimal `aio` configuration block you must run a benc
 
 
 
-<a id='deepspeed-zero2-zero3-performance'></a>
 
 #### ZeRO-2 vs ZeRO-3 Performance
 
@@ -789,7 +776,6 @@ these help you to trade scalability for speed depending on your needs.
 
 
 
-<a id='deepspeed-zero2-example'></a>
 
 #### ZeRO-2 Example
 
@@ -900,7 +886,6 @@ values look like, but we highly recommend using the one with multiple `auto` set
 }
 ```
 
-<a id='deepspeed-zero3-example'></a>
 
 #### ZeRO-3 Example
 
@@ -1041,7 +1026,6 @@ GPU implementation (except LAMB).
 
 
 
-<a id='deepspeed-optimizer'></a>
 
 #### Optimizer
 
@@ -1112,7 +1096,6 @@ config values. e.g. for Adam you will want `weight_decay` around `0.01`.
 
 
 
-<a id='deepspeed-scheduler'></a>
 
 #### Scheduler
 
@@ -1196,7 +1179,6 @@ and `total_num_steps`, `warmup_max_lr`, `warmup_num_steps` and `total_num_steps`
 
 
 
-<a id='deepspeed-fp32'></a>
 
 ### fp32 Precision
 
@@ -1224,7 +1206,6 @@ instructions on how to disable this automatic conversion if for some reason you 
 
 
 
-<a id='deepspeed-amp'></a>
 
 ### Automatic Mixed Precision
 
@@ -1302,7 +1283,6 @@ Here is the [documentation](https://www.deepspeed.ai/docs/config-json/#automatic
 
 
 
-<a id='deepspeed-bs'></a>
 
 ### Batch Size
 
@@ -1332,7 +1312,6 @@ configuration.
 
 
 
-<a id='deepspeed-grad-acc'></a>
 
 ### Gradient Accumulation
 
@@ -1359,7 +1338,6 @@ configuration.
 
 
 
-<a id='deepspeed-grad-clip'></a>
 
 ### Gradient Clipping
 
@@ -1386,7 +1364,6 @@ configuration.
 
 
 
-<a id='deepspeed-weight-extraction'></a>
 
 ### Getting The Model Weights Out
 
@@ -1588,7 +1565,6 @@ larger multi-dimensional shape, this means that the parameter is partitioned and
 
 
 
-<a id='deepspeed-zero-inference'></a>
 
 
 ### ZeRO Inference
@@ -1757,7 +1733,6 @@ ZeRO-3. Here is how you can [estimate how much memory is needed for a specific m
 
 
 
-<a id='deepspeed-non-trainer-integration'></a>
 
 ## Non-Trainer Deepspeed Integration
 

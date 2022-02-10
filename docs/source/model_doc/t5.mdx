@@ -67,7 +67,6 @@ All checkpoints can be found on the [hub](https://huggingface.co/models?search=t
 
 This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/google-research/text-to-text-transfer-transformer).
 
-<a id='training'></a>
 
 ## Training
 
@@ -208,7 +207,6 @@ Additional training tips:
   encountered during training thus significantly slowing down the training. only padding up to the longest example in a
   batch) leads to very slow training on TPU.
 
-<a id='inference'></a>
 
 ## Inference
 
@@ -261,7 +259,6 @@ print(tokenizer.batch_decode(output_sequences, skip_special_tokens=True))
 # ['Das Haus ist wunderbar.', 'Ich arbeite gerne in NYC.']
 ```
 
-<a id='scripts'></a>
 
 ## Example scripts
 
