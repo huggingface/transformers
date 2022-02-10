@@ -22,7 +22,7 @@ from typing import Optional, Tuple
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss, BCEWithLogitsLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -306,7 +306,8 @@ class PoolFormerEncoder(nn.Module):
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
         return PoolFormerModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
         )
 
 
@@ -499,5 +500,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return PoolFormerClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
         )
