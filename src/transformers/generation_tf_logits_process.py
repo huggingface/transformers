@@ -15,7 +15,9 @@
 
 import inspect
 from abc import ABC
+from typing import Iterable, List, Optional
 
+import numpy as np
 import tensorflow as tf
 
 from .file_utils import add_start_docstrings
@@ -103,11 +105,13 @@ class TFMinLengthLogitsProcessor(TFLogitsProcessor):
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         # create boolean flag to decide if min length penalty should be applied
-        apply_penalty = 1 - tf.clip(cur_len - self.min_length, 0, 1)
+        apply_penalty = 1 - tf.clip_by_value(cur_len - self.min_length, 0, 1)
 
-        scores = tf.where(
-            apply_penalty, jax.ops.index_update(scores, jax.ops.index[:, self.eos_token_id], -float("inf")), scores
-        )
+        # TODO(Matt) - this if statement has to be rewritten for XLA. Leaving it now though since
+        # generate is not XLA - compileable anyways
+        if apply_penalty:
+            eos_token_id_mask = tf.broadcast_to(tf.range(scores.shape[-1]) == self.eos_token_id, scores.shape)
+            scores = tf.where(eos_token_id_mask, tf.ones_like(scores) * float("-inf"), scores)
 
         return scores
 
@@ -128,11 +132,11 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
 
         self.penalty = penalty
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        score = torch.gather(scores, 1, input_ids)
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        score = tf.gather(scores, 1, input_ids)
 
         # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
-        score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+        score = tf.where(score < 0, score * self.penalty, score / self.penalty)
 
         scores.scatter_(1, input_ids, score)
         return scores
@@ -173,13 +177,13 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
             else:
                 self.bad_words_id_length_greater_than_1.append(word)
 
-        self.static_bad_words_mask: Optional[torch.LongTensor] = None
+        self.static_bad_words_mask: Optional[tf.Tensor] = None
 
         for banned_token_seq in self.bad_words_id_length_greater_than_1:
             if len(banned_token_seq) == 0:
                 raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         if self.static_bad_words_mask is None and len(self.bad_words_id_length_1) > 0:
             self.static_bad_words_mask = self._calc_static_bad_word_mask(scores)
 
@@ -188,8 +192,8 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
 
         return scores
 
-    def _calc_static_bad_word_mask(self, scores: torch.FloatTensor) -> torch.BoolTensor:
-        static_bad_words_mask = torch.zeros(scores.shape[1])
+    def _calc_static_bad_word_mask(self, scores: tf.Tensor) -> tf.Tensor:
+        static_bad_words_mask = tf.zeros(scores.shape[1])
         static_bad_words_mask[self.bad_words_id_length_1] = 1
         return static_bad_words_mask.unsqueeze(0).to(scores.device).bool()
 
@@ -215,9 +219,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
 
         return banned_tokens
 
-    def _set_scores_to_inf_for_banned_tokens(
-        self, scores: torch.Tensor, banned_tokens: List[List[int]]
-    ) -> torch.Tensor:
+    def _set_scores_to_inf_for_banned_tokens(self, scores: tf.Tensor, banned_tokens: List[List[int]]) -> tf.Tensor:
         """
         Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be a
         list of list of banned tokens to ban in the format [[batch index, vocabulary position],...
@@ -242,22 +244,19 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
 
         else:
             if banned_mask_list:
-                banned_mask = torch.LongTensor(banned_mask_list)
-                indices = torch.ones(len(banned_mask))
+                banned_mask = tf.Tensor(banned_mask_list)
+                indices = tf.ones(len(banned_mask))
                 # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
                 # [ 0  1  1 ]
                 # [ 0  0  0 ]
                 # [ 1  0  0 ]
 
                 banned_mask = (
-                    torch.sparse.LongTensor(banned_mask.t(), indices, scores.size())
-                    .to(scores.device)
-                    .to_dense()
-                    .bool()
+                    tf.sparse.Tensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
                 )
 
                 if self.static_bad_words_mask is not None:
-                    banned_mask = torch.bitwise_or(banned_mask, self.static_bad_words_mask)
+                    banned_mask = tf.bitwise_or(banned_mask, self.static_bad_words_mask)
             else:
                 banned_mask = self.static_bad_words_mask
 
@@ -265,10 +264,45 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
             return scores
 
 
+def _get_ngrams(ngram_size: int, prev_input_ids: tf.Tensor, num_hypos: int):
+    generated_ngrams = [{} for _ in range(num_hypos)]
+    for idx in range(num_hypos):
+        gen_tokens = prev_input_ids[idx].tolist()
+        generated_ngram = generated_ngrams[idx]
+        for ngram in zip(*[gen_tokens[i:] for i in range(ngram_size)]):
+            prev_ngram_tuple = tuple(ngram[:-1])
+            generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
+    return generated_ngrams
+
+
+def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
+    # Before decoding the next token, prevent decoding of ngrams that have already appeared
+    start_idx = cur_len + 1 - ngram_size
+    ngram_idx = tuple(prev_input_ids[start_idx:cur_len].tolist())
+    return banned_ngrams.get(ngram_idx, [])
+
+
+def _calc_banned_ngram_tokens(
+    ngram_size: int, prev_input_ids: tf.Tensor, num_hypos: int, cur_len: int
+) -> List[Iterable[int]]:
+    """Copied from fairseq for no_repeat_ngram in beam_search"""
+    if cur_len + 1 < ngram_size:
+        # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
+        return [[] for _ in range(num_hypos)]
+
+    generated_ngrams = _get_ngrams(ngram_size, prev_input_ids, num_hypos)
+
+    banned_tokens = [
+        _get_generated_ngrams(generated_ngrams[hypo_idx], prev_input_ids[hypo_idx], ngram_size, cur_len)
+        for hypo_idx in range(num_hypos)
+    ]
+    return banned_tokens
+
+
 class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces no repetition of n-grams. See
-    [Fairseq](https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
+    [Fairseq](https://github.com/pytf/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
 
     Args:
         ngram_size (`int`):
@@ -280,7 +314,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
         self.ngram_size = ngram_size
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         num_batch_hypotheses = scores.shape[0]
         cur_len = input_ids.shape[-1]
         banned_batch_tokens = _calc_banned_ngram_tokens(self.ngram_size, input_ids, num_batch_hypotheses, cur_len)
