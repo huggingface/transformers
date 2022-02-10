@@ -207,6 +207,7 @@ def main():
         data_files=data_args.data_files,
         cache_dir=model_args.cache_dir,
         task="image-classification",
+        ignore_verifications=True,
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.
@@ -349,6 +350,8 @@ def main():
     else:
         trainer.create_model_card(**kwargs)
 
+def _mp_fn(index): # For xla_spawn (TPUs)
+    main()
 
 if __name__ == "__main__":
     main()
