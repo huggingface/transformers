@@ -100,8 +100,8 @@ class DeiTEmbeddings(nn.Module):
         if bool_masked_pos is not None:
             mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
             # replace the masked visual tokens by mask_tokens
-            w = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-            embeddings = embeddings * (1.0 - w) + mask_tokens * w
+            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+            embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         distillation_tokens = self.distillation_token.expand(batch_size, -1, -1)
@@ -616,9 +616,9 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
 
         # Reshape to (batch_size, num_channels, height, width)
         sequence_output = sequence_output[:, 1:-1]
-        B, L, C = sequence_output.shape
-        H = W = int(L**0.5)
-        sequence_output = sequence_output.permute(0, 2, 1).reshape(B, C, H, W)
+        batch_size, sequence_length, num_channels = sequence_output.shape
+        height = width = int(sequence_length**0.5)
+        sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
 
         # Reconstruct pixel values
         reconstructed_pixel_values = self.decoder(sequence_output)
