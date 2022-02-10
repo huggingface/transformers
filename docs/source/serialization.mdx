@@ -114,8 +114,8 @@ All good, model saved at: onnx/model.onnx
 ```
 
 This exports an ONNX graph of the checkpoint defined by the `--model` argument.
-In this example it is `distilbert-base-uncased`, but it can be any model on the
-Hugging Face Hub or one that's stored locally.
+In this example it is `distilbert-base-uncased`, but it can be any checkpoint on
+the Hugging Face Hub or one that's stored locally.
 
 The resulting `model.onnx` file can then be run on one of the [many
 accelerators](https://onnx.ai/supported-tools.html#deployModel) that support the
@@ -146,7 +146,46 @@ DistilBERT we have:
 ["last_hidden_state"]
 ```
 
-The approach is similar for TensorFlow models.
+The process is identical for TensorFlow checkpoints on the Hub. For example, we
+can export a pure TensorFlow checkpoint from the [Keras
+organization](https://huggingface.co/keras-io) as follows:
+
+```bash
+python -m transformers.onnx --model=keras-io/transformers-qa onnx/
+```
+
+To export a model that's stored locally, you'll need to have the model's weights
+and tokenizer files stored in a directory. For example, we can load and save a
+checkpoint as follows:
+
+```python
+>>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
+>>> # Load tokenizer and PyTorch weights form the Hub
+>>> tokenizer = tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> pt_model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> # Save to disk
+>>> tokenizer.save_pretrained("local-pt-checkpoint")
+>>> pt_model.save_pretrained("local-pt-checkpoint")
+===PT-TF-SPLIT===
+>>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+
+>>> # Load tokenizer and TensorFlow weights from the Hub
+>>> tokenizer = tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> # Save to disk
+>>> tokenizer.save_pretrained("local-tf-checkpoint")
+>>> tf_model.save_pretrained("local-tf-checkpoint")
+```
+
+Once the checkpoint is saved, we can export it to ONNX by pointing the `--model`
+argument of the `transformers.onnx` package to the desired directory:
+
+```bash
+python -m transformers.onnx --model=local-pt-checkpoint onnx/
+===PT-TF-SPLIT===
+python -m transformers.onnx --model=local-tf-checkpoint onnx/
+```
 
 ### Selecting features for different model topologies
 
