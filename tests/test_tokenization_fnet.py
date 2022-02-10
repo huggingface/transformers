@@ -410,11 +410,11 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
 
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
-    
+
     @slow
     def test_save_pretrained(self):
         super().test_save_pretrained()
-    
+
     @slow
     def test_save_slow_from_fast_and_reload_fast(self):
         super().test_save_slow_from_fast_and_reload_fast()
