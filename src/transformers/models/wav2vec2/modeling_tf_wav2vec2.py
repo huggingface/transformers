@@ -770,7 +770,7 @@ class TFWav2Vec2Attention(tf.keras.layers.Layer):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
@@ -1514,7 +1514,12 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+        return TFWav2Vec2BaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            extract_features=output.extract_features,
+            hidden_states=hs,
+            attentions=attns,
+        )
 
 
 @add_start_docstrings(
