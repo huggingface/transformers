@@ -16,6 +16,7 @@
 
 
 import tempfile
+import warnings
 from typing import Optional
 
 import tensorflow as tf
@@ -29,7 +30,13 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, shape_list
+from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
+    TFPreTrainedModel,
+    get_initializer,
+    input_processing,
+    shape_list,
+)
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_tf_auto import TFAutoModel, TFAutoModelForCausalLM
@@ -39,6 +46,13 @@ from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VisionEncoderDecoderConfig"
+
+DEPRECATION_WARNING = (
+    "Version v4.17.0 introduces a better way to train encoder-decoder models by computing the loss inside the "
+    "encoder-decoder framework rather than in the decoder itself. You may observe training discrepancies if fine-tuning "
+    "a model trained with versions anterior to 4.17.0. The decoder_input_ids are now created based on the labels, no "
+    "need to pass them yourself anymore."
+)
 
 VISION_ENCODER_DECODER_START_DOCSTRING = r"""
     This class can be used to initialize an image-to-text-sequence model with any pretrained vision autoencoding model
@@ -134,8 +148,37 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.encoder_decoder.modeling_tf_encoder_decoder.shift_tokens_right
+def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
+
+    if pad_token_id is None:
+        raise ValueError("Make sure to set the pad_token_id attribute of the model's configuration.")
+    pad_token_id = tf.cast(pad_token_id, input_ids.dtype)
+
+    if decoder_start_token_id is None:
+        raise ValueError("Make sure to set the decoder_start_token_id attribute of the model's configuration.")
+    decoder_start_token_id = tf.cast(decoder_start_token_id, input_ids.dtype)
+
+    start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
+    shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids = tf.where(
+        shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+    )
+
+    if tf.executing_eagerly():
+        # "Verify that `labels` has only positive values and -100"
+        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
+
+        # Make sure the assertion op is called by wrapping the result in an identity no-op
+        with tf.control_dependencies([assert_gte0]):
+            shifted_input_ids = tf.identity(shifted_input_ids)
+
+    return shifted_input_ids
+
+
 @add_start_docstrings(VISION_ENCODER_DECODER_START_DOCSTRING)
-class TFVisionEncoderDecoderModel(TFPreTrainedModel):
+class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
     r"""
     [`TFVisionEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture
     with one of the base vision model classes of the library as encoder and another one of the base model classes as
@@ -594,6 +637,11 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
         ):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
+        if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
+            decoder_input_ids = shift_tokens_right(
+                labels, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+
         batch_size, sequence_length = shape_list(encoder_hidden_states)[:2]
         encoder_attention_mask = tf.ones(shape=(batch_size, sequence_length), dtype=tf.int32)
 
@@ -605,7 +653,6 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
             "encoder_hidden_states": encoder_hidden_states,
             "encoder_attention_mask": encoder_attention_mask,
             "inputs_embeds": decoder_inputs_embeds,
-            "labels": labels,
             "output_attentions": output_attentions,
             "output_hidden_states": output_hidden_states,
             "use_cache": use_cache,
@@ -622,12 +669,17 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
         decoder_inputs = input_processing(**decoder_processing_inputs)
         decoder_outputs = self.decoder(**decoder_inputs)
 
-        loss = None if decoder_inputs["labels"] is None else decoder_outputs[0]
-        logits = decoder_outputs[0] if decoder_inputs["labels"] is None else decoder_outputs[1]
-        past_key_values = None
+        logits = decoder_outputs[0]
 
+        # Compute loss independent from decoder (as some shift the logits inside them)
+        loss = None
+        if labels is not None:
+            warnings.warn(DEPRECATION_WARNING, FutureWarning)
+            loss = self.hf_compute_loss(labels, logits)
+
+        past_key_values = None
         if decoder_inputs["use_cache"]:
-            past_key_values = decoder_outputs[1] if decoder_inputs["labels"] is None else decoder_outputs[2]
+            past_key_values = decoder_outputs[1]
         # The starting index of the remaining elements in `decoder_outputs`
         start_index = sum([1 if x is not None else 0 for x in (loss, logits, past_key_values)])
 
@@ -641,7 +693,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
             return output
 
         return TFSeq2SeqLMOutput(
-            loss=decoder_outputs.loss,
+            loss=loss,
             logits=decoder_outputs.logits,
             past_key_values=past,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -714,6 +766,9 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel):
             "decoder_input_ids": decoder_input_ids,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
+
+    def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(

@@ -1,7 +1,7 @@
 from functools import partial, reduce
-from typing import Callable, Dict, Optional, Tuple, Type
+from typing import Callable, Dict, Optional, Tuple, Type, Union
 
-from .. import PretrainedConfig, is_torch_available
+from .. import PretrainedConfig, PreTrainedModel, TFPreTrainedModel, is_tf_available, is_torch_available
 from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
@@ -24,7 +24,6 @@ from .config import OnnxConfig
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 if is_torch_available():
-    from transformers import PreTrainedModel
     from transformers.models.auto import (
         AutoModel,
         AutoModelForCausalLM,
@@ -35,9 +34,20 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
     )
+elif is_tf_available():
+    from transformers.models.auto import (
+        TFAutoModel,
+        TFAutoModelForCausalLM,
+        TFAutoModelForMaskedLM,
+        TFAutoModelForMultipleChoice,
+        TFAutoModelForQuestionAnswering,
+        TFAutoModelForSeq2SeqLM,
+        TFAutoModelForSequenceClassification,
+        TFAutoModelForTokenClassification,
+    )
 else:
     logger.warning(
-        "The ONNX export features are only supported for PyTorch, you will not be able to export models without it."
+        "The ONNX export features are only supported for PyTorch or TensorFlow. You will not be able to export models without one of these libraries installed."
     )
 
 
@@ -79,6 +89,17 @@ class FeaturesManager:
             "token-classification": AutoModelForTokenClassification,
             "multiple-choice": AutoModelForMultipleChoice,
             "question-answering": AutoModelForQuestionAnswering,
+        }
+    elif is_tf_available():
+        _TASKS_TO_AUTOMODELS = {
+            "default": TFAutoModel,
+            "masked-lm": TFAutoModelForMaskedLM,
+            "causal-lm": TFAutoModelForCausalLM,
+            "seq2seq-lm": TFAutoModelForSeq2SeqLM,
+            "sequence-classification": TFAutoModelForSequenceClassification,
+            "token-classification": TFAutoModelForTokenClassification,
+            "multiple-choice": TFAutoModelForMultipleChoice,
+            "question-answering": TFAutoModelForQuestionAnswering,
         }
     else:
         _TASKS_TO_AUTOMODELS = {}
@@ -270,7 +291,7 @@ class FeaturesManager:
             )
         return FeaturesManager._TASKS_TO_AUTOMODELS[task]
 
-    def get_model_from_feature(feature: str, model: str) -> PreTrainedModel:
+    def get_model_from_feature(feature: str, model: str) -> Union[PreTrainedModel, TFPreTrainedModel]:
         """
         Attempt to retrieve a model from a model's name and the feature to be enabled.
 
@@ -286,7 +307,9 @@ class FeaturesManager:
         return model_class.from_pretrained(model)
 
     @staticmethod
-    def check_supported_model_or_raise(model: PreTrainedModel, feature: str = "default") -> Tuple[str, Callable]:
+    def check_supported_model_or_raise(
+        model: Union[PreTrainedModel, TFPreTrainedModel], feature: str = "default"
+    ) -> Tuple[str, Callable]:
         """
         Check whether or not the model has the requested features.
 
