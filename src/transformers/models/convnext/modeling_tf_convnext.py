@@ -132,7 +132,9 @@ class TFConvNextLayer(tf.keras.layers.Layer):
             if config.layer_scale_init_value > 0
             else None
         )
-        self.drop_path = TFConvNextDropPath(drop_path) if drop_path > 0.0 else tf.identity
+        # Using `layers.Activation` instead of `tf.identity` to better control `training`
+        # behaviour.
+        self.drop_path = TFConvNextDropPath(drop_path) if drop_path > 0.0 else tf.keras.layers.Activation("linear")
 
     def call(self, hidden_states, training=False):
         input = hidden_states
