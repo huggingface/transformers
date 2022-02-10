@@ -1937,6 +1937,10 @@ class TFGenerationMixin:
             encoder_outputs = None
             cur_len = shape_list(input_ids)[-1]
 
+        # TODO(Patrick) - not very clean here
+        model_kwargs["attention_mask"] = attention_mask
+        model_kwargs["past"] = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
+
         assert (
             cur_len < max_length
         ), f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
@@ -2138,10 +2142,8 @@ class TFGenerationMixin:
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
-            encoder_hidden_states = (
-                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
-            )
+            encoder_attentions = model_kwargs["encoder_attentions"] if output_attentions else None
+            encoder_hidden_states = model_kwargs["encoder_hidden_states"] if output_hidden_states else None
 
         # keep track of which sequences are already finished
         unfinished_sequences = tf.ones_like(input_ids[:, 0])
@@ -2150,8 +2152,8 @@ class TFGenerationMixin:
         while cur_len < max_length:
             # TODO (Patrick): remove following two lines by cleaning up `prepare_inputs_for_generation`
             # in all models
-            model_kwargs["past"] = None if "past" not in model_kwargs else model_kwargs["past"]
             model_kwargs["use_cache"] = None if "use_cache" not in model_kwargs else model_kwargs["use_cache"]
+
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
