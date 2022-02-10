@@ -305,10 +305,7 @@ class PoolFormerEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return PoolFormerModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return PoolFormerModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
 class PoolFormerPreTrainedModel(PreTrainedModel):
@@ -499,8 +496,4 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return PoolFormerClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-        )
+        return PoolFormerClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
