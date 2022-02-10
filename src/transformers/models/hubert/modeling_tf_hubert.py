@@ -1284,6 +1284,16 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
     main_input_name = "input_values"
 
     @property
+    def has_cpu_backprop_support(self) -> bool:
+        """
+        Grouped convolutions are not supported on CPU, see https://github.com/keras-team/keras/issues/15713
+
+        Returns:
+            `bool`: Whether the model has backpropagation support on CPU
+        """
+        return False
+
+    @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         pad_token = 0.0
         input_values = tf.convert_to_tensor(np.random.rand(1, 16000), tf.float32)
