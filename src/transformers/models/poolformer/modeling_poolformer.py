@@ -22,7 +22,7 @@ from typing import Optional, Tuple
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss, MSELoss, BCEWithLogitsLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -286,17 +286,12 @@ class PoolFormerEncoder(nn.Module):
 
         self.block = nn.ModuleList(blocks)
 
-    def forward(
-        self,
-        pixel_values,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+    def forward(self, pixel_values, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
 
         hidden_states = pixel_values
-        for idx, x in enumerate(zip(self.patch_embeddings, self.block)):
-            embedding_layer, block_layer = x
+        for idx, layers in enumerate(zip(self.patch_embeddings, self.block)):
+            embedding_layer, block_layer = layers
             # Get patch embeddings from hidden_states
             hidden_states = embedding_layer(hidden_states)
             # Send the embeddings through the blocks
@@ -311,8 +306,7 @@ class PoolFormerEncoder(nn.Module):
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
         return PoolFormerModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states,
         )
 
 
@@ -479,20 +473,31 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return PoolFormerClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states,
         )

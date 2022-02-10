@@ -48,27 +48,27 @@ class PoolFormerConfig(PretrainedConfig):
             The size of the pooling window.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             The ratio of the number of channels in the output of the MLP to the number of channels in the input.
-        depths (`list`, *optional*, defaults to [2, 2, 6, 2]):
+        depths (`list`, *optional*, defaults to `[2, 2, 6, 2]`):
             The depth of each encoder block.
-        hidden_sizes (`list`, *optional*, defaults to [64, 128, 320, 512]):
+        hidden_sizes (`list`, *optional*, defaults to `[64, 128, 320, 512]`):
             The hidden sizes of each encoder block.
-        patch_sizes (`list`, *optional*, defaults to [7, 3, 3, 3]):
+        patch_sizes (`list`, *optional*, defaults to `[7, 3, 3, 3]`):
             The size of the input patch for each encoder block.
-        strides (`list`, *optional*, defaults to [4, 2, 2, 2]):
+        strides (`list`, *optional*, defaults to `[4, 2, 2, 2]`):
             The stride of the input patch for each encoder block.
-        padding (`list`, *optional*, defaults to [2, 1, 1, 1]):
+        padding (`list`, *optional*, defaults to `[2, 1, 1, 1]`):
             The padding of the input patch for each encoder block.
         num_encoder_blocks (`int`, *optional*, defaults to 4):
             The number of encoder blocks.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The dropout rate for the dropout layers.
-        hidden_act (`str`, *optional*, defaults to "gelu"):
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function for the hidden layers.
-        use_layer_scale (:`bool`, *optional*, defaults to True):
+        use_layer_scale (`bool`, *optional*, defaults to `True`):
             Whether to use layer scale.
-        layer_scale_init_value (:`float`, *optional*, defaults to 1e-5):
+        layer_scale_init_value (`float`, *optional*, defaults to 1e-5):
             The initial value for the layer scale.
-        initializer_range (:`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The initializer range for the weights.
 
     Example:
