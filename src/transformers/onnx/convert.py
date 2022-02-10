@@ -90,7 +90,7 @@ def export_pytorch(
     """
     if issubclass(type(model), PreTrainedModel):
         import torch
-        from torch.onnx import export
+        from torch.onnx import export as onnx_export
 
         logger.info(f"Using framework PyTorch: {torch.__version__}")
         with torch.no_grad():
