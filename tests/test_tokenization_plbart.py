@@ -46,7 +46,7 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="base", keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
-    def test_full_tokenizer(self):
+    def test_full_base_tokenizer(self):
         tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="base", keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
@@ -119,6 +119,105 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 "s",
                 "<unk>",
                 ".",
+            ],
+        )
+
+        end = tokenizer.vocab_size
+        language_tokens = [tokenizer.convert_ids_to_tokens(x) for x in range(end - 4, end)]
+
+        self.assertListEqual(
+            language_tokens,
+            ["java", "python", "en_XX", "<mask>"],
+        )
+
+    def test_full_multi_tokenizer(self):
+        tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="multi", keep_accents=True)
+
+        tokens = tokenizer.tokenize("This is a test")
+        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
+
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(tokens),
+            [value + tokenizer.fairseq_offset for value in [285, 46, 10, 170, 382]],
+        )
+
+        tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
+        self.assertListEqual(
+            tokens,
+            [
+                SPIECE_UNDERLINE + "I",
+                SPIECE_UNDERLINE + "was",
+                SPIECE_UNDERLINE + "b",
+                "or",
+                "n",
+                SPIECE_UNDERLINE + "in",
+                SPIECE_UNDERLINE + "",
+                "9",
+                "2",
+                "0",
+                "0",
+                "0",
+                ",",
+                SPIECE_UNDERLINE + "and",
+                SPIECE_UNDERLINE + "this",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "f",
+                "al",
+                "s",
+                "é",
+                ".",
+            ],
+        )
+        ids = tokenizer.convert_tokens_to_ids(tokens)
+        self.assertListEqual(
+            ids,
+            [
+                value + tokenizer.fairseq_offset
+                for value in [8, 21, 84, 55, 24, 19, 7, 2, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 2, 4]
+                #                                       ^ unk: 2 + 1 = 3                  unk: 2 + 1 = 3 ^
+            ],
+        )
+
+        back_tokens = tokenizer.convert_ids_to_tokens(ids)
+        self.assertListEqual(
+            back_tokens,
+            [
+                SPIECE_UNDERLINE + "I",
+                SPIECE_UNDERLINE + "was",
+                SPIECE_UNDERLINE + "b",
+                "or",
+                "n",
+                SPIECE_UNDERLINE + "in",
+                SPIECE_UNDERLINE + "",
+                "<unk>",
+                "2",
+                "0",
+                "0",
+                "0",
+                ",",
+                SPIECE_UNDERLINE + "and",
+                SPIECE_UNDERLINE + "this",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "f",
+                "al",
+                "s",
+                "<unk>",
+                ".",
+            ],
+        )
+        end = tokenizer.vocab_size
+        language_tokens = [tokenizer.convert_ids_to_tokens(x) for x in range(end - 7, end)]
+
+        self.assertListEqual(
+            language_tokens,
+            [
+                "java",
+                "python",
+                "en_XX",
+                "javascript",
+                "php",
+                "ruby",
+                "go",
             ],
         )
 
