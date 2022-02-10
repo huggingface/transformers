@@ -733,14 +733,14 @@ The following configuration example enables NVMe to offload both optimizer state
             "buffer_count": 5,
             "buffer_size": 1e8,
             "max_in_cpu": 1e9
-        }
+        },
         "aio": {
             "block_size": 262144,
             "queue_depth": 32,
             "thread_count": 1,
             "single_submit": false,
             "overlap_events": true
-        }
+        },
         "overlap_comm": true,
         "contiguous_gradients": true,
         "sub_group_size": 1e9,
@@ -750,7 +750,7 @@ The following configuration example enables NVMe to offload both optimizer state
         "stage3_max_live_parameters": 1e9,
         "stage3_max_reuse_distance": 1e9,
         "stage3_gather_fp16_weights_on_model_save": true
-    },
+    }
 }
 ```
 
