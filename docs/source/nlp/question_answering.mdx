@@ -10,9 +10,13 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Question answering with SQuAD
+# Question answering
 
-Question answering (QA) tasks return an answer given a question. This type of NLP task can be extractive where the model identifies the answer from the given context. The task can also be open-ended for more of a challenge where a model generates the answer from the given context. This guide will focus on extractive QA, and you will learn how to fine-tune a pretrained model on the [SQuAD](https://huggingface.co/datasets/squad) dataset.
+<Youtube id="ajPx5LwJD-I"/>
+
+Question answering tasks return an answer given a question. This type of NLP task can be extractive where the model identifies an answer from the given context. The task can also be open-ended for more of a challenge where a model generates an answer from the given context. 
+
+This guide will show you how to fine-tune [DistilBERT](https://huggingface.co/distilbert-base-uncased) on the [SQuAD](https://huggingface.co/datasets/squad) dataset for extractive question answering.
 
 <Tip>
 
@@ -30,7 +34,7 @@ Load the SQuAD dataset from the 🤗 Datasets library:
 >>> squad = load_dataset("squad")
 ```
 
-When you look at an example from the dataset, you can see it has a `question`, `context` and `answers` fields. The `answers` field contains the starting position of the answer in the context.
+Then take a look at an example:
 
 ```py
 >>> squad["train"][0]
@@ -42,7 +46,11 @@ When you look at an example from the dataset, you can see it has a `question`, `
 }
 ```
 
+The `answers` field gives you the starting position of the answer and the `text` of the answer.
+
 ## Preprocess
+
+<Youtube id="qgaM0weJHpA"/>
 
 Load the DistilBERT tokenizer to process the `question` and `context` fields:
 
@@ -52,16 +60,16 @@ Load the DistilBERT tokenizer to process the `question` and `context` fields:
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 ```
 
-There are a few things to be aware of when preprocessing text for question answering:
+There are a few preprocessing steps particular to question answering that you should be aware of:
 
 1. Some examples in a dataset may have a very long `context` that exceeds the maximum input length of the model. You
    can deal with this by truncating only the `context` by setting `truncation="only_second"`.
 2. Next, you need to map the start and end positions of the answer to the original context by setting
    `return_offset_mapping=True`.
-3. With the mapping in hand, you can find the start and end tokens of the answer. Use the `sequence_ids` method to
+3. With the mapping in hand, you can find the start and end tokens of the answer. Use the [`sequence_ids`](https://huggingface.co/docs/tokenizers/python/latest/api/reference.html#tokenizers.Encoding.sequence_ids) method to
    find which part of the offset corresponds to the question and which corresponds to the context.
 
-Assemble everything in a preprocessing function as shown below:
+Here is how you can create a function to truncate and map the start and end tokens of the answer to the context:
 
 ```py
 >>> def preprocess_function(examples):
@@ -116,13 +124,13 @@ Assemble everything in a preprocessing function as shown below:
 ...     return inputs
 ```
 
-Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) function to apply the preprocessing function over the entire dataset. Set `batched=True` to process multiple elements of the dataset at once for faster preprocessing and remove the old column names with `remove_columns`:
+Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) function to apply the preprocessing function over the entire dataset. You can also set `batched=True` to process multiple elements of the dataset at once for faster preprocessing. Remove the columns you don't need:
 
 ```py
 >>> tokenized_squad = squad.map(preprocess_function, batched=True, remove_columns=squad["train"].column_names)
 ```
 
-Batch the processed examples with a [`DefaultDataCollator`]:
+Use [`DefaultDataCollator`] to batch the examples together:
 
 ```py
 >>> from transformers import DefaultDataCollator
@@ -130,9 +138,9 @@ Batch the processed examples with a [`DefaultDataCollator`]:
 >>> data_collator = DefaultDataCollator()
 ```
 
-## Fine-tune with `Trainer`
+## Fine-tune with Trainer
 
-Load [DistilBERT](https://huggingface.co/distilbert-base-uncased) with [`AutoModelForQuestionAnswering`]:
+Load DistilBERT with [`AutoModelForQuestionAnswering`]:
 
 ```py
 >>> from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
@@ -140,11 +148,17 @@ Load [DistilBERT](https://huggingface.co/distilbert-base-uncased) with [`AutoMod
 >>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased")
 ```
 
+<Tip>
+
+If you aren't familiar with fine-tuning a model with Trainer, take a look at the basic tutorial [here](training#finetune-with-trainer)!
+
+</Tip>
+
 At this point, only three steps remain:
 
 1. Define your training hyperparameters in [`TrainingArguments`].
 2. Pass the training arguments to [`Trainer`] along with the model, dataset, tokenizer, and data collator.
-3. Call [`~transformers.Trainer.train`] to fine-tune your model.
+3. Call [`~Trainer.train`] to fine-tune your model.
 
 ```py
 >>> training_args = TrainingArguments(
@@ -173,6 +187,12 @@ At this point, only three steps remain:
 
 To fine-tune a model in TensorFlow is just as easy, with only a few differences.
 
+<Tip>
+
+If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
+
+</Tip>
+
 Start by batching the processed examples together with the [`DefaultDataCollator`] function. Make sure you set `return_tensors="tf"` to return `tf.Tensor`'s instead of PyTorch tensors!
 
 ```py
@@ -181,7 +201,7 @@ Start by batching the processed examples together with the [`DefaultDataCollator
 >>> data_collator = DefaultDataCollator(return_tensors="tf")
 ```
 
-Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and the starting and end positions of an answer in the `columns` argument:
+Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and the start and end positions of an answer in `columns`:
 
 ```py
 >>> tf_train_set = tokenized_squad["train"].to_tf_dataset(
@@ -235,11 +255,7 @@ Configure the model for training with [`compile`](https://keras.io/api/models/mo
 Finally, fine-tune the model by calling [`fit`](https://keras.io/api/models/model_training_apis/#fit-method):
 
 ```py
->>> model.fit(
-...     tf_train_set,
-...     validation_data=tf_validation_set,
-...     epochs=num_train_epochs,
-... )
+>>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3)
 ```
 
 <Tip>

@@ -41,13 +41,19 @@
     title: Fine-tuning with custom datasets
   - sections:
     - local: nlp/sequence_classification
-      title: Sequence classification
+      title: Text classification
     - local: nlp/token_classification
       title: Token classification
     - local: nlp/question_answering
       title: Question answering
     - local: nlp/language_modeling
       title: Language modeling
+    - local: nlp/translation
+      title: Translation
+    - local: nlp/summarization
+      title: Summarization
+    - local: nlp/multiple_choice
+      title: Multiple choice
     title: NLP tasks
   - local: notebooks
     title: "🤗 Transformers Notebooks"
