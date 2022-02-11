@@ -848,8 +848,9 @@ class Trainer:
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
                 if optimizer_cls.__name__ == "Adam8bit":
-                    import bitsandbytes
                     from torch.nn import Embedding
+
+                    import bitsandbytes
 
                     manager = bitsandbytes.optim.GlobalOptimManager.get_instance()
 
@@ -857,7 +858,6 @@ class Trainer:
                         if isinstance(module, Embedding):
                             manager.register_module_override(module, "weight", {"optim_bits": 32})
                             logger.info(f"Registering bitsandbytes override for {module}")
-
 
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
