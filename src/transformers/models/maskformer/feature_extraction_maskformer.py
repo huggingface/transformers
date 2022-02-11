@@ -39,12 +39,6 @@ logger = logging.get_logger(__name__)
 ImageInput = Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]]
 
 
-class InstanceSegmentationSegment(TypedDict):
-    id: int
-    category_id: int
-    is_thing: bool
-
-
 class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a MaskFormer feature extractor.
@@ -428,7 +422,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         object_mask_threshold: Optional[float] = 0.8,
         overlap_mask_area_threshold: Optional[float] = 0.8,
         is_thing_map: Dict[int, bool] = None,
-    ) -> Tensor:
+    ) -> List[Dict]:
         """
         Converts the output of [`MaskFormerModel`] into image panoptic segmentation predictions. Only supports PyTorch.
 
@@ -442,7 +436,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 If not set, defaults to the `is_thing_map` of COCO panoptic.
 
         Returns:
-            Tensor: [description]
+            Returns:
+                `List[Dict]`: A list of dictionaries, each dictionary containing two keys:
+                - **segmentation** -- a tensor of shape `(height, width)` where each pixel represent a `segment_id`.
+                - **segments** -- a dictionary with the following keys
+                    - **id** -- an integer representing the `segment_id`.
+                    - **category_id** -- an integer representing the segment's label.
+                    - **is_thing** -- a boolean, `True` if `category_id` was in `is_thing_map`, `False` otherwise.
         """
 
         if is_thing_map is None:
@@ -472,7 +472,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             we_detect_something: bool = mask_probs.shape[0] > 0
 
             segmentation: Tensor = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-            segments: List[InstanceSegmentationSegment] = []
+            segments: List[Dict] = []
 
             if we_detect_something:
                 current_segment_id: int = 0
