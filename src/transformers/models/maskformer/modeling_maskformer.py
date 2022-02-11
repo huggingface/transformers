@@ -24,7 +24,6 @@ from typing import Dict, List, Optional, Tuple, TypedDict
 
 import numpy as np
 import torch
-import torchvision
 from torch import Tensor, nn
 from torch.nn import functional as F
 
@@ -62,9 +61,15 @@ MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# TODO this has to go away!
-from detectron2.utils.comm import get_world_size
 from scipy.optimize import linear_sum_assignment
+
+# TODO ask what I should do with dist code
+def get_world_size() -> int:
+    if not dist.is_available():
+        return 1
+    if not dist.is_initialized():
+        return 1
+    return dist.get_world_size()
 
 
 @dataclass
@@ -692,7 +697,7 @@ class FPNModel(nn.Module):
         output: Tensor = self.stem(last_feature)
         for layer, left in zip(self.layers, other_features[::-1]):
             x = layer(output, left)
-            fpn_features.append(output)
+            fpn_features.append(x)
         return fpn_features
 
 
@@ -972,7 +977,6 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
         self.model = MaskFormerModel(config)
         hidden_size: int = config.transformer_decoder.hidden_size
         # + 1 because we add the "null" class
-        self.mask_classification = config.mask_classification
         self.class_predictor = nn.Linear(hidden_size, config.num_labels + 1)
         self.mask_embedder = MaskformerMLPPredictionHead(hidden_size, hidden_size, config.mask_feature_size)
 
@@ -1086,8 +1090,13 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
         we_have_labels: bool = mask_labels is not None and class_labels is not None
 
         if we_have_labels:
+            logits: Dict[str, Tensor] = {
+                "masks_queries_logits": masks_queries_logits,
+                "class_queries_logits": class_queries_logits,
+                "auxilary_logits": auxilary_logits,
+            }
             labels: Dict[str, Tensor] = {"mask_labels": mask_labels, "class_labels": class_labels}
-            loss_dict: Dict[str, Tensor] = self.get_loss_dict(outputs, labels)
+            loss_dict: Dict[str, Tensor] = self.get_loss_dict(logits, labels)
             loss: Tensor = self.get_loss(loss_dict)
 
         return MaskFormerForInstanceSegmentationOutput(

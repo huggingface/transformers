@@ -29,10 +29,6 @@ MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = [
 logger = logging.get_logger(__name__)
 
 
-class DatasetMetadata(TypedDict):
-    classes: List[ClassSpec]
-
-
 class MaskFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormer`]. It is used to instantiate a
@@ -56,7 +52,6 @@ class MaskFormerConfig(PretrainedConfig):
         dice_weight (Optional[float], optional): [description]. Defaults to 1.0.
         cross_entropy_weight (Optional[float], optional): [description]. Defaults to 1.0.
         mask_weight (Optional[float], optional): [description]. Defaults to 20.0.
-        mask_classification (Optional[bool], optional): [description]. Defaults to True.
 
     Raises:
         ValueError: Raised if the backbone model type selected is not in `MaskFormerConfig.backbones_supported`
@@ -95,7 +90,7 @@ class MaskFormerConfig(PretrainedConfig):
         dice_weight: Optional[float] = 1.0,
         cross_entropy_weight: Optional[float] = 1.0,
         mask_weight: Optional[float] = 20.0,
-        mask_classification: Optional[bool] = True,
+        num_labels: Optional[int] = 150,
         **kwargs,
     ):
         if backbone_config is None:
@@ -140,9 +135,7 @@ class MaskFormerConfig(PretrainedConfig):
         self.dice_weight = dice_weight
         self.mask_weight = mask_weight
 
-        self.mask_classification = mask_classification
-
-        super().__init__(**kwargs)
+        super().__init__(num_labels=num_labels, **kwargs)
 
     @classmethod
     def from_backbone_and_detr_configs(
