@@ -27,7 +27,6 @@ from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType, is_torch_available
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
-from .configuration_maskformer import ClassSpec
 
 if is_torch_available():
     import torch
@@ -429,18 +428,27 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         outputs: MaskFormerForInstanceSegmentationOutput,
         object_mask_threshold: Optional[float] = 0.8,
         overlap_mask_area_threshold: Optional[float] = 0.8,
+        is_thing_map: Dict[int, ClassSpec] = None,
     ) -> Tensor:
         """
         Converts the output of [`MaskFormerModel`] into image panoptic segmentation predictions. Only supports PyTorch.
 
+
         Args:
-            outputs (MaskFormerOutput): [description]
+            outputs (MaskFormerForInstanceSegmentationOutput): [description]
             object_mask_threshold (Optional[float], optional): [description]. Defaults to 0.8.
             overlap_mask_area_threshold (Optional[float], optional): [description]. Defaults to 0.8.
+            is_thing_map (Dict[int, bool], optional): [description].
+                Dictionary mapping class indices to either True or False, depending on whether or not they are a thing.
+                If not set, defaults to the `is_thing_map` of COCO panoptic.
 
         Returns:
             Tensor: [description]
         """
+
+        if is_thing_map is None:
+            # default to is_thing_map of COCO panoptic
+            is_thing_map = {i: i <= 90 for i in range(201)}
         # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits: Tensor = outputs.class_queries_logits
         # keep track of the number of labels, subtract -1 for null class
@@ -479,8 +487,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 for k in range(pred_labels.shape[0]):
                     pred_class: int = pred_labels[k].item()
                     # check if pred_class is not a "thing", so it can be merged with other instance. For example, class "sky" cannot have more then one instance
-                    class_spec: ClassSpec = self.model.config.dataset_metadata["classes"][pred_class]
-                    is_stuff = not class_spec["is_thing"]
+                    is_stuff = not is_thing_map[pred_class]
                     # get the mask associated with the k class
                     mask_k: Tensor = mask_labels == k
                     # create the area, since bool we just need to sum :)

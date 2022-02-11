@@ -29,12 +29,6 @@ MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = [
 logger = logging.get_logger(__name__)
 
 
-class ClassSpec(TypedDict):
-    is_thing: bool
-    label: str
-    color: Tuple[int, int, int]
-
-
 class DatasetMetadata(TypedDict):
     classes: List[ClassSpec]
 
@@ -91,7 +85,6 @@ class MaskFormerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        dataset_metadata: DatasetMetadata = None,
         mask_feature_size: Optional[int] = 256,
         no_object_weight: Optional[float] = 0.1,
         use_auxilary_loss: Optional[bool] = False,
