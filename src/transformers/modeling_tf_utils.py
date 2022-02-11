@@ -691,14 +691,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         return "tf"
 
-    @property
-    def has_cpu_backprop_support(self) -> bool:
-        """
-        Returns:
-            `bool`: Whether the model has backpropagation support on CPU
-        """
-        return True
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
         if not isinstance(config, PretrainedConfig):
@@ -907,24 +899,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
             loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
-
         # Run backwards pass.
-        try:
-            self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
-        except tf.errors.InvalidArgumentError as exc:
-            if not self.has_cpu_backprop_support:
-                # When there are no GPUs on the machine, the message can be vague, which has caused raised issues.
-                raise tf.errors.InvalidArgumentError(
-                    node_def=exc.node_def,
-                    op=exc.op,
-                    message=exc.message
-                    + (
-                        f"\n\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. "
-                        "Please try training/fine-tunning with other kinds of hardware devices if you are using a CPU."
-                    ),
-                )
-            raise
-
+        self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
         # When y_pred is a ModelOutput and y is a tf.Tensor the metrics update
         # should be done only with the relevant ModelOutput param that is
         # considered by the loss.

@@ -1284,16 +1284,6 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
     main_input_name = "input_values"
 
     @property
-    def has_cpu_backprop_support(self) -> bool:
-        """
-        Grouped convolutions are not supported on CPU, see https://github.com/keras-team/keras/issues/15713
-
-        Returns:
-            `bool`: Whether the model has backpropagation support on CPU
-        """
-        return False
-
-    @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         pad_token = 0.0
         input_values = tf.convert_to_tensor(np.random.rand(1, 16000), tf.float32)
@@ -1302,6 +1292,13 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
             "attention_mask": tf.cast(tf.not_equal(input_values, pad_token), tf.float32),
         }
         return dummy_inputs
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        logger.warning(
+            f"\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. If you wish "
+            "to train/fine-tine this model, you need a GPU or a TPU"
+        )
 
     @tf.function
     def serving(self, inputs):
