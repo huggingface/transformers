@@ -21,6 +21,7 @@ from typing import Dict, Optional, Union
 
 # Build the list of all feature extractors
 from ...configuration_utils import PretrainedConfig
+from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...file_utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo
 from ...utils import logging
@@ -222,6 +223,10 @@ class AutoFeatureExtractor:
                 functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a dictionary
                 consisting of the key/value pairs whose keys are not feature extractor attributes: i.e., the part of
                 `kwargs` which has not been used to update `feature_extractor` and is otherwise ignored.
+            trust_remote_code (`bool`, *optional*, defaults to `False`):
+                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
+                should only be set to `True` for repositories you trust and in which you have read the code, as it will
+                execute code present on the Hub on your local machine.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
@@ -245,20 +250,44 @@ class AutoFeatureExtractor:
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
+        trust_remote_code = kwargs.pop("trust_remote_code", False)
         kwargs["_from_auto"] = True
 
         config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
         feature_extractor_class = config_dict.get("feature_extractor_type", None)
+        feature_extractor_auto_map = config_dict.get("auto_map", None)
 
         # If we don't find the feature extractor class in the feature extractor config, let's try the model config.
-        if feature_extractor_class is None:
+        if feature_extractor_class is None and feature_extractor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
                 config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
             # It could be in `config.feature_extractor_type``
             feature_extractor_class = getattr(config, "feature_extractor_type", None)
+            if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
+                feature_extractor_auto_map = config.auto_map["AutoTokenizer"]
 
         if feature_extractor_class is not None:
-            feature_extractor_class = feature_extractor_class_from_name(feature_extractor_class)
+             # If we have custom code for a feature extractor, we get the proper class.
+            if feature_extractor_auto_map is not None:
+                if not trust_remote_code:
+                    raise ValueError(
+                        f"Loading {pretrained_model_name_or_path} requires you to execute the feature extractor file "
+                        "in that repo on your local machine. Make sure you have read the code there to avoid "
+                        "malicious use, then set the option `trust_remote_code=True` to remove this error."
+                    )
+                if kwargs.get("revision", None) is None:
+                    logger.warning(
+                        "Explicitly passing a `revision` is encouraged when loading a feature extractor with custom "
+                        "code to ensure no malicious code has been contributed in a newer revision."
+                    )
+
+                module_file, class_name = feature_extractor_auto_map.split(".")
+                feature_extractor_class = get_class_from_dynamic_module(
+                    pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
+                )
+            else :
+                feature_extractor_class = feature_extractor_class_from_name(feature_extractor_class)
+
             return feature_extractor_class.from_dict(config_dict, **kwargs)
         # Last try: we use the FEATURE_EXTRACTOR_MAPPING.
         elif type(config) in FEATURE_EXTRACTOR_MAPPING:
