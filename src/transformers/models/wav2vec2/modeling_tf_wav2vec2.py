@@ -1319,6 +1319,13 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
         }
         return dummy_inputs
 
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        logger.warning(
+            f"\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. If you wish "
+            "to train/fine-tine this model, you need a GPU or a TPU"
+        )
+
     @tf.function
     def serving(self, inputs):
         output = self.call(input_values=inputs, training=False)
