@@ -17,7 +17,7 @@ import unittest
 
 from tests.test_modeling_tf_core import TFCoreModelTesterMixin
 from transformers import GPTJConfig, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_tf, slow, tooslow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -26,7 +26,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.gptj.modeling_tf_gptj import TFGPTJModel, shape_list
+    from transformers.models.gptj.modeling_tf_gptj import TFGPTJForCausalLM, TFGPTJModel, shape_list
 
 
 class TFGPTJModelTester:
@@ -244,6 +244,16 @@ class TFGPTJModelTester:
         # test that outputs are equal for slice
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
+    def create_and_check_gptj_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+        model = TFGPTJForCausalLM(config=config)
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+        }
+        result = model(inputs)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -270,9 +280,17 @@ class TFGPTJModelTester:
 @require_tf
 class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (TFGPTJModel,) if is_tf_available() else ()
+    all_model_classes = (
+        (
+            TFGPTJForCausalLM,
+            TFGPTJModel,
+        )
+        if is_tf_available()
+        else ()
+    )
 
-    all_generative_model_classes = () if is_tf_available() else ()
+    all_generative_model_classes = (TFGPTJForCausalLM,) if is_tf_available() else ()
+    test_onnx = False
     test_pruning = False
     test_missing_keys = False
     test_head_masking = False
@@ -300,6 +318,10 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gptj_model_past_large_inputs(*config_and_inputs)
 
+    def test_gptj_lm_head_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gptj_lm_head_model(*config_and_inputs)
+
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -322,3 +344,36 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
     def test_model_from_pretrained(self):
         model = TFGPTJModel.from_pretrained("EleutherAI/gpt-j-6B", from_pt=True)
         self.assertIsNotNone(model)
+
+
+@require_tf
+class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
+    @tooslow
+    def test_lm_generate_gptj(self):
+        model = TFGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", from_pt=True)
+        input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
+        # The dog is a man's best friend. It is a loyal companion, and it is a friend
+        expected_output_ids = [
+            464,
+            3290,
+            318,
+            257,
+            582,
+            338,
+            1266,
+            1545,
+            13,
+            632,
+            318,
+            257,
+            9112,
+            15185,
+            11,
+            290,
+            340,
+            318,
+            257,
+            1545,
+        ]
+        output_ids = model.generate(input_ids, do_sample=False)
+        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)

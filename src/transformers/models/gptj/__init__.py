@@ -36,6 +36,7 @@ if is_torch_available():
 
 if is_tf_available():
     _import_structure["modeling_tf_gptj"] = [
+        "TFGPTJForCausalLM",
         "TFGPTJModel",
         "TFGPTJPreTrainedModel",
     ]
@@ -62,7 +63,7 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_gptj import TFGPTJModel, TFGPTJPreTrainedModel
+        from .modeling_tf_gptj import TFGPTJForCausalLM, TFGPTJModel, TFGPTJPreTrainedModel
 
     if is_flax_available():
         from .modeling_flax_gptj import FlaxGPTJForCausalLM, FlaxGPTJModel, FlaxGPTJPreTrainedModel

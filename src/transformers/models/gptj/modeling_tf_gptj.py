@@ -9,7 +9,7 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from ...modeling_tf_outputs import TFBaseModelOutputWithPast
+from ...modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast
 from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
@@ -67,9 +67,7 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             raise ValueError(
                 f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and `num_attention_heads`: {self.num_attention_heads})."
             )
-        self.scale_attn = tf.Variable(
-            tf.sqrt(float(self.head_dim)), dtype=tf.float32, trainable=False, name="scale_attn"
-        )
+        self.scale_attn = tf.constant(tf.sqrt(float(self.head_dim)), dtype=tf.float32, name="scale_attn")
 
         self.rotary_dim = config.rotary_dim
 
@@ -710,4 +708,111 @@ class TFGPTJModel(TFGPTJPreTrainedModel):
             past_key_values=pkv,
             hidden_states=hs,
             attentions=attns,
+        )
+
+
+@add_start_docstrings(
+    """
+    The GPT-J Model transformer with a language modeling head on top.
+    """,
+    GPTJ_START_DOCSTRING,
+)
+class TFGPTJForCausalLM(TFGPTJPreTrainedModel):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.transformer = TFGPTJMainLayer(config, name="transformer")
+        self.lm_head = tf.keras.layers.Dense(
+            config.vocab_size, kernel_initializer=get_initializer(config.initializer_range), name="lm_head"
+        )
+
+    def get_output_embeddings(self):
+        return self.get_input_embeddings()
+
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
+
+    def prepare_inputs_for_generation(self, inputs, past, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if past:
+            inputs = tf.expand_dims(inputs[:, -1], -1)
+
+        return {"input_ids": inputs, "past": past, "use_cache": kwargs["use_cache"]}
+
+    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFCausalLMOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        input_ids=None,
+        past_key_values=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+        **kwargs,
+    ):
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            labels=labels,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            past_key_values=inputs["past_key_values"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
+        hidden_states = transformer_outputs[0]
+        lm_logits = self.lm_head(hidden_states)
+
+        loss = None
+        if inputs["labels"] is not None:
+            # shift labels to the left and cut last logit token
+            shifted_logits = lm_logits[:, :-1]
+            labels = inputs["labels"][:, 1:]
+            loss = self.hf_compute_loss(labels, shifted_logits)
+
+        if not inputs["return_dict"]:
+            output = (lm_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFCausalLMOutputWithPast(
+            loss=loss,
+            logits=lm_logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
         )
