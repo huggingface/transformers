@@ -170,6 +170,8 @@
       title: DeiT
     - local: model_doc/detr
       title: DETR
+    - local: model_doc/maskformer
+      title: MaskFormer
     - local: model_doc/dialogpt
       title: DialoGPT
     - local: model_doc/distilbert
