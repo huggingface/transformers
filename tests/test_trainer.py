@@ -1763,7 +1763,7 @@ if is_torch_available():
             )
         )
     if is_bnb_available():
-        import bnb
+        import bitsandbytes as bnb
 
         optim_test_params.append(
             (
@@ -1829,9 +1829,9 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         # the test to run without requiring a bnb installation.
         mock = Mock()
         modules = {
-            "bnb": mock,
-            "bnb.optim": mock.optim,
-            "bnb.optim.Adam8bit": mock.optim.Adam8bit,
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Adam8bit": mock.optim.Adam8bit,
         }
         with patch.dict("sys.modules", modules):
             self.check_optim_and_kwargs(
