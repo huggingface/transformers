@@ -17,8 +17,12 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
+from PIL import Image
+
+import requests
 from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType, is_torch_available
 
+from ..feature_extraction_utils import FeatureExtractionMixin
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
 
 
@@ -71,6 +75,7 @@ class OnnxConfig(ABC):
                 "end_logits": {0: "batch", 1: "sequence"},
             }
         ),
+        "image-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
     }
 
     def __init__(self, config: PretrainedConfig, task: str = "default", patching_specs: List[PatchingSpec] = None):
@@ -197,11 +202,12 @@ class OnnxConfig(ABC):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PreTrainedTokenizer = None,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
+        feature_extractor: FeatureExtractionMixin = None,
     ) -> Mapping[str, Any]:
         """
         Generate inputs to provide to the ONNX exporter for the specific framework
@@ -216,21 +222,25 @@ class OnnxConfig(ABC):
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
         """
+        if tokenizer:
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(
+                batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH, num_token_to_add=0
+            )
 
-        # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
-        batch_size = compute_effective_axis_dimension(
-            batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH, num_token_to_add=0
-        )
+            # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
+            token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
+            seq_length = compute_effective_axis_dimension(
+                seq_length, fixed_dimension=OnnxConfig.DEFAULT_FIXED_SEQUENCE, num_token_to_add=token_to_add
+            )
 
-        # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
-        token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
-        seq_length = compute_effective_axis_dimension(
-            seq_length, fixed_dimension=OnnxConfig.DEFAULT_FIXED_SEQUENCE, num_token_to_add=token_to_add
-        )
-
-        # Generate dummy inputs according to compute batch and sequence
-        dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
-        return dict(tokenizer(dummy_input, return_tensors=framework))
+            # Generate dummy inputs according to compute batch and sequence
+            dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
+            return dict(tokenizer(dummy_input, return_tensors=framework))
+        elif feature_extractor:
+            url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+            image = Image.open(requests.get(url, stream=True).raw)
+            return dict(feature_extractor(images=image, return_tensors=framework))
 
     def patch_ops(self):
         for spec in self._patching_specs:

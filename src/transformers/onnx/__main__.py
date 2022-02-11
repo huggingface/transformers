@@ -15,7 +15,7 @@
 from argparse import ArgumentParser
 from pathlib import Path
 
-from transformers.models.auto import AutoTokenizer
+from transformers.models.auto import AutoFeatureExtractor, AutoTokenizer
 
 from ..utils import logging
 from .convert import export, validate_model_outputs
@@ -37,6 +37,7 @@ def main():
     parser.add_argument(
         "--atol", type=float, default=None, help="Absolute difference tolerence when validating the model."
     )
+    parser.add_argument("--modality", type=str, default="text", help="The modality the model was trained on.")
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
 
     # Retrieve CLI arguments
@@ -47,7 +48,12 @@ def main():
         args.output.parent.mkdir(parents=True)
 
     # Allocate the model
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    tokenizer = None
+    feature_extractor = None
+    if args.modality == "text":
+        tokenizer = AutoTokenizer.from_pretrained(args.model)
+    if args.modality == "image":
+        feature_extractor = AutoFeatureExtractor.from_pretrained(args.model)
     model = FeaturesManager.get_model_from_feature(args.feature, args.model)
     model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=args.feature)
     onnx_config = model_onnx_config(model.config)
@@ -62,12 +68,19 @@ def main():
             f"At least  {onnx_config.default_onnx_opset} is required."
         )
 
-    onnx_inputs, onnx_outputs = export(tokenizer, model, onnx_config, args.opset, args.output)
+    onnx_inputs, onnx_outputs = export(
+        tokenizer=tokenizer,
+        model=model,
+        config=onnx_config,
+        opset=args.opset,
+        output=args.output,
+        feature_extractor=feature_extractor,
+    )
 
     if args.atol is None:
         args.atol = onnx_config.atol_for_validation
 
-    validate_model_outputs(onnx_config, tokenizer, model, args.output, onnx_outputs, args.atol)
+    validate_model_outputs(onnx_config, tokenizer, model, args.output, onnx_outputs, args.atol, feature_extractor)
     logger.info(f"All good, model saved at: {args.output.as_posix()}")
 
 
