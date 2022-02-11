@@ -1815,7 +1815,13 @@ if is_tf_available():
         ]
     )
     _import_structure["models.gptj"].extend(
-        ["TFGPTJForCausalLM", "TFGPTJForSequenceClassification", "TFGPTJModel", "TFGPTJPreTrainedModel"]
+        [
+            "TFGPTJForCausalLM",
+            "TFGPTJForQuestionAnswering",
+            "TFGPTJForSequenceClassification",
+            "TFGPTJModel",
+            "TFGPTJPreTrainedModel",
+        ]
     )
     _import_structure["models.hubert"].extend(
         [
@@ -3773,7 +3779,13 @@ if TYPE_CHECKING:
             TFGPT2Model,
             TFGPT2PreTrainedModel,
         )
-        from .models.gptj import TFGPTJForCausalLM, TFGPTJForSequenceClassification, TFGPTJModel, TFGPTJPreTrainedModel
+        from .models.gptj import (
+            TFGPTJForCausalLM,
+            TFGPTJForQuestionAnswering,
+            TFGPTJForSequenceClassification,
+            TFGPTJModel,
+            TFGPTJPreTrainedModel,
+        )
         from .models.hubert import (
             TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFHubertForCTC,

@@ -28,6 +28,7 @@ from ...file_utils import (
 from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPast,
     TFCausalLMOutputWithPast,
+    TFQuestionAnsweringModelOutput,
     TFSequenceClassifierOutputWithPast,
 )
 from ...modeling_tf_utils import (
@@ -869,8 +870,8 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
         self.transformer = TFGPTJMainLayer(config, name="transformer")
-        self.score = self.lm_head = tf.keras.layers.Dense(
-            config.vocab_size,
+        self.score = tf.keras.layers.Dense(
+            self.num_labels,
             use_bias=False,
             kernel_initializer=get_initializer(config.initializer_range),
             name="score",
@@ -992,4 +993,111 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel):
 
         return TFSequenceClassifierOutputWithPast(
             logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns
+        )
+
+
+@add_start_docstrings(
+    """
+    The GPT-J Model transformer with a span classification head on top for extractive question-answering tasks like
+    SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
+    GPTJ_START_DOCSTRING,
+)
+class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head\.weight"]
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+        self.transformer = TFGPTJMainLayer(config, name="transformer")
+        self.qa_outputs = tf.keras.layers.Dense(
+            self.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
+        )
+
+    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFQuestionAnsweringModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        input_ids=None,
+        past_key_values=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        start_positions=None,
+        end_positions=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+        **kwargs,
+    ):
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            start_positions=start_positions,
+            end_positions=end_positions,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            past_key_values=inputs["past_key_values"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+        sequence_output = transformer_outputs[0]
+
+        logits = self.qa_outputs(sequence_output)
+        start_logits, end_logits = tf.split(logits, 2, axis=-1)
+        start_logits = tf.squeeze(start_logits, axis=-1)
+        end_logits = tf.squeeze(end_logits, axis=-1)
+
+        loss = None
+        if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
+            labels = {"start_position": inputs["start_positions"]}
+            labels["end_position"] = inputs["end_positions"]
+            loss = self.hf_compute_loss(labels, (start_logits, end_logits))
+
+        if not inputs["return_dict"]:
+            output = (start_logits, end_logits) + transformer_outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFQuestionAnsweringModelOutput(
+            loss=loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFQuestionAnsweringModelOutput(
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )

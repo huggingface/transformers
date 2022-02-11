@@ -29,6 +29,7 @@ if is_tf_available():
 
     from transformers.models.gptj.modeling_tf_gptj import (
         TFGPTJForCausalLM,
+        TFGPTJForQuestionAnswering,
         TFGPTJForSequenceClassification,
         TFGPTJModel,
     )
@@ -285,7 +286,11 @@ class TFGPTJModelTester:
 @require_tf
 class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (TFGPTJForCausalLM, TFGPTJForSequenceClassification, TFGPTJModel) if is_tf_available() else ()
+    all_model_classes = (
+        (TFGPTJForCausalLM, TFGPTJForSequenceClassification, TFGPTJForQuestionAnswering, TFGPTJModel)
+        if is_tf_available()
+        else ()
+    )
 
     all_generative_model_classes = (TFGPTJForCausalLM,) if is_tf_available() else ()
     test_onnx = False
