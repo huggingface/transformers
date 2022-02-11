@@ -1514,7 +1514,12 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+        return TFWav2Vec2BaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            extract_features=output.extract_features,
+            hidden_states=hs,
+            attentions=attns,
+        )
 
 
 @add_start_docstrings(

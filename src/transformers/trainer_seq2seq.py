@@ -161,6 +161,9 @@ class Seq2SeqTrainer(Trainer):
             "synced_gpus": True if is_deepspeed_zero3_enabled() else False,
         }
 
+        if "attention_mask" in inputs:
+            gen_kwargs["attention_mask"] = inputs.get("attention_mask", None)
+
         # prepare generation inputs
         # some encoder-decoder models can have varying encder's and thus
         # varying model input names
@@ -171,7 +174,6 @@ class Seq2SeqTrainer(Trainer):
 
         generated_tokens = self.model.generate(
             generation_inputs,
-            attention_mask=inputs.get("attention_mask", None),
             **gen_kwargs,
         )
         # in case the batch is shorter than max length, the output should be padded
