@@ -1102,8 +1102,7 @@ if is_torch_available():
     _import_structure["models.maskformer"].extend(
         [
             "MASK_FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MaskFormerForPanopticSegmentation",
-            "MaskFormerForSemanticSegmentation",
+            "MaskFormerForInstanceSegmentation",
             "MaskFormerModel",
             "MaskFormerPreTrainedModel",
         ]
@@ -3149,8 +3148,7 @@ if TYPE_CHECKING:
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.maskformer import (
             MASK_FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MaskFormerForPanopticSegmentation,
-            MaskFormerForSemanticSegmentation,
+            MaskFormerForInstanceSegmentation,
             MaskFormerModel,
             MaskFormerPreTrainedModel,
         )
