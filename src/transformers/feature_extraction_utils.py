@@ -334,7 +334,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
-        
+
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo = self._create_or_get_repo(save_directory, **kwargs)
@@ -351,7 +351,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
         self.to_json_file(output_feature_extractor_file)
         logger.info(f"Feature extractor saved in {output_feature_extractor_file}")
-    
+
         if push_to_hub:
             url = self._push_to_hub(repo, commit_message=commit_message)
             logger.info(f"Feature extractor pushed to the hub in this commit: {url}")
