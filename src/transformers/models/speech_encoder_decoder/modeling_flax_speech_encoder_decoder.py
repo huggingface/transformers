@@ -123,11 +123,6 @@ SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = """TODO"""
 SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = """TODO"""
 
 
-# def shift_tokens_right necessary?
-def shift_tokens_right():
-    return
-
-
 class FlaxSpeechEncoderDecoderModule(nn.Module):
     config: SpeechEncoderDecoderConfig
     dtype: jnp.dtype = jnp.float32
