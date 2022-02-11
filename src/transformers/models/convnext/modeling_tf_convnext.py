@@ -73,7 +73,7 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
             kernel_size=config.patch_size,
             strides=config.patch_size,
             name="patch_embeddings",
-            kernel_initializer=get_initializer(self.config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             bias_initializer="zeros",
         )
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm")
@@ -104,7 +104,7 @@ class TFConvNextLayer(tf.keras.layers.Layer):
         drop_path (`float`): Stochastic depth rate. Default: 0.0.
     """
 
-    def __init__(self, config, dim, drop_path=0, **kwargs):
+    def __init__(self, config, dim, drop_path=0.0, **kwargs):
         # (sayakpaul): need to figure out the layer names.
         super().__init__(**kwargs)
         self.dwconv = tf.keras.layers.Conv2D(
@@ -112,19 +112,19 @@ class TFConvNextLayer(tf.keras.layers.Layer):
             kernel_size=7,
             padding="same",
             groups=dim,
-            kernel_initializer=get_initializer(self.config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             bias_initializer="zeros",
         )  # depthwise conv
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.pwconv1 = tf.keras.layers.Dense(
             units=4 * dim,
-            kernel_initializer=get_initializer(self.config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             bias_initializer="zeros",
         )  # pointwise/1x1 convs, implemented with linear layers
-        self.act = get_tf_activation[config.hidden_act]
+        self.act = get_tf_activation(config.hidden_act)
         self.pwconv2 = tf.keras.layers.Dense(
             units=dim,
-            kernel_initializer=get_initializer(self.config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             bias_initializer="zeros",
         )
         self.layer_scale_parameter = (
@@ -176,7 +176,7 @@ class TFConvNextStage(tf.keras.layers.Layer):
                         filters=out_channels,
                         kernel_size=kernel_size,
                         strides=stride,
-                        kernel_initializer=get_initializer(self.config.initializer_range),
+                        kernel_initializer=get_initializer(config.initializer_range),
                         bias_initializer="zeros",
                     ),
                 ]
@@ -200,7 +200,7 @@ class TFConvNextEncoder(tf.keras.layers.Layer):
         # `pwconv1`, and `pwconv2`.
         super().__init__(**kwargs)
         self.stages = []
-        drop_path_rates = [x.item() for x in tf.linspace(0, config.drop_path_rate, sum(config.depths))]
+        drop_path_rates = [x for x in tf.linspace(0.0, config.drop_path_rate, sum(config.depths))]
         cur = 0
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
@@ -335,7 +335,7 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
         self.encoder = TFConvNextEncoder(config)
 
         # final layernorm layer
-        self.layernorm = tf.keras.layers.Layer(epsilon=config.layer_norm_eps)
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps)
 
         # global average pooling
         self.pooler = tf.keras.layers.GlobalAvgPool2D()
