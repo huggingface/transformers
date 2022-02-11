@@ -1725,8 +1725,6 @@ class TFGenerationMixin:
         )  # generate sequences without allowing bad_words to be generated
         ```"""
         # 1. Set generation parameters if not already defined
-        num_beams = num_beams if num_beams is not None else self.config.num_beams
-        do_sample = do_sample if do_sample is not None else self.config.do_sample
         max_length = max_length if max_length is not None else self.config.max_length
         min_length = min_length if min_length is not None else self.config.min_length
         early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
@@ -1744,6 +1742,12 @@ class TFGenerationMixin:
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
 
+        num_beams = num_beams if num_beams is not None else self.config.num_beams
+        do_sample = do_sample if do_sample is not None else self.config.do_sample
+        num_return_sequences = (
+            num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+        )
+
         if pad_token_id is None and eos_token_id is not None:
             logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
             pad_token_id = eos_token_id
@@ -1751,126 +1755,49 @@ class TFGenerationMixin:
         # 2. Define model inputs
         # inputs_ids now has to be defined
         input_ids = self._prepare_model_inputs(input_ids, bos_token_id)
+        batch_size = input_ids.shape[0]
 
-        if input_ids is not None:
-            batch_size = shape_list(input_ids)[0]  # overridden by the input batch_size
-        else:
-            batch_size = 1
+        # 3. Prepare other model kwargs
+        model_kwargs["output_attentions"] = output_attentions
+        model_kwargs["output_hidden_states"] = output_hidden_states
+        model_kwargs["use_cache"] = use_cache
 
-        # 3. Define other model kwargs
-        if self.config.is_encoder_decoder:
-            model_kwargs["encoder_attentions"] = None
-            model_kwargs["encoder_hidden_states"] = None
+        requires_attention_mask = "encoder_outputs" not in model_kwargs
 
-        # This block corresponds to the following line in `generation_tf_utils`:
-        #   "input_ids = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))"
-        # with the following differences:
-        #   1. In PT, `generate()`'s `model_kwargs` can accept `encoder_outputs`, but not the case in TF.
-        #   2. There is no shape checking in PT.
-        # In both PT/TF, if `input_ids` is `None`, we try to create it as it is for a text model.
-        if input_ids is None:
-            if not isinstance(bos_token_id, int) or bos_token_id < 0:
-                raise ValueError(
-                    "you should either supply a context to complete as `input_ids` input "
-                    "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
-                )
-            input_ids = tf.fill((batch_size, 1), bos_token_id)
-
-        # create attention mask if necessary
-        # TODO (PVP): this should later be handled by the forward fn() in each model in the future see PR 3140
-        if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids.numpy()):
-            attention_mask = tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
-        elif attention_mask is None:
-            attention_mask = tf.ones_like(input_ids)
-
-        # current position and vocab size
-        cur_len = shape_list(input_ids)[1]  # unused
-        vocab_size = getattr(self.config, "vocab_size", None)
-        if vocab_size is None and self.config.is_encoder_decoder:
-            decoder_config = getattr(self.config, "decoder", None)
-            if decoder_config is not None:
-                vocab_size = getattr(self.config.decoder, "vocab_size", None)
-
-        # set effective batch size and effective batch multiplier according to do_sample
-        if do_sample:
-            effective_batch_size = batch_size * num_return_sequences
-            effective_batch_mult = num_return_sequences
-        else:
-            effective_batch_size = batch_size
-            effective_batch_mult = 1
+        if model_kwargs.get("attention_mask", None) is None and requires_attention_mask:
+            model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(input_ids, pad_token_id)
 
         if self.config.is_encoder_decoder:
-            if decoder_start_token_id is None:
-                decoder_start_token_id = bos_token_id
+            # if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
+            # if model is encoder decoder encoder_outputs are created
+            # and added to `model_kwargs`
+            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
 
-            assert (
-                decoder_start_token_id is not None
-            ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
-            assert hasattr(self, "get_encoder"), f"{self} should have a 'get_encoder' function defined"
-            assert callable(self.get_encoder), f"{self.get_encoder} should be a method"
+        # TODO(PVP) - ugly hack here which requires a bigger
+        # refactor of all generation models in TF. `past` should be
+        # optional everywhere
+        model_kwargs["past"] = model_kwargs["encoder_outputs"] if self.config.is_encoder_decoder else None
 
-            # get encoder and store encoder outputs
-            encoder = self.get_encoder()
-
-            encoder_kwargs = {
-                "attention_mask": attention_mask,
-                "output_attentions": output_attentions,
-                "output_hidden_states": output_hidden_states,
-                "return_dict": return_dict_in_generate,
-            }
-
-            # vision models don't use `attention_mask`.
-            signature = dict(inspect.signature(encoder.call).parameters)
-            if "attention_mask" not in signature:
-                encoder_kwargs.pop("attention_mask")
-
-            encoder_outputs = encoder(input_ids, **encoder_kwargs)
-            if return_dict_in_generate:
-                if output_attentions:
-                    model_kwargs["encoder_attentions"] = encoder_outputs.attentions
-                if output_hidden_states:
-                    model_kwargs["encoder_hidden_states"] = encoder_outputs.hidden_states
-
-        # TODO(Patrick) - not very clean here
-        model_kwargs["attention_mask"] = attention_mask
-        model_kwargs["past"] = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
-
+        # 4. Prepare `input_ids` which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
-            # create empty decoder_input_ids
-            input_ids = (
-                tf.ones(
-                    (effective_batch_size * num_beams, 1),
-                    dtype=tf.int32,
-                )
-                * decoder_start_token_id
+            # if encoder-decoder then `input_ids` come from `decoder_start_token_id`
+            input_ids = self._prepare_decoder_input_ids_for_generation(
+                batch_size,
+                decoder_start_token_id=decoder_start_token_id,
+                bos_token_id=bos_token_id,
+                model_kwargs=model_kwargs,
             )
-            cur_len = 1
 
-            assert (
-                batch_size == encoder_outputs[0].shape[0]
-            ), f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[0]} "
-
-            # expand batch_idx to assign correct encoder output for expanded input_ids (due to num_beams > 1 and num_return_sequences > 1)
-            expanded_batch_idxs = tf.reshape(
-                tf.repeat(tf.expand_dims(tf.range(batch_size), -1), repeats=num_beams * effective_batch_mult, axis=1),
-                shape=(-1,),
-            )
-            # expand encoder_outputs
-            encoder_outputs = (tf.gather(encoder_outputs[0], expanded_batch_idxs, axis=0),)
-        else:
-            encoder_outputs = None
-            cur_len = shape_list(input_ids)[-1]
-
-        if cur_len >= max_length:
+        if input_ids.shape[-1] >= max_length:
             raise ValueError(
-                f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
+                f"The context has {input_ids.shape[-1]} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
             )
 
-        # 6. determine generation mode
+        # 5. determine generation mode
         is_greedy_gen_mode = (num_beams == 1) and do_sample is False
 
         # prepare distribution pre_processing samplers
-        # 7. prepare distribution pre_processing samplers
+        # 6. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
@@ -1879,14 +1806,14 @@ class TFGenerationMixin:
             eos_token_id=eos_token_id,
         )
 
-        # 8. go into different generation modes
+        # 7. go into different generation modes
         if is_greedy_gen_mode:
             if num_return_sequences > 1:
                 raise ValueError(
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
                 )
 
-            # 9. run greedy search
+            # 8. run greedy search
             return self.greedy_search(
                 input_ids,
                 max_length=max_length,
@@ -1894,11 +1821,41 @@ class TFGenerationMixin:
                 eos_token_id=eos_token_id,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
             )
+
+    def _prepare_attention_mask_for_generation(
+        self,
+        input_ids: tf.Tensor,
+        pad_token_id: int,
+    ) -> tf.Tensor:
+        if (pad_token_id is not None) and (pad_token_id in input_ids.numpy()):
+            return tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
+        else:
+            return tf.ones_like(input_ids)
+
+    def _prepare_encoder_decoder_kwargs_for_generation(self, input_ids: tf.Tensor, model_kwargs) -> Dict[str, Any]:
+        # get encoder and store encoder outputs
+        encoder = self.get_encoder()
+
+        # prepare encoder args and encoder kwargs from model kwargs
+        irrelevant_prefix = ["decoder_", "cross_attn", "use_cache"]
+        encoder_kwargs = {
+            argument: value
+            for argument, value in model_kwargs.items()
+            if not any(argument.startswith(p) for p in irrelevant_prefix)
+        }
+
+        # vision models don't use `attention_mask`.
+        signature = dict(inspect.signature(encoder.call).parameters)
+        if "attention_mask" not in signature:
+            encoder_kwargs.pop("attention_mask")
+
+        encoder_outputs = encoder(input_ids, **encoder_kwargs)
+
+        model_kwargs["encoder_outputs"] = encoder_outputs
+        return model_kwargs
 
     def _prepare_decoder_input_ids_for_generation(
         self,
@@ -1907,12 +1864,37 @@ class TFGenerationMixin:
         bos_token_id: int = None,
         model_kwargs: Optional[Dict[str, tf.Tensor]] = None,
     ) -> tf.Tensor:
-
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
             return model_kwargs.pop("decoder_input_ids")
         else:
             decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
             return tf.ones((batch_size, 1), dtype=tf.int32) * decoder_start_token_id
+
+    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
+        )
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
+
+        if decoder_start_token_id is not None:
+            return decoder_start_token_id
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "decoder_start_token_id")
+            and self.config.decoder.decoder_start_token_id is not None
+        ):
+            return self.config.decoder.decoder_start_token_id
+        elif bos_token_id is not None:
+            return bos_token_id
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "bos_token_id")
+            and self.config.decoder.bos_token_id is not None
+        ):
+            return self.config.decoder.bos_token_id
+        raise ValueError(
+            "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
+        )
 
     def _prepare_model_inputs(self, inputs: Optional[tf.Tensor] = None, bos_token_id: Optional[int] = None):
         if inputs is None:
@@ -2003,8 +1985,8 @@ class TFGenerationMixin:
 
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
-            logits_processor (`LogitsProcessorList`, *optional*):
-                An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
+            logits_processor (`TFLogitsProcessorList`, *optional*):
+                An instance of [`TFLogitsProcessorList`]. List of instances of class derived from [`TFLogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
             max_length (`int`, *optional*, defaults to 20):
                 The maximum length of the sequence to be generated.
@@ -2085,8 +2067,10 @@ class TFGenerationMixin:
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_attentions"] if output_attentions else None
-            encoder_hidden_states = model_kwargs["encoder_hidden_states"] if output_hidden_states else None
+            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+            encoder_hidden_states = (
+                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
+            )
 
         # keep track of which sequences are already finished
         unfinished_sequences = tf.ones_like(input_ids[:, 0])
