@@ -676,8 +676,8 @@ class SwinEncoder(nn.Module):
             [
                 SwinLayer(
                     config=config,
-                    dim=int(config.embed_dim * 2**i_layer),
-                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
+                    dim=int(config.embed_dim * 2 ** i_layer),
+                    input_resolution=(grid_size[0] // (2 ** i_layer), grid_size[1] // (2 ** i_layer)),
                     depth=config.depths[i_layer],
                     num_heads=config.num_heads[i_layer],
                     drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
@@ -842,7 +842,7 @@ class SwinModel(SwinPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SwinModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    # @replace_return_docstrings(output_type=SwinModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -923,13 +923,13 @@ class SwinForImageClassification(SwinPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    # @add_code_sample_docstrings(
+    #     processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+    #     checkpoint=_IMAGE_CLASS_CHECKPOINT,
+    #     output_type=SequenceClassifierOutput,
+    #     config_class=_CONFIG_FOR_DOC,
+    #     expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    # )
     def forward(
         self,
         pixel_values=None,
