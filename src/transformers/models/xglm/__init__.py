@@ -18,13 +18,21 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_flax_available, is_tokenizers_available, is_torch_available
+from ...file_utils import (
+    _LazyModule,
+    is_flax_available,
+    is_sentencepiece_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
     "configuration_xglm": ["XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XGLMConfig"],
-    "tokenization_xglm": ["XGLMTokenizer"],
 }
+
+if is_sentencepiece_available():
+    _import_structure["tokenization_xglm"] = ["XGLMTokenizer"]
 
 if is_tokenizers_available():
     _import_structure["tokenization_xglm_fast"] = ["XGLMTokenizerFast"]
@@ -48,7 +56,9 @@ if is_flax_available():
 
 if TYPE_CHECKING:
     from .configuration_xglm import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XGLMConfig
-    from .tokenization_xglm import XGLMTokenizer
+
+    if is_sentencepiece_available():
+        from .tokenization_xglm import XGLMTokenizer
 
     if is_tokenizers_available():
         from .tokenization_xglm_fast import XGLMTokenizerFast

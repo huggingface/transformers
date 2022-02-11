@@ -14,9 +14,10 @@
 # limitations under the License.
 
 import copy
-import os
+import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 from transformers import BertConfig, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
@@ -31,9 +32,15 @@ from transformers.testing_utils import (
 from .test_modeling_bert import BertModelTester
 
 
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
+
+from test_module.custom_configuration import CustomConfig  # noqa E402
+
+
 if is_torch_available():
     import torch
 
+    from test_module.custom_modeling import CustomModel
     from transformers import (
         AutoConfig,
         AutoModel,
@@ -56,7 +63,6 @@ if is_torch_available():
         FunnelModel,
         GPT2Config,
         GPT2LMHeadModel,
-        PreTrainedModel,
         RobertaForMaskedLM,
         T5Config,
         T5ForConditionalGeneration,
@@ -79,51 +85,6 @@ if is_torch_available():
     from transformers.models.gpt2.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.models.tapas.modeling_tapas import TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST
-
-
-class NewModelConfig(BertConfig):
-    model_type = "new-model"
-
-
-if is_torch_available():
-
-    class NewModel(BertModel):
-        config_class = NewModelConfig
-
-    class FakeModel(PreTrainedModel):
-        config_class = BertConfig
-        base_model_prefix = "fake"
-
-        def __init__(self, config):
-            super().__init__(config)
-            self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
-
-        def forward(self, x):
-            return self.linear(x)
-
-        def _init_weights(self, module):
-            pass
-
-
-# Make sure this is synchronized with the model above.
-FAKE_MODEL_CODE = """
-import torch
-from transformers import BertConfig, PreTrainedModel
-
-class FakeModel(PreTrainedModel):
-    config_class = BertConfig
-    base_model_prefix = "fake"
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
-
-    def forward(self, x):
-        return self.linear(x)
-
-    def _init_weights(self, module):
-        pass
-"""
 
 
 @require_torch
@@ -325,20 +286,25 @@ class AutoModelTest(unittest.TestCase):
                         assert not issubclass(child, parent), f"{child.__name__} is child of {parent.__name__}"
 
     def test_from_pretrained_dynamic_model_local(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        config.auto_map = {"AutoModel": "modeling.FakeModel"}
-        model = FakeModel(config)
+        try:
+            AutoConfig.register("custom", CustomConfig)
+            AutoModel.register(CustomConfig, CustomModel)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            with open(os.path.join(tmp_dir, "modeling.py"), "w") as f:
-                f.write(FAKE_MODEL_CODE)
+            config = CustomConfig(hidden_size=32)
+            model = CustomModel(config)
 
-            new_model = AutoModel.from_pretrained(tmp_dir, trust_remote_code=True)
-            for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                self.assertTrue(torch.equal(p1, p2))
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir)
+
+                new_model = AutoModel.from_pretrained(tmp_dir, trust_remote_code=True)
+                for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                    self.assertTrue(torch.equal(p1, p2))
+
+        finally:
+            if "custom" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["custom"]
+            if CustomConfig in MODEL_MAPPING._extra_content:
+                del MODEL_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_model_distant(self):
         model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
@@ -349,7 +315,7 @@ class AutoModelTest(unittest.TestCase):
         self.assertEqual(model.__class__.__name__, "NewModel")
 
     def test_new_model_registration(self):
-        AutoConfig.register("new-model", NewModelConfig)
+        AutoConfig.register("custom", CustomConfig)
 
         auto_classes = [
             AutoModel,
@@ -366,26 +332,27 @@ class AutoModelTest(unittest.TestCase):
                 with self.subTest(auto_class.__name__):
                     # Wrong config class will raise an error
                     with self.assertRaises(ValueError):
-                        auto_class.register(BertConfig, NewModel)
-                    auto_class.register(NewModelConfig, NewModel)
+                        auto_class.register(BertConfig, CustomModel)
+                    auto_class.register(CustomConfig, CustomModel)
                     # Trying to register something existing in the Transformers library will raise an error
                     with self.assertRaises(ValueError):
                         auto_class.register(BertConfig, BertModel)
 
                     # Now that the config is registered, it can be used as any other config with the auto-API
                     tiny_config = BertModelTester(self).get_config()
-                    config = NewModelConfig(**tiny_config.to_dict())
+                    config = CustomConfig(**tiny_config.to_dict())
                     model = auto_class.from_config(config)
-                    self.assertIsInstance(model, NewModel)
+                    self.assertIsInstance(model, CustomModel)
 
                     with tempfile.TemporaryDirectory() as tmp_dir:
                         model.save_pretrained(tmp_dir)
                         new_model = auto_class.from_pretrained(tmp_dir)
-                        self.assertIsInstance(new_model, NewModel)
+                        # The model is a CustomModel but from the new dynamically imported class.
+                        self.assertIsInstance(new_model, CustomModel)
 
         finally:
-            if "new-model" in CONFIG_MAPPING._extra_content:
-                del CONFIG_MAPPING._extra_content["new-model"]
+            if "custom" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["custom"]
             for mapping in (
                 MODEL_MAPPING,
                 MODEL_FOR_PRETRAINING_MAPPING,
@@ -395,8 +362,8 @@ class AutoModelTest(unittest.TestCase):
                 MODEL_FOR_CAUSAL_LM_MAPPING,
                 MODEL_FOR_MASKED_LM_MAPPING,
             ):
-                if NewModelConfig in mapping._extra_content:
-                    del mapping._extra_content[NewModelConfig]
+                if CustomConfig in mapping._extra_content:
+                    del mapping._extra_content[CustomConfig]
 
     def test_repo_not_found(self):
         with self.assertRaisesRegex(

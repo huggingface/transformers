@@ -37,6 +37,7 @@ from . import (
     canine,
     clip,
     convbert,
+    convnext,
     cpm,
     ctrl,
     deberta,
@@ -120,6 +121,7 @@ from . import (
     xlm,
     xlm_prophetnet,
     xlm_roberta,
+    xlm_roberta_xl,
     xlnet,
     yoso,
 )

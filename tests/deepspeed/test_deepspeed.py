@@ -26,6 +26,7 @@ from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available
 from transformers.file_utils import WEIGHTS_NAME, is_torch_bf16_available
 from transformers.testing_utils import (
     CaptureLogger,
+    CaptureStd,
     CaptureStderr,
     CaptureStdout,
     ExtendSysPath,
@@ -1011,7 +1012,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         with CaptureStderr() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
-        assert "Detected DeepSpeed ZeRO-3" in cs.err
+        self.assertIn("Detected DeepSpeed ZeRO-3", cs.err)
 
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
@@ -1056,7 +1057,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         cmd = launcher + script + args + ds_args
         # keep for quick debug
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
-        with CaptureStdout() as cs:
+        with CaptureStd() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
-        # enough to test deespeed was invoked and it didn't fail
-        assert "DeepSpeed info" in cs.out
+        # enough to test it didn't fail
+        self.assertIn("DeepSpeed info", cs.out)
