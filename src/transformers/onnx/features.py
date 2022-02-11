@@ -126,7 +126,10 @@ class FeaturesManager:
             "masked-lm": {"tf": TFAutoModelForMaskedLM, "pt": AutoModelForMaskedLM},
             "causal-lm": {"tf": TFAutoModelForCausalLM, "pt": AutoModelForCausalLM},
             "seq2seq-lm": {"tf": TFAutoModelForSeq2SeqLM, "pt": AutoModelForSeq2SeqLM},
-            "sequence-classification": {"tf": TFAutoModelForSequenceClassification, "pt": AutoModelForSequenceClassification},
+            "sequence-classification": {
+                "tf": TFAutoModelForSequenceClassification,
+                "pt": AutoModelForSequenceClassification,
+            },
             "token-classification": {"tf": TFAutoModelForTokenClassification, "pt": AutoModelForTokenClassification},
             "multiple-choice": {"tf": TFAutoModelForMultipleChoice, "pt": AutoModelForMultipleChoice},
             "question-answering": {"tf": TFAutoModelForQuestionAnswering, "pt": AutoModelForQuestionAnswering},

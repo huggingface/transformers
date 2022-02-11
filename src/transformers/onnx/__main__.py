@@ -41,7 +41,7 @@ def main():
         "--framework",
         type=str,
         default="pt",
-        help="The framework to use for the export, either `pt` for PyTorch or `tf` for TensorFlow. The specified framework must be installed.",
+        help="The framework of the model weights, either `pt` for PyTorch or `tf` for TensorFlow. The specified framework must be installed.",
     )
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
 
