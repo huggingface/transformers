@@ -39,7 +39,7 @@ from ...file_utils import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput, DetrPreTrainedModel
+from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput
 from ..swin import SwinConfig, SwinModel
 from .configuration_maskformer import MaskFormerConfig
 
