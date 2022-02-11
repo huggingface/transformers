@@ -20,12 +20,12 @@ import logging
 from dataclasses import dataclass
 from numbers import Number
 from optparse import Option
-from typing import Dict, List, Optional, Tuple, TypedDict
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 from torch import Tensor, nn
-from torch.nn import functional as F
+from torch.nn.functional import interpolate, binary_cross_entropy_with_logits, cross_entropy
 
 from transformers.modeling_outputs import BaseModelOutput
 
@@ -39,7 +39,6 @@ from ...file_utils import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..detr import DetrConfig
 from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput, DetrPreTrainedModel
 from ..swin import SwinConfig, SwinModel
 from .configuration_maskformer import MaskFormerConfig
@@ -211,7 +210,7 @@ def upsample_like(x: Tensor, like: Tensor, mode: str = "bilinear") -> Tensor:
         Tensor: The upsampled tensor
     """
     _, _, height, width = like.shape
-    upsampled: Tensor = F.interpolate(
+    upsampled: Tensor = interpolate(
         x,
         size=(height, width),
         mode=mode,
@@ -283,7 +282,7 @@ def sigmoid_focal_loss(
         Tensor: The computed loss
     """
     probs: Tensor = inputs.sigmoid()
-    cross_entropy_loss: Tensor = F.binary_cross_entropy_with_logits(inputs, labels, reduction="none")
+    cross_entropy_loss: Tensor = binary_cross_entropy_with_logits(inputs, labels, reduction="none")
     p_t: Tensor = probs * labels + (1 - probs) * (1 - labels)
     loss: Tensor = cross_entropy_loss * ((1 - p_t) ** gamma)
 
@@ -339,11 +338,11 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 
     height_and_width: int = inputs.shape[1]
 
     prob: Tensor = inputs.sigmoid()
-    cross_entropy_loss_pos = F.binary_cross_entropy_with_logits(inputs, torch.ones_like(inputs), reduction="none")
+    cross_entropy_loss_pos = binary_cross_entropy_with_logits(inputs, torch.ones_like(inputs), reduction="none")
     focal_pos: Tensor = ((1 - prob) ** gamma) * cross_entropy_loss_pos
     focal_pos *= alpha
 
-    cross_entropy_loss_neg = F.binary_cross_entropy_with_logits(inputs, torch.zeros_like(inputs), reduction="none")
+    cross_entropy_loss_neg = binary_cross_entropy_with_logits(inputs, torch.zeros_like(inputs), reduction="none")
 
     focal_neg: Tensor = (prob ** gamma) * cross_entropy_loss_neg
     focal_neg *= 1 - alpha
@@ -405,7 +404,7 @@ class MaskFormerHungarianMatcher(nn.Module):
         labels_masks: Tensor = labels["mask_labels"]
         preds_probs: Tensor = outputs["class_queries_logits"].softmax(dim=-1)
         # downsample all masks in one go -> save memory
-        labels_masks: Tensor = F.interpolate(labels_masks, size=preds_masks.shape[-2:], mode="nearest")
+        labels_masks: Tensor = interpolate(labels_masks, size=preds_masks.shape[-2:], mode="nearest")
         # iterate through batch size
         for pred_probs, pred_mask, target_mask, labels in zip(
             preds_probs, preds_masks, labels_masks, labels["class_labels"]
@@ -505,7 +504,7 @@ class MaskFormerLoss(nn.Module):
         target_classes[idx] = target_classes_o
         # target_classes is a [BATCH, CLASSES, N_QUERIES], we need to permute pred_logits "b q c -> b c q"
         pred_logits_permuted: Tensor = pred_logits.permute(0, 2, 1)
-        loss_ce: Tensor = F.cross_entropy(pred_logits_permuted, target_classes, self.empty_weight)
+        loss_ce: Tensor = cross_entropy(pred_logits_permuted, target_classes, self.empty_weight)
         losses: Tensor = {"loss_cross_entropy": loss_ce}
         return losses
 
@@ -522,7 +521,7 @@ class MaskFormerLoss(nn.Module):
         target_masks = labels["mask_labels"]  # shape [BATCH, NUM_QUERIES, H, W]
         target_masks = target_masks[tgt_idx]  # shape [BATCH * NUM_QUERIES, H, W]
         # upsample predictions to the target size, we have to add one dim to use interpolate
-        pred_masks = F.interpolate(
+        pred_masks = interpolate(
             pred_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
         )
         pred_masks = pred_masks[:, 0].flatten(1)
@@ -676,7 +675,7 @@ class FPNLayer(nn.Module):
 
     def forward(self, down: Tensor, left: Tensor) -> Tensor:
         left = self.proj(left)
-        down = F.interpolate(down, size=left.shape[-2:], mode="nearest")
+        down = interpolate(down, size=left.shape[-2:], mode="nearest")
         down += left
         down = self.block(down)
         return down
