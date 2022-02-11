@@ -42,6 +42,7 @@ if is_vision_available():
 
 SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
+
 def prepare_image_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
     """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
     or a list of PyTorch tensors if one specifies torchify=True.
@@ -132,6 +133,11 @@ class ConfigPushToHubTester(unittest.TestCase):
         except HTTPError:
             pass
 
+        try:
+            delete_repo(token=cls._token, name="test-dynamic-feature-extractor")
+        except HTTPError:
+            pass
+
     def test_push_to_hub(self):
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -157,20 +163,6 @@ class ConfigPushToHubTester(unittest.TestCase):
             new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("valid_org/test-feature-extractor-org")
             for k, v in feature_extractor.__dict__.items():
                 self.assertEqual(v, getattr(new_feature_extractor, k))
-
-
-@is_staging_test
-class ConfigPushToHubTester(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls._token = login(username=USER, password=PASS)
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            delete_repo(token=cls._token, name="test-dynamic-feature-extractor")
-        except HTTPError:
-            pass
 
     def test_push_to_hub_dynamic_feature_extractor(self):
         CustomFeatureExtractor.register_for_auto_class()

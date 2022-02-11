@@ -339,7 +339,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             commit_message = kwargs.pop("commit_message", None)
             repo = self._create_or_get_repo(save_directory, **kwargs)
 
-
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
         if self._auto_class is not None:
