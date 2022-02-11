@@ -82,3 +82,9 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             "hf-internal-testing/config-no-model does not appear to have a file named preprocessor_config.json.",
         ):
             _ = AutoFeatureExtractor.from_pretrained("hf-internal-testing/config-no-model")
+
+    def test_from_pretrained_dynamic_feature_extractor(self):
+        model = AutoFeatureExtractor.from_pretrained(
+            "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=True
+        )
+        self.assertEqual(model.__class__.__name__, "NewFeatureExtractor")

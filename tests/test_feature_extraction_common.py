@@ -16,9 +16,21 @@
 
 import json
 import os
+import sys
 import tempfile
+import unittest
+from pathlib import Path
 
+from huggingface_hub import Repository, delete_repo, login
+from requests.exceptions import HTTPError
+from transformers import AutoFeatureExtractor
 from transformers.file_utils import is_torch_available, is_vision_available
+from transformers.testing_utils import PASS, USER, is_staging_test
+
+
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
+
+from test_module.custom_feature_extraction import CustomFeatureExtractor  # noqa E402
 
 
 if is_torch_available():
@@ -27,6 +39,9 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
+
+
+SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
 
 def prepare_image_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
@@ -99,3 +114,41 @@ class FeatureExtractionSavingTestMixin:
     def test_init_without_params(self):
         feat_extract = self.feature_extraction_class()
         self.assertIsNotNone(feat_extract)
+
+
+@is_staging_test
+class ConfigPushToHubTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._token = login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            delete_repo(token=cls._token, name="test-dynamic-feature-extractor")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub_dynamic_feature_extractor(self):
+        CustomFeatureExtractor.register_for_auto_class()
+        feature_extractor = CustomFeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-feature-extractor", use_auth_token=self._token)
+            feature_extractor.save_pretrained(tmp_dir)
+
+            # This has added the proper auto_map field to the config
+            self.assertDictEqual(
+                feature_extractor.auto_map,
+                {"AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor"},
+            )
+            # The code has been copied from fixtures
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_feature_extraction.py")))
+
+            repo.push_to_hub()
+
+        new_feature_extractor = AutoFeatureExtractor.from_pretrained(
+            f"{USER}/test-dynamic-feature-extractor", trust_remote_code=True
+        )
+        # Can't make an isinstance check because the new_feature_extractor is from the CustomFeatureExtractor class of a dynamic module
+        self.assertEqual(new_feature_extractor.__class__.__name__, "CustomFeatureExtractor")

@@ -26,6 +26,7 @@ import numpy as np
 
 from requests import HTTPError
 
+from .dynamic_module_utils import custom_object_save
 from .file_utils import (
     FEATURE_EXTRACTOR_NAME,
     EntryNotFoundError,
@@ -205,6 +206,8 @@ class FeatureExtractionMixin:
     extractors.
     """
 
+    _auto_class = None
+
     def __init__(self, **kwargs):
         """Set elements of `kwargs` as attributes."""
         # Pop "processor_class" as it should be saved as private attribute
@@ -316,6 +319,12 @@ class FeatureExtractionMixin:
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
+
+        # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self._auto_class is not None:
+            custom_object_save(self, save_directory, config=self)
+
         os.makedirs(save_directory, exist_ok=True)
         # If we save using the predefined names, we can load using `from_pretrained`
         output_feature_extractor_file = os.path.join(save_directory, FEATURE_EXTRACTOR_NAME)
@@ -539,3 +548,29 @@ class FeatureExtractionMixin:
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="AutoFeatureExtractor"):
+        """
+        Register this class with a given auto class. This should only be used for custom feature extractors as the ones
+        in the library are already mapped with `AutoFeatureExtractor`.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"AutoFeatureExtractor"`):
+                The auto class to register this new feature extractor with.
+        """
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
+        cls._auto_class = auto_class
