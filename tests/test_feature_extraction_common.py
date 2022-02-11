@@ -23,7 +23,7 @@ from pathlib import Path
 
 from huggingface_hub import Repository, delete_repo, login
 from requests.exceptions import HTTPError
-from transformers import AutoFeatureExtractor
+from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import PASS, USER, is_staging_test
 
@@ -40,6 +40,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
+SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
 SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
@@ -114,6 +115,51 @@ class FeatureExtractionSavingTestMixin:
     def test_init_without_params(self):
         feat_extract = self.feature_extraction_class()
         self.assertIsNotNone(feat_extract)
+
+
+@is_staging_test
+class ConfigPushToHubTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._token = login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            delete_repo(token=cls._token, name="test-feature-extractor")
+        except HTTPError:
+            pass
+
+        try:
+            delete_repo(token=cls._token, name="test-feature-extractor-org", organization="valid_org")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub(self):
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            feature_extractor.save_pretrained(os.path.join(tmp_dir, "test-feature-extractor"), push_to_hub=True, use_auth_token=self._token)
+
+            new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(f"{USER}/test-feature-extractor")
+            #for k, v in config.__dict__.items():
+            #    if k != "transformers_version":
+            #        self.assertEqual(v, getattr(new_config, k))
+
+    def test_push_to_hub_in_organization(self):
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            feature_extractor.save_pretrained(
+                os.path.join(tmp_dir, "test-feature-extractor-org"),
+                push_to_hub=True,
+                use_auth_token=self._token,
+                organization="valid_org",
+            )
+
+            new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("valid_org/test-feature-extractor-org")
+            #for k, v in config.__dict__.items():
+            #    if k != "transformers_version":
+            #        self.assertEqual(v, getattr(new_config, k))
 
 
 @is_staging_test
