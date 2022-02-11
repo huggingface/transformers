@@ -2277,26 +2277,11 @@ class MarianMTModel(metaclass=DummyObject):
 MASK_FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class MaskFormerForPanopticSegmentation(metaclass=DummyObject):
+class MaskFormerForInstanceSegmentation(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
-
-class MaskFormerForSemanticSegmentation(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class MaskFormerLayer(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
 
 class MaskFormerModel(metaclass=DummyObject):
     _backends = ["torch"]
