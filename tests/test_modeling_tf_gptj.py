@@ -17,7 +17,6 @@ import unittest
 
 from tests.test_modeling_tf_core import TFCoreModelTesterMixin
 from transformers import GPTJConfig, is_tf_available
-from transformers.modeling_tf_utils import shape_list
 from transformers.testing_utils import require_tf, slow, tooslow
 
 from .test_configuration_common import ConfigTester
@@ -32,6 +31,7 @@ if is_tf_available():
         TFGPTJForQuestionAnswering,
         TFGPTJForSequenceClassification,
         TFGPTJModel,
+        shape_list
     )
 
 
