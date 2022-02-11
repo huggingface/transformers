@@ -17,6 +17,7 @@ import unittest
 
 from tests.test_modeling_tf_core import TFCoreModelTesterMixin
 from transformers import GPTJConfig, is_tf_available
+from transformers.modeling_tf_utils import shape_list
 from transformers.testing_utils import require_tf, slow, tooslow
 
 from .test_configuration_common import ConfigTester
@@ -26,7 +27,11 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.gptj.modeling_tf_gptj import TFGPTJForCausalLM, TFGPTJModel, shape_list
+    from transformers.models.gptj.modeling_tf_gptj import (
+        TFGPTJForCausalLM,
+        TFGPTJForSequenceClassification,
+        TFGPTJModel,
+    )
 
 
 class TFGPTJModelTester:
@@ -280,14 +285,7 @@ class TFGPTJModelTester:
 @require_tf
 class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            TFGPTJForCausalLM,
-            TFGPTJModel,
-        )
-        if is_tf_available()
-        else ()
-    )
+    all_model_classes = (TFGPTJForCausalLM, TFGPTJForSequenceClassification, TFGPTJModel) if is_tf_available() else ()
 
     all_generative_model_classes = (TFGPTJForCausalLM,) if is_tf_available() else ()
     test_onnx = False
