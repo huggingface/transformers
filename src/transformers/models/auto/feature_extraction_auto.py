@@ -255,7 +255,9 @@ class AutoFeatureExtractor:
 
         config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
         feature_extractor_class = config_dict.get("feature_extractor_type", None)
-        feature_extractor_auto_map = config_dict.get("auto_map", None)
+        feature_extractor_auto_map = None
+        if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
+            feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
 
         # If we don't find the feature extractor class in the feature extractor config, let's try the model config.
         if feature_extractor_class is None and feature_extractor_auto_map is None:
@@ -263,11 +265,11 @@ class AutoFeatureExtractor:
                 config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
             # It could be in `config.feature_extractor_type``
             feature_extractor_class = getattr(config, "feature_extractor_type", None)
-            if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
-                feature_extractor_auto_map = config.auto_map["AutoTokenizer"]
+            if hasattr(config, "auto_map") and "AutoFeatureExtractor" in config.auto_map:
+                feature_extractor_auto_map = config.auto_map["AutoFeatureExtractor"]
 
         if feature_extractor_class is not None:
-             # If we have custom code for a feature extractor, we get the proper class.
+            # If we have custom code for a feature extractor, we get the proper class.
             if feature_extractor_auto_map is not None:
                 if not trust_remote_code:
                     raise ValueError(
@@ -285,7 +287,7 @@ class AutoFeatureExtractor:
                 feature_extractor_class = get_class_from_dynamic_module(
                     pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
                 )
-            else :
+            else:
                 feature_extractor_class = feature_extractor_class_from_name(feature_extractor_class)
 
             return feature_extractor_class.from_dict(config_dict, **kwargs)
