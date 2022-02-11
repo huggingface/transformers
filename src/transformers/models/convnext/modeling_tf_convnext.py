@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 
 _CONFIG_FOR_DOC = "ConvNextConfig"
-_CHECKPOINT_FOR_DOC = "facebook/ConvNext-tiny-224"
+_CHECKPOINT_FOR_DOC = "facebook/convnext-tiny-224"
 
 
 class TFConvNextDropPath(tf.keras.layers.Layer):
