@@ -27,8 +27,6 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from einops import rearrange
-from einops.einops import repeat
 from transformers.modeling_outputs import BaseModelOutput
 
 from ...file_utils import (
@@ -416,9 +414,12 @@ class MaskFormerHungarianMatcher(nn.Module):
             # but approximate it in 1 - proba[target class].
             # The 1 is a constant that doesn't change the matching, it can be ommitted.
             cost_class: Tensor = -pred_probs[:, labels]
-            # flatten spatial dimension
-            pred_mask_flat: Tensor = rearrange(pred_mask, "q h w -> q (h w)")  # [num_queries, H*W]
-            target_mask_flat: Tensor = rearrange(target_mask, "c h w -> c (h w)")  # [num_total_labels, H*W]
+            # flatten spatial dimension "q h w -> q (h w)"
+            num_queries, height, width = pred_mask.shape
+            pred_mask_flat: Tensor = pred_mask.view(num_queries, height * width)  # [num_queries, H*W]
+            # same for target_mask "c h w -> c (h w)"
+            num_channels, height, width = target_mask.shape
+            target_mask_flat: Tensor = target_mask.view(num_channels, height * width)  # [num_total_labels, H*W]
             # compute the focal loss between each mask pairs -> shape [NUM_QUERIES, CLASSES]
             cost_mask: Tensor = pair_wise_sigmoid_focal_loss(pred_mask_flat, target_mask_flat)
             # Compute the dice loss betwen each mask pairs -> shape [NUM_QUERIES, CLASSES]
@@ -502,7 +503,9 @@ class MaskFormerLoss(nn.Module):
             (b, q), fill_value=self.num_classes, dtype=torch.int64, device=pred_logits.device
         )
         target_classes[idx] = target_classes_o
-        loss_ce: Tensor = F.cross_entropy(rearrange(pred_logits, "b q c -> b c q"), target_classes, self.empty_weight)
+        # target_classes is a [BATCH, CLASSES, N_QUERIES], we need to permute pred_logits "b q c -> b c q"
+        pred_logits_permuted: Tensor = pred_logits.permute(0, 2, 1)
+        loss_ce: Tensor = F.cross_entropy(pred_logits_permuted, target_classes, self.empty_weight)
         losses: Tensor = {"loss_cross_entropy": loss_ce}
         return losses
 
@@ -616,13 +619,17 @@ class SwinTransformerBackbone(nn.Module):
         hidden_states: Tuple[Tuple[Tensor]] = output.hidden_states[1:]
         # spatial dimensions contains all the heights and widths of each stage, including after the embeddings
         spatial_dimensions: Tuple[Tuple[int, int]] = output.hidden_states_spatial_dimensions
-        for i, (hidden_state, (h, w)) in enumerate(zip(hidden_states, spatial_dimensions)):
+        for i, (hidden_state, (height, width)) in enumerate(zip(hidden_states, spatial_dimensions)):
             norm = self.hidden_states_norms[i]
             # the last element corespond to the layer's last block output but before patch merging
             hidden_state_unpolled: Tensor = hidden_state[-1]
             hidden_state_norm = norm(hidden_state_unpolled)
             # our pixel decoder (FPN) expect 3D tensors (features)
-            hidden_state_permuted = rearrange(hidden_state_norm, "b (h w) d -> b d h w", h=h, w=w).contiguous()
+            batch_size, sequence_length, hidden_size = hidden_state_norm.shape
+            # reshape our tensor "b (h w) d -> b d h w"
+            hidden_state_permuted = (
+                hidden_state_norm.permute(0, 2, 1).view((batch_size, hidden_size, height, width)).contiguous()
+            )
             hidden_states_permuted.append(hidden_state_permuted)
         return hidden_states_permuted
 
@@ -835,10 +842,15 @@ class MaskFormerTransformerModule(nn.Module):
         if self.input_projection is not None:
             image_features = self.input_projection(image_features)
         position_embeddings: Tensor = self.position_embedder(image_features)
-        queries_embeddings: Tensor = repeat(self.queries_embedder.weight, "q c -> b q c", b=image_features.shape[0])
+        # repeat the queries "q c -> b q c"
+        batch_size: int = image_features.shape[0]
+        queries_embeddings: Tensor = self.queries_embedder.weight.repeat(1, batch_size, 1)
         inputs_embeds = torch.zeros_like(queries_embeddings)
-        image_features = rearrange(image_features, "b c h w -> (h w) b c")
-        position_embeddings = rearrange(position_embeddings, "b c h w -> (h w) b c")
+
+        batch_size, num_channels, height, width = image_features.shape
+        # rearrange both iamge_features and position_embeddings "b c h w -> (h w) b c"
+        image_features = image_features.view(batch_size, num_channels, height * width).permute(0, 2, 1)
+        position_embeddings = position_embeddings.view(batch_size, num_channels, height * width).permute(0, 2, 1)
 
         transformer_decoder_output: DetrDecoderOutput = self.transformer_decoder(
             inputs_embeds=inputs_embeds,
