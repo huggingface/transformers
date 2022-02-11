@@ -16,7 +16,7 @@ limitations under the License.
 
 # Image pretraining examples
 
-This directory contains Python scripts that allow you to pre-train Transformers for computer vision tasks on your own data, after which you can easily load the weights into a `ViTForImageClassification` for instance. It currently includes scripts for:
+This directory contains Python scripts that allow you to pre-train Transformer-based vision models on your own data, after which you can easily load the weights into a `ViTForImageClassification` for instance. It currently includes scripts for:
 - [SimMIM](#simmim) (by Microsoft Research)
 - [MAE](#mae) (by Facebook AI).
 
@@ -25,7 +25,7 @@ NOTE: If you encounter problems/have suggestions for improvement, open an issue 
 
 # SimMIM: A Simple Framework for Masked Image Modeling
 
-The `run_mim.py` script can be used to pre-train any Transformer-based vision model in the library (concretly, any model supported by the `AutoModelForMaskedImageModeling` API) for masked image modeling (as proposed in [SimMIM: A Simple Framework for Masked Image Modeling](https://arxiv.org/abs/2111.09886)) using PyTorch.
+The `run_mim.py` script can be used to pre-train any Transformer-based vision model in the library (concretly, any model supported by the `AutoModelForMaskedImageModeling` API) for masked image modeling as proposed in [SimMIM: A Simple Framework for Masked Image Modeling](https://arxiv.org/abs/2111.09886)using PyTorch.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/simmim_architecture.jpg"
 alt="drawing" width="300"/> 
@@ -36,7 +36,7 @@ The goal for the model is to predict raw pixel values for the masked patches, us
 
 ## Using datasets from 🤗 datasets
 
-Here we show how to pre-train a `ViT` from scratch for masked image modeling on the [cifar10](https://huggingface.co/datasets/cifar10) dataset. To pre-train a `BEiT` model (which is a Vision Transformer with relative position embeddings instead of absolute ones) from scratch, just change the `model_type` argument to "beit". 
+Here we show how to pre-train a `ViT` from scratch for masked image modeling on the [cifar10](https://huggingface.co/datasets/cifar10) dataset.
 
 Alternatively, one can decide to further pre-train an already pre-trained (or fine-tuned) checkpoint from the [hub](https://huggingface.co/). This can be done by setting the `model_name_or_path` argument to "google/vit-base-patch16-224-in21k" for example (and not specifying the `model_type` argument).
 
@@ -73,12 +73,13 @@ DEPTHS = [2, 2, 18, 2]
 NUM_HEADS = [4, 8, 16, 32]
 WINDOW_SIZE = 6
 
-config = SwinConfig(image_size=IMAGE_SIZE,
-                    patch_size=PATCH_SIZE,
-                    embed_dim=EMBED_DIM,
-                    depths=DEPTHS,
-                    num_heads=NUM_HEADS,
-                    window_size=WINDOW_SIZE
+config = SwinConfig(
+    image_size=IMAGE_SIZE,
+    patch_size=PATCH_SIZE,
+    embed_dim=EMBED_DIM,
+    depths=DEPTHS,
+    num_heads=NUM_HEADS,
+    window_size=WINDOW_SIZE,
 )
 config.save_pretrained("path_to_config")
 ```
