@@ -196,15 +196,11 @@ class FlaxBeitEmbeddings(nn.Module):
 
     config: BeitConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    use_mask_token: bool = False
 
     def setup(self):
         self.cls_token = self.param("cls_token", nn.initializers.zeros, (1, 1, self.config.hidden_size))
-        self.mask_token = (
-            self.param("mask_token", nn.initializers.zeros, (1, 1, self.config.hidden_size))
-            if self.use_mask_token
-            else None
-        )
+        if self.config.use_mask_token:
+            self.mask_token = self.param("mask_token", nn.initializers.zeros, (1, 1, self.config.hidden_size))
         self.patch_embeddings = FlaxBeitPatchEmbeddings(self.config, dtype=self.dtype)
         num_patches = self.patch_embeddings.num_patches
         if self.config.use_absolute_position_embeddings:
@@ -225,8 +221,8 @@ class FlaxBeitEmbeddings(nn.Module):
             mask_tokens = jnp.broadcast_to(self.mask_token, (batch_size, seq_len, self.config.hidden_size))
             mask_tokens = mask_tokens.astype(embeddings.dtype)
             # replace the masked visual tokens by mask_tokens
-            mask = jnp.expand_dims(bool_masked_pos, axis=-1)
-            embeddings = embeddings * (1 - mask) + mask_tokens * mask
+            w = jnp.expand_dims(bool_masked_pos, axis=-1)
+            embeddings = embeddings * (1 - w) + mask_tokens * w
 
         embeddings = jnp.concatenate((cls_tokens, embeddings), axis=1)
 
@@ -673,10 +669,9 @@ class FlaxBeitModule(nn.Module):
     config: BeitConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     add_pooling_layer: bool = True
-    use_mask_token: bool = False
 
     def setup(self):
-        self.embeddings = FlaxBeitEmbeddings(self.config, dtype=self.dtype, use_mask_token=self.use_mask_token)
+        self.embeddings = FlaxBeitEmbeddings(self.config, dtype=self.dtype)
         self.encoder = FlaxBeitEncoder(
             self.config, window_size=self.embeddings.patch_embeddings.patch_shape, dtype=self.dtype
         )
@@ -759,12 +754,9 @@ append_replace_return_docstrings(FlaxBeitModel, output_type=FlaxBeitModelOutputW
 class FlaxBeitForMaskedImageModelingModule(nn.Module):
     config: BeitConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    use_mask_token: bool = True
 
     def setup(self):
-        self.beit = FlaxBeitModule(
-            self.config, add_pooling_layer=False, use_mask_token=self.use_mask_token, dtype=self.dtype
-        )
+        self.beit = FlaxBeitModule(self.config, add_pooling_layer=False, dtype=self.dtype)
 
         # Classifier head
         self.layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)

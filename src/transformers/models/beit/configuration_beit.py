@@ -62,6 +62,8 @@ class BeitConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether to use a mask token for masked image modeling.
         use_absolute_position_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to use BERT-style absolute position embeddings.
         use_relative_position_bias (`bool`, *optional*, defaults to `False`):
@@ -75,11 +77,6 @@ class BeitConfig(PretrainedConfig):
         use_mean_pooling (`bool`, *optional*, defaults to `True`):
             Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
             CLS token, before applying the classification head.
-        decoder_type (`str`, *optional*, defaults to `"beit"`):
-            Decoder type to use for masked image modeling. Either "beit" or "simmim".
-        encoder_stride (`int`, *optional*, defaults to 16):
-            Factor to increase the spatial resolution by in the decoder head for masked image modeling, in case
-            `"decoder_type"` is set to `simmim`.
         out_indices (`List[int]`, *optional*, defaults to `[3, 5, 7, 11]`):
             Indices of the feature maps to use for semantic segmentation.
         pool_scales (`Tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
@@ -133,14 +130,13 @@ class BeitConfig(PretrainedConfig):
         image_size=224,
         patch_size=16,
         num_channels=3,
+        use_mask_token=False,
         use_absolute_position_embeddings=False,
         use_relative_position_bias=False,
         use_shared_relative_position_bias=False,
         layer_scale_init_value=0.1,
         drop_path_rate=0.1,
         use_mean_pooling=True,
-        decoder_type="beit",
-        encoder_stride=16,
         out_indices=[3, 5, 7, 11],
         pool_scales=[1, 2, 3, 6],
         use_auxiliary_head=True,
@@ -168,15 +164,13 @@ class BeitConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+        self.use_mask_token = use_mask_token
         self.use_absolute_position_embeddings = use_absolute_position_embeddings
         self.use_relative_position_bias = use_relative_position_bias
         self.use_shared_relative_position_bias = use_shared_relative_position_bias
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.use_mean_pooling = use_mean_pooling
-        # masked image modeling attributes
-        self.decoder_type = decoder_type
-        self.encoder_stride = encoder_stride
         # decode head attributes (semantic segmentation)
         self.out_indices = out_indices
         self.pool_scales = pool_scales
