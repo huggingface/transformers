@@ -848,14 +848,12 @@ class Trainer:
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
                 if optimizer_cls.__name__ == "Adam8bit":
-                    from torch.nn import Embedding
-
                     import bitsandbytes
 
                     manager = bitsandbytes.optim.GlobalOptimManager.get_instance()
 
                     for module in self.model.modules():
-                        if isinstance(module, Embedding):
+                        if isinstance(module, nn.Embedding):
                             manager.register_module_override(module, "weight", {"optim_bits": 32})
                             logger.info(f"Registering bitsandbytes override for {module}")
 
