@@ -23,7 +23,7 @@ from .config import OnnxConfig
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-if is_torch_available():
+if is_torch_available() and not is_tf_available():
     from transformers.models.auto import (
         AutoModel,
         AutoModelForCausalLM,
@@ -34,8 +34,27 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
     )
-elif is_tf_available():
+elif is_tf_available() and not is_torch_available():
     from transformers.models.auto import (
+        TFAutoModel,
+        TFAutoModelForCausalLM,
+        TFAutoModelForMaskedLM,
+        TFAutoModelForMultipleChoice,
+        TFAutoModelForQuestionAnswering,
+        TFAutoModelForSeq2SeqLM,
+        TFAutoModelForSequenceClassification,
+        TFAutoModelForTokenClassification,
+    )
+elif is_torch_available() and is_tf_available():
+    from transformers.models.auto import (
+        AutoModel,
+        AutoModelForCausalLM,
+        AutoModelForMaskedLM,
+        AutoModelForMultipleChoice,
+        AutoModelForQuestionAnswering,
+        AutoModelForSeq2SeqLM,
+        AutoModelForSequenceClassification,
+        AutoModelForTokenClassification,
         TFAutoModel,
         TFAutoModelForCausalLM,
         TFAutoModelForMaskedLM,
@@ -79,7 +98,7 @@ def supported_features_mapping(
 
 
 class FeaturesManager:
-    if is_torch_available():
+    if is_torch_available() and not is_tf_available():
         _TASKS_TO_AUTOMODELS = {
             "default": AutoModel,
             "masked-lm": AutoModelForMaskedLM,
@@ -90,7 +109,7 @@ class FeaturesManager:
             "multiple-choice": AutoModelForMultipleChoice,
             "question-answering": AutoModelForQuestionAnswering,
         }
-    elif is_tf_available():
+    elif is_tf_available() and not is_torch_available():
         _TASKS_TO_AUTOMODELS = {
             "default": TFAutoModel,
             "masked-lm": TFAutoModelForMaskedLM,
@@ -100,6 +119,17 @@ class FeaturesManager:
             "token-classification": TFAutoModelForTokenClassification,
             "multiple-choice": TFAutoModelForMultipleChoice,
             "question-answering": TFAutoModelForQuestionAnswering,
+        }
+    elif is_tf_available() and is_torch_available():
+        _TASKS_TO_AUTOMODELS = {
+            "default": {"tf": TFAutoModel, "pt": AutoModel},
+            "masked-lm": {"tf": TFAutoModelForMaskedLM, "pt": AutoModelForMaskedLM},
+            "causal-lm": {"tf": TFAutoModelForCausalLM, "pt": AutoModelForCausalLM},
+            "seq2seq-lm": {"tf": TFAutoModelForSeq2SeqLM, "pt": AutoModelForSeq2SeqLM},
+            "sequence-classification": {"tf": TFAutoModelForSequenceClassification, "pt": AutoModelForSequenceClassification},
+            "token-classification": {"tf": TFAutoModelForTokenClassification, "pt": AutoModelForTokenClassification},
+            "multiple-choice": {"tf": TFAutoModelForMultipleChoice, "pt": AutoModelForMultipleChoice},
+            "question-answering": {"tf": TFAutoModelForQuestionAnswering, "pt": AutoModelForQuestionAnswering},
         }
     else:
         _TASKS_TO_AUTOMODELS = {}
@@ -273,7 +303,7 @@ class FeaturesManager:
         return feature.replace("-with-past", "")
 
     @staticmethod
-    def get_model_class_for_feature(feature: str) -> Type:
+    def get_model_class_for_feature(feature: str, framework: str = None) -> Type:
         """
         Attempt to retrieve an AutoModel class from a feature name.
 
@@ -289,9 +319,14 @@ class FeaturesManager:
                 f"Unknown task: {feature}. "
                 f"Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
             )
-        return FeaturesManager._TASKS_TO_AUTOMODELS[task]
+        if framework:
+            return FeaturesManager._TASKS_TO_AUTOMODELS[task][framework]
+        else:
+            return FeaturesManager._TASKS_TO_AUTOMODELS[task]
 
-    def get_model_from_feature(feature: str, model: str) -> Union[PreTrainedModel, TFPreTrainedModel]:
+    def get_model_from_feature(
+        feature: str, model: str, framework: str = None
+    ) -> Union[PreTrainedModel, TFPreTrainedModel]:
         """
         Attempt to retrieve a model from a model's name and the feature to be enabled.
 
@@ -303,7 +338,7 @@ class FeaturesManager:
             The instance of the model.
 
         """
-        model_class = FeaturesManager.get_model_class_for_feature(feature)
+        model_class = FeaturesManager.get_model_class_for_feature(feature, framework)
         return model_class.from_pretrained(model)
 
     @staticmethod

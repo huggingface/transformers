@@ -37,6 +37,12 @@ def main():
     parser.add_argument(
         "--atol", type=float, default=None, help="Absolute difference tolerence when validating the model."
     )
+    parser.add_argument(
+        "--framework",
+        type=str,
+        default="pt",
+        help="The framework to use for the export, either `pt` for PyTorch or `tf` for TensorFlow. The specified framework must be installed.",
+    )
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
 
     # Retrieve CLI arguments
@@ -48,7 +54,7 @@ def main():
 
     # Allocate the model
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = FeaturesManager.get_model_from_feature(args.feature, args.model)
+    model = FeaturesManager.get_model_from_feature(args.feature, args.model, args.framework)
     model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=args.feature)
     onnx_config = model_onnx_config(model.config)
 
