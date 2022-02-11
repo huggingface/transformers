@@ -309,9 +309,13 @@ def booleans_processing(config, **kwargs):
     final_booleans = {}
 
     if tf.executing_eagerly():
-        final_booleans["output_attentions"] = (
-            kwargs["output_attentions"] if kwargs["output_attentions"] is not None else config.output_attentions
-        )
+        # final_booleans["output_attentions"] = (
+        #     kwargs["output_attentions"] if kwargs["output_attentions"] else config.output_attentions
+        # )
+        final_booleans["output_attentions"] = kwargs.get("output_attentions", None)
+        if not final_booleans["output_attentions"]:
+            final_booleans["output_attentions"] = config.output_attentions
+
         final_booleans["output_hidden_states"] = (
             kwargs["output_hidden_states"]
             if kwargs["output_hidden_states"] is not None
@@ -1827,7 +1831,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.initializer_range = hidden_size**-0.5 if initializer_range is None else initializer_range
+        self.initializer_range = hidden_size ** -0.5 if initializer_range is None else initializer_range
 
     def build(self, input_shape):
         """

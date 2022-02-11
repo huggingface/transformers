@@ -370,6 +370,8 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
