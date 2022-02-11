@@ -112,11 +112,15 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         )
         self.masked_bias = tf.Variable(-1e9, trainable=False, name="masked_bias")
 
-    def _split_heads(self, hidden_states: tf.Tensor) -> tf.Tensor:
-        return tf.reshape(hidden_states, hidden_states.shape[:2] + (self.num_attention_heads, self.head_dim))
+    def _split_heads(self, hidden_states: tf.Tensor, rotary: bool) -> tf.Tensor:
+        hidden_states = tf.reshape(hidden_states, hidden_states.shape[:2] + (self.num_attention_heads, self.head_dim))
+        if rotary:
+            return hidden_states
+        return tf.transpose(hidden_states, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
     def _merge_heads(self, hidden_states: tf.Tensor) -> tf.Tensor:
-        return tf.reshape(hidden_states, hidden_states.shape[:2] + (self.embed_dim,))
+        hidden_states = tf.transpose(hidden_states, (0, 2, 1, 3))
+        return tf.reshape(hidden_states, hidden_states.shape[:2] + (self.num_attention_heads * self.head_dim,))
 
     def _attn(
         self,
@@ -141,7 +145,7 @@ class TFGPTJAttention(tf.keras.layers.Layer):
 
         if attention_mask is not None:
             # Apply the attention mask
-            attn_weights = tf.einsum("bs...,biis->bs...", attn_weights, attention_mask)
+            attn_weights = attn_weights + attention_mask
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
         attn_weights = tf.cast(attn_weights, value.dtype)
@@ -159,7 +163,7 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
-        layer_past: Optional[tf.Tensor] = None,
+        layer_past: Optional[Tuple[tf.Tensor, tf.Tensor]] = None,
         head_mask: Optional[tf.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
@@ -168,9 +172,9 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
-        query = self._split_heads(query)
-        key = self._split_heads(key)
-        value = self._split_heads(value)
+        query = self._split_heads(query, True)
+        key = self._split_heads(key, True)
+        value = self._split_heads(value, False)
 
         seq_len = key.shape[1]
         offset = 0
@@ -196,6 +200,9 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
             key = apply_rotary_pos_emb(key, sincos, offset=offset)
             query = apply_rotary_pos_emb(query, sincos, offset=offset)
+
+        key = tf.transpose(key, (0, 2, 1, 3))
+        query = tf.transpose(query, (0, 2, 1, 3))
 
         if layer_past is not None:
             past_key = layer_past[0]
@@ -271,18 +278,14 @@ class TFGPTJBlock(tf.keras.layers.Layer):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-        )
+        )  # attn_outputs: attn_output, present, (attentions)
         attn_output = attn_outputs[0]
         outputs = attn_outputs[1:]
 
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = attn_output + feed_forward_hidden_states + residual
 
-        if use_cache:
-            outputs = (hidden_states,) + outputs
-        else:
-            outputs = (hidden_states,) + outputs[1:]
-
+        outputs = (hidden_states,) + outputs
         return outputs  # hidden_states, present, (attentions)
 
 

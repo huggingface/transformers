@@ -273,9 +273,9 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
     all_model_classes = (TFGPTJModel,) if is_tf_available() else ()
 
     all_generative_model_classes = () if is_tf_available() else ()
+    test_pruning = False
+    test_missing_keys = False
     test_head_masking = False
-    test_onnx = True
-    onnx_min_opset = 10
 
     def setUp(self):
         self.model_tester = TFGPTJModelTester(self)
