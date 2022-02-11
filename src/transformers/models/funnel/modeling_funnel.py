@@ -278,7 +278,7 @@ class FunnelAttentionStructure(nn.Module):
 
                 # Second type
                 pos = pooled_pos
-                stride = 2 ** block_index
+                stride = 2**block_index
                 rel_pos = self.relative_pos(pos, stride)
 
                 rel_pos = rel_pos[:, None] + zero_offset
@@ -297,7 +297,7 @@ class FunnelAttentionStructure(nn.Module):
             # the previous block of the 1st real block. Since the 1st real
             # block always has position 1, the position of the previous block
             # will be at `1 - 2 ** block_index`.
-            cls_pos = pos_id.new_tensor([-(2 ** block_index) + 1])
+            cls_pos = pos_id.new_tensor([-(2**block_index) + 1])
             pooled_pos_id = pos_id[1:-1] if self.config.truncate_seq else pos_id[1:]
             return torch.cat([cls_pos, pooled_pos_id[::2]], 0)
         else:
@@ -454,7 +454,7 @@ class FunnelRelMultiheadAttention(nn.Module):
 
         self.post_proj = nn.Linear(n_head * d_head, d_model)
         self.layer_norm = nn.LayerNorm(d_model, eps=config.layer_norm_eps)
-        self.scale = 1.0 / (d_head ** 0.5)
+        self.scale = 1.0 / (d_head**0.5)
 
     def relative_positional_attention(self, position_embeds, q_head, context_len, cls_mask=None):
         """Relative attention score for the positional encodings"""

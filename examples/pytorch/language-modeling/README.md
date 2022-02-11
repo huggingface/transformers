@@ -39,6 +39,8 @@ python run_clm.py \
     --model_name_or_path gpt2 \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-clm
@@ -54,6 +56,8 @@ python run_clm.py \
     --model_name_or_path gpt2 \
     --train_file path_to_train_file \
     --validation_file path_to_validation_file \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-clm
@@ -83,6 +87,8 @@ python run_mlm.py \
     --model_name_or_path roberta-base \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-mlm
@@ -95,6 +101,8 @@ python run_mlm.py \
     --model_name_or_path roberta-base \
     --train_file path_to_train_file \
     --validation_file path_to_validation_file \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-mlm
@@ -139,6 +147,8 @@ python run_plm.py \
     --model_name_or_path=xlnet-base-cased \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-plm
@@ -151,6 +161,8 @@ python run_plm.py \
     --model_name_or_path=xlnet-base-cased \
     --train_file path_to_train_file \
     --validation_file path_to_validation_file \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
     --do_train \
     --do_eval \
     --output_dir /tmp/test-plm

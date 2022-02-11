@@ -96,7 +96,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
 
         self._extra_ids = extra_ids
 
-        self._utf_vocab_size = 2 ** 8  # utf is 8 bits
+        self._utf_vocab_size = 2**8  # utf is 8 bits
 
         # define special tokens dict
         self.special_tokens_encoder: Dict[int, str] = {
