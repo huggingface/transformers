@@ -128,8 +128,6 @@ class MaskFormerConfig(PretrainedConfig):
 
         self.transformer_decoder = transformer_decoder
 
-        self.dataset_metadata = dataset_metadata
-
         self.fpn_feature_size = mask_feature_size
         self.mask_feature_size = mask_feature_size
         self.no_object_weight = no_object_weight

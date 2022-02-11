@@ -39,11 +39,10 @@ logger = logging.get_logger(__name__)
 ImageInput = Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]]
 
 
-class PanopticSegmentationSegment(TypedDict):
+class InstanceSegmentationSegment(TypedDict):
     id: int
     category_id: int
     is_thing: bool
-    label: str
 
 
 class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -428,7 +427,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         outputs: MaskFormerForInstanceSegmentationOutput,
         object_mask_threshold: Optional[float] = 0.8,
         overlap_mask_area_threshold: Optional[float] = 0.8,
-        is_thing_map: Dict[int, ClassSpec] = None,
+        is_thing_map: Dict[int, bool] = None,
     ) -> Tensor:
         """
         Converts the output of [`MaskFormerModel`] into image panoptic segmentation predictions. Only supports PyTorch.
@@ -473,7 +472,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             we_detect_something: bool = mask_probs.shape[0] > 0
 
             segmentation: Tensor = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-            segments: List[PanopticSegmentationSegment] = []
+            segments: List[InstanceSegmentationSegment] = []
 
             if we_detect_something:
                 current_segment_id: int = 0
@@ -516,7 +515,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                                     "id": current_segment_id,
                                     "category_id": pred_class,
                                     "is_thing": not is_stuff,
-                                    "label": class_spec["label"],
                                 }
                             )
                             if is_stuff:

@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_maskformer import (
             MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-            MaskFormerForInstanceSegmentation
+            MaskFormerForInstanceSegmentation,
             MaskFormerModel,
         )
 
