@@ -188,7 +188,7 @@ class TFConvNextStage(tf.keras.layers.Layer):
             [*[TFConvNextLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]]
         )
 
-    def forward(self, hidden_states):
+    def call(self, hidden_states):
         hidden_states = self.downsampling_layer(hidden_states)
         hidden_states = self.layers(hidden_states)
         return hidden_states
