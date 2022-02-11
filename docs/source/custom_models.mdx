@@ -213,6 +213,12 @@ code of the model is saved.
 
 ## Sending the code to the Hub
 
+<Tip warning={true}>
+
+This API is experimental and may have some slight breaking changes in the next releases.
+
+</Tip>
+
 First, make sure your model is fully defined in a `.py` file. It can rely on relative imports to some other files as
 long as all the files are in the same directory (we don't support submodules for this feature yet). For our example,
 we'll define a `modeling_resnet.py` file and a `configuration_resnet.py` file in a folder of the current working
