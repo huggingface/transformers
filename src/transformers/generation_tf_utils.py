@@ -1753,8 +1753,8 @@ class TFGenerationMixin:
             pad_token_id = eos_token_id
 
         # 2. Define model inputs
-        # inputs_ids now has to be defined
         input_ids = self._prepare_model_inputs(input_ids, bos_token_id)
+        # inputs_ids now has to be defined and cannot be None anymore
         batch_size = input_ids.shape[0]
 
         # 3. Prepare other model kwargs
@@ -1768,15 +1768,15 @@ class TFGenerationMixin:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(input_ids, pad_token_id)
 
         if self.config.is_encoder_decoder:
-            # if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
-            # if model is encoder decoder encoder_outputs are created
-            # and added to `model_kwargs`
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
+            # if model is encoder decoder model, we create encoder_outputs and add to `model_kwargs`
+            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
+                input_ids, return_dict_in_generate, model_kwargs
+            )
 
-        # TODO(PVP) - ugly hack here which requires a bigger
+        # TODO(Patrick) - ugly `past`/`encoder_output` hack here which requires a bigger
         # refactor of all generation models in TF. `past` should be
-        # optional everywhere
-        model_kwargs["past"] = model_kwargs["encoder_outputs"] if self.config.is_encoder_decoder else None
+        # optional everywhere and not be set equal to encoder_outputs
+        model_kwargs["past"] = model_kwargs.get("encoder_outputs")[:1] if self.config.is_encoder_decoder else None
 
         # 4. Prepare `input_ids` which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
@@ -1794,9 +1794,9 @@ class TFGenerationMixin:
             )
 
         # 5. determine generation mode
+        # TODO(Matt, Joao, Patrick) - add more use cases here
         is_greedy_gen_mode = (num_beams == 1) and do_sample is False
 
-        # prepare distribution pre_processing samplers
         # 6. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
@@ -1825,17 +1825,25 @@ class TFGenerationMixin:
                 **model_kwargs,
             )
 
+        # TODO(Matt, Joao, Patrick) - add more sub-generation methods here
+
     def _prepare_attention_mask_for_generation(
         self,
         input_ids: tf.Tensor,
         pad_token_id: int,
     ) -> tf.Tensor:
+        # prepare `attention_mask` if not passed
         if (pad_token_id is not None) and (pad_token_id in input_ids.numpy()):
             return tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
         else:
             return tf.ones_like(input_ids)
 
-    def _prepare_encoder_decoder_kwargs_for_generation(self, input_ids: tf.Tensor, model_kwargs) -> Dict[str, Any]:
+    def _prepare_encoder_decoder_kwargs_for_generation(
+        self, input_ids: tf.Tensor, return_dict_in_generate, model_kwargs
+    ) -> Dict[str, Any]:
+        # TODO(Patrick) - remove `return_dict_in_generate` flag input once `past`/`encoder_outputs`
+        # is cleaned
+
         # get encoder and store encoder outputs
         encoder = self.get_encoder()
 
@@ -1855,6 +1863,15 @@ class TFGenerationMixin:
         encoder_outputs = encoder(input_ids, **encoder_kwargs)
 
         model_kwargs["encoder_outputs"] = encoder_outputs
+
+        # TODO(Patrick): `encoder_outputs`, `past` hack. Currently, `encoder_attentions` and
+        # `encoder_hidden_states` have to be seperated from encoder_outputs and passed
+        # under other names because of `encoder_outputs`, `past` hack. Need to clean-up
+        # all encoder-decoder prepare_inputs_for_generation method to clean this
+        if return_dict_in_generate:
+            model_kwargs["encoder_attentions"] = encoder_outputs.get("attentions", None)
+            model_kwargs["encoder_hidden_states"] = encoder_outputs.get("hidden_states", None)
+
         return model_kwargs
 
     def _prepare_decoder_input_ids_for_generation(
@@ -1864,6 +1881,8 @@ class TFGenerationMixin:
         bos_token_id: int = None,
         model_kwargs: Optional[Dict[str, tf.Tensor]] = None,
     ) -> tf.Tensor:
+
+        # prepare `input_ids` for decoder if model is encoder-decoder
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
             return model_kwargs.pop("decoder_input_ids")
         else:
@@ -1871,6 +1890,8 @@ class TFGenerationMixin:
             return tf.ones((batch_size, 1), dtype=tf.int32) * decoder_start_token_id
 
     def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+        # retrieve decoder_start_token_id for encoder-decoder models
+        # fall back to bos_token_id if necessary
         decoder_start_token_id = (
             decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
         )
@@ -1897,7 +1918,10 @@ class TFGenerationMixin:
         )
 
     def _prepare_model_inputs(self, inputs: Optional[tf.Tensor] = None, bos_token_id: Optional[int] = None):
+        # TODO(Patrick) - adapt this function when making `generate` more flexible
+        # for all kinds of input types
         if inputs is None:
+            # if no `inputs` are passed create prompt of size (1,1) filled with BOS token
             if not isinstance(bos_token_id, int) or bos_token_id < 0:
                 raise ValueError(
                     "you should either supply a context to complete as `input_ids` input "
@@ -1905,7 +1929,6 @@ class TFGenerationMixin:
                 )
             return tf.fill((1, 1), bos_token_id, dtype=tf.int32)
 
-        # if inputs are passed return those
         return inputs
 
     @staticmethod
@@ -2065,12 +2088,16 @@ class TFGenerationMixin:
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
+        # TODO(Patrick): `encoder_outputs`, `past` hack. Currently T5, Bart expect `encoder_outputs`
+        # to be wrapped into `past` variable. Tis is a bad design and needs
+        # to be updated.
+        # Remove the following lines when updating all encoder-decoder models
+        encoder_outputs = model_kwargs.pop("encoder_outputs", None)
+
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
-            encoder_hidden_states = (
-                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
-            )
+            encoder_attentions = encoder_outputs.get("attentions") if output_attentions else None
+            encoder_hidden_states = encoder_outputs.get("hidden_states") if output_hidden_states else None
 
         # keep track of which sequences are already finished
         unfinished_sequences = tf.ones_like(input_ids[:, 0])
@@ -2113,7 +2140,7 @@ class TFGenerationMixin:
                     )
 
             # pre-process distribution
-            next_tokens_scores = logits_processor(input_ids, next_token_logits, cur_len)
+            next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
             # argmax
             next_tokens = tf.cast(tf.argmax(next_tokens_scores, axis=-1), tf.int32)

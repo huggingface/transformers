@@ -74,7 +74,7 @@ class TFLogitsProcessorList(list):
     """
 
     @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int, **kwargs) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, **kwargs) -> tf.Tensor:
         for processor in self:
             function_args = inspect.signature(processor.__call__).parameters
             if len(function_args) > 3:
@@ -83,9 +83,9 @@ class TFLogitsProcessorList(list):
                         f"Make sure that all the required parameters: {list(function_args.keys())} for "
                         f"{processor.__class__} are passed to the logits processor."
                     )
-                scores = processor(input_ids, scores, cur_len, **kwargs)
+                scores = processor(input_ids, scores, **kwargs)
             else:
-                scores = processor(input_ids, scores, cur_len)
+                scores = processor(input_ids, scores)
         return scores
 
 
@@ -110,8 +110,9 @@ class TFMinLengthLogitsProcessor(TFLogitsProcessor):
         self.min_length = min_length
         self.eos_token_id = eos_token_id
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
         # create boolean flag to decide if min length penalty should be applied
+        cur_len = input_ids.shape[-1]
         apply_penalty = 1 - tf.clip_by_value(cur_len - self.min_length, 0, 1)
 
         # TODO(Matt) - this if statement has to be rewritten for XLA. Leaving it now though since
@@ -141,6 +142,9 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
 
     def _create_score_penalties(self, input_ids, logits):
         # create logit penalties for already seen input_ids
+        input_ids = input_ids.cpu()
+        logits = logits.cpu()
+
         token_penalties = np.ones(logits.shape)
         prev_input_ids = [np.unique(input_id) for input_id in input_ids.numpy()]
         for i, prev_input_id in enumerate(prev_input_ids):
@@ -152,7 +156,7 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
             np.put(token_penalties[i], prev_input_id, logit_penalties)
         return tf.convert_to_tensor(token_penalties, dtype=tf.float32)
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
 
         score_penalties = self._create_score_penalties(input_ids, scores)
 
@@ -214,7 +218,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
                     len(banned_token_seq) > 0
                 ), f"Banned words token sequences {self.bad_words_ids} cannot have an empty list"
 
-                if _tokens_match(prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
+                if _tokens_match(prev_input_ids_slice.cpu().numpy().tolist(), banned_token_seq[:-1]) is False:
                     # if tokens do not match continue
                     continue
 
@@ -224,7 +228,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
 
         return banned_tokens
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
 
         vocab_size = scores.shape[-1]
 
@@ -266,7 +270,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             return [[] for _ in range(num_hypos)]
         generated_ngrams = [{} for _ in range(num_hypos)]
         for idx in range(num_hypos):
-            gen_tokens = prev_input_ids[idx].numpy().tolist()
+            gen_tokens = prev_input_ids[idx].cpu().numpy().tolist()
             generated_ngram = generated_ngrams[idx]
             for ngram in zip(*[gen_tokens[i:] for i in range(self.ngram_size)]):
                 prev_ngram_tuple = tuple(ngram[:-1])
@@ -275,16 +279,17 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
         def _get_generated_ngrams(hypo_idx):
             # Before decoding the next token, prevent decoding of ngrams that have already appeared
             start_idx = cur_len + 1 - self.ngram_size
-            ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].numpy().tolist())
+            ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].cpu().numpy().tolist())
             return generated_ngrams[hypo_idx].get(ngram_idx, [])
 
         banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
 
         return banned_tokens
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
 
         batch_size, vocab_size = scores.shape
+        cur_len = input_ids.shape[-1]
         banned_tokens = self.calc_banned_ngram_tokens(input_ids, batch_size, cur_len)
 
         # create banned_tokens boolean mask

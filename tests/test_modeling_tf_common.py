@@ -931,7 +931,7 @@ class TFModelTesterMixin:
                 # num_return_sequences = 1
                 self._check_generated_ids(model.generate(do_sample=True, max_length=5))
 
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ValueError):
                 # generating multiple sequences when no beam search generation
                 # is not allowed as it would always generate the same sequences
                 model.generate(input_ids, do_sample=False, num_return_sequences=2)
