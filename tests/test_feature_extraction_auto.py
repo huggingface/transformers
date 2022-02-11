@@ -15,11 +15,26 @@
 
 import json
 import os
+import sys
 import tempfile
 import unittest
+from pathlib import Path
 
-from transformers import AutoFeatureExtractor, Wav2Vec2Config, Wav2Vec2FeatureExtractor
+from transformers import (
+    CONFIG_MAPPING,
+    FEATURE_EXTRACTOR_MAPPING,
+    AutoConfig,
+    AutoFeatureExtractor,
+    Wav2Vec2Config,
+    Wav2Vec2FeatureExtractor,
+)
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
+
+
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
+
+from test_module.custom_configuration import CustomConfig  # noqa E402
+from test_module.custom_feature_extraction import CustomFeatureExtractor  # noqa E402
 
 
 SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
@@ -88,3 +103,24 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=True
         )
         self.assertEqual(model.__class__.__name__, "NewFeatureExtractor")
+
+    def test_new_feature_extractor_registration(self):
+        try:
+            AutoConfig.register("custom", CustomConfig)
+            AutoFeatureExtractor.register(CustomConfig, CustomFeatureExtractor)
+            # Trying to register something existing in the Transformers library will raise an error
+            with self.assertRaises(ValueError):
+                AutoFeatureExtractor.register(Wav2Vec2Config, Wav2Vec2FeatureExtractor)
+
+            # Now that the config is registered, it can be used as any other config with the auto-API
+            feature_extractor = CustomFeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                feature_extractor.save_pretrained(tmp_dir)
+                new_feature_extractor = AutoFeatureExtractor.from_pretrained(tmp_dir)
+                self.assertIsInstance(new_feature_extractor, CustomFeatureExtractor)
+
+        finally:
+            if "custom" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["custom"]
+            if CustomConfig in FEATURE_EXTRACTOR_MAPPING._extra_content:
+                del FEATURE_EXTRACTOR_MAPPING._extra_content[CustomConfig]
