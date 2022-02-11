@@ -31,7 +31,7 @@ if is_tf_available():
         TFGPTJForQuestionAnswering,
         TFGPTJForSequenceClassification,
         TFGPTJModel,
-        shape_list
+        shape_list,
     )
 
 
