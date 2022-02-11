@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     CaptureLogger,
     CaptureStd,
     CaptureStderr,
-    CaptureStdout,
     ExtendSysPath,
     LoggingLevel,
     TestCasePlus,
@@ -980,7 +979,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
 
-
     def test_clm_from_config_zero3_fp16(self):
         # this test exercises AutoModel.from_config(config) - to ensure zero.Init is called
 
@@ -1013,7 +1011,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         with CaptureStderr() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
         self.assertIn("Detected DeepSpeed ZeRO-3", cs.err)
-
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
     def test_load_best_model(self, stage, dtype):
