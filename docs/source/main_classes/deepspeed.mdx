@@ -613,7 +613,7 @@ The following is an example of configuration for ZeRO stage 2:
   the slower the communication gets, and the more GPU RAM will be available to other tasks. So if a bigger batch size is
   important, getting a slightly slower training time could be a good trade.
 
-Additionally, `deepspeed==0.4.4` added a new option ``round_robin_gradients`` which you can enable with:
+Additionally, `deepspeed==0.4.4` added a new option `round_robin_gradients` which you can enable with:
 
 ```json
 {
