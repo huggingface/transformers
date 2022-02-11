@@ -613,6 +613,17 @@ The following is an example of configuration for ZeRO stage 2:
   the slower the communication gets, and the more GPU RAM will be available to other tasks. So if a bigger batch size is
   important, getting a slightly slower training time could be a good trade.
 
+Additionally, `deepspeed==0.4.4` added a new option `round_robin_gradients` which you can enable with:
+
+```json
+{
+    "zero_optimization": {
+        "round_robin_gradients": true
+    }
+}
+```
+
+This is a stage 2 optimization for CPU offloading that parallelizes gradient copying to CPU memory among ranks by fine-grained gradient partitioning. Performance benefit grows with gradient accumulation steps (more copying between optimizer steps) or GPU count (increased parallelism).
 
 
 <a id='deepspeed-zero3-config'></a>
@@ -1733,7 +1744,7 @@ Things to consider:
 
 ### Troubleshooting
 
-- `deepspeed` process gets killed at startup without a traceback
+#### the `deepspeed` process gets killed at startup without a traceback
 
 If the `deepspeed` process gets killed at launch time without a traceback, that usually means that the program tried
 to allocate more CPU memory than your system has or your process is allowed to allocate and the OS kernel killed that
@@ -1742,7 +1753,49 @@ both configured to offload to `cpu`. If you have NVMe, experiment with offloadin
 ZeRO-3. Here is how you can [estimate how much memory is needed for a specific model](https://deepspeed.readthedocs.io/en/latest/memory.html).
 
 
+#### training and/or eval/predict loss is `NaN`
 
+This often happens when one takes a model pre-trained in bf16 mixed precision mode and tries to use it under fp16 (with or without mixed precision). Most models trained on TPU and often the ones released by Google are in this category (e.g. almost all t5-based models). Here the solution is to either use fp32 or bf16 if your hardware supports it (TPU, Ampere GPUs or newer).
+
+The other problem may have to do with using fp16. When you configure this section:
+
+```json
+{
+    "fp16": {
+        "enabled": "auto",
+        "loss_scale": 0,
+        "loss_scale_window": 1000,
+        "initial_scale_power": 16,
+        "hysteresis": 2,
+        "min_loss_scale": 1
+    }
+}
+```
+
+and you see in your log that Deepspeed reports `OVERFLOW!` as follows:
+
+```
+0%|                                                                                                                             | 0/189 [00:00<?, ?it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 262144, reducing to 262144
+  1%|▌                                                                                                                    | 1/189 [00:00<01:26,  2.17it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 262144, reducing to 131072.0
+  1%|█▏
+ [...]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+ 14%|████████████████▌                                                                                                   | 27/189 [00:14<01:13,  2.21it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+ 15%|█████████████████▏                                                                                                  | 28/189 [00:14<01:13,  2.18it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+ 15%|█████████████████▊                                                                                                  | 29/189 [00:15<01:13,  2.18it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+[...]
+```
+
+that means that the Deepspeed loss scaler can't figure out a scaling co-efficient that overcomes loss overflow.
+
+(the log was massaged to be more readable here.)
+
+In this case you usually need to raise the value of `initial_scale_power`. Setting it to `"initial_scale_power": 32` will typically resolve the problem.
 
 
 
@@ -1805,7 +1858,7 @@ Please note that if you're not using the [`Trainer`] integration, you're complet
 [[autodoc]] deepspeed.HfDeepSpeedConfig
     - all
 
-### DeepSpeed ZeRO Inference
+### Custom DeepSpeed ZeRO Inference
 
 Here is an example of how one could do DeepSpeed ZeRO Inference without using [`Trainer`] when one can't fit a model onto a single GPU. The solution includes using additional GPUs or/and offloading GPU memory to CPU memory.
 
