@@ -124,50 +124,10 @@ class ConfigPushToHubTester(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        # try:
-        #    delete_repo(token=cls._token, name="test-config")
-        # except HTTPError:
-        #    pass
-
-        # try:
-        #    delete_repo(token=cls._token, name="test-config-org", organization="valid_org")
-        # except HTTPError:
-        #    pass
-
         try:
             delete_repo(token=cls._token, name="test-dynamic-feature-extractor")
         except HTTPError:
             pass
-
-    """ def test_push_to_hub(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(os.path.join(tmp_dir, "test-config"), push_to_hub=True, use_auth_token=self._token)
-
-            new_config = BertConfig.from_pretrained(f"{USER}/test-config")
-            for k, v in config.__dict__.items():
-                if k != "transformers_version":
-                    self.assertEqual(v, getattr(new_config, k))
-
-    def test_push_to_hub_in_organization(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(
-                os.path.join(tmp_dir, "test-config-org"),
-                push_to_hub=True,
-                use_auth_token=self._token,
-                organization="valid_org",
-            )
-
-            new_config = BertConfig.from_pretrained("valid_org/test-config-org")
-            for k, v in config.__dict__.items():
-                if k != "transformers_version":
-                    self.assertEqual(v, getattr(new_config, k)) """
 
     def test_push_to_hub_dynamic_feature_extractor(self):
         CustomFeatureExtractor.register_for_auto_class()
