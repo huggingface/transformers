@@ -258,7 +258,6 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         else:
             self._dtype = torch.float16
 
-
     def trainer_config_finalize(self, args, model, num_training_steps):
         """
         This stage is run after we have the model and know num_training_steps.
