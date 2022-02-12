@@ -1251,7 +1251,7 @@ To configure pytorch AMP-like mode with fp16 (float16) set:
 and the [`Trainer`] will automatically enable or disable it based on the value of
 `args.fp16_backend`. The rest of config values are up to you.
 
-This mode gets enabled when ``--fp16 --fp16_backend amp`` or ``--fp16_full_eval`` command line args are passed.
+This mode gets enabled when `--fp16 --fp16_backend amp` or `--fp16_full_eval` command line args are passed.
 
 You can also enable/disable this mode explicitly:
 
@@ -1287,7 +1287,7 @@ If bf16 (bfloat16) is desired instead of fp16 then the following configuration s
 
 bf16 has the same dynamic range as fp32 and thus doesn't require loss scaling.
 
-This mode gets enabled when ``--bf16`` or ``--bf16_full_eval`` command line args are passed.
+This mode gets enabled when `--bf16` or `--bf16_full_eval` command line args are passed.
 
 You can also enable/disable this mode explicitly:
 
@@ -1433,8 +1433,7 @@ they are only the fp16 version of the weights.
 
 Under ZeRO-3, things are much more complicated, since the model weights are partitioned out over multiple GPUs,
 therefore `"stage3_gather_16bit_weights_on_model_save": true` is required to get the `Trainer` to save the fp16
-version of the weights. If this setting is `False` ``pytorch_model.bin` won't be created. This is because by default DeepSpeed's `state_dict` contains a placeholder and not the real weights. If we were to save this `state_dict`` it
-won't be possible to load it back.
+version of the weights. If this setting is `False` `pytorch_model.bin` won't be created. This is because by default DeepSpeed's `state_dict` contains a placeholder and not the real weights. If we were to save this `state_dict` it won't be possible to load it back.
 
 
 ```json
