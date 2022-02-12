@@ -258,11 +258,6 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         else:
             self._dtype = torch.float16
 
-        # print(self._dtype)
-        # print(self.get_value("fp16.enabled"))
-        # print(self.get_value("bf16.enabled"))
-        # print(self.config)
-        # die
 
     def trainer_config_finalize(self, args, model, num_training_steps):
         """
