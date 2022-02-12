@@ -80,6 +80,7 @@ class MaskFormerConfig(PretrainedConfig):
 
     def __init__(
         self,
+        fpn_feature_size: Optional[int] = 256,
         mask_feature_size: Optional[int] = 256,
         no_object_weight: Optional[float] = 0.1,
         use_auxilary_loss: Optional[bool] = False,
@@ -123,7 +124,7 @@ class MaskFormerConfig(PretrainedConfig):
 
         self.transformer_decoder = transformer_decoder
 
-        self.fpn_feature_size = mask_feature_size
+        self.fpn_feature_size = fpn_feature_size
         self.mask_feature_size = mask_feature_size
         self.no_object_weight = no_object_weight
         self.use_auxilary_loss = use_auxilary_loss

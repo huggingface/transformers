@@ -17,15 +17,13 @@ from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import MetadataCatalog
 from detectron2.projects.deeplab import add_deeplab_config
-from transformers.models.maskformer import (
+from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerConfig,
-    MaskFormerForPanopticSegmentation,
-    MaskFormerForPanopticSegmentationOutput,
-    MaskFormerForSemanticSegmentation,
-    MaskFormerForSemanticSegmentationOutput,
+    MaskFormerForInstanceSegmentation,
+    MaskFormerForInstanceSegmentationOutput,
     MaskFormerModel,
+    MaskFormerOutput
 )
-from transformers.models.maskformer.configuration_maskformer import ClassSpec, DatasetMetadata
 from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
 from transformers.models.maskformer.MaskFormer.mask_former import add_mask_former_config
 from transformers.models.maskformer.MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
@@ -96,28 +94,6 @@ def setup_cfg(args: Args):
 
 
 class OriginalMaskFormerConfigToOursConverter:
-    def get_dataset_metadata(self, original_config: object) -> DatasetMetadata:
-        ds_name: str = original_config.DATASETS.TEST[0]
-        logger.info(f"Getting metadata from {ds_name}")
-        metadata = MetadataCatalog.get(ds_name)
-        # thing_classes and stuff_classes are equal
-        labels = metadata.stuff_classes
-        # same for colors
-        colors = metadata.stuff_colors
-        if metadata.get("thing_dataset_id_to_contiguous_id") is not None:
-            print("thing_dataset_id_to_contiguous_id in", ds_name)
-            thing_ids = metadata.thing_dataset_id_to_contiguous_id.values()
-        else:
-            thing_ids = list(range(0, len(labels)))
-
-        dataset_metadata: DatasetMetadata = {}
-        dataset_metadata["classes"] = [None] * len(labels)
-        for class_id, label, color in zip(range(len(labels)), labels, colors):
-            class_spec: ClassSpec = {"is_thing": class_id in thing_ids, "label": label, "color": tuple(color)}
-            dataset_metadata["classes"][class_id] = class_spec
-
-        assert None not in dataset_metadata["classes"]
-        return dataset_metadata
 
     def __call__(self, original_config: object) -> MaskFormerConfig:
 
@@ -125,49 +101,49 @@ class OriginalMaskFormerConfigToOursConverter:
         mask_former = model.MASK_FORMER
         swin = model.SWIN
 
-        dataset_metadata: DatasetMetadata = self.get_dataset_metadata(original_config)
 
         config: MaskFormerConfig = MaskFormerConfig(
-            dataset_metadata=dataset_metadata,
             fpn_feature_size=model.SEM_SEG_HEAD.CONVS_DIM,
             mask_feature_size=model.SEM_SEG_HEAD.MASK_DIM,
             num_labels=model.SEM_SEG_HEAD.NUM_CLASSES,
             no_object_weight=mask_former.NO_OBJECT_WEIGHT,
             num_queries=mask_former.NUM_OBJECT_QUERIES,
-            swin_pretrain_img_size=swin.PRETRAIN_IMG_SIZE,
-            swin_in_channels=3,
-            swin_patch_size=swin.PATCH_SIZE,
-            swin_embed_dim=swin.EMBED_DIM,
-            swin_depths=swin.DEPTHS,
-            swin_num_heads=swin.NUM_HEADS,
-            swin_window_size=swin.WINDOW_SIZE,
-            # TODO miss swin_attn_drop_rage, path_norm
-            swin_drop_path_rate=swin.DROP_PATH_RATE,
+            backbone_config=dict(
+                pretrain_img_size=swin.PRETRAIN_IMG_SIZE,
+                in_channels=3,
+                patch_size=swin.PATCH_SIZE,
+                embed_dim=swin.EMBED_DIM,
+                depths=swin.DEPTHS,
+                num_heads=swin.NUM_HEADS,
+                window_size=swin.WINDOW_SIZE,
+                # TODO miss attn_drop_rage, path_norm
+                drop_path_rate=swin.DROP_PATH_RATE,
+                model_type='swin'
+            ),
             dice_weight=mask_former.DICE_WEIGHT,
             ce_weight=1.0,
             mask_weight=mask_former.MASK_WEIGHT,
-            mask_classification=True,
-            detr_max_position_embeddings=1024,
-            detr_encoder_layers=6,
-            detr_encoder_ffn_dim=2048,
-            detr_encoder_attention_heads=8,
-            detr_decoder_layers=mask_former.DEC_LAYERS,
-            detr_decoder_ffn_dim=mask_former.DIM_FEEDFORWARD,
-            detr_decoder_attention_heads=mask_former.NHEADS,
-            detr_encoder_layerdrop=0.0,
-            detr_decoder_layerdrop=0.0,
-            detr_d_model=mask_former.HIDDEN_DIM,
-            detr_dropout=mask_former.DROPOUT,
-            detr_attention_dropout=0.0,
-            detr_activation_dropout=0.0,
-            detr_init_std=0.02,
-            detr_init_xavier_std=1.0,
-            detr_scale_embedding=False,
-            detr_auxiliary_loss=False,
-            detr_dilation=False,
-            # default pretrained config values
-            id2label={k: c["label"] for k, c in enumerate(dataset_metadata["classes"])},
-            label2id={c["label"]: k for k, c in enumerate(dataset_metadata["classes"])},
+            detr_config=dict(
+                detr_max_position_embeddings=1024,
+                detr_encoder_layers=6,
+                detr_encoder_ffn_dim=2048,
+                detr_encoder_attention_heads=8,
+                detr_decoder_layers=mask_former.DEC_LAYERS,
+                detr_decoder_ffn_dim=mask_former.DIM_FEEDFORWARD,
+                detr_decoder_attention_heads=mask_former.NHEADS,
+                detr_encoder_layerdrop=0.0,
+                detr_decoder_layerdrop=0.0,
+                detr_d_model=mask_former.HIDDEN_DIM,
+                detr_dropout=mask_former.DROPOUT,
+                detr_attention_dropout=0.0,
+                detr_activation_dropout=0.0,
+                detr_init_std=0.02,
+                detr_init_xavier_std=1.0,
+                detr_scale_embedding=False,
+                detr_auxiliary_loss=False,
+                detr_dilation=False,
+                # default pretrained config values
+            )
         )
 
         return config
@@ -186,17 +162,17 @@ class OriginalMaskFormerConfigToFeatureExtractorConverter:
         )
 
 
-class MaskFormerCheckpointConverter:
-    def __init__(self, original_model: OriginalMaskFormer, to_model: MaskFormerModel):
+class OriginalMaskFormerCheckpoinToOursConverter:
+    def __init__(self, original_model: OriginalMaskFormer, config: MaskFormerConfig):
         self.original_model = original_model
-        self.to_model = to_model
+        self.config = config
 
     def pop_all(self, renamed_keys: List[Tuple[str, str]], dst_state_dict: StateDict, src_state_dict: StateDict):
         for (src_key, dst_key) in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
 
     def replace_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: MaskFormerConfig):
-        dst_prefix: str = "pixel_level_module.backbone"
+        dst_prefix: str = "pixel_level_module.encoder"
         src_prefix: str = "backbone"
 
         renamed_keys = [
@@ -208,9 +184,9 @@ class MaskFormerCheckpointConverter:
             (f"{src_prefix}.patch_embed.norm.weight", f"{dst_prefix}.model.embeddings.norm.weight"),
             (f"{src_prefix}.patch_embed.norm.bias", f"{dst_prefix}.model.embeddings.norm.bias"),
         ]
-        num_layers = len(config.swin_depths)
+        num_layers = len(config.backbone.depths)
         for layer_idx in range(num_layers):
-            for block_idx in range(config.swin_depths[layer_idx]):
+            for block_idx in range(config.backbone.depths[layer_idx]):
                 renamed_keys.extend(
                     [  # src, dst
                         (
@@ -378,10 +354,10 @@ class MaskFormerCheckpointConverter:
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     def replace_pixel_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
-        dst_prefix: str = "pixel_level_module.pixel_decoder"
+        dst_prefix: str = "pixel_level_module.decoder"
         src_prefix: str = "sem_seg_head.pixel_decoder"
 
-        self.replace_backbone(dst_state_dict, src_state_dict, self.to_model.config)
+        self.replace_backbone(dst_state_dict, src_state_dict, self.config)
 
         def rename_keys_for_conv(detectron_conv: str, mine_conv: str):
             return [
@@ -411,12 +387,12 @@ class MaskFormerCheckpointConverter:
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     def rename_keys_in_detr_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
-        dst_prefix: str = "transformer_module.detr_decoder"
+        dst_prefix: str = "transformer_module.transformer_decoder"
         src_prefix: str = "sem_seg_head.predictor.transformer.decoder"
         # not sure why we are not popping direcetly here!
         # here we list all keys to be renamed (original name on the left, our name on the right)
         rename_keys = []
-        for i in range(self.to_model.config.detr_decoder_layers):
+        for i in range(self.config.transformer_decoder.decoder_layers):
             # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms
             rename_keys.append(
                 (
@@ -468,9 +444,9 @@ class MaskFormerCheckpointConverter:
         return rename_keys
 
     def replace_q_k_v_in_detr_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
-        dst_prefix: str = "transformer_module.detr_decoder"
+        dst_prefix: str = "transformer_module.transformer_decoder"
         src_prefix: str = "sem_seg_head.predictor.transformer.decoder"
-        for i in range(self.to_model.config.detr_decoder_layers):
+        for i in range(self.config.transformer_decoder.decoder_layers):
             # read in weights + bias of input projection layer of self-attention
             in_proj_weight = src_state_dict.pop(f"{src_prefix}.layers.{i}.self_attn.in_proj_weight")
             in_proj_bias = src_state_dict.pop(f"{src_prefix}.layers.{i}.self_attn.in_proj_bias")
@@ -495,7 +471,7 @@ class MaskFormerCheckpointConverter:
             dst_state_dict[f"{dst_prefix}.layers.{i}.encoder_attn.v_proj.bias"] = in_proj_bias_cross_attn[-256:]
 
     def replace_detr_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
-        dst_prefix: str = "transformer_module.detr_decoder"
+        dst_prefix: str = "transformer_module.transformer_decoder"
         src_prefix: str = "sem_seg_head.predictor.transformer.decoder"
         renamed_keys = self.rename_keys_in_detr_decoder(dst_state_dict, src_state_dict)
         # add more
@@ -524,46 +500,57 @@ class MaskFormerCheckpointConverter:
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
-    def replace_segmentation_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
-        dst_prefix: str = "segmentation_module"
+    def replace_instance_segmentation_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+        # NOTE in our case we don't have a prefix, thus we removed the "." from the keys later on!
+        dst_prefix: str = ""
         src_prefix: str = "sem_seg_head.predictor"
 
         renamed_keys = [
-            (f"{src_prefix}.class_embed.weight", f"{dst_prefix}.class_predictor.weight"),
-            (f"{src_prefix}.class_embed.bias", f"{dst_prefix}.class_predictor.bias"),
+            (f"{src_prefix}.class_embed.weight", f"{dst_prefix}class_predictor.weight"),
+            (f"{src_prefix}.class_embed.bias", f"{dst_prefix}class_predictor.bias"),
         ]
 
         mlp_len = 3
         for i in range(mlp_len):
             renamed_keys.extend(
                 [
-                    (f"{src_prefix}.mask_embed.layers.{i}.weight", f"{dst_prefix}.mask_embedder.{i}.0.weight"),
-                    (f"{src_prefix}.mask_embed.layers.{i}.bias", f"{dst_prefix}.mask_embedder.{i}.0.bias"),
+                    (f"{src_prefix}.mask_embed.layers.{i}.weight", f"{dst_prefix}mask_embedder.{i}.0.weight"),
+                    (f"{src_prefix}.mask_embed.layers.{i}.bias", f"{dst_prefix}mask_embedder.{i}.0.bias"),
                 ]
             )
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
-    def __call__(self) -> MaskFormerModel:
-        dst_state_dict = TrackedStateDict(self.to_model.state_dict())
+    def convert(self, mask_former: MaskFormerModel) -> MaskFormerModel:
+        dst_state_dict = TrackedStateDict(mask_former.state_dict())
         src_state_dict = self.original_model.state_dict()
 
         self.replace_pixel_module(dst_state_dict, src_state_dict)
         self.replace_transformer_module(dst_state_dict, src_state_dict)
-        self.replace_segmentation_module(dst_state_dict, src_state_dict)
 
         logger.info(f"Missed keys are {pformat(dst_state_dict.diff())}")
         logger.info(f"Not copied keys are {pformat(src_state_dict.keys())}")
         logger.info("🙌 Done")
 
-        self.to_model.load_state_dict(dst_state_dict)
+        mask_former.load_state_dict(dst_state_dict)
 
-        return self.to_model
+        return mask_former
+
+    def convert_instance_segmentation(self, mask_former: MaskFormerForInstanceSegmentation) -> MaskFormerForInstanceSegmentation:
+        dst_state_dict = TrackedStateDict(mask_former.state_dict())
+        src_state_dict = self.original_model.state_dict()
+
+        self.replace_instance_segmentation_module(dst_state_dict, src_state_dict)
+
+        mask_former.load_state_dict(dst_state_dict)
+
+        return mask_former
+
 
     @classmethod
     def from_original_config_and_checkpoint_file(
         cls, original_config_file: str, original_checkpoint_file: str
-    ) -> MaskFormerCheckpointConverter:
+    ) -> OriginalMaskFormerCheckpoinToOursConverter:
         original_config = setup_cfg(Args(config_file=original_config_file))
         mask_former_kwargs = OriginalMaskFormer.from_config(original_config)
 
@@ -575,22 +562,20 @@ class MaskFormerCheckpointConverter:
 
         to_model = MaskFormerModel(config=config).eval()
 
-        return cls(original_model, to_model)
+        return cls(original_model)
 
     @staticmethod
     def using_dirs(
         checkpoints_dir: Path, config_dir: Path
-    ) -> Iterator[Tuple[MaskFormerCheckpointConverter, Path, Path]]:
+    ) -> Iterator[Tuple[OriginalMaskFormerCheckpoinToOursConverter, Path, Path]]:
         checkpoints: List[Path] = checkpoints_dir.glob("**/*.pkl")
 
         for checkpoint in checkpoints:
             logger.info(f"💪 Converting {checkpoint.stem}")
             # find associated config file
             config: Path = config_dir / checkpoint.parents[0].stem / "swin" / f"{checkpoint.stem}.yaml"
-
-            yield MaskFormerCheckpointConverter.from_original_config_and_checkpoint_file(
-                str(config), str(checkpoint)
-            ), config, checkpoint
+        
+            yield config, checkpoint
 
 
 checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
@@ -611,7 +596,7 @@ def test(src, dst):
         for src_feature, dst_feature in zip(src_features.values(), dst_features):
             assert torch.allclose(src_feature, dst_feature, atol=1e-4)
 
-        src_pixel_out = src.sem_seg_head.pixel_decoder.forward_features(src_features)
+        src_pixel_out = src.sem_seg_head.decoder.forward_features(src_features)
         dst_pixel_out = dst.pixel_level_module(x)
 
         assert torch.allclose(src_pixel_out[0], dst_pixel_out[1], atol=1e-4)
@@ -707,10 +692,15 @@ if __name__ == "__main__":
     config_dir: Path = args.configs_dir
     save_directory: Path = args.save_directory
 
+    checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
+
+    config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs")
+
+
     if not save_directory.exists():
         save_directory.mkdir(parents=True)
 
-    for converter, config_file, checkpoint_file in MaskFormerCheckpointConverter.using_dirs(
+    for config_file, checkpoint_file in OriginalMaskFormerCheckpoinToOursConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
 
@@ -718,11 +708,30 @@ if __name__ == "__main__":
             setup_cfg(Args(config_file=config_file))
         )
 
-        converted: MaskFormerModel = converter()
+        original_config = setup_cfg(Args(config_file=config_file))
+        mask_former_kwargs = OriginalMaskFormer.from_config(original_config)
+
+        original_model = OriginalMaskFormer(**mask_former_kwargs).eval()
+
+        DetectionCheckpointer(original_model).load(str(checkpoint_file))
+
+        config: MaskFormerConfig = OriginalMaskFormerConfigToOursConverter()(original_config)
+
+        mask_former = MaskFormerModel(config=config).eval()
+
+        converter = OriginalMaskFormerCheckpoinToOursConverter(original_model, config)
+
+        converter.convert(mask_former)
+
+        mask_former_for_instance_segmentation = MaskFormerForInstanceSegmentation(config=config).eval()
+
+        mask_former_for_instance_segmentation.model = mask_former
+        converter.convert_instance_segmentation(mask_former_for_instance_segmentation)
 
         model_name: str = f"{checkpoint_file.parents[0].stem}-{checkpoint_file.stem}"
 
+        print(model_name)
         # test(converter.original_model, converted)
 
-        feature_extractor.save_pretrained(save_directory / model_name)
-        converted.save_pretrained(save_directory / model_name)
+        # feature_extractor.save_pretrained(save_directory / model_name)
+        # converted.save_pretrained(save_directory / model_name)
