@@ -206,7 +206,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
             logit_scores_decoder.append(beams[0][-2])
             lm_scores_decoder.append(beams[0][-1])
         pool.close()
-        
+
         self.assertListEqual(texts_decoder, decoded_processor.text)
         self.assertListEqual(["<s> <s> </s>", "<s> <s> <s>"], decoded_processor.text)
         self.assertListEqual(logit_scores_decoder, decoded_processor.logit_score)
