@@ -237,13 +237,9 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # use self.get_config_dict(stage) to use these to ensure the original is not modified
         with io.open(self.ds_config_file[ZERO2], "r", encoding="utf-8") as f:
             config_zero2 = json.load(f)
-            # by default use fp16
-            # config_zero2["fp16"]["enabled"] = True
         with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
             config_zero3 = json.load(f)
-            # by default use fp16
-            # config_zero3["fp16"]["enabled"] = True
-            # This setting slows things down, so don't enable it by default unless needed by a test.
+            # The following setting slows things down, so don't enable it by default unless needed by a test.
             # It's in the file as a demo for users since we want everything to work out of the box even if slower.
             config_zero3["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = False
 
@@ -540,7 +536,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         if dtype == FP16:
             ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
         # XXX:
-        if stage == ZERO3:  # and dtype == FP16:
+        if stage == ZERO3:
             ds_config_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
 
         # save checkpoints
@@ -592,7 +588,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         if dtype == FP16:
             ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
         # XXX:
-        if stage == ZERO3:  # and dtype == FP16:
+        if stage == ZERO3:
             ds_config_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
 
         kwargs = dict(output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict)
