@@ -580,7 +580,7 @@ class PretrainedConfig(PushToHubMixin):
         if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
-            configuration_file = kwargs.get("_configuration_file", CONFIG_NAME)
+            configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
 
             if os.path.isdir(pretrained_model_name_or_path):
                 config_file = os.path.join(pretrained_model_name_or_path, configuration_file)
@@ -866,6 +866,12 @@ class PretrainedConfig(PushToHubMixin):
         """
         Register this class with a given auto class. This should only be used for custom configurations as the ones in
         the library are already mapped with `AutoConfig`.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoConfig"`):

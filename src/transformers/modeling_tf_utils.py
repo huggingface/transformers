@@ -1139,6 +1139,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         return model_embeds
 
     def _get_word_embedding_weight(model, embedding_layer):
+        # If the variable holds the weights themselves, return them
+        if isinstance(embedding_layer, tf.Tensor):
+            return embedding_layer
+        # Otherwise, try to get them from the layer's attributes
+
         embeds = getattr(embedding_layer, "weight", None)
         if embeds is not None:
             return embeds
@@ -2024,6 +2029,12 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         """
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"TFAutoModel"`):
