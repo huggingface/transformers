@@ -23,7 +23,6 @@ from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
-from packaging import version
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
@@ -32,6 +31,7 @@ from requests import HTTPError
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
+from .dynamic_module_utils import custom_object_save
 from .file_utils import (
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
@@ -247,6 +247,27 @@ class ModuleUtilsMixin:
 
         return encoder_extended_attention_mask
 
+    def create_extended_attention_mask_for_decoder(self, input_shape, attention_mask, device):
+        batch_size, seq_length = input_shape
+        seq_ids = torch.arange(seq_length, device=device)
+        causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
+        # in case past_key_values are used we need to add a prefix ones mask to the causal mask
+        # causal and attention masks must have same type with pytorch version < 1.3
+        causal_mask = causal_mask.to(attention_mask.dtype)
+
+        if causal_mask.shape[1] < attention_mask.shape[1]:
+            prefix_seq_len = attention_mask.shape[1] - causal_mask.shape[1]
+            causal_mask = torch.cat(
+                [
+                    torch.ones((batch_size, seq_length, prefix_seq_len), device=device, dtype=causal_mask.dtype),
+                    causal_mask,
+                ],
+                axis=-1,
+            )
+
+        extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
+        return extended_attention_mask
+
     def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: Tuple[int], device: device) -> Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -271,26 +292,9 @@ class ModuleUtilsMixin:
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
             if self.config.is_decoder:
-                batch_size, seq_length = input_shape
-                seq_ids = torch.arange(seq_length, device=device)
-                causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
-                # in case past_key_values are used we need to add a prefix ones mask to the causal mask
-                # causal and attention masks must have same type with pytorch version < 1.3
-                causal_mask = causal_mask.to(attention_mask.dtype)
-
-                if causal_mask.shape[1] < attention_mask.shape[1]:
-                    prefix_seq_len = attention_mask.shape[1] - causal_mask.shape[1]
-                    causal_mask = torch.cat(
-                        [
-                            torch.ones(
-                                (batch_size, seq_length, prefix_seq_len), device=device, dtype=causal_mask.dtype
-                            ),
-                            causal_mask,
-                        ],
-                        axis=-1,
-                    )
-
-                extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
+                extended_attention_mask = self.create_extended_attention_mask_for_decoder(
+                    input_shape, attention_mask, device
+                )
             else:
                 extended_attention_mask = attention_mask[:, None, None, :]
         else:
@@ -384,7 +388,7 @@ class ModuleUtilsMixin:
         if self.main_input_name in input_dict:
             return input_dict[self.main_input_name].numel()
         else:
-            logger.warn(
+            logger.warning(
                 "Could not estimate the number of tokens of the input, floating-point operations will not be computed"
             )
             return 0
@@ -446,6 +450,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     config_class = None
     base_model_prefix = ""
     main_input_name = "input_ids"
+    _auto_class = None
 
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
@@ -616,10 +621,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         weights instead.
         """
         output_embeddings = self.get_output_embeddings()
-        if output_embeddings is not None and self.config.tie_word_embeddings:
+        if output_embeddings is not None and getattr(self.config, "tie_word_embeddings", True):
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
-        if self.config.is_encoder_decoder and self.config.tie_encoder_decoder:
+        if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
             if hasattr(self, self.base_model_prefix):
                 self = getattr(self, self.base_model_prefix)
             self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
@@ -1052,6 +1057,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
+
+        # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self._auto_class is not None:
+            custom_object_save(self, save_directory, config=self.config)
 
         # Save the config
         if save_config:
@@ -1805,6 +1815,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         del state_dict
 
+    @classmethod
+    def register_for_auto_class(cls, auto_class="AutoModel"):
+        """
+        Register this class with a given auto class. This should only be used for custom models as the ones in the
+        library are already mapped with an auto class.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"AutoModel"`):
+                The auto class to register this new model with.
+        """
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
+        cls._auto_class = auto_class
+
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
@@ -1835,7 +1871,7 @@ class Conv1D(nn.Module):
     def forward(self, x):
         size_out = x.size()[:-1] + (self.nf,)
         x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
-        x = x.view(*size_out)
+        x = x.view(size_out)
         return x
 
 
@@ -2436,13 +2472,3 @@ def apply_chunking_to_forward(
         return torch.cat(output_chunks, dim=chunk_dim)
 
     return forward_fn(*input_tensors)
-
-
-def torch_int_div(tensor1, tensor2):
-    """
-    A function that performs integer division across different versions of PyTorch.
-    """
-    if version.parse(torch.__version__) < version.parse("1.8.0"):
-        return tensor1 // tensor2
-    else:
-        return torch.div(tensor1, tensor2, rounding_mode="floor")

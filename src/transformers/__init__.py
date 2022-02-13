@@ -22,8 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.16.0.dev0"
-
+__version__ = "4.17.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -94,8 +93,9 @@ _import_structure = {
     "debug_utils": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
+    "dynamic_module_utils": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
-    "feature_extraction_utils": ["BatchFeature"],
+    "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
@@ -201,6 +201,7 @@ _import_structure = {
         "CLIPVisionConfig",
     ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
+    "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
@@ -329,10 +330,13 @@ _import_structure = {
         "WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "WavLMConfig",
     ],
+    "models.xglm": ["XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XGLMConfig"],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
+    "models.xlm_roberta_xl": ["XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaXLConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
+    "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -361,6 +365,7 @@ _import_structure = {
         "ZeroShotClassificationPipeline",
         "pipeline",
     ],
+    "processing_utils": ["ProcessorMixin"],
     "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
@@ -408,6 +413,7 @@ if is_sentencepiece_available():
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
+    _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
     _import_structure["models.xlnet"].append("XLNetTokenizer")
@@ -422,6 +428,7 @@ else:
 if is_tokenizers_available():
     # Fast tokenizers
     _import_structure["models.realm"].append("RealmTokenizerFast")
+    _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
@@ -508,6 +515,7 @@ if is_vision_available():
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.clip"].append("CLIPProcessor")
+    _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
@@ -604,7 +612,12 @@ if is_torch_available():
         "TextDatasetForNextSentencePrediction",
     ]
     _import_structure["deepspeed"] = []
-    _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer"]
+    _import_structure["generation_beam_constraints"] = [
+        "Constraint",
+        "ConstraintListState",
+        "PhrasalConstraint",
+    ]
+    _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]
     _import_structure["generation_logits_process"] = [
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
@@ -683,6 +696,7 @@ if is_torch_available():
             "AutoModelForObjectDetection",
             "AutoModelForPreTraining",
             "AutoModelForQuestionAnswering",
+            "AutoModelForSemanticSegmentation",
             "AutoModelForSeq2SeqLM",
             "AutoModelForSequenceClassification",
             "AutoModelForSpeechSeq2Seq",
@@ -830,6 +844,14 @@ if is_torch_available():
             "ConvBertModel",
             "ConvBertPreTrainedModel",
             "load_tf_weights_in_convbert",
+        ]
+    )
+    _import_structure["models.convnext"].extend(
+        [
+            "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConvNextForImageClassification",
+            "ConvNextModel",
+            "ConvNextPreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -1461,6 +1483,14 @@ if is_torch_available():
             "WavLMPreTrainedModel",
         ]
     )
+    _import_structure["models.xglm"].extend(
+        [
+            "XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "XGLMForCausalLM",
+            "XGLMModel",
+            "XGLMPreTrainedModel",
+        ]
+    )
     _import_structure["models.xlm"].extend(
         [
             "XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1496,6 +1526,19 @@ if is_torch_available():
             "XLMRobertaModel",
         ]
     )
+    _import_structure["models.xlm_roberta_xl"].extend(
+        [
+            "XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "XLMRobertaXLForCausalLM",
+            "XLMRobertaXLForMaskedLM",
+            "XLMRobertaXLForMultipleChoice",
+            "XLMRobertaXLForQuestionAnswering",
+            "XLMRobertaXLForSequenceClassification",
+            "XLMRobertaXLForTokenClassification",
+            "XLMRobertaXLModel",
+            "XLMRobertaXLPreTrainedModel",
+        ]
+    )
     _import_structure["models.xlnet"].extend(
         [
             "XLNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1510,6 +1553,19 @@ if is_torch_available():
             "load_tf_weights_in_xlnet",
         ]
     )
+    _import_structure["models.yoso"].extend(
+        [
+            "YOSO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "YosoForMaskedLM",
+            "YosoForMultipleChoice",
+            "YosoForQuestionAnswering",
+            "YosoForSequenceClassification",
+            "YosoForTokenClassification",
+            "YosoLayer",
+            "YosoModel",
+            "YosoPreTrainedModel",
+        ]
+    )
     _import_structure["optimization"] = [
         "Adafactor",
         "AdamW",
@@ -1521,6 +1577,7 @@ if is_torch_available():
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
     ]
+    _import_structure["pytorch_utils"] = []
     _import_structure["sagemaker"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
@@ -1536,7 +1593,7 @@ if is_tf_available():
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
-    _import_structure["keras_callbacks"] = ["PushToHubCallback"]
+    _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
     _import_structure["modeling_tf_outputs"] = []
     _import_structure["modeling_tf_utils"] = [
         "TFPreTrainedModel",
@@ -1570,6 +1627,7 @@ if is_tf_available():
             "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+            "TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
             "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "TF_MODEL_FOR_VISION_2_SEQ_MAPPING",
@@ -1584,6 +1642,7 @@ if is_tf_available():
             "TFAutoModelForQuestionAnswering",
             "TFAutoModelForSeq2SeqLM",
             "TFAutoModelForSequenceClassification",
+            "TFAutoModelForSpeechSeq2Seq",
             "TFAutoModelForTableQuestionAnswering",
             "TFAutoModelForTokenClassification",
             "TFAutoModelForVision2Seq",
@@ -1895,6 +1954,14 @@ if is_tf_available():
             "TFRoFormerPreTrainedModel",
         ]
     )
+    _import_structure["models.speech_to_text"].extend(
+        [
+            "TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSpeech2TextForConditionalGeneration",
+            "TFSpeech2TextModel",
+            "TFSpeech2TextPreTrainedModel",
+        ]
+    )
     _import_structure["models.t5"].extend(
         [
             "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2190,6 +2257,13 @@ if is_flax_available():
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
     )
+    _import_structure["models.xglm"].extend(
+        [
+            "FlaxXGLMForCausalLM",
+            "FlaxXGLMModel",
+            "FlaxXGLMPreTrainedModel",
+        ]
+    )
 else:
     from .utils import dummy_flax_objects
 
@@ -2239,7 +2313,7 @@ if TYPE_CHECKING:
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
     # Feature Extractor
-    from .feature_extraction_utils import BatchFeature
+    from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Files and general utilities
     from .file_utils import (
@@ -2345,6 +2419,7 @@ if TYPE_CHECKING:
         CLIPVisionConfig,
     )
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
+    from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
@@ -2450,10 +2525,13 @@ if TYPE_CHECKING:
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
+    from .models.xglm import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XGLMConfig
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
+    from .models.xlm_roberta_xl import XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaXLConfig
     from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+    from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
 
     # Pipelines
     from .pipelines import (
@@ -2483,6 +2561,7 @@ if TYPE_CHECKING:
         ZeroShotClassificationPipeline,
         pipeline,
     )
+    from .processing_utils import ProcessorMixin
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer
@@ -2530,6 +2609,7 @@ if TYPE_CHECKING:
         from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.t5 import T5Tokenizer
+        from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
         from .models.xlnet import XLNetTokenizer
@@ -2577,6 +2657,7 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -2603,6 +2684,7 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
+        from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
@@ -2673,7 +2755,8 @@ if TYPE_CHECKING:
             TextDataset,
             TextDatasetForNextSentencePrediction,
         )
-        from .generation_beam_search import BeamScorer, BeamSearchScorer
+        from .generation_beam_constraints import Constraint, ConstraintListState, PhrasalConstraint
+        from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .generation_logits_process import (
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
@@ -2746,6 +2829,7 @@ if TYPE_CHECKING:
             AutoModelForObjectDetection,
             AutoModelForPreTraining,
             AutoModelForQuestionAnswering,
+            AutoModelForSemanticSegmentation,
             AutoModelForSeq2SeqLM,
             AutoModelForSequenceClassification,
             AutoModelForSpeechSeq2Seq,
@@ -2869,6 +2953,12 @@ if TYPE_CHECKING:
             ConvBertModel,
             ConvBertPreTrainedModel,
             load_tf_weights_in_convbert,
+        )
+        from .models.convnext import (
+            CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvNextForImageClassification,
+            ConvNextModel,
+            ConvNextPreTrainedModel,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3390,6 +3480,7 @@ if TYPE_CHECKING:
             WavLMModel,
             WavLMPreTrainedModel,
         )
+        from .models.xglm import XGLM_PRETRAINED_MODEL_ARCHIVE_LIST, XGLMForCausalLM, XGLMModel, XGLMPreTrainedModel
         from .models.xlm import (
             XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLMForMultipleChoice,
@@ -3419,6 +3510,17 @@ if TYPE_CHECKING:
             XLMRobertaForTokenClassification,
             XLMRobertaModel,
         )
+        from .models.xlm_roberta_xl import (
+            XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
+            XLMRobertaXLForCausalLM,
+            XLMRobertaXLForMaskedLM,
+            XLMRobertaXLForMultipleChoice,
+            XLMRobertaXLForQuestionAnswering,
+            XLMRobertaXLForSequenceClassification,
+            XLMRobertaXLForTokenClassification,
+            XLMRobertaXLModel,
+            XLMRobertaXLPreTrainedModel,
+        )
         from .models.xlnet import (
             XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLNetForMultipleChoice,
@@ -3430,6 +3532,17 @@ if TYPE_CHECKING:
             XLNetModel,
             XLNetPreTrainedModel,
             load_tf_weights_in_xlnet,
+        )
+        from .models.yoso import (
+            YOSO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            YosoForMaskedLM,
+            YosoForMultipleChoice,
+            YosoForQuestionAnswering,
+            YosoForSequenceClassification,
+            YosoForTokenClassification,
+            YosoLayer,
+            YosoModel,
+            YosoPreTrainedModel,
         )
 
         # Optimization
@@ -3460,7 +3573,7 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
         from .generation_tf_utils import tf_top_k_top_p_filtering
-        from .keras_callbacks import PushToHubCallback
+        from .keras_callbacks import KerasMetricCallback, PushToHubCallback
         from .modeling_tf_layoutlm import (
             TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLayoutLMForMaskedLM,
@@ -3493,6 +3606,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
@@ -3507,6 +3621,7 @@ if TYPE_CHECKING:
             TFAutoModelForQuestionAnswering,
             TFAutoModelForSeq2SeqLM,
             TFAutoModelForSequenceClassification,
+            TFAutoModelForSpeechSeq2Seq,
             TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
             TFAutoModelForVision2Seq,
@@ -3755,6 +3870,12 @@ if TYPE_CHECKING:
             TFRoFormerModel,
             TFRoFormerPreTrainedModel,
         )
+        from .models.speech_to_text import (
+            TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSpeech2TextForConditionalGeneration,
+            TFSpeech2TextModel,
+            TFSpeech2TextPreTrainedModel,
+        )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFT5EncoderModel,
@@ -3993,6 +4114,7 @@ if TYPE_CHECKING:
             FlaxWav2Vec2Model,
             FlaxWav2Vec2PreTrainedModel,
         )
+        from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.

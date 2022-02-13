@@ -477,7 +477,7 @@ class TFRemBertEncoder(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
         hidden_states = self.embedding_hidden_mapping_in(inputs=hidden_states)
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
+        all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
@@ -1275,9 +1275,9 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
 
         if inputs["labels"] is not None:
             # shift labels to the left and cut last logit token
-            logits = logits[:, :-1]
+            shifted_logits = logits[:, :-1]
             labels = inputs["labels"][:, 1:]
-            loss = self.hf_compute_loss(labels=labels, logits=logits)
+            loss = self.hf_compute_loss(labels=labels, logits=shifted_logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]

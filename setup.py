@@ -93,12 +93,12 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
-    "black==21.4b0",
+    "black~=22.0",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "deepspeed>=0.5.7",
+    "deepspeed>=0.5.9",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
@@ -166,7 +166,7 @@ _deps = [
 # packaging: "packaging"
 #
 # some of the values are versioned whereas others aren't.
-deps = {b: a for a, b in (re.findall(r"^(([^!=<>]+)(?:[!=<>].*)?$)", x)[0] for x in _deps)}
+deps = {b: a for a, b in (re.findall(r"^(([^!=<>~]+)(?:[!=<>~].*)?$)", x)[0] for x in _deps)}
 
 # since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
 # anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
@@ -351,7 +351,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.16.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.17.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Suraj Patil, Stas Bekman, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

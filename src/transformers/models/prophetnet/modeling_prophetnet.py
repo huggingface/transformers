@@ -674,7 +674,7 @@ class ProphetNetAttention(nn.Module):
         ], f"Size of hidden states should be {batch_size, tgt_len, hidden_size}, but is {hidden_states.size()}"
 
         # previous time steps are cached - no need to recompute key and value if they are static
-        query_states = self.query_proj(hidden_states) / (self.head_dim ** 0.5)
+        query_states = self.query_proj(hidden_states) / (self.head_dim**0.5)
 
         if is_cross_attention and past_key_value is not None:
             # reuse k,v, cross_attentions
@@ -855,7 +855,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         value_states = self.value_proj(hidden_states)
 
         # normalize
-        query_states = query_states / (self.head_dim ** 0.5)
+        query_states = query_states / (self.head_dim**0.5)
 
         # reshape
         query_states = self._shape(query_states, ngram_sequence_length, batch_size)

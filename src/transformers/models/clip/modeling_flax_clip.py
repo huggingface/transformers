@@ -144,8 +144,6 @@ CLIP_INPUTS_DOCSTRING = r"""
         pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
             [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -265,7 +263,7 @@ class FlaxCLIPAttention(nn.Module):
         assert (
             self.head_dim * self.num_heads == self.embed_dim
         ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.dropout = self.config.attention_dropout
 
         self.k_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))

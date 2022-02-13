@@ -3,12 +3,12 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow",
-    "black": "black==21.4b0",
+    "black": "black~=22.0",
     "codecarbon": "codecarbon==1.2.0",
     "cookiecutter": "cookiecutter==1.7.2",
     "dataclasses": "dataclasses",
     "datasets": "datasets",
-    "deepspeed": "deepspeed>=0.5.7",
+    "deepspeed": "deepspeed>=0.5.9",
     "fairscale": "fairscale>0.3",
     "faiss-cpu": "faiss-cpu",
     "fastapi": "fastapi",

@@ -35,25 +35,42 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
 )
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput, TokenClassifierOutput
-from ...modeling_utils import PreTrainedModel, torch_int_div
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_int_div
 from ...utils import logging
 from .configuration_wavlm import WavLMConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "WavLMConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
-_CHECKPOINT_FOR_DOC = "patrickvonplaten/wavlm-libri-clean-100h-base-plus"
-
-_SEQ_CLASS_CHECKPOINT = "microsoft/wavlm-base"
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-
-_SEQ_CLASS_CHECKPOINT = "microsoft/wavlm-base-plus"
-_FRAME_CLASS_CHECKPOINT = "microsoft/wavlm-base-plus-sd"
-_XVECTOR_CHECKPOINT = "microsoft/wavlm-base-plus-sv"
 
 _HIDDEN_STATES_START_POSITION = 2
+
+# General docstring
+_CONFIG_FOR_DOC = "WavLMConfig"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "patrickvonplaten/wavlm-libri-clean-100h-base-plus"
+_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
+
+# CTC docstring
+_CTC_EXPECTED_OUTPUT = "'mister quilter is the aposle of the middle classes and we are glad to welcome his gospel'"
+_CTC_EXPECTED_LOSS = 12.51
+
+# Audio class docstring
+_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_SEQ_CLASS_CHECKPOINT = "hf-internal-testing/tiny-random-wavlm"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'no'"  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
+_SEQ_CLASS_EXPECTED_LOSS = 0.7  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
+
+# Frame class docstring
+_FRAME_CLASS_CHECKPOINT = "microsoft/wavlm-base-plus-sd"
+_FRAME_EXPECTED_OUTPUT = [0, 0]
+
+# Speaker Verification docstring
+_XVECTOR_CHECKPOINT = "microsoft/wavlm-base-plus-sv"
+_XVECTOR_EXPECTED_OUTPUT = 0.97
 
 WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/wavlm-base",
@@ -168,9 +185,13 @@ def _compute_mask_indices(
         num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
         num_masked_span = max(num_masked_span, min_masks)
 
-        # make sure num masked indices <= sequence_length
+        # make sure num masked span <= sequence_length
         if num_masked_span * mask_length > sequence_length:
             num_masked_span = sequence_length // mask_length
+
+        # make sure num_masked span is also <= input_length - (mask_length - 1)
+        if input_length - (mask_length - 1) < num_masked_span:
+            num_masked_span = max(input_length - (mask_length - 1), 0)
 
         return num_masked_span
 
@@ -202,7 +223,13 @@ def _compute_mask_indices(
         # pick first sampled index that will serve as a dummy index to pad vector
         # to ensure same dimension for all batches due to probabilistic rounding
         # Picking first sample just pads those vectors twice.
-        dummy_mask_idx = spec_aug_mask_idx[0]
+        if len(spec_aug_mask_idx) == 0:
+            # this case can only happen if `input_length` is strictly smaller then
+            # `sequence_length` in which case the last token has to be a padding
+            # token which we can use as a dummy mask id
+            dummy_mask_idx = sequence_length - 1
+        else:
+            dummy_mask_idx = spec_aug_mask_idx[0]
 
         spec_aug_mask_idx = np.concatenate(
             [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
@@ -223,6 +250,10 @@ def _compute_mask_indices(
         batch_size, max_num_masked_span * mask_length
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
+
+    # ensure that we cannot have indices larger than sequence_length
+    if spec_aug_mask_idxs.max() > sequence_length - 1:
+        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
 
     # scatter indices to mask
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
@@ -455,7 +486,7 @@ class WavLMAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
 
         self.k_proj = nn.Linear(embed_dim, embed_dim)
         self.v_proj = nn.Linear(embed_dim, embed_dim)
@@ -1247,6 +1278,7 @@ class WavLMModel(WavLMPreTrainedModel):
         output_type=WavLMBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1320,7 +1352,10 @@ class WavLMForCTC(WavLMPreTrainedModel):
                 "instantiate the model as follows: `WavLMForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
+        output_hidden_size = (
+            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
+        )
+        self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1350,6 +1385,8 @@ class WavLMForCTC(WavLMPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1436,6 +1473,10 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        if hasattr(config, "add_adapter") and config.add_adapter:
+            raise ValueError(
+                "Sequence classification does not support the use of WavLM adapters (config.add_adapter=True)"
+            )
         self.wavlm = WavLMModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
@@ -1480,6 +1521,8 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1554,6 +1597,10 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        if hasattr(config, "add_adapter") and config.add_adapter:
+            raise ValueError(
+                "Audio frame classification does not support the use of WavLM adapters (config.add_adapter=True)"
+            )
         self.wavlm = WavLMModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
@@ -1596,6 +1643,7 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_FRAME_EXPECTED_OUTPUT,
     )
     def forward(
         self,
@@ -1772,6 +1820,7 @@ class WavLMForXVector(WavLMPreTrainedModel):
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
+        expected_output=_XVECTOR_EXPECTED_OUTPUT,
     )
     def forward(
         self,

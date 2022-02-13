@@ -189,6 +189,103 @@ that make things deterministic (.e.g., `torch.backends.cudnn.deterministic`) may
 can't be done by default, but you can enable those yourself if needed.
 
 
+## Specific GPUs Selection
+
+Let's discuss how you can tell your program which GPUs are to be used and in what order.
+
+When using [`DistributedDataParallel`](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) to use only a subset of your GPUs, you simply specify the number of GPUs to use. For example, if you have 4 GPUs, but you wish to use the first 2 you can do:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node=2  trainer-program.py ...
+```
+
+if you have either [`accelerate`](https://github.com/huggingface/accelerate) or [`deepspeed`](https://github.com/microsoft/DeepSpeed) installed you can also accomplish the same by using one of:
+```bash
+accelerate launch --num_processes 2 trainer-program.py ...
+```
+
+```bash
+deepspeed --num_gpus 2 trainer-program.py ...
+```
+
+You don't need to use the Accelerate or [the Deepspeed integration](Deepspeed) features to use these launchers.
+
+
+Until now you were able to tell the program how many GPUs to use. Now let's discuss how to select specific GPUs and control their order.
+
+The following environment variables help you control which GPUs to use and their order.
+
+**`CUDA_VISIBLE_DEVICES`**
+
+If you have multiple GPUs and you'd like to use only 1 or a few of those GPUs, set the environment variable `CUDA_VISIBLE_DEVICES` to a list of the GPUs to be used.
+
+For example, let's say you have 4 GPUs: 0, 1, 2 and 3. To run only on the physical GPUs 0 and 2, you can do:
+
+```bash
+CUDA_VISIBLE_DEVICES=0,2 python -m torch.distributed.launch trainer-program.py ...
+```
+
+So now pytorch will see only 2 GPUs, where your physical GPUs 0 and 2 are mapped to `cuda:0` and `cuda:1` correspondingly.
+
+You can even change their order:
+
+```bash
+CUDA_VISIBLE_DEVICES=2,0 python -m torch.distributed.launch trainer-program.py ...
+```
+
+Here your physical GPUs 0 and 2 are mapped to `cuda:1` and `cuda:0` correspondingly.
+
+The above examples were all for `DistributedDataParallel` use pattern, but the same method works for [`DataParallel`](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html) as well:
+```bash
+CUDA_VISIBLE_DEVICES=2,0 python trainer-program.py ...
+```
+
+To emulate an environment without GPUs simply set this environment variable to an empty value like so:
+
+```bash
+CUDA_VISIBLE_DEVICES= python trainer-program.py ...
+```
+
+As with any environment variable you can, of course, export those instead of adding these to the command line, as in:
+
+
+```bash
+export CUDA_VISIBLE_DEVICES=0,2
+python -m torch.distributed.launch trainer-program.py ...
+```
+
+but this approach can be confusing since you may forget you set up the environment variable earlier and not understand why the wrong GPUs are used. Therefore, it's a common practice to set the environment variable just for a specific run on the same command line as it's shown in most examples of this section.
+
+**`CUDA_DEVICE_ORDER`**
+
+There is an additional environment variable `CUDA_DEVICE_ORDER` that controls how the physical devices are ordered. The two choices are:
+
+1. ordered by PCIe bus IDs (matches `nvidia-smi`'s order) - this is the default.
+
+```bash
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
+```
+
+2. ordered by GPU compute capabilities
+
+```bash
+export CUDA_DEVICE_ORDER=FASTEST_FIRST
+```
+
+Most of the time you don't need to care about this environment variable, but it's very helpful if you have a lopsided setup where you have an old and a new GPUs physically inserted in such a way so that the slow older card appears to be first. One way to fix that is to swap the cards. But if you can't swap the cards (e.g., if the cooling of the devices gets impacted) then setting `CUDA_DEVICE_ORDER=FASTEST_FIRST` will always put the newer faster card first. It'll be somewhat confusing though since `nvidia-smi` will still report them in the PCIe order.
+
+The other solution to swapping the order is to use:
+
+```bash
+export CUDA_VISIBLE_DEVICES=1,0
+```
+In this example we are working with just 2 GPUs, but of course the same would apply to as many GPUs as your computer has.
+
+Also if you do set this environment variable it's the best to set it in your `~/.bashrc` file or some other startup config file and forget about it.
+
+
+
+
 ## Trainer Integrations
 
 The [`Trainer`] has been extended to support libraries that may dramatically improve your training

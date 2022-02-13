@@ -50,6 +50,8 @@ _CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
 _TOKENIZER_FOR_DOC = "LongformerTokenizer"
 
+LARGE_NEGATIVE = -1e8
+
 TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "allenai/longformer-base-4096",
     "allenai/longformer-large-4096",
@@ -403,13 +405,10 @@ def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_se
     else:
         # last token is separation token and should not be counted and in the middle are two separation tokens
         question_end_index = tf.tile(question_end_index + 1, (1, input_ids_shape[1]))
-        attention_mask = (
-            tf.cast(
-                attention_mask > question_end_index,
-                dtype=question_end_index.dtype,
-            )
-            * tf.cast(attention_mask < input_ids_shape[-1], dtype=question_end_index.dtype)
-        )
+        attention_mask = tf.cast(
+            attention_mask > question_end_index,
+            dtype=question_end_index.dtype,
+        ) * tf.cast(attention_mask < input_ids_shape[-1], dtype=question_end_index.dtype)
 
     return attention_mask
 
@@ -755,10 +754,15 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             query_vectors, key_vectors, self.one_sided_attn_window_size
         )
 
+        # values to pad for attention probs
+        remove_from_windowed_attention_mask = attention_mask != 0
+        # cast to fp32/fp16 then replace 1's with -inf
+        float_mask = tf.cast(remove_from_windowed_attention_mask, dtype=query_vectors.dtype) * LARGE_NEGATIVE
+
         # diagonal mask with zeros everywhere and -inf inplace of padding
         diagonal_mask = self._sliding_chunks_query_key_matmul(
             tf.ones(shape_list(attention_mask)),
-            attention_mask,
+            float_mask,
             self.one_sided_attn_window_size,
         )
 
