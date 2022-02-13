@@ -221,8 +221,6 @@ class TFConvNextStage(tf.keras.layers.Layer):
 
 class TFConvNextEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        # (sayakpaul): need to figure out the naming convention for `dwconv`,
-        # `pwconv1`, and `pwconv2`.
         super().__init__(**kwargs)
         base_name = kwargs.get("name")
         self.stages = []
