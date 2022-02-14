@@ -1927,17 +1927,27 @@ class TFGenerationMixin:
 
         return inputs
 
-    @staticmethod
     def _update_model_kwargs_for_generation(
-        outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
+        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
     ) -> Dict[str, Any]:
         # update past
-        if "past_key_values" in outputs:
+        if self._use_cache(outputs, model_kwargs["use_cache"]):
+            # TODO(Patrick): `past`/`encoder_outputs` hack. This should be
+            # removed when cleaning up the encoder-decoder models
+            # if model has past, then set the past variable to speed up decoding
+            # make this method static then as well
+            model_kwargs["past"] = outputs[1]
+        elif "past_key_values" in outputs:
             model_kwargs["past"] = outputs.past_key_values
         elif "mems" in outputs:
             model_kwargs["past"] = outputs.mems
         elif "past_buckets_states" in outputs:
             model_kwargs["past"] = outputs.past_buckets_states
+        elif "past" in model_kwargs:
+            # TODO(Patrick) `past`/`encoder_outputs` hack.
+            # removed when cleaning up the encoder-decoder models.
+            # The line should not be necessary.
+            pass
         else:
             model_kwargs["past"] = None
 
@@ -2100,7 +2110,7 @@ class TFGenerationMixin:
         cur_len = input_ids.shape[-1]
 
         while cur_len < max_length:
-            # TODO (Patrick): remove following line by cleaning up `prepare_inputs_for_generation`
+            # TODO(Patrick): remove following line by cleaning up `prepare_inputs_for_generation`
             # in all models
             model_kwargs["use_cache"] = None if "use_cache" not in model_kwargs else model_kwargs["use_cache"]
 
