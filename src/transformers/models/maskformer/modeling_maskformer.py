@@ -457,7 +457,6 @@ class MaskFormerLoss(nn.Module):
         matcher: MaskFormerHungarianMatcher,
         weight_dict: Dict[str, float],
         eos_coef: float,
-        losses: List[str],
     ):
         """The MaskFormer Loss. The loss is computed very similar to DETR. The process happens in two steps:
         1) we compute hungarian assignment between ground truth masks and the outputs of the model 2) we supervise each
@@ -469,7 +468,6 @@ class MaskFormerLoss(nn.Module):
                 A torch module that computes the assigments between the predictions and labels
             weight_dict (Dict[str, float]): A dictionary of weights to be applied to the different losses
             eos_coef (float): Weight to apply to the null class
-            losses (List[str]): A list of losses to be used TODO probably remove it
         """
 
         super().__init__()
@@ -478,7 +476,7 @@ class MaskFormerLoss(nn.Module):
         self.matcher = matcher
         self.weight_dict = weight_dict
         self.eos_coef = eos_coef
-        self.losses = losses
+        self.losses = ["labels", "masks"]
         empty_weight: Tensor = torch.ones(self.num_classes + 1)
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
@@ -991,7 +989,6 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
         self.class_predictor = nn.Linear(hidden_size, config.num_labels + 1)
         self.mask_embedder = MaskformerMLPPredictionHead(hidden_size, hidden_size, config.mask_feature_size)
 
-        losses = ["labels", "masks"]
         self.matcher = MaskFormerHungarianMatcher(
             cost_class=1.0, cost_dice=config.dice_weight, cost_mask=config.mask_weight
         )
@@ -1007,7 +1004,6 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
             matcher=self.matcher,
             weight_dict=self.weight_dict,
             eos_coef=config.no_object_weight,
-            losses=losses,
         )
 
         self.post_init()
@@ -1089,8 +1085,8 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
         >>> class_queries_logits = outputs.class_queries_logits
         >>> masks_queries_logits = outputs.masks_queries_logits
         >>> # you can pass them to feature_extractor for postprocessing
-        >>> segmentation = feature_extractor.post_process_segmentation(outputs)
-        >>> segmentation = feature_extractor.post_process_panoptic_segmentation(outputs)
+        >>> output = feature_extractor.post_process_segmentation(outputs)
+        >>> output = feature_extractor.post_process_panoptic_segmentation(outputs)
 
         """
 

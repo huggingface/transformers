@@ -14,13 +14,12 @@
 # limitations under the License.
 """Feature extractor class for MaskFormer."""
 
-from typing import Dict, List, Optional, Tuple, Union, TypedDict
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
 from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerForInstanceSegmentationOutput,
-    MaskFormerOutput,
 )
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
