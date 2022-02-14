@@ -20,7 +20,7 @@ import unittest
 from shutil import copyfile
 
 from transformers import AutoProcessor, AutoTokenizer, Wav2Vec2Config, Wav2Vec2FeatureExtractor, Wav2Vec2Processor
-from transformers.file_utils import FEATURE_EXTRACTOR_NAME
+from transformers.file_utils import FEATURE_EXTRACTOR_NAME, is_tokenizers_available
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 
 
@@ -115,3 +115,27 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             processor = AutoProcessor.from_pretrained(tmpdirname)
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
+
+    def test_from_pretrained_dynamic_processor(self):
+        processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor", trust_remote_code=True)
+        self.assertTrue(processor.special_attribute_present)
+        self.assertEqual(processor.__class__.__name__, "NewProcessor")
+
+        feature_extractor = processor.feature_extractor
+        self.assertTrue(feature_extractor.special_attribute_present)
+        self.assertEqual(feature_extractor.__class__.__name__, "NewFeatureExtractor")
+
+        tokenizer = processor.tokenizer
+        self.assertTrue(tokenizer.special_attribute_present)
+        if is_tokenizers_available():
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
+
+            # Test we can also load the slow version
+            processor = AutoProcessor.from_pretrained(
+                "hf-internal-testing/test_dynamic_processor", trust_remote_code=True, use_fast=False
+            )
+            tokenizer = processor.tokenizer
+            self.assertTrue(tokenizer.special_attribute_present)
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+        else:
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
