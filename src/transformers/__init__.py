@@ -852,6 +852,9 @@ if is_torch_available():
             "ConvNextForImageClassification",
             "ConvNextModel",
             "ConvNextPreTrainedModel",
+            "TFConvNextForImageClassification",
+            "TFConvNextModel",
+            "TFConvNextPreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -3680,6 +3683,7 @@ if TYPE_CHECKING:
             TFConvBertModel,
             TFConvBertPreTrainedModel,
         )
+        from .models.convnext import TFConvNextForImageClassification, TFConvNextModel, TFConvNextPreTrainedModel
         from .models.ctrl import (
             TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFCTRLForSequenceClassification,

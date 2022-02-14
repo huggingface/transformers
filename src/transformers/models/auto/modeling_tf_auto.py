@@ -36,6 +36,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("rembert", "TFRemBertModel"),
         ("roformer", "TFRoFormerModel"),
         ("convbert", "TFConvBertModel"),
+        ("convnext", "TFConvNextModel"),
         ("led", "TFLEDModel"),
         ("lxmert", "TFLxmertModel"),
         ("mt5", "TFMT5Model"),
@@ -155,6 +156,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
         ("vit", "TFViTForImageClassification"),
+        ("convnext", "TFConvNextForImageClassification"),
     ]
 )
 

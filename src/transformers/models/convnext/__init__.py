@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_torch_available, is_vision_available
+from ...file_utils import _LazyModule, is_torch_available, is_tf_available, is_vision_available
 
 
 _import_structure = {
@@ -36,6 +36,12 @@ if is_torch_available():
         "ConvNextPreTrainedModel",
     ]
 
+if is_tf_available():
+    _import_structure["modeling_tf_convnext"] = [
+        "TFConvNextForImageClassification",
+        "TFConvNextModel",
+        "TFConvNextPreTrainedModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
