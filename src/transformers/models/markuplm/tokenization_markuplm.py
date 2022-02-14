@@ -14,15 +14,15 @@
 # limitations under the License.
 """Tokenization class for MarkupLM."""
 
-import collections
+import json
 import os
-import sys
-import unicodedata
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
+import regex as re
+
 from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     BatchEncoding,
@@ -55,7 +55,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "microsoft/markuplm-base": 512,
     "microsoft/markuplm-large": 512,
 }
-
 
 
 MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
@@ -121,10 +120,10 @@ def bytes_to_unicode():
     )
     cs = bs[:]
     n = 0
-    for b in range(2 ** 8):
+    for b in range(2**8):
         if b not in bs:
             bs.append(b)
-            cs.append(2 ** 8 + n)
+            cs.append(2**8 + n)
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
@@ -200,7 +199,6 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
 
     def __init__(
         self,
@@ -285,22 +283,23 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         xpath_tags_list = []
         xpath_subs_list = []
 
-        xpath_units = xpath.split["/"]
+        xpath_units = xpath.split("/")
         for unit in xpath_units:
-            if not unit.strip(): continue
+            if not unit.strip():
+                continue
             name_subs = unit.strip().split("[")
             tag_name = name_subs[0]
             sub = 0 if len(name_subs) == 1 else int(name_subs[1][:-1])
             xpath_tags_list.append(self.tags_dict.get(tag_name, self.unk_tag_id))
             xpath_subs_list.append(min(self.max_width, sub))
 
-        xpath_tags_list = xpath_tags_list[:self.max_depth]
-        xpath_subs_list = xpath_tags_list[:self.max_depth]
+        xpath_tags_list = xpath_tags_list[: self.max_depth]
+        xpath_subs_list = xpath_tags_list[: self.max_depth]
         xpath_tags_list += [self.pad_tag_id] * (self.max_depth - len(xpath_tags_list))
         xpath_subs_list += [self.pad_width] * (self.max_depth - len(xpath_subs_list))
 
         return xpath_tags_list, xpath_subs_list
-    
+
     @property
     def vocab_size(self):
         return len(self.encoder)
@@ -1048,7 +1047,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
         tokens = []
         pair_tokens = []
-        xpath_tags_seq = [] # token_xpaths actually corresponds to xpath_tags_seq and xpath_subs_seq
+        xpath_tags_seq = []
         xpath_subs_seq = []
         pair_xpath_tags_seq = []
         pair_xpath_subs_seq = []
@@ -1063,7 +1062,9 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                     word_tokens = self.tokenize(word)
                     tokens.extend(word_tokens)
                     # TODO properly create xpath_tags_seq and xpath_subs_seq
-                    token_xpaths.extend([xpath] * len(word_tokens))
+                    xpath_tags_list, xpath_subs_list = self.get_xpath_seq(xpath)
+                    xpath_tags_seq.extend([xpath_tags_list] * len(word_tokens))
+                    xpath_subs_seq.extend([xpath_subs_list] * len(word_tokens))
             else:
                 # CASE 2: token classification (training)
                 for word, xpath, label in zip(text, xpaths, word_labels):
@@ -1072,7 +1073,9 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                     word_tokens = self.tokenize(word)
                     tokens.extend(word_tokens)
                     # TODO properly create xpath_tags_seq and xpath_subs_seq
-                    token_xpaths.extend([xpath] * len(word_tokens))
+                    xpath_tags_list, xpath_subs_list = self.get_xpath_seq(xpath)
+                    xpath_tags_seq.extend([xpath_tags_list] * len(word_tokens))
+                    xpath_subs_seq.extend([xpath_subs_list] * len(word_tokens))
                     if self.only_label_first_subword:
                         # Use the real label id for the first token of the word, and padding ids for the remaining tokens
                         labels.extend([label] + [self.pad_token_label] * (len(word_tokens) - 1))
@@ -1084,7 +1087,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             # text_pair = nodes
             tokens = self.tokenize(text)
             # TODO properly create xpath_tags_seq and xpath_subs_seq
-            token_xpaths = [self.pad_xpath_tags_seq for _ in range(len(tokens))]
+            xpath_tags_seq = [self.pad_xpath_tags_seq for _ in range(len(tokens))]
+            xpath_subs_seq = [self.pad_xpath_subs_seq for _ in range(len(tokens))]
 
             for word, xpath in zip(text_pair, xpaths):
                 if len(word) < 1:  # skip empty nodes
@@ -1092,7 +1096,9 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 word_tokens = self.tokenize(word)
                 pair_tokens.extend(word_tokens)
                 # TODO properly create pair_xpath_tags_seq and pair_xpath_subs_seq
-                pair_token_xpaths.extend([xpath] * len(word_tokens))
+                xpath_tags_list, xpath_subs_list = self.get_xpath_seq(xpath)
+                pair_xpath_tags_seq.extend([xpath_tags_list] * len(word_tokens))
+                pair_xpath_subs_seq.extend([xpath_subs_list] * len(word_tokens))
 
         # Create ids + pair_ids
         ids = self.convert_tokens_to_ids(tokens)
@@ -1117,23 +1123,28 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
         # Truncation: Handle max sequence length
         overflowing_tokens = []
-        overflowing_token_xpaths = []
+        overflowing_xpath_tags_seq = []
+        overflowing_xpath_subs_seq = []
         overflowing_labels = []
         if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
             (
                 ids,
-                token_xpaths,
+                xpath_tags_seq,
+                xpath_subs_seq,
                 pair_ids,
-                pair_token_xpaths,
+                pair_xpath_tags_seq,
+                pair_xpath_subs_seq,
                 labels,
                 overflowing_tokens,
                 overflowing_token_xpaths,
                 overflowing_labels,
             ) = self.truncate_sequences(
                 ids,
-                token_xpaths,
+                xpath_tags_seq=xpath_tags_seq,
+                xpath_subs_seq=xpath_subs_seq,
                 pair_ids=pair_ids,
-                pair_token_xpaths=pair_token_xpaths,
+                pair_xpath_tags_seq=pair_xpath_tags_seq,
+                pair_xpath_subs_seq=pair_xpath_subs_seq,
                 labels=labels,
                 num_tokens_to_remove=total_len - max_length,
                 truncation_strategy=truncation_strategy,
@@ -1157,7 +1168,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
         if return_overflowing_tokens:
             encoded_inputs["overflowing_tokens"] = overflowing_tokens
-            encoded_inputs["overflowing_token_xpaths"] = overflowing_token_xpaths
+            encoded_inputs["overflowing_xpath_tags_seq"] = overflowing_xpath_tags_seq
+            encoded_inputs["overflowing_xpath_subs_seq"] = overflowing_xpath_subs_seq
             encoded_inputs["overflowing_labels"] = overflowing_labels
             encoded_inputs["num_truncated_tokens"] = total_len - max_length
 
@@ -1165,18 +1177,25 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         if add_special_tokens:
             sequence = self.build_inputs_with_special_tokens(ids, pair_ids)
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
-            token_xpaths = [self.cls_token_xpath] + token_xpaths + [self.sep_token_xpath]
-            if pair_token_xpaths:
-                pair_token_xpaths = pair_token_xpaths + [self.sep_token_xpath]
-            if labels:
-                labels = [self.pad_token_label] + labels + [self.pad_token_label]
+            xpath_tags_ids = self.build_xpath_tags_with_special_tokens(xpath_tags_seq, pair_xpath_tags_seq)
+            xpath_subs_ids = self.build_xpath_subs_with_special_tokens(xpath_subs_seq, pair_xpath_subs_seq)
+
+            # xpath_tags_ids = (
+            #     [self.pad_xpath_tags_seq] + xpath_tags_seq + [self.pad_xpath_tags_seq] + pair_xpath_tags_seq
+            # )
+            # xpath_subs_ids = (
+            #     [self.pad_xpath_subs_seq] + xpath_subs_seq + [self.pad_xpath_subs_seq] + + pair_xpath_subs_seq
+            # )
         else:
             sequence = ids + pair_ids if pair else ids
             token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])
+            xpath_tags_ids = xpath_tags_seq + pair_xpath_tags_seq if pair else xpath_tags_seq
+            xpath_subs_ids = xpath_subs_seq + pair_xpath_subs_seq if pair else xpath_subs_seq
 
         # Build output dictionary
         encoded_inputs["input_ids"] = sequence
-        encoded_inputs["xpath_tags_seq"] = token_xpath_tags_seq + pair_xpath_tags_seq
+        encoded_inputs["xpath_tags_seq"] = xpath_tags_ids
+        encoded_inputs["xpath_subs_seq"] = xpath_subs_ids
         if return_token_type_ids:
             encoded_inputs["token_type_ids"] = token_type_ids
         if return_special_tokens_mask:
@@ -1184,9 +1203,6 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
             else:
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
-
-        if labels:
-            encoded_inputs["labels"] = labels
 
         # Check lengths
         self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
@@ -1213,35 +1229,38 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
     def truncate_sequences(
         self,
         ids: List[int],
-        token_xpaths: List[List[int]],
+        xpath_tags_seq: List[List[int]],
+        xpath_subs_seq: List[List[int]],
         pair_ids: Optional[List[int]] = None,
-        pair_token_xpaths: Optional[List[List[int]]] = None,
+        pair_xpath_tags_seq: Optional[List[List[int]]] = None,
+        pair_xpath_subs_seq: Optional[List[List[int]]] = None,
         labels: Optional[List[int]] = None,
         num_tokens_to_remove: int = 0,
         truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
         stride: int = 0,
     ) -> Tuple[List[int], List[int], List[int]]:
         """
-        Truncates a sequence pair in-place following the strategy.
-
         Args:
+        Truncates a sequence pair in-place following the strategy.
             ids (`List[int]`):
                 Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
                 `convert_tokens_to_ids` methods.
-            token_xpaths (`List[List[int]]`):
-                Bounding xpaths of the first sequence.
+            xpath_tags_seq (`List[List[int]]`):
+                XPath tag IDs of the first sequence.
+            xpath_subs_seq (`List[List[int]]`):
+                XPath sub IDs of the first sequence.
             pair_ids (`List[int]`, *optional*):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
                 and `convert_tokens_to_ids` methods.
-            pair_token_xpaths (`List[List[int]]`, *optional*):
-                Bounding xpaths of the second sequence.
-            labels (`List[int]`, *optional*):
-                Labels of the first sequence (for token classification tasks).
+            pair_xpath_tags_seq (`List[List[int]]`, *optional*):
+                XPath tag IDs of the second sequence.
+            pair_xpath_subs_seq (`List[List[int]]`, *optional*):
+                XPath sub IDs of the second sequence.
             num_tokens_to_remove (`int`, *optional*, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
-            truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
+            truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to
+            `False`):
                 The strategy to follow for truncation. Can be:
-
                 - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
                   maximum acceptable input length for the model if that argument is not provided. This will truncate
                   token by token, removing a token from the longest sequence in the pair if a pair of sequences (or a
@@ -1257,32 +1276,31 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             stride (`int`, *optional*, defaults to 0):
                 If set to a positive number, the overflowing tokens returned will contain some tokens from the main
                 sequence returned. The value of this argument defines the number of additional tokens.
-
         Returns:
             `Tuple[List[int], List[int], List[int]]`: The truncated `ids`, the truncated `pair_ids` and the list of
             overflowing tokens. Note: The *longest_first* strategy returns empty list of overflowing tokens if a pair
             of sequences (or a batch of pairs) is provided.
         """
         if num_tokens_to_remove <= 0:
-            return ids, token_xpaths, pair_ids, pair_token_xpaths, labels, [], [], []
+            return ids, xpath_tags_seq, xpath_subs_seq, pair_ids, pair_xpath_tags_seq, pair_xpath_subs_seq, [], [], []
 
         if not isinstance(truncation_strategy, TruncationStrategy):
             truncation_strategy = TruncationStrategy(truncation_strategy)
 
         overflowing_tokens = []
-        overflowing_token_xpaths = []
-        overflowing_labels = []
+        overflowing_xpath_tags_seq = []
+        overflowing_xpath_subs_seq = []
         if truncation_strategy == TruncationStrategy.ONLY_FIRST or (
             truncation_strategy == TruncationStrategy.LONGEST_FIRST and pair_ids is None
         ):
             if len(ids) > num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
                 overflowing_tokens = ids[-window_len:]
-                overflowing_token_xpaths = token_xpaths[-window_len:]
-                overflowing_labels = labels[-window_len:]
+                overflowing_xpath_tags_seq = xpath_tags_seq[-window_len:]
+                overflowing_xpath_subs_seq = xpath_subs_seq[-window_len:]
                 ids = ids[:-num_tokens_to_remove]
-                token_xpaths = token_xpaths[:-num_tokens_to_remove]
-                labels = labels[:-num_tokens_to_remove]
+                xpath_tags_seq = xpath_tags_seq[:-num_tokens_to_remove]
+                xpath_subs_seq = xpath_subs_seq[:-num_tokens_to_remove]
             else:
                 error_msg = (
                     f"We need to remove {num_tokens_to_remove} to truncate the input "
@@ -1304,18 +1322,21 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             for _ in range(num_tokens_to_remove):
                 if pair_ids is None or len(ids) > len(pair_ids):
                     ids = ids[:-1]
-                    token_xpaths = token_xpaths[:-1]
-                    labels = labels[:-1]
+                    xpath_tags_seq = xpath_tags_seq[:-1]
+                    xpath_subs_seq = xpath_subs_seq[:-1]
                 else:
                     pair_ids = pair_ids[:-1]
-                    pair_token_xpaths = pair_token_xpaths[:-1]
+                    pair_xpath_tags_seq = pair_xpath_tags_seq[:-1]
+                    pair_xpath_subs_seq = pair_xpath_subs_seq[:-1]
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
                 overflowing_tokens = pair_ids[-window_len:]
-                overflowing_token_xpaths = pair_token_xpaths[-window_len:]
+                overflowing_xpath_tags_seq = xpath_tags_seq[-window_len:]
+                overflowing_xpath_subs_seq = xpath_subs_seq[-window_len:]
                 pair_ids = pair_ids[:-num_tokens_to_remove]
-                pair_token_xpaths = pair_token_xpaths[:-num_tokens_to_remove]
+                pair_xpath_tags_seq = pair_xpath_tags_seq[:-num_tokens_to_remove]
+                pair_xpath_subs_seq = pair_xpath_subs_seq[:-num_tokens_to_remove]
             else:
                 logger.error(
                     f"We need to remove {num_tokens_to_remove} to truncate the input "
@@ -1326,13 +1347,14 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
         return (
             ids,
-            token_xpaths,
+            xpath_tags_seq,
+            xpath_subs_seq,
             pair_ids,
-            pair_token_xpaths,
-            labels,
+            pair_xpath_tags_seq,
+            pair_xpath_subs_seq,
             overflowing_tokens,
-            overflowing_token_xpaths,
-            overflowing_labels,
+            overflowing_xpath_tags_seq,
+            overflowing_xpath_subs_seq,
         )
 
     def _pad(
@@ -1344,20 +1366,17 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
-        Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
-
         Args:
+        Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
             encoded_inputs:
                 Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
-
                 - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
                 - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
                 - PaddingStrategy.DO_NOT_PAD: Do not pad
                 The tokenizer padding sides are defined in self.padding_side:
-
                     - 'left': pads on the left of the sequences
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
@@ -1394,11 +1413,13 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                         encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
                     )
                 if "xpath_tags_seq" in encoded_inputs:
-                    encoded_inputs["xpath_tags_seq"] = encoded_inputs["xpath_tags_seq"] + [self.pad_xpath_tags_seq] * difference
+                    encoded_inputs["xpath_tags_seq"] = (
+                        encoded_inputs["xpath_tags_seq"] + [self.pad_xpath_tags_seq] * difference
+                    )
                 if "xpath_subs_seq" in encoded_inputs:
-                    encoded_inputs["xpath_subs_seq"] = encoded_inputs["xpath_subs_seq"] + [self.pad_xpath_subs_seq] * difference
-                if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = encoded_inputs["labels"] + [self.pad_token_label] * difference
+                    encoded_inputs["xpath_subs_seq"] = (
+                        encoded_inputs["xpath_subs_seq"] + [self.pad_xpath_subs_seq] * difference
+                    )
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
@@ -1410,11 +1431,13 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                         "token_type_ids"
                     ]
                 if "xpath_tags_seq" in encoded_inputs:
-                    encoded_inputs["xpath_tags_seq"] = [self.pad_xpath_tags_seq] * difference + encoded_inputs["xpath_tags_seq"]
+                    encoded_inputs["xpath_tags_seq"] = [self.pad_xpath_tags_seq] * difference + encoded_inputs[
+                        "xpath_tags_seq"
+                    ]
                 if "xpath_subs_seq" in encoded_inputs:
-                    encoded_inputs["xpath_subs_seq"] = [self.pad_xpath_subs_seq] * difference + encoded_inputs["xpath_subs_seq"]
-                if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = [self.pad_token_label] * difference + encoded_inputs["labels"]
+                    encoded_inputs["xpath_subs_seq"] = [self.pad_xpath_subs_seq] * difference + encoded_inputs[
+                        "xpath_subs_seq"
+                    ]
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
@@ -1422,211 +1445,3 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
         return encoded_inputs
-
-
-# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
-    """
-    Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
-
-    Args:
-        do_lower_case (`bool`, *optional*, defaults to `True`):
-            Whether or not to lowercase the input when tokenizing.
-        never_split (`Iterable`, *optional*):
-            Collection of tokens which will never be split during tokenization. Only has an effect when
-            `do_basic_tokenize=True`
-        tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
-            Whether or not to tokenize Chinese characters.
-
-            This should likely be deactivated for Japanese (see this
-            [issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents: (`bool`, *optional*):
-            Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original BERT).
-    """
-
-    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
-        if never_split is None:
-            never_split = []
-        self.do_lower_case = do_lower_case
-        self.never_split = set(never_split)
-        self.tokenize_chinese_chars = tokenize_chinese_chars
-        self.strip_accents = strip_accents
-
-    def tokenize(self, text, never_split=None):
-        """
-        Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
-        WordPieceTokenizer.
-
-        Args:
-            never_split (`List[str]`, *optional*)
-                Kept for backward compatibility purposes. Now implemented directly at the base class level (see
-                [`PreTrainedTokenizer.tokenize`]) List of token not to split.
-        """
-        # union() returns a new set by concatenating the two sets.
-        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
-        text = self._clean_text(text)
-
-        # This was added on November 1st, 2018 for the multilingual and Chinese
-        # models. This is also applied to the English models now, but it doesn't
-        # matter since the English models were not trained on any Chinese data
-        # and generally don't have any Chinese data in them (there are Chinese
-        # characters in the vocabulary because Wikipedia does have some Chinese
-        # words in the English Wikipedia.).
-        if self.tokenize_chinese_chars:
-            text = self._tokenize_chinese_chars(text)
-        orig_tokens = whitespace_tokenize(text)
-        split_tokens = []
-        for token in orig_tokens:
-            if token not in never_split:
-                if self.do_lower_case:
-                    token = token.lower()
-                    if self.strip_accents is not False:
-                        token = self._run_strip_accents(token)
-                elif self.strip_accents:
-                    token = self._run_strip_accents(token)
-            split_tokens.extend(self._run_split_on_punc(token, never_split))
-
-        output_tokens = whitespace_tokenize(" ".join(split_tokens))
-        return output_tokens
-
-    def _run_strip_accents(self, text):
-        """Strips accents from a piece of text."""
-        text = unicodedata.normalize("NFD", text)
-        output = []
-        for char in text:
-            cat = unicodedata.category(char)
-            if cat == "Mn":
-                continue
-            output.append(char)
-        return "".join(output)
-
-    def _run_split_on_punc(self, text, never_split=None):
-        """Splits punctuation on a piece of text."""
-        if never_split is not None and text in never_split:
-            return [text]
-        chars = list(text)
-        i = 0
-        start_new_word = True
-        output = []
-        while i < len(chars):
-            char = chars[i]
-            if _is_punctuation(char):
-                output.append([char])
-                start_new_word = True
-            else:
-                if start_new_word:
-                    output.append([])
-                start_new_word = False
-                output[-1].append(char)
-            i += 1
-
-        return ["".join(x) for x in output]
-
-    def _tokenize_chinese_chars(self, text):
-        """Adds whitespace around any CJK character."""
-        output = []
-        for char in text:
-            cp = ord(char)
-            if self._is_chinese_char(cp):
-                output.append(" ")
-                output.append(char)
-                output.append(" ")
-            else:
-                output.append(char)
-        return "".join(output)
-
-    def _is_chinese_char(self, cp):
-        """Checks whether CP is the codepoint of a CJK character."""
-        # This defines a "chinese character" as anything in the CJK Unicode block:
-        #   https://en.wikipedia.org/wiki/CJK_Unified_Ideographs_(Unicode_block)
-        #
-        # Note that the CJK Unicode block is NOT all Japanese and Korean characters,
-        # despite its name. The modern Korean Hangul alphabet is a different block,
-        # as is Japanese Hiragana and Katakana. Those alphabets are used to write
-        # space-separated words, so they are not treated specially and handled
-        # like the all of the other languages.
-        if (
-            (cp >= 0x4E00 and cp <= 0x9FFF)
-            or (cp >= 0x3400 and cp <= 0x4DBF)  #
-            or (cp >= 0x20000 and cp <= 0x2A6DF)  #
-            or (cp >= 0x2A700 and cp <= 0x2B73F)  #
-            or (cp >= 0x2B740 and cp <= 0x2B81F)  #
-            or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
-            or (cp >= 0xF900 and cp <= 0xFAFF)
-            or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
-        ):  #
-            return True
-
-        return False
-
-    def _clean_text(self, text):
-        """Performs invalid character removal and whitespace cleanup on text."""
-        output = []
-        for char in text:
-            cp = ord(char)
-            if cp == 0 or cp == 0xFFFD or _is_control(char):
-                continue
-            if _is_whitespace(char):
-                output.append(" ")
-            else:
-                output.append(char)
-        return "".join(output)
-
-
-# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer(object):
-    """Runs WordPiece tokenization."""
-
-    def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
-        self.vocab = vocab
-        self.unk_token = unk_token
-        self.max_input_chars_per_word = max_input_chars_per_word
-
-    def tokenize(self, text):
-        """
-        Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
-        tokenization using the given vocabulary.
-
-        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
-
-        Args:
-            text: A single token or whitespace separated tokens. This should have
-                already been passed through *BasicTokenizer*.
-
-        Returns:
-            A list of wordpiece tokens.
-        """
-
-        output_tokens = []
-        for token in whitespace_tokenize(text):
-            chars = list(token)
-            if len(chars) > self.max_input_chars_per_word:
-                output_tokens.append(self.unk_token)
-                continue
-
-            is_bad = False
-            start = 0
-            sub_tokens = []
-            while start < len(chars):
-                end = len(chars)
-                cur_substr = None
-                while start < end:
-                    substr = "".join(chars[start:end])
-                    if start > 0:
-                        substr = "##" + substr
-                    if substr in self.vocab:
-                        cur_substr = substr
-                        break
-                    end -= 1
-                if cur_substr is None:
-                    is_bad = True
-                    break
-                sub_tokens.append(cur_substr)
-                start = end
-
-            if is_bad:
-                output_tokens.append(self.unk_token)
-            else:
-                output_tokens.extend(sub_tokens)
-        return output_tokens
