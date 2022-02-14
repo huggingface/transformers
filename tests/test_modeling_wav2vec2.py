@@ -16,6 +16,7 @@
 
 import math
 import unittest
+from pathlib import Path
 
 import numpy as np
 from datasets import load_dataset
@@ -1498,7 +1499,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_local_lm(self):
-        model_from_hub = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        _ = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
         processor_from_hub = Wav2Vec2ProcessorWithLM.from_pretrained("hf-internal-testing/processor_with_lm")
         language_model_from_hub = processor_from_hub.decoder.model_container[processor_from_hub.decoder._model_key]
         path_to_cached_dir_from_hub = Path(
