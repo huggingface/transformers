@@ -376,8 +376,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_torch
     @require_pyctcdecode
     def test_with_local_lm_fast(self):
+        local_dir = snapshot_download("hf-internal-testing/processor_with_lm")
         speech_recognizer = pipeline(
-            model=snapshot_download("hf-internal-testing/processor_with_lm"),
+            task="automatic-speech-recognition",
+            model=local_dir,
         )
         self.assertEqual(speech_recognizer.type, "ctc_with_lm")
 
