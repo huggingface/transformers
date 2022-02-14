@@ -153,6 +153,21 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
         else:
             self.enc_to_dec_proj = None
 
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return (input_length - kernel_size) // stride + 1
+
+        for kernel_size, stride in zip(self.config.encoder.conv_kernel, self.config.encoder.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        return input_lengths
+
     def _get_encoder_module(self):
         return self.encoder
 
@@ -200,6 +215,8 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
         # compute correct encoder attention mask? requires function _get_feature_vector_attention_mask to be added to the
+        # Exactly! We need to add this function to `modeling_flax_wav2vec2.py` now :-)
+
         # flax script modeling_flax_wav2vec2.py
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -248,9 +265,6 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         **kwargs
     ):
-        if input_shape is None:
-            input_shape = ((1, 1024), (1, 1024))
-
         if config.decoder.cross_attention_hidden_size is not None:
             # Raise ValueError or option to project enc to dec hidden_size (eg EncAdapterLayer)
             if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
@@ -262,6 +276,13 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
                 )
 
         module = self.module_class(config=config, dtype=dtype, **kwargs)
+
+        if input_shape is None:
+            # speech encoders almost always downsample the sequence length dimension
+            encoder_input_length = 1024
+            decoder_input_length = module._get_feat_extract_output_lengths(encoder_input_length)
+            input_shape = ((1, encoder_input_length), (1, decoder_input_length))
+
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
@@ -331,6 +352,9 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
             method=_decoder_forward,  # we only need to call the decoder to init the cache
         )
         return unfreeze(init_variables["cache"])
+
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[jnp.ndarray, int]):
+        return self.module._get_feat_extract_output_lengths(input_lengths)
 
     @add_start_docstrings(SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=_CONFIG_FOR_DOC)
