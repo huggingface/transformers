@@ -2,7 +2,7 @@ from __future__ import annotations
 from pprint import pprint
 
 from transformers import CvtConfig, CvtForImageClassification
-from CvT.lib.models.cls_cvt import ConvolutionalVisionTransformer as CVT
+from lib.models.cls_cvt import ConvolutionalVisionTransformer as CVT
 import torch
 import yaml
 
@@ -111,19 +111,20 @@ class ModuleTransfer:
 # Model Zoo: https://1drv.ms/u/s!AhIXJn_J-blW9RzF3rMW7SsLHa8h?e=blQ0Al
 # yaml is in experiments folder
 
-with open('/home/zuppif/Documents/Work/hugging_face/cvt/transformers/src/transformers/models/cvt/CvT/experiments/imagenet/cvt/cvt-13-224x224.yaml', 'r') as f:
+with open('C:\\Users\AH87766\Documents\CvT\experiments\imagenet\cvt\cvt-13-224x224.yaml', 'r') as f:
     original_config = yaml.load(f, Loader=yaml.FullLoader)
 
 cvt_hugging_config = CvtConfig()
+cvt_hugging_config.cls_token =  [False, False, True]
 cvt_hugging_model = CvtForImageClassification(cvt_hugging_config).eval()
-original_config['MODEL']['CLS_TOKEN'] = [False, False, False]
+original_config['MODEL']['CLS_TOKEN'] = [False, False, True]
 original_model = CVT(spec=original_config['MODEL']['SPEC']).eval()
 
 x = torch.zeros((1, 3, 224, 224))
 module_transfer = ModuleTransfer(original_model, cvt_hugging_model,verbose=0)
 module_transfer(x)
 
-from torchinfo import summary
+#from torchinfo import summary
 
 
 # print(summary(original_model, (1, 3, 224, 224), device=torch.device('cpu')))
@@ -133,5 +134,6 @@ from torchinfo import summary
 
 original_logits = original_model(x.clone())
 cvt_hugging_face_output = cvt_hugging_model(x.clone())
+
 
 print('asddsa')

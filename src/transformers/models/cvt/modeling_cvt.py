@@ -495,6 +495,7 @@ class CvtEncoder(nn.Module):
         
         blocks = []
         for i in range(config.num_stages):
+            dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate[i], config.depth[i])]  # stochastic depth decay rule
             layers = []
             for j in range(config.depth[i]):
                 layers.append(
@@ -510,7 +511,7 @@ class CvtEncoder(nn.Module):
                         qkv_bias=config.qkv_bias[i],
                         attention_drop_rate=config.attention_drop_rate[i],
                         drop_rate=config.drop_rate[i],
-                        drop_path_rate=config.drop_path_rate[i],
+                        drop_path_rate=dpr[i],
                         mlp_ratio=config.mlp_ratio[i],
                         with_cls_token=config.cls_token[i],
                     )
@@ -705,16 +706,13 @@ class CvtModel(CvtPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
         cls_token = encoder_outputs[1]
-
+        
         if self.config.cls_token[-1]:
             sequence_output = self.layernorm(cls_token)
-            sequence_output = torch.squeeze(sequence_output
-            ) 
             pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
         else:
             sequence_output = rearrange(sequence_output, 'b c h w -> b (h w) c')
             sequence_output = self.layernorm(sequence_output)
-            sequence_output = torch.mean(sequence_output, dim=1)
             pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
