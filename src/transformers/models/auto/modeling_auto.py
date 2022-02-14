@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("convnext", "ConvNextModel"),
         ("yoso", "YosoModel"),
         ("swin", "SwinModel"),
         ("vilt", "ViltModel"),
@@ -273,6 +274,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
             ),
         ),
         ("swin", "SwinForImageClassification"),
+        ("convnext", "ConvNextForImageClassification"),
     ]
 )
 
@@ -799,7 +801,7 @@ class AutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
 
 
 AutoModelForSpeechSeq2Seq = auto_class_update(
-    AutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeing"
+    AutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeling"
 )
 
 

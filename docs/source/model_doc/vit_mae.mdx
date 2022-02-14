@@ -32,6 +32,8 @@ Tips:
 
 - MAE (masked auto encoding) is a method for self-supervised pre-training of Vision Transformers (ViTs). The pre-training objective is relatively simple:
 by masking a large portion (75%) of the image patches, the model must reconstruct raw pixel values. One can use [`ViTMAEForPreTraining`] for this purpose.
+- An example Python script that illustrates how to pre-train [`ViTMAEForPreTraining`] from scratch can be found [here](https://github.com/huggingface/transformers/tree/master/examples/pytorch/image-pretraining).
+One can easily tweak it for their own use case.
 - A notebook that illustrates how to visualize reconstructed pixel values with [`ViTMAEForPreTraining`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTMAE/ViT_MAE_visualization_demo.ipynb).
 - After pre-training, one "throws away" the decoder used to reconstruct pixels, and one uses the encoder for fine-tuning/linear probing. This means that after
 fine-tuning, one can directly plug in the weights into a [`ViTForImageClassification`].

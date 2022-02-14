@@ -322,7 +322,7 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(global_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, seq_length],
+                [self.model_tester.num_attention_heads, seq_length, seq_length],
             )
             self.assertListEqual(
                 list(global_attentions[0].shape[-3:]),

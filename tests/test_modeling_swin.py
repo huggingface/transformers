@@ -252,7 +252,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            window_size_squared = config.window_size ** 2
+            window_size_squared = config.window_size**2
             model = model_class(config)
             model.to(torch_device)
             model.eval()
