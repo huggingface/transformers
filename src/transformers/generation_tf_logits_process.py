@@ -20,6 +20,7 @@ from typing import List
 import numpy as np
 import tensorflow as tf
 
+from .tf_utils import set_tensor_by_indices_to_value
 from .file_utils import add_start_docstrings
 from .utils.logging import get_logger
 
@@ -45,14 +46,6 @@ TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
     Return:
         `tf.Tensor` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
 """
-
-
-# TODO(Patrick) - this function is copied from `generation_tf_utils.py`
-# it should be moved into a `tf_utils.py` file.
-def set_tensor_by_indices_to_value(tensor, indices, value):
-    # create value_tensor since tensor value assignment is not possible in TF
-    value_tensor = tf.zeros_like(tensor) + value
-    return tf.where(indices, value_tensor, tensor)
 
 
 class TFLogitsProcessor(ABC):

@@ -18,6 +18,7 @@ import unittest
 
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf
+from transformers.tf_utils import set_tensor_by_indices_to_value
 
 from .test_modeling_tf_common import ids_tensor
 
@@ -32,12 +33,6 @@ if is_tf_available():
         TFNoRepeatNGramLogitsProcessor,
         TFRepetitionPenaltyLogitsProcessor,
     )
-
-
-def set_tensor_by_indices_to_value(tensor, indices, value):
-    # create value_tensor since tensor value assignment is not possible in TF
-    value_tensor = tf.zeros_like(tensor) + value
-    return tf.where(indices, value_tensor, tensor)
 
 
 @require_tf

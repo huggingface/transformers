@@ -22,6 +22,7 @@ import numpy as np
 import tensorflow as tf
 
 from .file_utils import ModelOutput
+from .tf_utils import shape_list, set_tensor_by_indices_to_value
 from .generation_tf_logits_process import (
     TFLogitsProcessorList,
     TFMinLengthLogitsProcessor,
@@ -1832,7 +1833,7 @@ class TFGenerationMixin:
         if (pad_token_id is not None) and (pad_token_id in input_ids.numpy()):
             return tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
         else:
-            return tf.ones_like(input_ids)
+            return tf.ones(input_ids.shape[:2], dtype=tf.int32)
 
     def _prepare_encoder_decoder_kwargs_for_generation(
         self, input_ids: tf.Tensor, return_dict_in_generate, model_kwargs
@@ -2340,12 +2341,6 @@ def scatter_values_on_batch_indices(values, batch_indices):
     return tf.scatter_nd(pair_indices, tf.reshape(values, [-1]), shape)
 
 
-def set_tensor_by_indices_to_value(tensor, indices, value):
-    # create value_tensor since tensor value assignment is not possible in TF
-    value_tensor = tf.zeros_like(tensor) + value
-    return tf.where(indices, value_tensor, tensor)
-
-
 def sample_without_replacement(logits, num_samples):
     """
     categorical sampling without replacement is currently not implemented the gumbel-max trick will do for now see
@@ -2354,13 +2349,6 @@ def sample_without_replacement(logits, num_samples):
     z = -tf.math.log(tf.random.uniform(shape_list(logits), 0, 1))
     _, indices = tf.nn.top_k(logits + z, num_samples)
     return indices
-
-
-def shape_list(x):
-    """Deal with dynamic shape in tensorflow cleanly."""
-    static = x.shape.as_list()
-    dynamic = tf.shape(x)
-    return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
 class BeamHypotheses(object):
