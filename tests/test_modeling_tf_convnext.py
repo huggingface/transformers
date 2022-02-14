@@ -215,7 +215,7 @@ def prepare_img():
 
 @require_tf
 @require_vision
-class TFViTModelIntegrationTest(unittest.TestCase):
+class TFConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return ConvNextFeatureExtractor.from_pretrained("acebook/convnext-tiny-224") if is_vision_available() else None
