@@ -15,25 +15,26 @@ from torch import Tensor
 import requests
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
-from detectron2.data import MetadataCatalog
 from detectron2.projects.deeplab import add_deeplab_config
 from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerConfig,
     MaskFormerForInstanceSegmentation,
     MaskFormerForInstanceSegmentationOutput,
     MaskFormerModel,
-    MaskFormerOutput
+    MaskFormerOutput,
+    MaskFormerPixelLevelModuleOutput,
 )
 from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
 from transformers.models.maskformer.MaskFormer.mask_former import add_mask_former_config
 from transformers.models.maskformer.MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
-
+from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
 
 StateDict = Dict[str, Tensor]
 from transformers.utils import logging
 
-
+# hugging face logger doesn't write on console
 logging.set_verbosity_info()
+logging.add_handler(logging.logging.StreamHandler())
 logger = logging.get_logger(__name__)
 
 
@@ -94,13 +95,11 @@ def setup_cfg(args: Args):
 
 
 class OriginalMaskFormerConfigToOursConverter:
-
     def __call__(self, original_config: object) -> MaskFormerConfig:
 
         model = original_config.MODEL
         mask_former = model.MASK_FORMER
         swin = model.SWIN
-
 
         config: MaskFormerConfig = MaskFormerConfig(
             fpn_feature_size=model.SEM_SEG_HEAD.CONVS_DIM,
@@ -110,6 +109,7 @@ class OriginalMaskFormerConfigToOursConverter:
             num_queries=mask_former.NUM_OBJECT_QUERIES,
             backbone_config=dict(
                 pretrain_img_size=swin.PRETRAIN_IMG_SIZE,
+                image_size=swin.PRETRAIN_IMG_SIZE,
                 in_channels=3,
                 patch_size=swin.PATCH_SIZE,
                 embed_dim=swin.EMBED_DIM,
@@ -118,7 +118,7 @@ class OriginalMaskFormerConfigToOursConverter:
                 window_size=swin.WINDOW_SIZE,
                 # TODO miss attn_drop_rage, path_norm
                 drop_path_rate=swin.DROP_PATH_RATE,
-                model_type='swin'
+                model_type="swin",
             ),
             dice_weight=mask_former.DICE_WEIGHT,
             ce_weight=1.0,
@@ -143,7 +143,7 @@ class OriginalMaskFormerConfigToOursConverter:
                 detr_auxiliary_loss=False,
                 detr_dilation=False,
                 # default pretrained config values
-            )
+            ),
         )
 
         return config
@@ -528,15 +528,17 @@ class OriginalMaskFormerCheckpoinToOursConverter:
         self.replace_pixel_module(dst_state_dict, src_state_dict)
         self.replace_transformer_module(dst_state_dict, src_state_dict)
 
-        logger.info(f"Missed keys are {pformat(dst_state_dict.diff())}")
-        logger.info(f"Not copied keys are {pformat(src_state_dict.keys())}")
-        logger.info("🙌 Done")
+        print(f"Missed keys are {pformat(dst_state_dict.diff())}")
+        print(f"Not copied keys are {pformat(src_state_dict.keys())}")
+        print("🙌 Done")
 
         mask_former.load_state_dict(dst_state_dict)
 
         return mask_former
 
-    def convert_instance_segmentation(self, mask_former: MaskFormerForInstanceSegmentation) -> MaskFormerForInstanceSegmentation:
+    def convert_instance_segmentation(
+        self, mask_former: MaskFormerForInstanceSegmentation
+    ) -> MaskFormerForInstanceSegmentation:
         dst_state_dict = TrackedStateDict(mask_former.state_dict())
         src_state_dict = self.original_model.state_dict()
 
@@ -545,24 +547,6 @@ class OriginalMaskFormerCheckpoinToOursConverter:
         mask_former.load_state_dict(dst_state_dict)
 
         return mask_former
-
-
-    @classmethod
-    def from_original_config_and_checkpoint_file(
-        cls, original_config_file: str, original_checkpoint_file: str
-    ) -> OriginalMaskFormerCheckpoinToOursConverter:
-        original_config = setup_cfg(Args(config_file=original_config_file))
-        mask_former_kwargs = OriginalMaskFormer.from_config(original_config)
-
-        original_model = OriginalMaskFormer(**mask_former_kwargs).eval()
-
-        DetectionCheckpointer(original_model).load(original_checkpoint_file)
-
-        config: MaskFormerConfig = OriginalMaskFormerConfigToOursConverter()(original_config)
-
-        to_model = MaskFormerModel(config=config).eval()
-
-        return cls(original_model)
 
     @staticmethod
     def using_dirs(
@@ -574,7 +558,7 @@ class OriginalMaskFormerCheckpoinToOursConverter:
             logger.info(f"💪 Converting {checkpoint.stem}")
             # find associated config file
             config: Path = config_dir / checkpoint.parents[0].stem / "swin" / f"{checkpoint.stem}.yaml"
-        
+
             yield config, checkpoint
 
 
@@ -582,42 +566,52 @@ checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weig
 config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs")
 
 
-def test(src, dst):
+def test(original_model, our_model: MaskFormerForInstanceSegmentation):
     with torch.no_grad():
 
-        src = src.eval()
-        dst = dst.eval()
+        original_model = original_model.eval()
+        our_model = our_model.eval()
 
         x = torch.zeros((1, 3, 384, 384))
 
-        src_features = src.backbone(x)
-        dst_features = dst.pixel_level_module.backbone(x.clone())
+        original_model_backbone_features = original_model.backbone(x)
 
-        for src_feature, dst_feature in zip(src_features.values(), dst_features):
-            assert torch.allclose(src_feature, dst_feature, atol=1e-4)
+        our_model_output: MaskFormerOutput = our_model.model(x, output_hidden_states=True)
 
-        src_pixel_out = src.sem_seg_head.decoder.forward_features(src_features)
-        dst_pixel_out = dst.pixel_level_module(x)
+        for original_model_feature, our_model_feature in zip(
+            original_model_backbone_features.values(), our_model_output.encoder_hidden_states
+        ):
+            assert torch.allclose(original_model_feature, our_model_feature, atol=1e-4)
 
-        assert torch.allclose(src_pixel_out[0], dst_pixel_out[1], atol=1e-4)
-        # turn off aux_loss loss
-        src.sem_seg_head.predictor.aux_loss = False
-        src_transformer_out = src.sem_seg_head.predictor(src_features["res5"], src_pixel_out[0])
-        dst_queries = dst.transformer_module(dst_pixel_out[0])
-        dst_transformer_out = dst.segmentation_module(dst_queries, dst_pixel_out[1])
+        original_model_pixel_out = original_model.sem_seg_head.pixel_decoder.forward_features(
+            original_model_backbone_features
+        )
 
-        assert torch.allclose(src_transformer_out["pred_logits"], dst_transformer_out["preds_logits"], atol=1e-4)
+        # assert torch.allclose(original_model_pixel_out[0], our_model_output.pixel_decoder_last_hidden_state, atol=1e-4)
+        # # turn off aux_loss loss
+        # original_model.sem_seg_head.predictor.aux_loss = False
+        # original_model_transformer_out = original_model.sem_seg_head.predictor(
+        #     original_model_backbone_features["res5"], original_model_pixel_out[0]
+        # )
+        # our_model_queries = our_model.model.transformer_module(our_model_pixel_out[0])
+        # our_model_transformer_out = our_model.model.segmentation_module(our_model_queries, our_model_pixel_out[1])
 
-        assert torch.allclose(src_transformer_out["pred_masks"], dst_transformer_out["preds_masks"], atol=1e-4)
+        # assert torch.allclose(
+        #     original_model_transformer_out["pred_logits"], our_model_transformer_out["preds_logits"], atol=1e-4
+        # )
 
-        src_out = src([{"image": x.squeeze(0)}])
+        # assert torch.allclose(
+        #     original_model_transformer_out["pred_masks"], our_model_transformer_out["preds_masks"], atol=1e-4
+        # )
 
-        dst_for_seg = MaskFormerForSemanticSegmentation(config=dst.config).eval()
-        dst_for_seg.model.load_state_dict(dst.state_dict())
+        original_model_out = original_model([{"image": x.squeeze(0)}])
 
-        dst_out: MaskFormerForSemanticSegmentationOutput = dst_for_seg(x)
+        our_model_out: MaskFormerForInstanceSegmentationOutput = our_model(x)
 
-        assert torch.allclose(src_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
+        feature_extractor = MaskFormerFeatureExtractor()
+
+        segmentation = feature_extractor.post_process_segmentation(our_model_out, target_size=(384, 384))
+        assert torch.allclose(original_model_out[0]["sem_seg"], segmentation, atol=1e-4)
 
         im = prepare_img()
 
@@ -634,32 +628,38 @@ def test(src, dst):
 
         x = tr(im)
 
-        src_out = src([{"image": x}])
-        dst_out = dst_for_seg(x.unsqueeze(0))
+        original_model_out = original_model([{"image": x}])
+        our_model_out: MaskFormerForInstanceSegmentationOutput = our_model(x.unsqueeze(0))
+
+        feature_extractor = MaskFormerFeatureExtractor()
+
+        segmentation = feature_extractor.post_process_semantic_segmentation(our_model_out, target_size=(384, 384))
+        original_sem_seg = original_model_out[0]["sem_seg"].argmax(dim=0)
+        assert torch.allclose(original_sem_seg, segmentation, atol=1e-4)
         # NOTE this fails but the numbers are very very close
-        # assert torch.allclose(src_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
+        # assert torch.allclose(original_model_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
 
         dst_for_pan_seg = MaskFormerForPanopticSegmentation(
             config=dst.config,
-            overlap_mask_area_threshold=src.overlap_threshold,
-            object_mask_threshold=src.object_mask_threshold,
+            overlap_mask_area_threshold=original_model.overlap_threshold,
+            object_mask_threshold=original_model.object_mask_threshold,
         ).eval()
         dst_for_pan_seg.model.load_state_dict(dst.state_dict())
         # not all the models will work on pan seg (due to their dataset)
-        metadata = src.metadata
+        metadata = original_model.metadata
         if metadata.get("thing_dataset_id_to_contiguous_id") is not None:
-            src.panoptic_on = True
+            original_model.panoptic_on = True
 
-            src_out = src([{"image": x}])
+            original_model_out = original_model([{"image": x}])
             dst_out: MaskFormerForPanopticSegmentationOutput = dst_for_pan_seg(x.unsqueeze(0))
-            src_seg = src_out[0]["panoptic_seg"]
+            original_model_seg = original_model_out[0]["panoptic_seg"]
 
-            assert torch.allclose(src_out[0]["panoptic_seg"][0], dst_out.segmentation, atol=1e-4)
+            assert torch.allclose(original_model_out[0]["panoptic_seg"][0], dst_out.segmentation, atol=1e-4)
 
-            for src_segment, dst_segment in zip(src_seg[1], dst_out.segments):
-                assert src_segment["id"] == dst_segment["id"]
-                assert src_segment["category_id"] == dst_segment["category_id"]
-                assert src_segment["isthing"] == dst_segment["is_thing"]
+            for original_model_segment, dst_segment in zip(original_model_seg[1], dst_out.segments):
+                assert original_model_segment["id"] == dst_segment["id"]
+                assert original_model_segment["category_id"] == dst_segment["category_id"]
+                assert original_model_segment["isthing"] == dst_segment["is_thing"]
 
         logger.info("✅ Test passed!")
 
@@ -696,7 +696,6 @@ if __name__ == "__main__":
 
     config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs")
 
-
     if not save_directory.exists():
         save_directory.mkdir(parents=True)
 
@@ -721,17 +720,18 @@ if __name__ == "__main__":
 
         converter = OriginalMaskFormerCheckpoinToOursConverter(original_model, config)
 
-        converter.convert(mask_former)
+        maskformer = converter.convert(mask_former)
 
         mask_former_for_instance_segmentation = MaskFormerForInstanceSegmentation(config=config).eval()
 
         mask_former_for_instance_segmentation.model = mask_former
-        converter.convert_instance_segmentation(mask_former_for_instance_segmentation)
+        mask_former_for_instance_segmentation = converter.convert_instance_segmentation(
+            mask_former_for_instance_segmentation
+        )
+
+        test(original_model, mask_former_for_instance_segmentation)
 
         model_name: str = f"{checkpoint_file.parents[0].stem}-{checkpoint_file.stem}"
-
-        print(model_name)
-        # test(converter.original_model, converted)
 
         # feature_extractor.save_pretrained(save_directory / model_name)
         # converted.save_pretrained(save_directory / model_name)

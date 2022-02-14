@@ -956,7 +956,7 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
         batch_size, _, height, width = pixel_values.shape
-        # TODO I am not passing pixel_mask, I need to pass it and use it!!!
+
         if pixel_mask is None:
             pixel_mask = torch.ones((batch_size, height, width), device=pixel_values.device)
         pixel_level_module_output: MaskFormerPixelLevelModuleOutput = self.pixel_level_module(
@@ -972,7 +972,7 @@ class MaskFormerModel(MaskFormerPretrainedModel):
             encoder_last_hidden_state=image_features,
             pixel_decoder_last_hidden_state=pixel_embeddings,
             transformer_decoder_last_hidden_state=queries,
-            encoder_hidden_states=transformer_module_output.hidden_states if output_hidden_states else (),
+            encoder_hidden_states=pixel_level_module_output.encoder_hidden_states if output_hidden_states else (),
             pixel_decoder_hidden_states=pixel_level_module_output.decoder_hidden_states
             if output_hidden_states
             else (),

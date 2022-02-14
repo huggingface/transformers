@@ -18,14 +18,13 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
-from transformers.models.maskformer.modeling_maskformer import (
-    MaskFormerForInstanceSegmentationOutput,
-)
+from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput, upsample_like
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType, is_torch_available
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
+from torch.nn.functional import interpolate
 
 if is_torch_available():
     import torch
@@ -363,11 +362,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         return encoded_inputs
 
-    def post_process_segmentation(self, outputs: MaskFormerForInstanceSegmentationOutput) -> Tensor:
-        """Converts the output of [`MaskFormerModel`] into image segmentation predictions. Only supports PyTorch.
+    def post_process_segmentation(
+        self, outputs: MaskFormerForInstanceSegmentationOutput, target_size: Tuple[int, int] = None
+    ) -> Tensor:
+        """Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image segmentation predictions. Only supports PyTorch.
 
         Args:
-            outputs (MaskFormerOutput): The outputs from MaskFor
+            outputs (MaskFormerForInstanceSegmentationOutput): The outputs from MaskFor
 
         Returns:
             Tensor: A tensor of shape `batch_size, num_labels, height, width`
@@ -387,6 +388,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
         segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
+        if target_size is not None:
+            segmentation: Tensor = interpolate(
+                segmentation,
+                size=target_size,
+                mode="bilinear",
+                align_corners=False,
+            )
         return segmentation
 
     def remove_low_and_no_objects(
@@ -415,6 +423,21 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         return masks[to_keep], scores[to_keep], labels[to_keep]
 
+    def post_process_semantic_segmentation(
+        self, outputs: MaskFormerForInstanceSegmentationOutput, target_size: Tuple[int, int] = None
+    ) -> Tensor:
+        """Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into semantic segmentation predictions. Only supports PyTorch.
+
+        Args:
+            outputs (MaskFormerForInstanceSegmentationOutput): The outputs from MaskFor
+
+        Returns:
+            Tensor: A tensor of shape `batch_size, height, width`
+        """
+        segmentation: Tensor = self.post_process_segmentation(outputs, target_size)
+        semantic_segmentation: Tensor = segmentation.argmax(dim=1)
+        return semantic_segmentation
+
     def post_process_panoptic_segmentation(
         self,
         outputs: MaskFormerForInstanceSegmentationOutput,
@@ -423,7 +446,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         is_thing_map: Dict[int, bool] = None,
     ) -> List[Dict]:
         """
-        Converts the output of [`MaskFormerModel`] into image panoptic segmentation predictions. Only supports PyTorch.
+        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation predictions. Only supports PyTorch.
 
 
         Args:
