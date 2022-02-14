@@ -186,7 +186,7 @@ class TFConvNextStage(tf.keras.layers.Layer):
                 [
                     tf.keras.layers.LayerNormalization(
                         epsilon=1e-6,
-                        name=f"{base_name}.downsampling_layer.0",
+                        name=f"{base_name}/{base_name}.downsampling_layer.0",
                     ),
                     tf.keras.layers.Conv2D(
                         filters=out_channels,
@@ -194,12 +194,12 @@ class TFConvNextStage(tf.keras.layers.Layer):
                         strides=stride,
                         kernel_initializer=get_initializer(config.initializer_range),
                         bias_initializer="zeros",
-                        name=f"{base_name}.downsampling_layer.1",
+                        name=f"{base_name}/{base_name}.downsampling_layer.1",
                     ),
                 ],
             )
         else:
-            self.downsampling_layer = tf.keras.layers.Activation("linear")
+            self.downsampling_layer = tf.identity
 
         drop_path_rates = drop_path_rates or [0.0] * depth
         self.layers = tf.keras.Sequential(
