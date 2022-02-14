@@ -827,8 +827,10 @@ def requires_backends(obj, backends):
         backends = [backends]
 
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not all(BACKENDS_MAPPING[backend][0]() for backend in backends):
-        raise ImportError("".join([BACKENDS_MAPPING[backend][1].format(name) for backend in backends]))
+    checks = (BACKENDS_MAPPING[backend] for backend in backends)
+    failed = [msg.format(name) for available, msg in checks if not available()]
+    if failed:
+        raise ImportError("".join(failed))
 
 
 class DummyObject(type):
