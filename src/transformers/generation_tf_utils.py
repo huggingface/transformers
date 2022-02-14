@@ -1924,7 +1924,7 @@ class TFGenerationMixin:
                     "you should either supply a context to complete as `input_ids` input "
                     "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
                 )
-            return tf.fill((1, 1), bos_token_id, dtype=tf.int32)
+            return tf.cast(tf.fill((1, 1), bos_token_id), dtype=tf.int32)
 
         return inputs
 

@@ -18,9 +18,6 @@ import unittest
 
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf
-from transformers.tf_utils import set_tensor_by_indices_to_value
-
-from .test_modeling_tf_common import ids_tensor
 
 
 if is_tf_available():
@@ -33,6 +30,9 @@ if is_tf_available():
         TFNoRepeatNGramLogitsProcessor,
         TFRepetitionPenaltyLogitsProcessor,
     )
+    from transformers.tf_utils import set_tensor_by_indices_to_value
+
+    from .test_modeling_tf_common import ids_tensor
 
 
 @require_tf
