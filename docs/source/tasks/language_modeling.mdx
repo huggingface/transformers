@@ -128,6 +128,7 @@ Now you need a second preprocessing function to preserve the information in the 
 ```py
 >>> block_size = 128
 
+
 >>> def group_texts(examples):
 ...     concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
 ...     total_length = len(concatenated_examples[list(examples.keys())[0]])
