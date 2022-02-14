@@ -105,7 +105,7 @@ class CvtConfig(PretrainedConfig):
         drop_rate = [0.0, 0.0, 0.0],
         drop_path_rate = [0.0, 0.0, 0.1],
         qkv_bias = [True, True, True],
-        cls_token = [False, False, False],
+        cls_token = [False, False, True],
         pos_embed = [False, False, False],
         qkv_projection_method = ['dw_bn', 'dw_bn', 'dw_bn'],
         kernel_qkv = [3, 3, 3],
