@@ -189,11 +189,26 @@ class ProcessorPushToHubTester(unittest.TestCase):
             repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-processor", use_auth_token=self._token)
             processor.save_pretrained(tmp_dir)
 
-            # This has added the proper auto_map field to the config
-            # self.assertDictEqual(
-            #    feature_extractor.auto_map,
-            #    {"AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor"},
-            # )
+            # This has added the proper auto_map field to the feature extractor config
+            self.assertDictEqual(
+                processor.feature_extractor.auto_map,
+                {
+                    "AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor",
+                    "AutoProcessor": "custom_processing.CustomProcessor",
+                },
+            )
+
+            # This has added the proper auto_map field to the tokenizer config
+            with open(os.path.join(tmp_dir, "tokenizer_config.json")) as f:
+                tokenizer_config = json.load(f)
+            self.assertDictEqual(
+                tokenizer_config["auto_map"],
+                {
+                    "AutoTokenizer": ["custom_tokenization.CustomTokenizer", None],
+                    "AutoProcessor": "custom_processing.CustomProcessor",
+                },
+            )
+
             # The code has been copied from fixtures
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_feature_extraction.py")))
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_tokenization.py")))
