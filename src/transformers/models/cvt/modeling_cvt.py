@@ -21,6 +21,8 @@ import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+import math
+import warnings
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -107,6 +109,12 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: 
         random_tensor.div_(keep_prob)
     return x * random_tensor
 
+def _no_grad_trunc_normal_(tensor, mean, std, a, b):
+    # Cut & paste from PyTorch official master until it's in a few official releases - RW
+    # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+    def norm_cdf(x):
+        # Computes standard normal cumulative distribution function
+        return (1. + math.erf(x / math.sqrt(2.))) / 2.
 
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
