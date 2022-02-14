@@ -36,6 +36,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("decision_transformer", "DecisionTransformerModel"),
         ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
         ("poolformer", "PoolFormerModel"),
+        ("cvt", "CvtModel"),
         ("convnext", "ConvNextModel"),
         ("van", "VanModel"),
         ("resnet", "ResNetModel"),
@@ -289,6 +290,7 @@ MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image Classification mapping
+        ("cvt", "CvtForImageClassification"),
         ("vit", "ViTForImageClassification"),
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
         ("beit", "BeitForImageClassification"),
