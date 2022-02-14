@@ -148,7 +148,7 @@ class ImageSegmentationPipeline(Pipeline):
             for label_id in range(num_labels):
                 label = self.model.config.id2label[label_id]
                 mask = classes == label_id
-                score = ((mask * logits_reshaped).sum() / mask.sum()).exp().item()
+                score = ((mask * logits_reshaped[0, label_id]).sum() / mask.sum()).exp().item()
                 mask = self._get_mask_str(mask.numpy())
                 annotation.append({"score": score, "label": label, "mask": mask})
 
