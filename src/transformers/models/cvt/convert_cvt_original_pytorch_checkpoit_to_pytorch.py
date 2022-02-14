@@ -1,6 +1,6 @@
 # Run this file inside CVT Repo
 
-from transformers import CvtConfig, CvtModel
+from transformers import CvtConfig, CvtForImageClassification
 from lib.models.cls_cvt import ConvolutionalVisionTransformer as CVT
 import torch
 import yaml
@@ -13,7 +13,7 @@ with open('C:\\Users\AH87766\Documents\CvT\experiments\imagenet\cvt\cvt-13-224x2
     original_config = yaml.load(f)
 
 cvt_hugging_config = CvtConfig()
-cvt_hugging_model = CvtModel(cvt_hugging_config)
+cvt_hugging_model = CvtForImageClassification(cvt_hugging_config)
 
 original_model = CVT(spec=original_config['MODEL']['SPEC'])
 
