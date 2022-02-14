@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -31,6 +32,7 @@ from transformers.pipelines.audio_utils import chunk_bytes_iter
 from transformers.pipelines.automatic_speech_recognition import apply_stride, chunk_iter
 from transformers.testing_utils import (
     is_pipeline_test,
+    is_pyctcdecode_available,
     is_torch_available,
     nested_simplify,
     require_pyctcdecode,
@@ -45,6 +47,10 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 if is_torch_available():
     import torch
+
+
+if is_pyctcdecode_available():
+    from transformers.models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
 
 
 # We can't use this mixin because it assumes TF support.
@@ -355,6 +361,29 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         speech_recognizer = pipeline(
             model="hf-internal-testing/processor_with_lm",
         )
+        self.assertEqual(speech_recognizer.type, "ctc_with_lm")
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        n_repeats = 2
+        audio_tiled = np.tile(audio, n_repeats)
+
+        output = speech_recognizer([audio_tiled], batch_size=2)
+
+        self.assertEqual(output, [{"text": ANY(str)}])
+        self.assertEqual(output[0]["text"][:6], "<s> <s")
+
+    @require_torch
+    @require_pyctcdecode
+    def test_with_local_lm_fast(self):
+        processor_from_hub = Wav2Vec2ProcessorWithLM.from_pretrained("hf-internal-testing/processor_with_lm")
+        language_model_from_hub = processor_from_hub.decoder.model_container[processor_from_hub.decoder._model_key]
+        path_to_cached_dir_from_hub = Path(
+            language_model_from_hub._kenlm_model.path.decode("utf-8")
+        ).parent.parent.absolute()
+
+        speech_recognizer = pipeline(model=path_to_cached_dir_from_hub)
         self.assertEqual(speech_recognizer.type, "ctc_with_lm")
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")

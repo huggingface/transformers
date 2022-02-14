@@ -303,3 +303,23 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         # https://huggingface.co/hf-internal-testing/processor_with_lm/tree/main
         # are downloaded and none of the rest (e.g. README.md, ...)
         self.assertListEqual(downloaded_decoder_files, expected_decoder_files)
+
+    def test_decoder_local_files(self):
+        processor_from_hub = Wav2Vec2ProcessorWithLM.from_pretrained("hf-internal-testing/processor_with_lm")
+        language_model_from_hub = processor_from_hub.decoder.model_container[processor_from_hub.decoder._model_key]
+        path_to_cached_dir_from_hub = Path(
+            language_model_from_hub._kenlm_model.path.decode("utf-8")
+        ).parent.parent.absolute()
+
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained(path_to_cached_dir_from_hub)
+        language_model = processor.decoder.model_container[processor.decoder._model_key]
+        path_to_cached_dir = Path(language_model._kenlm_model.path.decode("utf-8")).parent.parent.absolute()
+
+        downloaded_decoder_files = os.listdir(path_to_cached_dir_from_hub)
+        local_decoder_files = os.listdir(path_to_cached_dir)
+
+        downloaded_decoder_files.sort()
+        local_decoder_files.sort()
+
+        # test that both decoder form hub and local files in cache are the same
+        self.assertListEqual(downloaded_decoder_files, local_decoder_files)

@@ -1495,6 +1495,35 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
 
+    @require_pyctcdecode
+    @require_torchaudio
+    def test_wav2vec2_with_local_lm(self):
+        model_from_hub = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        processor_from_hub = Wav2Vec2ProcessorWithLM.from_pretrained("hf-internal-testing/processor_with_lm")
+        language_model_from_hub = processor_from_hub.decoder.model_container[processor_from_hub.decoder._model_key]
+        path_to_cached_dir_from_hub = Path(
+            language_model_from_hub._kenlm_model.path.decode("utf-8")
+        ).parent.parent.absolute()
+
+        ds = load_dataset("common_voice", "es", split="test", streaming=True)
+        sample = next(iter(ds))
+
+        resampled_audio = torchaudio.functional.resample(
+            torch.tensor(sample["audio"]["array"]), 48_000, 16_000
+        ).numpy()
+
+        model = Wav2Vec2ForCTC.from_pretrained(path_to_cached_dir_from_hub).to(torch_device)
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained(path_to_cached_dir_from_hub)
+
+        input_values = processor(resampled_audio, return_tensors="pt").input_values
+
+        with torch.no_grad():
+            logits = model(input_values.to(torch_device)).logits
+
+        transcription = processor.batch_decode(logits.cpu().numpy()).text
+
+        self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
+
     def test_inference_diarization(self):
         model = Wav2Vec2ForAudioFrameClassification.from_pretrained("anton-l/wav2vec2-base-superb-sd").to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/wav2vec2-base-superb-sd")
