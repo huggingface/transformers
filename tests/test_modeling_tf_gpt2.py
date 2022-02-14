@@ -33,8 +33,8 @@ if is_tf_available():
         TFGPT2ForSequenceClassification,
         TFGPT2LMHeadModel,
         TFGPT2Model,
-        shape_list,
     )
+    from transformers.tf_utils import shape_list
 
 
 class TFGPT2ModelTester:
