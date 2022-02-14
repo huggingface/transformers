@@ -19,7 +19,7 @@ import unittest
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf
 
-from .test_modeling_common import ids_tensor
+from .test_modeling_tf_common import ids_tensor
 
 
 if is_tf_available():
@@ -138,7 +138,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
 
         # dummy input_ids and scores
         input_ids = ids_tensor((batch_size, sequence_length), vocab_size)
-        input_ids_comp = input_ids.clone()
+        input_ids_comp = tf.identity(input_ids)
 
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores_comp = tf.identity(scores)
