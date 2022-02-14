@@ -795,8 +795,8 @@ class CvtForImageClassification(CvtPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-
-        logits = self.classifier(sequence_output[:, 0, :])
+        sequence_output_mean = sequence_output.mean(dim=1)
+        logits = self.classifier(sequence_output_mean)
 
         loss = None
         if labels is not None:
