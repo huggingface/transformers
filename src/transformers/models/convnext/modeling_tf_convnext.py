@@ -84,6 +84,9 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
         # shape = (batch_size, in_height, in_width, in_channels=num_channels)
+        if isinstance(pixel_values, dict):
+            pixel_values = pixel_values["pixel_values"]
+
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
 
         embeddings = self.patch_embeddings(pixel_values)
