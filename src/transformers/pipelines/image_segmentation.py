@@ -16,8 +16,12 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
+    import torchvision
 
-    from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_SEGMENTATION_MAPPING
+    from ..models.auto.modeling_auto import (
+        MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+        MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
+    )
 
 logger = logging.get_logger(__name__)
 
@@ -46,7 +50,9 @@ class ImageSegmentationPipeline(Pipeline):
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
         requires_backends(self, "vision")
-        self.check_model_type(MODEL_FOR_IMAGE_SEGMENTATION_MAPPING)
+        self.check_model_type(
+            dict(MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items() + MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items())
+        )
 
     def _sanitize_parameters(self, **kwargs):
         postprocess_kwargs = {}
@@ -105,23 +111,46 @@ class ImageSegmentationPipeline(Pipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.9, mask_threshold=0.5):
-        raw_annotations = self.feature_extractor.post_process_segmentation(
-            model_outputs, model_outputs["target_size"], threshold=threshold, mask_threshold=0.5
-        )
-        raw_annotation = raw_annotations[0]
+        if hasattr(self.feature_extractor, "post_process_segmentation"):
+            # Panoptic
+            raw_annotations = self.feature_extractor.post_process_segmentation(
+                model_outputs, model_outputs["target_size"], threshold=threshold, mask_threshold=0.5
+            )
+            raw_annotation = raw_annotations[0]
+            raw_annotation["masks"] *= 255  # [0,1] -> [0,255] black and white pixels
+            raw_annotation["scores"] = raw_annotation["scores"].tolist()
+            raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in raw_annotation["labels"]]
+            raw_annotation["masks"] = [self._get_mask_str(mask) for mask in raw_annotation["masks"].cpu().numpy()]
 
-        raw_annotation["masks"] *= 255  # [0,1] -> [0,255] black and white pixels
-
-        raw_annotation["scores"] = raw_annotation["scores"].tolist()
-        raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in raw_annotation["labels"]]
-        raw_annotation["masks"] = [self._get_mask_str(mask) for mask in raw_annotation["masks"].cpu().numpy()]
-
-        # {"scores": [...], ...} --> [{"score":x, ...}, ...]
-        keys = ["score", "label", "mask"]
-        annotation = [
-            dict(zip(keys, vals))
-            for vals in zip(raw_annotation["scores"], raw_annotation["labels"], raw_annotation["masks"])
-        ]
+            # {"scores": [...], ...} --> [{"score":x, ...}, ...]
+            keys = ["score", "label", "mask"]
+            annotation = [
+                dict(zip(keys, vals))
+                for vals in zip(raw_annotation["scores"], raw_annotation["labels"], raw_annotation["masks"])
+            ]
+        else:
+            # Default logits
+            logits = model_outputs.logits
+            if len(logits.shape) != 4:
+                raise ValueError(f"Logits don't have expected dimensions, expected [1, N, H, W], got {logits.shape}")
+            # Softmax
+            logits = logits.log_softmax(dim=1)
+            b, n, h, w = logits.shape
+            num_labels = len(self.model.config.id2label)
+            if n != num_labels:
+                raise ValueError(
+                    f"Logits don't have expected dimensions, expected [1, {num_labels}, H, W], got {logits.shape}"
+                )
+            size = model_outputs["target_size"].tolist()[0]
+            logits_reshaped = torchvision.transforms.Resize(size)(logits)
+            classes = logits_reshaped.argmax(dim=1)[0]
+            annotation = []
+            for label_id in range(num_labels):
+                label = self.model.config.id2label[label_id]
+                mask = classes == label_id
+                score = ((mask * logits_reshaped).sum() / mask.sum()).exp().item()
+                mask = self._get_mask_str(mask.numpy())
+                annotation.append({"score": score, "label": label, "mask": mask})
 
         return annotation
 

@@ -17,6 +17,7 @@ import unittest
 
 from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+    MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
     AutoFeatureExtractor,
     AutoModelForImageSegmentation,
     ImageSegmentationPipeline,
@@ -51,7 +52,13 @@ else:
 @require_torch
 @is_pipeline_test
 class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-    model_mapping = MODEL_FOR_IMAGE_SEGMENTATION_MAPPING
+    model_mapping = {
+        k: v
+        for k, v in (
+            list(MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items()) if MODEL_FOR_IMAGE_SEGMENTATION_MAPPING else []
+        )
+        + (MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items() if MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING else [])
+    }
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
         image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
@@ -164,6 +171,31 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                         "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
                     },
                 ],
+            ],
+        )
+
+    @require_torch
+    def test_small_model_pt_semantic(self):
+        model_id = "hf-internal-testing/tiny-random-beit-pipeline"
+        image_segmenter = pipeline(model=model_id)
+        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg")
+        for o in outputs:
+            # shortening by hashing
+            o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {
+                    "score": 0.25,
+                    "label": "LABEL_0",
+                    "mask": "ee3dad3c87af95c31c9b00864598cec4a205ad79",
+                },
+                {
+                    "score": 0.25,
+                    "label": "LABEL_1",
+                    "mask": "6ef826f78506d3ce6f1b940a587baef805e48530",
+                },
             ],
         )
 
