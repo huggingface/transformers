@@ -68,6 +68,10 @@ def feature_extractor_class_from_name(class_name: str):
             return getattr(module, class_name)
             break
 
+    for config, extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.items():
+        if getattr(extractor, "__name__", None) == class_name:
+            return extractor
+
     return None
 
 
@@ -301,3 +305,15 @@ class AutoFeatureExtractor:
             f"`feature_extractor_type` key in its {FEATURE_EXTRACTOR_NAME} of {CONFIG_NAME}, or one of the following "
             "`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES.keys())}"
         )
+
+    @staticmethod
+    def register(config_class, feature_extractor_class):
+        """
+        Register a new feature extractor for this class.
+
+        Args:
+            config_class ([`PretrainedConfig`]):
+                The configuration corresponding to the model to register.
+            feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
+        """
+        FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class)
