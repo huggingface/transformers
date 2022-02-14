@@ -41,16 +41,16 @@ _CONFIG_FOR_DOC = "CvtConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "CvtFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/cvt-base-patch13-224-in1k"
+_CHECKPOINT_FOR_DOC = "microsoft/cvt-13"
 _EXPECTED_OUTPUT_SHAPE = [1, 384, 14, 14]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "microsoft/cvt-base-patch13-224"
+_IMAGE_CLASS_CHECKPOINT = "microsoft/cvt-13"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby cat'"
 
 
 CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "anugunj/testcvtmodel",
+    "anugunj/cvt-13",
     # See all Cvt models at https://huggingface.co/models?filter=cvt
 ]
 
@@ -197,7 +197,6 @@ class ConvEmbeddings(nn.Module):
     Image to Conv Embedding.
 
     """
-
     def __init__(self, patch_size, num_channels, embed_dim, stride, padding):
         super().__init__()
         patch_size = to_2tuple(patch_size)
@@ -499,7 +498,6 @@ class CvtLayer(nn.Module):
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
         attention_output = self.drop_path(attention_output)
 
         # first residual connection

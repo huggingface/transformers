@@ -116,6 +116,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
     "models": [],
     # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
@@ -656,6 +657,17 @@ if is_torch_available():
 
     # PyTorch models structure
 
+<<<<<<< HEAD
+=======
+    _import_structure["models.cvt"].extend(
+        [
+            "CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CvtForImageClassification",
+            "CvtModel",
+            "CvtPreTrainedModel",
+        ]
+    )
+>>>>>>> f110cbdd6 (Cvt Files)
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2556,6 +2568,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2971,6 +2984,15 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
+<<<<<<< HEAD
+=======
+        from .models.cvt import (
+            CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CvtForImageClassification,
+            CvtModel,
+            CvtPreTrainedModel,
+        )
+>>>>>>> f110cbdd6 (Cvt Files)
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
