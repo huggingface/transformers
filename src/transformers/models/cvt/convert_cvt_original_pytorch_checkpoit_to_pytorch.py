@@ -1,3 +1,4 @@
+# Run this file inside CVT Repo
 from __future__ import annotations
 from pprint import pprint
 
@@ -116,7 +117,7 @@ with open('/home/zuppif/Documents/Work/hugging_face/cvt/transformers/src/transfo
 
 cvt_hugging_config = CvtConfig()
 cvt_hugging_model = CvtForImageClassification(cvt_hugging_config).eval()
-original_config['MODEL']['CLS_TOKEN'] = [False, False, False]
+
 original_model = CVT(spec=original_config['MODEL']['SPEC']).eval()
 
 x = torch.zeros((1, 3, 224, 224))
