@@ -119,7 +119,7 @@ class TFMinLengthLogitsProcessor(TFLogitsProcessor):
 
 class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
     r"""
-    [`LogitsProcessor`] enforcing an exponential penalty on repeated sequences.
+    [`TFLogitsProcessor`] enforcing an exponential penalty on repeated sequences.
 
     Args:
         repetition_penalty (`float`):
@@ -160,7 +160,7 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
 
 class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
     """
-    [`LogitsProcessor`] that enforces that specified sequences will never be sampled.
+    [`TFLogitsProcessor`] that enforces that specified sequences will never be sampled.
 
     Args:
         bad_words_ids (`List[List[int]]`):
@@ -243,7 +243,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
 
 class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
     r"""
-    [`LogitsProcessor`] that enforces no repetition of n-grams. See
+    [`TFLogitsProcessor`] that enforces no repetition of n-grams. See
     [Fairseq](https://github.com/pytf/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
 
     Args:

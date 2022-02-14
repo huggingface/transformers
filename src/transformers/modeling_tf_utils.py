@@ -54,6 +54,7 @@ from .file_utils import (
 )
 from .generation_tf_utils import TFGenerationMixin
 from .modeling_tf_outputs import TFSeq2SeqLMOutput
+from .tf_utils import shape_list
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
