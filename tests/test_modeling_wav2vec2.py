@@ -64,7 +64,6 @@ if is_torchaudio_available():
 
 
 if is_pyctcdecode_available():
-    from huggingface_hub import snapshot_download
     from transformers import Wav2Vec2ProcessorWithLM
 
 
@@ -1486,30 +1485,6 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             torch_device
         )
         processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
-
-        input_values = processor(resampled_audio, return_tensors="pt").input_values
-
-        with torch.no_grad():
-            logits = model(input_values.to(torch_device)).logits
-
-        transcription = processor.batch_decode(logits.cpu().numpy()).text
-
-        self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
-
-    @require_pyctcdecode
-    @require_torchaudio
-    def test_wav2vec2_with_local_lm(self):
-        local_dir = snapshot_download("hf-internal-testing/processor_with_lm")
-
-        ds = load_dataset("common_voice", "es", split="test", streaming=True)
-        sample = next(iter(ds))
-
-        resampled_audio = torchaudio.functional.resample(
-            torch.tensor(sample["audio"]["array"]), 48_000, 16_000
-        ).numpy()
-
-        model = Wav2Vec2ForCTC.from_pretrained(local_dir).to(torch_device)
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained(local_dir)
 
         input_values = processor(resampled_audio, return_tensors="pt").input_values
 

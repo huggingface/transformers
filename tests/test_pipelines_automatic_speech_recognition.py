@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 from datasets import load_dataset
 
+from huggingface_hub import snapshot_download
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
@@ -31,7 +32,6 @@ from transformers.pipelines.audio_utils import chunk_bytes_iter
 from transformers.pipelines.automatic_speech_recognition import apply_stride, chunk_iter
 from transformers.testing_utils import (
     is_pipeline_test,
-    is_pyctcdecode_available,
     is_torch_available,
     nested_simplify,
     require_pyctcdecode,
@@ -46,10 +46,6 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 if is_torch_available():
     import torch
-
-
-if is_pyctcdecode_available():
-    from huggingface_hub import snapshot_download
 
 
 # We can't use this mixin because it assumes TF support.
