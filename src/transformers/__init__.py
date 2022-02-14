@@ -2054,6 +2054,7 @@ if is_tf_available():
         ]
     )
     _import_structure["optimization_tf"] = ["AdamWeightDecay", "GradientAccumulator", "WarmUp", "create_optimizer"]
+    _import_structure["tf_utils"] = []
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
 else:
@@ -2272,7 +2273,6 @@ if is_flax_available():
             "FlaxXGLMPreTrainedModel",
         ]
     )
-    _import_structure["tf_utils"] = []
 else:
     from .utils import dummy_flax_objects
 
