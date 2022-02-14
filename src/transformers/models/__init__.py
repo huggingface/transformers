@@ -89,6 +89,7 @@ from . import (
     m2m_100,
     marian,
     maskformer,
+    markuplm,
     mbart,
     mbart50,
     mctct,
