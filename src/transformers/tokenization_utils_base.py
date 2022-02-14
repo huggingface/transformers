@@ -1739,7 +1739,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         raise error
 
                 except RepositoryNotFoundError as err:
-                    logger.error(err)
                     raise EnvironmentError(
                         f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
                         "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
@@ -1747,7 +1746,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         "`huggingface-cli login` and pass `use_auth_token=True`."
                     )
                 except RevisionNotFoundError as err:
-                    logger.error(err)
                     raise EnvironmentError(
                         f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
                         "for this model name. Check the model page at "

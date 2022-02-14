@@ -1584,7 +1584,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 )
 
             except RepositoryNotFoundError as err:
-                logger.error(err)
                 raise EnvironmentError(
                     f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
                     "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a "
@@ -1592,14 +1591,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     "login` and pass `use_auth_token=True`."
                 )
             except RevisionNotFoundError as err:
-                logger.error(err)
                 raise EnvironmentError(
                     f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for "
                     "this model name. Check the model page at "
                     f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
                 )
             except EntryNotFoundError as err:
-                logger.error(err)
                 if filename == TF2_WEIGHTS_NAME:
                     has_file_kwargs = {
                         "revision": revision,
@@ -1614,7 +1611,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                             "those weights."
                         )
                     else:
-                        logger.error(err)
                         raise EnvironmentError(
                             f"{pretrained_model_name_or_path} does not appear to have a file named {TF2_WEIGHTS_NAME} "
                             f"or {WEIGHTS_NAME}."
@@ -1624,7 +1620,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
                     )
             except HTTPError as err:
-                logger.error(err)
                 raise EnvironmentError(
                     "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
                     f"{pretrained_model_name_or_path} is not the path to a directory conaining a a file named "
@@ -1633,7 +1628,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     "'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
             except EnvironmentError as err:
-                logger.error(err)
                 raise EnvironmentError(
                     f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it from "
                     "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "

@@ -2301,7 +2301,6 @@ def get_file_from_repo(
         )
 
     except RepositoryNotFoundError as err:
-        logger.error(err)
         raise EnvironmentError(
             f"{path_or_repo} is not a local folder and is not a valid model identifier "
             "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
@@ -2309,7 +2308,6 @@ def get_file_from_repo(
             "`huggingface-cli login` and pass `use_auth_token=True`."
         )
     except RevisionNotFoundError as err:
-        logger.error(err)
         raise EnvironmentError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
             "for this model name. Check the model page at "
