@@ -657,17 +657,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-<<<<<<< HEAD
-=======
-    _import_structure["models.cvt"].extend(
-        [
-            "CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CvtForImageClassification",
-            "CvtModel",
-            "CvtPreTrainedModel",
-        ]
-    )
->>>>>>> f110cbdd6 (Cvt Files)
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2984,15 +2973,6 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
-<<<<<<< HEAD
-=======
-        from .models.cvt import (
-            CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CvtForImageClassification,
-            CvtModel,
-            CvtPreTrainedModel,
-        )
->>>>>>> f110cbdd6 (Cvt Files)
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
