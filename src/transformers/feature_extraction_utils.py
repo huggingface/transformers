@@ -412,36 +412,31 @@ class FeatureExtractionMixin(PushToHubMixin):
                 user_agent=user_agent,
             )
 
-        except RepositoryNotFoundError as err:
-            logger.error(err)
+        except RepositoryNotFoundError:
             raise EnvironmentError(
                 f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier listed on "
                 "'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token having "
                 "permission to this repo with `use_auth_token` or log in with `huggingface-cli login` and pass "
                 "`use_auth_token=True`."
             )
-        except RevisionNotFoundError as err:
-            logger.error(err)
+        except RevisionNotFoundError:
             raise EnvironmentError(
                 f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
                 f"model name. Check the model page at 'https://huggingface.co/{pretrained_model_name_or_path}' for "
                 "available revisions."
             )
-        except EntryNotFoundError as err:
-            logger.error(err)
+        except EntryNotFoundError:
             raise EnvironmentError(
                 f"{pretrained_model_name_or_path} does not appear to have a file named {FEATURE_EXTRACTOR_NAME}."
             )
-        except HTTPError as err:
-            logger.error(err)
+        except HTTPError:
             raise EnvironmentError(
                 "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
                 f"{pretrained_model_name_or_path} is not the path to a directory conaining a "
                 f"{FEATURE_EXTRACTOR_NAME} file.\nCheckout your internet connection or see how to run the library in "
                 "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
             )
-        except EnvironmentError as err:
-            logger.error(err)
+        except EnvironmentError:
             raise EnvironmentError(
                 f"Can't load feature extractor for '{pretrained_model_name_or_path}'. If you were trying to load it "
                 "from 'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
