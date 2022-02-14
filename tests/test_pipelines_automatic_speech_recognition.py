@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import unittest
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -51,7 +50,6 @@ if is_torch_available():
 
 if is_pyctcdecode_available():
     from huggingface_hub import snapshot_download
-    from transformers.models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
 
 
 # We can't use this mixin because it assumes TF support.

@@ -23,7 +23,6 @@ from pathlib import Path
 import numpy as np
 
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME, is_pyctcdecode_available
-from transformers.models.auto.modeling_auto import AutoModelForCTC
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pyctcdecode
