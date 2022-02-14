@@ -1,4 +1,3 @@
-# Run this file inside CVT Repo
 from __future__ import annotations
 from pprint import pprint
 
