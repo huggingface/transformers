@@ -299,7 +299,7 @@ The syntax for Example docstrings can look as follows:
 ```
     Example:
 
-    \`\`\`python
+    ```python
     >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
     >>> from datasets import load_dataset
     >>> import torch
@@ -320,8 +320,8 @@ The syntax for Example docstrings can look as follows:
     >>> # transcribe speech
     >>> transcription = processor.batch_decode(predicted_ids)
     >>> transcription[0]
-	'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'
-    \`\`\`
+    'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'
+    ```
 ```
 
 The docstring should give a minimal, clear example of how the respective model 
