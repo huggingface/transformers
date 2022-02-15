@@ -10,12 +10,13 @@ from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_vision_available():
-    import torchvision
     from PIL import Image
 
     from ..image_utils import load_image
 
 if is_torch_available():
+    if is_vision_available():
+        import torchvision
     import torch
 
     from ..models.auto.modeling_auto import (
