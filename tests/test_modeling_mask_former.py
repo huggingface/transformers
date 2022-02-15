@@ -121,9 +121,9 @@ class MaskFormerModelTester:
 
         def comm_check_on_output(result):
             # let's still check that all the required stuff is there
-            self.parent.assertFalse(result.transformer_decoder_hidden_states is not None)
-            self.parent.assertFalse(result.pixel_decoder_last_hidden_state is not None)
-            self.parent.assertFalse(result.encoder_last_hidden_state is not None)
+            self.parent.assertTrue(result.transformer_decoder_hidden_states is not None)
+            self.parent.assertTrue(result.pixel_decoder_last_hidden_state is not None)
+            self.parent.assertTrue(result.encoder_last_hidden_state is not None)
             # okay, now we need to check the logits shape
             # due to the encoder compression, masks have a //4 spatial size
             self.parent.assertEqual(

@@ -73,23 +73,23 @@ def get_world_size() -> int:
 @dataclass
 class MaskFormerPixelLevelModuleOutput(ModelOutput):
     """MaskFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the `encoder`
-and `decoder`. By default, the `encoder` is a Swin Transformer and the `decoder` is a Feature Pyramid Network (FPN).
+    and `decoder`. By default, the `encoder` is a Swin Transformer and the `decoder` is a Feature Pyramid Network (FPN).
 
-    The `encoder_last_hidden_state` are referred on the paper as **images features**, while `decoder_last_hidden_state`
-    as **pixel embeddings**
-     Args:
-        encoder_last_hidden_state (`torch.FloatTensor` of shape`(batch_size, num_channels, height, width)`):
-            Last hidden states (final feature map) of the last stage of the encoder.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
-        decoder_last_hidden_state (`torch.FloatTensor` of shape`(batch_size, num_channels, height, width)`):
-            Last hidden states (final feature map) of the last stage of the decoder.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
+        The `encoder_last_hidden_state` are referred on the paper as **images features**, while `decoder_last_hidden_state`
+        as **pixel embeddings**
+         Args:
+            encoder_last_hidden_state (`torch.FloatTensor` of shape`(batch_size, num_channels, height, width)`):
+                Last hidden states (final feature map) of the last stage of the encoder.
+            encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+                Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+                shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
+                the output of each stage.
+            decoder_last_hidden_state (`torch.FloatTensor` of shape`(batch_size, num_channels, height, width)`):
+                Last hidden states (final feature map) of the last stage of the decoder.
+            decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+                Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+                shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
+                the output of each stage.
     """
 
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
@@ -607,10 +607,10 @@ class MaskFormerLoss(nn.Module):
 
 class SwinTransformerBackbone(nn.Module):
     """This class uses [`SwinModel`] to reshape it's `hidden_states` from (`batch_size, sequence_length, hidden_size)` to
-(`batch_size, num_channels, height, width)`).
+    (`batch_size, num_channels, height, width)`).
 
-    Args:
-        config (SwinConfig): The configuration used by [`SwinModel`]
+        Args:
+            config (SwinConfig): The configuration used by [`SwinModel`]
     """
 
     def __init__(self, config: SwinConfig):
@@ -853,11 +853,11 @@ class MaskFormerTransformerModule(nn.Module):
         position_embeddings: Tensor = self.position_embedder(image_features)
         # repeat the queries "q c -> b q c"
         batch_size: int = image_features.shape[0]
-        queries_embeddings: Tensor = self.queries_embedder.weight.repeat(1, batch_size, 1)
+        queries_embeddings: Tensor = self.queries_embedder.weight.unsqueeze(0).repeat(batch_size, 1, 1)
         inputs_embeds = torch.zeros_like(queries_embeddings)
 
         batch_size, num_channels, height, width = image_features.shape
-        # rearrange both iamge_features and position_embeddings "b c h w -> (h w) b c"
+        # rearrange both image_features and position_embeddings "b c h w -> b (h w) c"
         image_features = image_features.view(batch_size, num_channels, height * width).permute(0, 2, 1)
         position_embeddings = position_embeddings.view(batch_size, num_channels, height * width).permute(0, 2, 1)
 
@@ -1094,7 +1094,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
         num_queries, height, width)` >>> class_queries_logits = outputs.class_queries_logits >>> masks_queries_logits =
         outputs.masks_queries_logits >>> # you can pass them to feature_extractor for postprocessing >>> output =
         feature_extractor.post_process_segmentation(outputs) >>> output =
-        feature_extractor.post_process_panoptic_segmentation(outputs) """
+        feature_extractor.post_process_panoptic_segmentation(outputs)"""
 
         outputs: MaskFormerOutput = self.model(pixel_values, pixel_mask, output_hidden_states)
 
