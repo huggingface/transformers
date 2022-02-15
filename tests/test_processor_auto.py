@@ -206,7 +206,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
             new_processor = Wav2Vec2Processor.from_pretrained("valid_org/test-processor-org")
             for k, v in processor.feature_extractor.__dict__.items():
                 self.assertEqual(v, getattr(new_processor.feature_extractor, k))
-            self.assertDictEqual(new_processor.tokenizer.vocab, processor.tokenizer.vocab)
+            self.assertDictEqual(new_processor.tokenizer.get_vocab(), processor.tokenizer.get_vocab())
 
     def test_push_to_hub_dynamic_processor(self):
         CustomFeatureExtractor.register_for_auto_class()
