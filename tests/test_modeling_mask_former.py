@@ -17,10 +17,14 @@
 
 import unittest
 
+import pytest
+
+from parameterized import parameterized
 from tests.test_modeling_common import floats_tensor
 from transformers import MaskFormerConfig, is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
 from transformers.models.maskformer.configuration_maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP
+from transformers.models.maskformer.MaskFormer.mask_former.mask_former_model import MaskFormer
 from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerForInstanceSegmentationOutput,
     MaskFormerOutput,
@@ -77,7 +81,7 @@ class MaskFormerModelTester:
         mask_labels = (
             torch.rand([self.batch_size, self.num_labels, self.min_size, self.max_size], device=torch_device) > 0.5
         ).float()
-        class_labels = (torch.rand((self.batch_size, self.num_labels), device=torch_device) > 0.5).float()
+        class_labels = (torch.rand((self.batch_size, self.num_labels), device=torch_device) > 0.5).long()
 
         config = self.get_config()
         return config, pixel_values, pixel_mask, mask_labels, class_labels
@@ -95,25 +99,37 @@ class MaskFormerModelTester:
         inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         return config, inputs_dict
 
-    def create_and_check_maskformer_model(self, config, pixel_values, pixel_mask, **kwargs):
+    def check_output_hidden_state(self, output: MaskFormerOutput, config: MaskFormerConfig):
+        encoder_hidden_states = output.encoder_hidden_states
+        pixel_decoder_hidden_states = output.pixel_decoder_hidden_states
+        transformer_decoder_hidden_states = output.transformer_decoder_hidden_states
+
+        self.parent.assertTrue(len(encoder_hidden_states), len(config.backbone.depths))
+        self.parent.assertTrue(len(pixel_decoder_hidden_states), len(config.backbone.depths))
+        self.parent.assertTrue(len(transformer_decoder_hidden_states), len(config.transformer_decoder.decoder_layers))
+
+    def create_and_check_maskformer_model(self, config, pixel_values, pixel_mask, output_hidden_state=False, **kwargs):
         model = MaskFormerModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result: MaskFormerOutput = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-        result: MaskFormerOutput = model(pixel_values)
-        # the correct shape of result.transformer_decoder_hidden_states ensure the correcteness of the
+        output: MaskFormerOutput = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        output: MaskFormerOutput = model(pixel_values)
+        # the correct shape of output.transformer_decoder_hidden_states ensure the correcteness of the
         # encoder and pixel decoder
         self.parent.assertEqual(
-            result.transformer_decoder_last_hidden_state.shape,
-            (1, self.batch_size * self.num_queries, self.mask_feature_size),
+            output.transformer_decoder_last_hidden_state.shape,
+            (self.batch_size, self.num_queries, self.mask_feature_size),
         )
         # let's ensure the other two hidden state exists
-        self.parent.assertTrue(result.pixel_decoder_last_hidden_state is not None)
-        self.parent.assertTrue(result.encoder_last_hidden_state is not None)
+        self.parent.assertTrue(output.pixel_decoder_last_hidden_state is not None)
+        self.parent.assertTrue(output.encoder_last_hidden_state is not None)
+
+        if output_hidden_state:
+            self.check_output_hidden_state(output, config)
 
     def create_and_check_maskformer_instance_segmentation_head_model(
-        self, config, pixel_values, pixel_mask, mask_labels, classes_labels
+        self, config, pixel_values, pixel_mask, mask_labels, class_labels
     ):
         model = MaskFormerForInstanceSegmentation(config=config)
         model.to(torch_device)
@@ -141,7 +157,7 @@ class MaskFormerModelTester:
         comm_check_on_output(result)
 
         result = model(
-            pixel_values=pixel_values, pixel_mask=pixel_mask, mask_labels=mask_labels, classes_labels=classes_labels
+            pixel_values=pixel_values, pixel_mask=pixel_mask, mask_labels=mask_labels, class_labels=class_labels
         )
 
         comm_check_on_output(result)
@@ -173,9 +189,10 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_maskformer_model(self):
+    @parameterized.expand([(True,), (False,)])
+    def test_maskformer_model(self, output_hidden_state):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.create_and_check_maskformer_model(config, **inputs)
+        self.model_tester.create_and_check_maskformer_model(config, **inputs, output_hidden_state=output_hidden_state)
 
     def test_maskformer_instance_segmentation_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -131,9 +131,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             # store original_size
             target["original_size"] = image.size
             if "masks" in target:
-                #           use PyTorch as current workaround
+                masks = torch.from_numpy(target["masks"])[:, None].float()
+                #  use PyTorch as current workaround
                 # TODO replace by self.resize
-                masks = torch.from_numpy(target["masks"][:, None]).float()
                 interpolated_masks = nn.functional.interpolate(masks, size=(height, width), mode="nearest")[:, 0] > 0.5
                 target["masks"] = interpolated_masks.numpy()
 
@@ -177,8 +177,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 number of channels, H and W are image height and width.
 
             annotations (`Dict`, `List[Dict]`, *optional*):
-                The corresponding annotations in the following format: { "masks" : the target mask, with shape [C,H,W],
-                "labels" : the target labels, with shape [C]}
+                The corresponding annotations as numpy arrays in the following format: { "masks" : the target mask,
+                with shape [C,H,W], "labels" : the target labels, with shape [C]}
 
             pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
@@ -230,7 +230,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         # Check that annotations has a valid type
         if annotations is not None:
-            # TODO ask best way to check!
             valid_annotations = type(annotations) is list and "masks" in annotations[0] and "labels" in annotations[0]
             if not valid_annotations:
                 raise ValueError(
@@ -369,13 +368,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self, outputs: MaskFormerForInstanceSegmentationOutput, target_size: Tuple[int, int] = None
     ) -> Tensor:
         """Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image segmentation predictions. Only supports
-PyTorch.
+        PyTorch.
 
-        Args:
-            outputs (MaskFormerForInstanceSegmentationOutput): The outputs from MaskFor
+                Args:
+                    outputs (MaskFormerForInstanceSegmentationOutput): The outputs from MaskFor
 
-        Returns:
-            Tensor: A tensor of shape `batch_size, num_labels, height, width`
+                Returns:
+                    Tensor: A tensor of shape `batch_size, num_labels, height, width`
         """
         # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits = outputs.class_queries_logits
@@ -432,13 +431,13 @@ PyTorch.
         self, outputs: MaskFormerForInstanceSegmentationOutput, target_size: Tuple[int, int] = None
     ) -> Tensor:
         """Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into semantic segmentation predictions. Only
-supports PyTorch.
+        supports PyTorch.
 
-        Args:
-            outputs (MaskFormerForInstanceSegmentationOutput): The outputs from MaskFor
+                Args:
+                    outputs (MaskFormerForInstanceSegmentationOutput): The outputs from MaskFor
 
-        Returns:
-            Tensor: A tensor of shape `batch_size, height, width`
+                Returns:
+                    Tensor: A tensor of shape `batch_size, height, width`
         """
         segmentation: Tensor = self.post_process_segmentation(outputs, target_size)
         semantic_segmentation: Tensor = segmentation.argmax(dim=1)
