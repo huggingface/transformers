@@ -20,6 +20,7 @@ from transformers import (
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
     AutoFeatureExtractor,
     AutoModelForImageSegmentation,
+    DetrForSegmentation,
     ImageSegmentationPipeline,
     is_vision_available,
     pipeline,
@@ -68,8 +69,16 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         ]
 
     def run_pipeline_test(self, image_segmenter, examples):
-        outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)
-        self.assertEqual(outputs, [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12)
+        outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0)
+        self.assertIsInstance(outputs, list)
+        n = len(outputs)
+        self.assertGreater(n, 1)
+        self.assertEqual(outputs, [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * n)
+
+        outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", raw_image=True, threshold=0)
+        self.assertIsInstance(outputs, list)
+        # We need to inverse because of PIL.Image.Image.__eq__ impl
+        self.assertEqual([{"score": ANY(float), "label": ANY(str), "mask": ANY(Image.Image)}] * n, outputs)
 
         import datasets
 
@@ -85,17 +94,25 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             # L
             dataset[2]["file"],
         ]
-        outputs = image_segmenter(batch, threshold=0.0)
 
+        if isinstance(image_segmenter.model, DetrForSegmentation):
+            # We need to test batch_size with images with the same size.
+            # Detr doesn't normalize the size of the images, meaning we can have
+            # 800x800 or 800x1200, meaning we cannot batch simply.
+            # We simply bail on this
+            batch_size = 1
+        else:
+            batch_size = 2
+        outputs = image_segmenter(batch, threshold=0.0, batch_size=batch_size)
         self.assertEqual(len(batch), len(outputs))
         self.assertEqual(
             outputs,
             [
-                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12,
-                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12,
-                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12,
-                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12,
-                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * 12,
+                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * n,
+                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * n,
+                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * n,
+                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * n,
+                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * n,
             ],
         )
 
