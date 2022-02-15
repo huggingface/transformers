@@ -259,6 +259,9 @@ class OnnxConfig(ABC):
             raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
         if isinstance(preprocessor, PreTrainedTokenizer) or isinstance(preprocessor, PreTrainedTokenizerFast):
             if tokenizer:
+                warnings.warn(
+                    "Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs."
+                )
                 preprocessor = tokenizer
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
             batch_size = compute_effective_axis_dimension(
