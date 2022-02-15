@@ -131,11 +131,3 @@ class ViTOnnxConfig(OnnxConfig):
                 ("pixel_values", {0: "batch", 1: "sequence"}),
             ]
         )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("logits", {0: "batch", 1: "sequence"}),
-            ]
-        )
