@@ -169,4 +169,4 @@ class TFLogitsProcessorTest(unittest.TestCase):
         tf.debugging.assert_near(scores, scores_comp, atol=1e-3)
 
         # input_ids should never be changed
-        self.assertListEqual(input_ids.cpu().numpy().tolist(), input_ids_comp.cpu().numpy().tolist())
+        self.assertListEqual(input_ids.numpy().tolist(), input_ids_comp.numpy().tolist())

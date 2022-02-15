@@ -134,9 +134,6 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
 
     def _create_score_penalties(self, input_ids, logits):
         # create logit penalties for already seen input_ids
-        input_ids = input_ids.cpu()
-        logits = logits.cpu()
-
         token_penalties = np.ones(logits.shape)
         prev_input_ids = [np.unique(input_id) for input_id in input_ids.numpy()]
         for i, prev_input_id in enumerate(prev_input_ids):
@@ -210,7 +207,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
                     len(banned_token_seq) > 0
                 ), f"Banned words token sequences {self.bad_words_ids} cannot have an empty list"
 
-                if _tokens_match(prev_input_ids_slice.cpu().numpy().tolist(), banned_token_seq[:-1]) is False:
+                if _tokens_match(prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
                     # if tokens do not match continue
                     continue
 
@@ -262,7 +259,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             return [[] for _ in range(num_hypos)]
         generated_ngrams = [{} for _ in range(num_hypos)]
         for idx in range(num_hypos):
-            gen_tokens = prev_input_ids[idx].cpu().numpy().tolist()
+            gen_tokens = prev_input_ids[idx].numpy().tolist()
             generated_ngram = generated_ngrams[idx]
             for ngram in zip(*[gen_tokens[i:] for i in range(self.ngram_size)]):
                 prev_ngram_tuple = tuple(ngram[:-1])
@@ -271,7 +268,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
         def _get_generated_ngrams(hypo_idx):
             # Before decoding the next token, prevent decoding of ngrams that have already appeared
             start_idx = cur_len + 1 - self.ngram_size
-            ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].cpu().numpy().tolist())
+            ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].numpy().tolist())
             return generated_ngrams[hypo_idx].get(ngram_idx, [])
 
         banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
