@@ -49,6 +49,7 @@ def main():
         args.output.parent.mkdir(parents=True)
 
     # Check the modality of the inputs and instantiate the appropriate preprocessor
+    # TODO(lewtun): Refactor this to a function if we need to check modalities it elsewhere
     config = AutoConfig.from_pretrained(args.model)
     if config.model_type in TOKENIZER_MAPPING_NAMES:
         preprocessor = AutoTokenizer.from_pretrained(args.model)

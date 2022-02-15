@@ -227,10 +227,10 @@ class OnnxConfig(ABC):
         seq_length: int = -1,
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
-        tokenizer: PreTrainedTokenizer = None,
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
+        tokenizer: PreTrainedTokenizer = None,
     ) -> Mapping[str, Any]:
         """
         Generate inputs to provide to the ONNX exporter for the specific framework
@@ -238,14 +238,20 @@ class OnnxConfig(ABC):
         Args:
             preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
                 The preprocessor associated with this model configuration.
-            batch_size (`int`):
-                The batch size (int) to export the model for (-1 means dynamic axis)
-            seq_length (`int`):
-                The sequence length (int) to export the model for (-1 means dynamic axis)
-            is_pair (`bool`):
+            batch_size (`int`, *optional*, defaults to -1):
+                The batch size to export the model for (-1 means dynamic axis).
+            seq_length (`int`, *optional*, defaults to -1):
+                The sequence length to export the model for (-1 means dynamic axis).
+            is_pair (`bool`, *optional*, defaults to `False`):
                 Indicate if the input is a pair (sentence 1, sentence 2)
-            framework (`TensorType`):
-                The framework (optional) the tokenizer will generate tensor for
+            framework (`TensorType`, *optional*, defaults to `None`):
+                The framework (optional) the tokenizer will generate tensor for.
+            num_channels (`int`, *optional*, defaults to 3):
+                The number of channels of the generated images.
+            image_width (`int`, *optional*, defaults to 40):
+                The width of the generated images.
+            image_height (`int`, *optional*, defaults to 40):
+                The height of the generated images.
 
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
@@ -259,9 +265,7 @@ class OnnxConfig(ABC):
             raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
         if isinstance(preprocessor, PreTrainedTokenizer) or isinstance(preprocessor, PreTrainedTokenizerFast):
             if tokenizer:
-                warnings.warn(
-                    "Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs."
-                )
+                warnings.warn("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
                 preprocessor = tokenizer
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
             batch_size = compute_effective_axis_dimension(
