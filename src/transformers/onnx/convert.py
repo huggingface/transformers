@@ -76,9 +76,9 @@ def export_pytorch(
     Export a PyTorch model to an ONNX Intermediate Representation (IR)
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data.
-        model ([`PreTrainedModel`]):
+        preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
+            The preprocessor used for encoding the data.
+        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model to export.
         config ([`~onnx.config.OnnxConfig`]):
             The ONNX configuration associated with the exported model.
@@ -86,6 +86,8 @@ def export_pytorch(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
+        tokenizer ([`PreTrainedTokenizer`]):
+            The tokenizer used for encoding the data.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
@@ -109,7 +111,9 @@ def export_pytorch(
 
             # Ensure inputs match
             # TODO: Check when exporting QA we provide "is_pair=True"
-            model_inputs = config.generate_dummy_inputs(preprocessor=preprocessor, framework=TensorType.PYTORCH)
+            model_inputs = config.generate_dummy_inputs(
+                preprocessor, tokenizer=tokenizer, framework=TensorType.PYTORCH
+            )
             inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
             onnx_outputs = list(config.outputs.keys())
 
@@ -153,19 +157,20 @@ def export_pytorch(
 
 
 def export_tensorflow(
-    tokenizer: PreTrainedTokenizer,
+    preprocessor: Union[PreTrainedTokenizer, FeatureExtractionMixin],
     model: TFPreTrainedModel,
     config: OnnxConfig,
     opset: int,
     output: Path,
+    tokenizer: PreTrainedTokenizer = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a TensorFlow model to an ONNX Intermediate Representation (IR)
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data.
-        model ([`TFPreTrainedModel`]):
+        preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
+            The preprocessor used for encoding the data.
+        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model to export.
         config ([`~onnx.config.OnnxConfig`]):
             The ONNX configuration associated with the exported model.
@@ -173,6 +178,8 @@ def export_tensorflow(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
+        tokenizer ([`PreTrainedTokenizer`]):
+            The tokenizer used for encoding the data.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
@@ -193,7 +200,7 @@ def export_tensorflow(
             setattr(model.config, override_config_key, override_config_value)
 
     # Ensure inputs match
-    model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.TENSORFLOW)
+    model_inputs = config.generate_dummy_inputs(preprocessor, tokenizer=tokenizer, framework=TensorType.TENSORFLOW)
     inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
     onnx_outputs = list(config.outputs.keys())
 
@@ -211,15 +218,14 @@ def export(
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: PreTrainedTokenizer = None
-    # feature_extractor: FeatureExtractionMixin = None,
+    tokenizer: PreTrainedTokenizer = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a Pytorch or TensorFlow model to an ONNX Intermediate Representation (IR)
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data.
+        preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
+            The preprocessor used for encoding the data.
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model to export.
         config ([`~onnx.config.OnnxConfig`]):
@@ -228,6 +234,8 @@ def export(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
+        tokenizer ([`PreTrainedTokenizer`]):
+            The tokenizer used for encoding the data.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
@@ -269,10 +277,13 @@ def validate_model_outputs(
     if issubclass(type(reference_model), PreTrainedModel):
         reference_model_inputs = config.generate_dummy_inputs(
             preprocessor,
+            tokenizer=tokenizer,
             framework=TensorType.PYTORCH,
         )
     else:
-        reference_model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.TENSORFLOW)
+        reference_model_inputs = config.generate_dummy_inputs(
+            preprocessor, tokenizer=tokenizer, framework=TensorType.TENSORFLOW
+        )
 
     # Create ONNX Runtime session
     options = SessionOptions()

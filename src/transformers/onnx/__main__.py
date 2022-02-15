@@ -37,7 +37,6 @@ def main():
     parser.add_argument(
         "--atol", type=float, default=None, help="Absolute difference tolerence when validating the model."
     )
-    parser.add_argument("--modality", type=str, default="text", help="The modality the model was trained on.")
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
 
     # Retrieve CLI arguments
@@ -48,13 +47,16 @@ def main():
         args.output.parent.mkdir(parents=True)
 
     # Allocate the model
-    if args.modality == "text":
-        preprocessor = AutoTokenizer.from_pretrained(args.model)
-    if args.modality == "image":
-        preprocessor = AutoFeatureExtractor.from_pretrained(args.model)
     model = FeaturesManager.get_model_from_feature(args.feature, args.model)
     model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=args.feature)
     onnx_config = model_onnx_config(model.config)
+    # Check the modality of the inputs and instantiate the appropriate preprocessor
+    if model.main_input_name == "input_ids":
+        preprocessor = AutoTokenizer.from_pretrained(args.model)
+    elif model.main_input_name == "pixel_values":
+        preprocessor = AutoFeatureExtractor.from_pretrained(args.model)
+    else:
+        raise ValueError(f"Unsupported model input name: {model.main_input_name}")
 
     # Ensure the requested opset is sufficient
     if args.opset is None:
@@ -72,7 +74,6 @@ def main():
         onnx_config,
         args.opset,
         args.output,
-        # feature_extractor=feature_extractor,
     )
 
     if args.atol is None:
