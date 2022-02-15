@@ -14,12 +14,15 @@
 # limitations under the License.
 """ MaskFormer model configuration"""
 from __future__ import annotations
+
 from typing import Dict, Optional
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto.configuration_auto import AutoConfig
 from ..detr import DetrConfig
 from ..swin import SwinConfig
-from ..auto.configuration_auto import AutoConfig
+
 
 MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = [
     "facebook/maskformer-swin-base-ade-640",
@@ -33,14 +36,17 @@ class MaskFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormer`]. It is used to instantiate a
     MaskFormer model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the "maskformer-swin-base-ade-640" architecture trained on ade20k-150
+    configuration with the defaults will yield a similar configuration to that of the "maskformer-swin-base-ade-640"
+    architecture trained on ade20k-150
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
         dataset_metadata (DatasetMetadata, optional): [description]. Defaults to None.
-        mask_feature_size (Optional[int], optional): The masks' features size, this value will also be used to specify the Feature Pyramid Network features size. Defaults to 256.
+        mask_feature_size (Optional[int], optional):
+            The masks' features size, this value will also be used to specify the Feature Pyramid Network features
+            size. Defaults to 256.
         no_object_weight (Optional[float], optional): Weight to apply to the null class . Defaults to 0.1.
         use_auxilary_loss (Optional[bool], optional): If `true` [`MaskFormerOutput`] will contain. Defaults to False.
         backbone_config (Optional[Dict], optional): [description]. Defaults to None.
@@ -142,7 +148,8 @@ class MaskFormerConfig(PretrainedConfig):
     def from_backbone_and_detr_configs(
         cls, backbone_config: PretrainedConfig, detr_config: DetrConfig, **kwargs
     ) -> MaskFormerConfig:
-        """Instantiate a [`MaskFormerConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model configuration.
+        """Instantiate a [`MaskFormerConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
+configuration.
 
         Args:
             backbone_config (PretrainedConfig): The backbone configuration

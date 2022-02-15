@@ -16,19 +16,17 @@
 
 
 import unittest
-from transformers.models.maskformer.configuration_maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP
-
-from transformers.models.maskformer.modeling_maskformer import (
-    MaskFormerOutput,
-    MaskFormerForInstanceSegmentationOutput,
-)
-from transformers import is_vision_available
-from transformers.trainer_callback import TrainerState
 
 from tests.test_modeling_common import floats_tensor
-from transformers import MaskFormerConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device, require_vision
+from transformers import MaskFormerConfig, is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
+from transformers.models.maskformer.configuration_maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP
+from transformers.models.maskformer.modeling_maskformer import (
+    MaskFormerForInstanceSegmentationOutput,
+    MaskFormerOutput,
+)
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.trainer_callback import TrainerState
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask

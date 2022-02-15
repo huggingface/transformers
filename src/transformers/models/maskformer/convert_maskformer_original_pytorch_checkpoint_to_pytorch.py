@@ -16,6 +16,9 @@ import requests
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.projects.deeplab import add_deeplab_config
+from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
+from transformers.models.maskformer.MaskFormer.mask_former import add_mask_former_config
+from transformers.models.maskformer.MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
 from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerConfig,
     MaskFormerForInstanceSegmentation,
@@ -24,13 +27,11 @@ from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerOutput,
     MaskFormerPixelLevelModuleOutput,
 )
-from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
-from transformers.models.maskformer.MaskFormer.mask_former import add_mask_former_config
-from transformers.models.maskformer.MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
-from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
+
 
 StateDict = Dict[str, Tensor]
 from transformers.utils import logging
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger()

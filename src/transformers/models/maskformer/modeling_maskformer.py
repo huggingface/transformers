@@ -25,17 +25,17 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import torch
 from torch import Tensor, nn
-from torch.nn.functional import interpolate, binary_cross_entropy_with_logits, cross_entropy
+from torch.nn.functional import binary_cross_entropy_with_logits, cross_entropy, interpolate
 
 from transformers.modeling_outputs import BaseModelOutput
 
 from ...file_utils import (
     ModelOutput,
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
     requires_backends,
-    add_code_sample_docstrings,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -60,6 +60,7 @@ MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 from scipy.optimize import linear_sum_assignment
 
+
 # TODO ask what I should do with dist code
 def get_world_size() -> int:
     if not dist.is_available():
@@ -71,9 +72,11 @@ def get_world_size() -> int:
 
 @dataclass
 class MaskFormerPixelLevelModuleOutput(ModelOutput):
-    """MaskFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the `encoder` and `decoder`. By default, the `encoder` is a Swin Transformer and the `decoder` is a Feature Pyramid Network (FPN).
+    """MaskFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the `encoder`
+and `decoder`. By default, the `encoder` is a Swin Transformer and the `decoder` is a Feature Pyramid Network (FPN).
 
-    The `encoder_last_hidden_state` are referred on the paper as **images features**, while `decoder_last_hidden_state` as **pixel embeddings**
+    The `encoder_last_hidden_state` are referred on the paper as **images features**, while `decoder_last_hidden_state`
+    as **pixel embeddings**
      Args:
         encoder_last_hidden_state (`torch.FloatTensor` of shape`(batch_size, num_channels, height, width)`):
             Last hidden states (final feature map) of the last stage of the encoder.
@@ -97,7 +100,8 @@ class MaskFormerPixelLevelModuleOutput(ModelOutput):
 
 class MaskFormerPixelDecoderOutput(BaseModelOutput):
     """
-    MaskFormer's pixel decoder module output, practically a Feature Pyramid Network. It returns the last hidden state and (optionally) the hidden states.
+    MaskFormer's pixel decoder module output, practically a Feature Pyramid Network. It returns the last hidden state
+    and (optionally) the hidden states.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -123,16 +127,16 @@ class MaskFormerOutput(ModelOutput):
             Last hidden states (final feature map) of the last stage of the transformer decoder model.
         encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the encoder model at
-            the output of each stage.
+            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the encoder
+            model at the output of each stage.
         pixel_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the pixel decoder model at
-            the output of each stage.
+            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the pixel
+            decoder model at the output of each stage.
         decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the transformer decoder at
-            the output of each stage.
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
+            transformer decoder at the output of each stage.
     """
 
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
@@ -149,11 +153,17 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     """
     Output type of [`MaskFormerForInstanceSegmentation`].
 
-    This output can be directly passed to [`~MaskFormerFeatureExtractor.post_process_segmentation`] or  [`~MaskFormerFeatureExtractor.post_process_panoptic_segmentation`] depending on the task. Please, see [`~MaskFormerFeatureExtractor] for a detail usage.
+    This output can be directly passed to [`~MaskFormerFeatureExtractor.post_process_segmentation`] or
+    [`~MaskFormerFeatureExtractor.post_process_panoptic_segmentation`] depending on the task. Please, see
+    [`~MaskFormerFeatureExtractor] for a detail usage.
 
     Args:
-        class_queries_logits (torch.FloatTensor): A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each query.
-        masks_queries_logits (torch.FloatTensor):  A tensor of shape `(batch_size, num_queries, num_classes + 1)` representing the proposed classes for each query. Note the `+ 1` is needed because we incorporate the null class.
+        class_queries_logits (torch.FloatTensor):
+            A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
+            query.
+        masks_queries_logits (torch.FloatTensor):
+            A tensor of shape `(batch_size, num_queries, num_classes + 1)` representing the proposed classes for each
+            query. Note the `+ 1` is needed because we incorporate the null class.
         encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Last hidden states (final feature map) of the last stage of the encoder model (backbone).
         pixel_decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -162,16 +172,16 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
             Last hidden states (final feature map) of the last stage of the transformer decoder model.
         encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the encoder model at
-            the output of each stage.
+            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the encoder
+            model at the output of each stage.
         pixel_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the pixel decoder model at
-            the output of each stage.
+            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the pixel
+            decoder model at the output of each stage.
         decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the transformer decoder at
-            the output of each stage.
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
+            transformer decoder at the output of each stage.
     """
 
     class_queries_logits: torch.FloatTensor = None
@@ -344,7 +354,7 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 
 
     cross_entropy_loss_neg = binary_cross_entropy_with_logits(inputs, torch.zeros_like(inputs), reduction="none")
 
-    focal_neg: Tensor = (prob ** gamma) * cross_entropy_loss_neg
+    focal_neg: Tensor = (prob**gamma) * cross_entropy_loss_neg
     focal_neg *= 1 - alpha
 
     loss: Tensor = torch.einsum("nc,mc->nm", focal_pos, labels) + torch.einsum("nc,mc->nm", focal_neg, (1 - labels))
@@ -382,8 +392,9 @@ class MaskFormerHungarianMatcher(nn.Module):
 
         Params:
             outputs: This is a dict that contains at least these entries:
-                 "masks_queries_logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
-                 "class_queries_logits": Tensor of dim [batch_size, num_queries, H_pred, W_pred] with the predicted masks
+                 "masks_queries_logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification
+                 logits "class_queries_logits": Tensor of dim [batch_size, num_queries, H_pred, W_pred] with the
+                 predicted masks
 
             labels: This is a list of labels (len(labels) = batch_size), where each target is a dict containing:
                  "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
@@ -595,7 +606,8 @@ class MaskFormerLoss(nn.Module):
 
 
 class SwinTransformerBackbone(nn.Module):
-    """This class uses [`SwinModel`] to reshape it's `hidden_states` from (`batch_size, sequence_length, hidden_size)` to (`batch_size, num_channels, height, width)`).
+    """This class uses [`SwinModel`] to reshape it's `hidden_states` from (`batch_size, sequence_length, hidden_size)` to
+(`batch_size, num_channels, height, width)`).
 
     Args:
         config (SwinConfig): The configuration used by [`SwinModel`]
@@ -1062,33 +1074,27 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
     ) -> MaskFormerForInstanceSegmentationOutput:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the classification and binary mask loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'mask_labels' (the class labels and masks labels of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of shape (`num_classes) and the mask_labels a `torch.FloatTensor` of shape `(num_classes, height, width)`.
+            Labels for computing the classification and binary mask loss. List of dicts, each dictionary containing at
+            least the following 2 keys: 'class_labels' and 'mask_labels' (the class labels and masks labels of an image
+            in the batch respectively). The class labels themselves should be a `torch.LongTensor` of shape
+            (`num_classes) and the mask_labels a `torch.FloatTensor` of shape `(num_classes, height, width)`.
 
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import MaskFormerFeatureExtractor, MaskFormerForObjectDetection
-        >>> from PIL import Image
-        >>> import requests
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> feature_extractor = MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-base-ade-640")
-        >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade-640")
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> # model predicts class_queries_logits of shape `(batch_size, num_queries)`
-        >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
-        >>> class_queries_logits = outputs.class_queries_logits
-        >>> masks_queries_logits = outputs.masks_queries_logits
-        >>> # you can pass them to feature_extractor for postprocessing
-        >>> output = feature_extractor.post_process_segmentation(outputs)
-        >>> output = feature_extractor.post_process_panoptic_segmentation(outputs)
-
-        """
+         >>> from transformers import MaskFormerFeatureExtractor, MaskFormerForObjectDetection >>> from PIL import
+        Image >>> import requests >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg" >>> image =
+        Image.open(requests.get(url, stream=True).raw) >>> feature_extractor =
+        MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-base-ade-640") >>> model =
+        MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade-640") >>> inputs =
+        feature_extractor(images=image, return_tensors="pt") >>> outputs = model(**inputs) >>> # model predicts
+        class_queries_logits of shape `(batch_size, num_queries)` >>> # and masks_queries_logits of shape `(batch_size,
+        num_queries, height, width)` >>> class_queries_logits = outputs.class_queries_logits >>> masks_queries_logits =
+        outputs.masks_queries_logits >>> # you can pass them to feature_extractor for postprocessing >>> output =
+        feature_extractor.post_process_segmentation(outputs) >>> output =
+        feature_extractor.post_process_panoptic_segmentation(outputs) """
 
         outputs: MaskFormerOutput = self.model(pixel_values, pixel_mask, output_hidden_states)
 

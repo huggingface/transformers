@@ -519,11 +519,11 @@ if is_vision_available():
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
-    _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
     _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
+    _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
     _import_structure["models.vilt"].append("ViltFeatureExtractor")
@@ -2698,10 +2698,10 @@ if TYPE_CHECKING:
         from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
-        from .models.maskformer import MaskFormerFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.layoutxlm import LayoutXLMProcessor
+        from .models.maskformer import MaskFormerFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
         from .models.vilt import ViltFeatureExtractor, ViltProcessor

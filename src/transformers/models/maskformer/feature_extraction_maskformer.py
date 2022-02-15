@@ -18,18 +18,19 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
+from torch.nn.functional import interpolate
+
 from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput, upsample_like
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType, is_torch_available
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
-from torch.nn.functional import interpolate
+
 
 if is_torch_available():
     import torch
-    from torch import nn
-    from torch import Tensor
+    from torch import Tensor, nn
 
 logger = logging.get_logger(__name__)
 
@@ -314,8 +315,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               *"pixel_mask"* is in `self.model_input_names`).
-            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_classes, height, width) to be fed to a model (when `annotations` are provided)
-            - **class_labels** -- Optional class labels of shape `(batch_size, num_classes) to be fed to a model (when `annotations` are provided)
+            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_classes, height, width) to be fed to a
+              model (when `annotations` are provided)
+            - **class_labels** -- Optional class labels of shape `(batch_size, num_classes) to be fed to a model (when
+              `annotations` are provided)
         """
 
         max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
@@ -365,7 +368,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
     def post_process_segmentation(
         self, outputs: MaskFormerForInstanceSegmentationOutput, target_size: Tuple[int, int] = None
     ) -> Tensor:
-        """Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image segmentation predictions. Only supports PyTorch.
+        """Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image segmentation predictions. Only supports
+PyTorch.
 
         Args:
             outputs (MaskFormerForInstanceSegmentationOutput): The outputs from MaskFor
@@ -402,7 +406,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
     ) -> Tuple[Tensor, Tensor, Tensor]:
         """
 
-        Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and `labels`
+        Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores`
+        and `labels`
 
         Args:
             masks (Tensor): A tensor of shape `(num_queries, height, width)`
@@ -426,7 +431,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
     def post_process_semantic_segmentation(
         self, outputs: MaskFormerForInstanceSegmentationOutput, target_size: Tuple[int, int] = None
     ) -> Tensor:
-        """Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into semantic segmentation predictions. Only supports PyTorch.
+        """Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into semantic segmentation predictions. Only
+supports PyTorch.
 
         Args:
             outputs (MaskFormerForInstanceSegmentationOutput): The outputs from MaskFor
@@ -446,7 +452,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         is_thing_map: Dict[int, bool] = None,
     ) -> List[Dict]:
         """
-        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation predictions. Only supports PyTorch.
+        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
+        predictions. Only supports PyTorch.
 
 
         Args:
