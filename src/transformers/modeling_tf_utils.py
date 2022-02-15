@@ -34,6 +34,7 @@ from tensorflow.python.keras.saving import hdf5_format
 from huggingface_hub import Repository, list_repo_files
 from requests import HTTPError
 
+from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .file_utils import (
@@ -1952,9 +1953,11 @@ class TFSequenceSummary(tf.keras.layers.Layer):
                 num_classes, kernel_initializer=get_initializer(initializer_range), name="summary"
             )
 
-        self.has_activation = hasattr(config, "summary_activation") and config.summary_activation == "tanh"
-        if self.has_activation:
-            self.activation = tf.keras.activations.tanh
+        self.has_activation = False
+        activation_string = getattr(config, "summary_activation", None)
+        if activation_string is not None:
+            self.has_activation = True
+            self.activation = get_tf_activation(activation_string)
 
         self.has_first_dropout = hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0
         if self.has_first_dropout:
