@@ -15,8 +15,9 @@
 from argparse import ArgumentParser
 from pathlib import Path
 
-from transformers.models.auto import AutoFeatureExtractor, AutoTokenizer
-
+from transformers import AutoConfig, AutoFeatureExtractor, AutoTokenizer
+from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
+from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from ..utils import logging
 from .convert import export, validate_model_outputs
 from .features import FeaturesManager
@@ -46,17 +47,19 @@ def main():
     if not args.output.parent.exists():
         args.output.parent.mkdir(parents=True)
 
+    # Check the modality of the inputs and instantiate the appropriate preprocessor
+    config = AutoConfig.from_pretrained(args.model)
+    if config.model_type in TOKENIZER_MAPPING_NAMES:
+        preprocessor = AutoTokenizer.from_pretrained(args.model)
+    elif config.model_type in FEATURE_EXTRACTOR_MAPPING_NAMES:
+        preprocessor = AutoFeatureExtractor.from_pretrained(args.model)
+    else:
+        raise ValueError(f"Unsupported model type: {config.model_type}")
+
     # Allocate the model
     model = FeaturesManager.get_model_from_feature(args.feature, args.model)
     model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=args.feature)
     onnx_config = model_onnx_config(model.config)
-    # Check the modality of the inputs and instantiate the appropriate preprocessor
-    if model.main_input_name == "input_ids":
-        preprocessor = AutoTokenizer.from_pretrained(args.model)
-    elif model.main_input_name == "pixel_values":
-        preprocessor = AutoFeatureExtractor.from_pretrained(args.model)
-    else:
-        raise ValueError(f"Unsupported model input name: {model.main_input_name}")
 
     # Ensure the requested opset is sufficient
     if args.opset is None:
