@@ -44,6 +44,9 @@ from ..swin import SwinConfig, SwinModel
 from .configuration_maskformer import MaskFormerConfig
 
 
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
+
 logger = logging.get_logger(__name__)
 import torch.distributed as dist
 
@@ -56,9 +59,6 @@ MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/maskformer-swin-base-ade-640",
     # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
 ]
-
-
-from scipy.optimize import linear_sum_assignment
 
 
 # TODO ask what I should do with dist code
@@ -409,7 +409,6 @@ class MaskFormerHungarianMatcher(nn.Module):
             For each batch element, it holds:
                 len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
-
         indices: List[Tuple[np.array]] = []
 
         preds_masks: Tensor = outputs["masks_queries_logits"]

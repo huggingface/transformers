@@ -196,8 +196,6 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_maskformer_model(config, **inputs, output_hidden_states=False)
 
-        self.model_tester.create_and_check_maskformer_model(config, **inputs, output_hidden_states=True)
-
     def test_maskformer_instance_segmentation_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_maskformer_instance_segmentation_head_model(*config_and_inputs)
@@ -228,7 +226,9 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
         self.parent.assertTrue(False)
 
     def test_outputs_hidden_states(self):
-        self.parent.assertTrue(False)
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        self.model_tester.create_and_check_maskformer_model(config, **inputs, output_hidden_states=True)
 
     def test_outputs_auxilary_loss(self):
         self.parent.assertTrue(False)
