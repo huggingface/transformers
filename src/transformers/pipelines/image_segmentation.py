@@ -15,9 +15,8 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    if is_vision_available():
-        import torchvision
     import torch
+    from torch.nn import functional as F
 
     from ..models.auto.modeling_auto import (
         MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
@@ -155,7 +154,7 @@ class ImageSegmentationPipeline(Pipeline):
                     f"Logits don't have expected dimensions, expected [1, {num_labels}, H, W], got {logits.shape}"
                 )
             size = model_outputs["target_size"].tolist()[0]
-            logits_reshaped = torchvision.transforms.Resize(size)(logits)
+            logits_reshaped = F.interpolate(logits, size=size)
             classes = logits_reshaped.argmax(dim=1)[0]
             annotation = []
             for label_id in range(num_labels):
