@@ -163,3 +163,11 @@ class MaskFormerConfig(PretrainedConfig):
             detr_config=detr_config.to_dict(),
             **kwargs,
         )
+
+    @property
+    def num_attention_heads(self) -> int:
+        return self.transformer_decoder.encoder_attention_heads
+
+    @property
+    def hidden_size(self) -> int:
+        return self.mask_feature_size

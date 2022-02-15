@@ -165,6 +165,7 @@ class MaskFormerModelTester:
         comm_check_on_output(result)
 
         self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertTrue(result.loss.shape is not None)
 
 
 @require_torch
@@ -229,9 +230,6 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
         self.model_tester.create_and_check_maskformer_model(config, **inputs, output_hidden_states=True)
-
-    def test_outputs_auxilary_loss(self):
-        self.parent.assertTrue(False)
 
     def test_attention_outputs(self):
         # TODO, what should I output from the model?

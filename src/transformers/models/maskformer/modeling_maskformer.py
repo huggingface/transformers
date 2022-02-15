@@ -904,6 +904,9 @@ MASKFORMER_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~MaskFormerModelOutput`] instead of a plain tuple.
 """
 
 
@@ -964,6 +967,7 @@ class MaskFormerModel(MaskFormerPretrainedModel):
         pixel_values: Tensor,
         pixel_mask: Optional[Tensor] = None,
         output_hidden_states: Option[bool] = False,
+        return_dict: Optional[bool] = True,
     ) -> MaskFormerOutput:
 
         if pixel_values is None:
@@ -980,6 +984,9 @@ class MaskFormerModel(MaskFormerPretrainedModel):
 
         transformer_module_output: DetrDecoderOutput = self.transformer_module(image_features, output_hidden_states)
         queries: Tensor = transformer_module_output.last_hidden_state
+
+        if not return_dict:
+            return (image_features, pixel_embeddings, queries)
 
         return MaskFormerOutput(
             encoder_last_hidden_state=image_features,
@@ -1072,6 +1079,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
         class_labels: Optional[Tensor] = None,
         pixel_mask: Optional[Tensor] = None,
         output_hidden_states: Option[bool] = False,
+        return_dict: Optional[bool] = True,
     ) -> MaskFormerForInstanceSegmentationOutput:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -1085,19 +1093,27 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
         Examples:
 
         ```python
-         >>> from transformers import MaskFormerFeatureExtractor, MaskFormerForObjectDetection >>> from PIL import
-        Image >>> import requests >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg" >>> image =
-        Image.open(requests.get(url, stream=True).raw) >>> feature_extractor =
-        MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-base-ade-640") >>> model =
-        MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade-640") >>> inputs =
-        feature_extractor(images=image, return_tensors="pt") >>> outputs = model(**inputs) >>> # model predicts
-        class_queries_logits of shape `(batch_size, num_queries)` >>> # and masks_queries_logits of shape `(batch_size,
-        num_queries, height, width)` >>> class_queries_logits = outputs.class_queries_logits >>> masks_queries_logits =
-        outputs.masks_queries_logits >>> # you can pass them to feature_extractor for postprocessing >>> output =
-        feature_extractor.post_process_segmentation(outputs) >>> output =
-        feature_extractor.post_process_panoptic_segmentation(outputs)"""
+        >>> from transformers import MaskFormerFeatureExtractor, MaskFormerForObjectDetection
+        >>> from PIL import Image
+        >>> import requests
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> feature_extractor =  MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-base-ade-640")
+        >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade-640")
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> # model predicts
+        class_queries_logits of shape `(batch_size, num_queries)`
+        >>> # and masks_queries_logits of shape `(batch_size,
+        num_queries, height, width)`
+        >>> class_queries_logits = outputs.class_queries_logits
+        >>> masks_queries_logits = outputs.masks_queries_logits
+        >>> # you can pass them to feature_extractor for postprocessing
+        >>> output = feature_extractor.post_process_segmentation(outputs)
+        >>> output = eature_extractor.post_process_panoptic_segmentation(outputs)
+        """
 
-        outputs: MaskFormerOutput = self.model(pixel_values, pixel_mask, output_hidden_states)
+        outputs: MaskFormerOutput = self.model(pixel_values, pixel_mask, output_hidden_states, return_dict)
 
         class_queries_logits, masks_queries_logits, auxilary_logits = self.get_logits(outputs)
 
@@ -1112,6 +1128,13 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
             labels: Dict[str, Tensor] = {"mask_labels": mask_labels, "class_labels": class_labels}
             loss_dict: Dict[str, Tensor] = self.get_loss_dict(logits, labels)
             loss: Tensor = self.get_loss(loss_dict)
+
+        if not return_dict:
+            if auxilary_logits is not None:
+                output = (class_queries_logits, masks_queries_logits) + (auxilary_logits) + outputs
+            else:
+                output = (class_queries_logits, masks_queries_logits) + outputs
+            return ((loss, loss_dict) + output) if loss is not None else output
 
         return MaskFormerForInstanceSegmentationOutput(
             **outputs,
