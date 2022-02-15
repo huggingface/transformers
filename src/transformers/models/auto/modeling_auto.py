@@ -801,7 +801,7 @@ class AutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
 
 
 AutoModelForSpeechSeq2Seq = auto_class_update(
-    AutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeing"
+    AutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeling"
 )
 
 

@@ -15,7 +15,11 @@
 # limitations under the License.
 """ ELECTRA model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -170,3 +174,15 @@ class ElectraConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
+
+
+class ElectraOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}),
+                ("attention_mask", {0: "batch", 1: "sequence"}),
+                ("token_type_ids", {0: "batch", 1: "sequence"}),
+            ]
+        )

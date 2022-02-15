@@ -95,7 +95,7 @@ _import_structure = {
     "dependency_versions_table": [],
     "dynamic_module_utils": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
-    "feature_extraction_utils": ["BatchFeature"],
+    "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
@@ -365,6 +365,7 @@ _import_structure = {
         "ZeroShotClassificationPipeline",
         "pipeline",
     ],
+    "processing_utils": ["ProcessorMixin"],
     "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
@@ -611,7 +612,12 @@ if is_torch_available():
         "TextDatasetForNextSentencePrediction",
     ]
     _import_structure["deepspeed"] = []
-    _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer"]
+    _import_structure["generation_beam_constraints"] = [
+        "Constraint",
+        "ConstraintListState",
+        "PhrasalConstraint",
+    ]
+    _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]
     _import_structure["generation_logits_process"] = [
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
@@ -1621,6 +1627,7 @@ if is_tf_available():
             "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+            "TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
             "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "TF_MODEL_FOR_VISION_2_SEQ_MAPPING",
@@ -1635,6 +1642,7 @@ if is_tf_available():
             "TFAutoModelForQuestionAnswering",
             "TFAutoModelForSeq2SeqLM",
             "TFAutoModelForSequenceClassification",
+            "TFAutoModelForSpeechSeq2Seq",
             "TFAutoModelForTableQuestionAnswering",
             "TFAutoModelForTokenClassification",
             "TFAutoModelForVision2Seq",
@@ -1944,6 +1952,14 @@ if is_tf_available():
             "TFRoFormerLayer",
             "TFRoFormerModel",
             "TFRoFormerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.speech_to_text"].extend(
+        [
+            "TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSpeech2TextForConditionalGeneration",
+            "TFSpeech2TextModel",
+            "TFSpeech2TextPreTrainedModel",
         ]
     )
     _import_structure["models.t5"].extend(
@@ -2297,7 +2313,7 @@ if TYPE_CHECKING:
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
     # Feature Extractor
-    from .feature_extraction_utils import BatchFeature
+    from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Files and general utilities
     from .file_utils import (
@@ -2545,6 +2561,7 @@ if TYPE_CHECKING:
         ZeroShotClassificationPipeline,
         pipeline,
     )
+    from .processing_utils import ProcessorMixin
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer
@@ -2738,7 +2755,8 @@ if TYPE_CHECKING:
             TextDataset,
             TextDatasetForNextSentencePrediction,
         )
-        from .generation_beam_search import BeamScorer, BeamSearchScorer
+        from .generation_beam_constraints import Constraint, ConstraintListState, PhrasalConstraint
+        from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .generation_logits_process import (
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
@@ -3588,6 +3606,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
@@ -3602,6 +3621,7 @@ if TYPE_CHECKING:
             TFAutoModelForQuestionAnswering,
             TFAutoModelForSeq2SeqLM,
             TFAutoModelForSequenceClassification,
+            TFAutoModelForSpeechSeq2Seq,
             TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
             TFAutoModelForVision2Seq,
@@ -3849,6 +3869,12 @@ if TYPE_CHECKING:
             TFRoFormerLayer,
             TFRoFormerModel,
             TFRoFormerPreTrainedModel,
+        )
+        from .models.speech_to_text import (
+            TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSpeech2TextForConditionalGeneration,
+            TFSpeech2TextModel,
+            TFSpeech2TextPreTrainedModel,
         )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,

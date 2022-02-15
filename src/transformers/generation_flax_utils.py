@@ -217,7 +217,9 @@ class FlaxGenerationMixin:
             params (`Dict[str, jnp.ndarray]`, *optional*):
                 Optionally the model parameters can be passed. Can be useful for parallelized generation.
             model_kwargs:
-                Additional model specific kwargs will be forwarded to the `forward` function of the model.
+                Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
+                is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific kwargs
+                should be prefixed with *decoder_*. Also accepts `encoder_outputs` to skip encoder part.
 
         Return:
             [`~file_utils.ModelOutput`].
@@ -251,7 +253,8 @@ class FlaxGenerationMixin:
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
+            if model_kwargs.get("encoder_outputs") is None:
+                model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
             # prepare decoder_input_ids for generation
             input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
@@ -676,7 +679,7 @@ class FlaxGenerationMixin:
             not_max_length_yet = state.cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = state.running_scores[:, -1:] / (max_length ** length_penalty)
+            best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
             worst_finished_score = jnp.where(
                 state.is_sent_finished, jnp.min(state.scores, axis=1, keepdims=True), np.array(-1.0e7)
             )
@@ -766,7 +769,7 @@ class FlaxGenerationMixin:
             # - add length penalty
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
-            topk_log_probs = topk_log_probs / (state.cur_len ** length_penalty)
+            topk_log_probs = topk_log_probs / (state.cur_len**length_penalty)
             beams_in_batch_are_full = (
                 jnp.broadcast_to(state.is_sent_finished.all(axis=-1, keepdims=True), did_topk_just_finished.shape)
                 & early_stopping

@@ -15,12 +15,11 @@
 """
 Image/Text processor class for CLIP
 """
+from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from .feature_extraction_clip import CLIPFeatureExtractor
-from .tokenization_clip import CLIPTokenizer
 
 
-class CLIPProcessor:
+class CLIPProcessor(ProcessorMixin):
     r"""
     Constructs a CLIP processor which wraps a CLIP feature extractor and a CLIP tokenizer into a single processor.
 
@@ -33,76 +32,12 @@ class CLIPProcessor:
         tokenizer ([`CLIPTokenizer`]):
             The tokenizer is a required input.
     """
+    feature_extractor_class = "CLIPFeatureExtractor"
+    tokenizer_class = "CLIPTokenizer"
 
     def __init__(self, feature_extractor, tokenizer):
-        if not isinstance(feature_extractor, CLIPFeatureExtractor):
-            raise ValueError(
-                f"`feature_extractor` has to be of type CLIPFeatureExtractor, but is {type(feature_extractor)}"
-            )
-        if not isinstance(tokenizer, CLIPTokenizer):
-            raise ValueError(f"`tokenizer` has to be of type CLIPTokenizer, but is {type(tokenizer)}")
-
-        self.feature_extractor = feature_extractor
-        self.tokenizer = tokenizer
+        super().__init__(feature_extractor, tokenizer)
         self.current_processor = self.feature_extractor
-
-    def save_pretrained(self, save_directory):
-        """
-        Save a CLIP feature extractor object and CLIP tokenizer object to the directory `save_directory`, so that it
-        can be re-loaded using the [`~CLIPProcessor.from_pretrained`] class method.
-
-        <Tip>
-
-        This class method is simply calling [`~PreTrainedFeatureExtractor.save_pretrained`] and
-        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the docstrings of the methods
-        above for more information.
-
-        </Tip>
-
-        Args:
-            save_directory (`str` or `os.PathLike`):
-                Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
-                be created if it does not exist).
-        """
-        self.feature_extractor._set_processor_class(self.__class__.__name__)
-        self.feature_extractor.save_pretrained(save_directory)
-
-        self.tokenizer._set_processor_class(self.__class__.__name__)
-        self.tokenizer.save_pretrained(save_directory)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        r"""
-        Instantiate a [`CLIPProcessor`] from a pretrained CLIP processor.
-
-        <Tip>
-
-        This class method is simply calling CLIPFeatureExtractor's [`~PreTrainedFeatureExtractor.from_pretrained`] and
-        CLIPTokenizer's [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the
-        docstrings of the methods above for more information.
-
-        </Tip>
-
-        Args:
-            pretrained_model_name_or_path (`str` or `os.PathLike`):
-                This can be either:
-
-                - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `clip-vit-base-patch32`, or
-                  namespaced under a user or organization name, like `openai/clip-vit-base-patch32`.
-                - a path to a *directory* containing a feature extractor file saved using the
-                  [`~PreTrainedFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
-                - a path or url to a saved feature extractor JSON *file*, e.g.,
-                  `./my_model_directory/preprocessor_config.json`.
-
-            **kwargs
-                Additional keyword arguments passed along to both [`PreTrainedFeatureExtractor`] and
-                [`PreTrainedTokenizer`]
-        """
-        feature_extractor = CLIPFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        tokenizer = CLIPTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """

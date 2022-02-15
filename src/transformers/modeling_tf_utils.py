@@ -1135,6 +1135,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         return model_embeds
 
     def _get_word_embedding_weight(model, embedding_layer):
+        # If the variable holds the weights themselves, return them
+        if isinstance(embedding_layer, tf.Tensor):
+            return embedding_layer
+        # Otherwise, try to get them from the layer's attributes
+
         embeds = getattr(embedding_layer, "weight", None)
         if embeds is not None:
             return embeds
@@ -1583,23 +1588,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     user_agent=user_agent,
                 )
 
-            except RepositoryNotFoundError as err:
-                logger.error(err)
+            except RepositoryNotFoundError:
                 raise EnvironmentError(
                     f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
                     "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a "
                     "token having permission to this repo with `use_auth_token` or log in with `huggingface-cli "
                     "login` and pass `use_auth_token=True`."
                 )
-            except RevisionNotFoundError as err:
-                logger.error(err)
+            except RevisionNotFoundError:
                 raise EnvironmentError(
                     f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for "
                     "this model name. Check the model page at "
                     f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
                 )
-            except EntryNotFoundError as err:
-                logger.error(err)
+            except EntryNotFoundError:
                 if filename == TF2_WEIGHTS_NAME:
                     has_file_kwargs = {
                         "revision": revision,
@@ -1614,7 +1616,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                             "those weights."
                         )
                     else:
-                        logger.error(err)
                         raise EnvironmentError(
                             f"{pretrained_model_name_or_path} does not appear to have a file named {TF2_WEIGHTS_NAME} "
                             f"or {WEIGHTS_NAME}."
@@ -1623,8 +1624,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     raise EnvironmentError(
                         f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
                     )
-            except HTTPError as err:
-                logger.error(err)
+            except HTTPError:
                 raise EnvironmentError(
                     "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
                     f"{pretrained_model_name_or_path} is not the path to a directory conaining a a file named "
@@ -1632,8 +1632,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     "Checkout your internet connection or see how to run the library in offline mode at "
                     "'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
-            except EnvironmentError as err:
-                logger.error(err)
+            except EnvironmentError:
                 raise EnvironmentError(
                     f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it from "
                     "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
@@ -1827,7 +1826,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.initializer_range = hidden_size ** -0.5 if initializer_range is None else initializer_range
+        self.initializer_range = hidden_size**-0.5 if initializer_range is None else initializer_range
 
     def build(self, input_shape):
         """
@@ -2020,6 +2019,12 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         """
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"TFAutoModel"`):

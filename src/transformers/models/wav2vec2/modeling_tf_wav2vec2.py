@@ -765,8 +765,12 @@ class TFWav2Vec2Attention(tf.keras.layers.Layer):
         self.num_heads = num_heads
         self.dropout = tf.keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
@@ -1315,6 +1319,13 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
         }
         return dummy_inputs
 
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        logger.warning(
+            f"\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. If you wish "
+            "to train/fine-tine this model, you need a GPU or a TPU"
+        )
+
     @tf.function
     def serving(self, inputs):
         output = self.call(input_values=inputs, training=False)
@@ -1510,7 +1521,12 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+        return TFWav2Vec2BaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            extract_features=output.extract_features,
+            hidden_states=hs,
+            attentions=attns,
+        )
 
 
 @add_start_docstrings(
