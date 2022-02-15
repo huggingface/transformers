@@ -485,7 +485,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not
         make use of token type ids, therefore a list of zeros is returned.
-        
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
@@ -1143,7 +1143,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 pair_xpath_subs_seq,
                 labels,
                 overflowing_tokens,
-                overflowing_token_xpaths,
+                overflowing_xpath_tags_seq,
+                overflowing_xpath_subs_seq,
                 overflowing_labels,
             ) = self.truncate_sequences(
                 ids,
@@ -1301,6 +1302,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         overflowing_tokens = []
         overflowing_xpath_tags_seq = []
         overflowing_xpath_subs_seq = []
+        overflowing_labels = []
         if truncation_strategy == TruncationStrategy.ONLY_FIRST or (
             truncation_strategy == TruncationStrategy.LONGEST_FIRST and pair_ids is None
         ):
@@ -1369,6 +1371,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             overflowing_tokens,
             overflowing_xpath_tags_seq,
             overflowing_xpath_subs_seq,
+            overflowing_labels,
         )
 
     def _pad(

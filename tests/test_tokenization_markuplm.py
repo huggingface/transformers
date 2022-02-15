@@ -1611,10 +1611,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
-                    if key != "bbox":
-                        self.assertEqual(len(tokens[key].shape), 2)
-                    else:
-                        self.assertEqual(len(tokens[key].shape), 3)
+                    self.assertEqual(len(tokens[key].shape), 2)
 
                 # Batch of examples
                 # For these 2 examples, 3 training examples will be created
@@ -1629,13 +1626,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     return_overflowing_tokens=True,
                 )
 
-                for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
-                    if key != "bbox":
-                        self.assertEqual(len(tokens[key].shape), 2)
-                        self.assertEqual(tokens[key].shape[-1], 6)
-                    else:
-                        self.assertEqual(len(tokens[key].shape), 3)
-                        self.assertEqual(tokens[key].shape[-1], 4)
+                for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):  
+                    self.assertEqual(len(tokens[key].shape), 2)
+                    self.assertEqual(tokens[key].shape[-1], 6)
 
     @unittest.skip("TO DO: overwrite this very extensive test.")
     def test_alignement_methods(self):
@@ -1691,13 +1684,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertGreater(len(seq0_tokens["input_ids"]), 2 + stride)
                 question_1 = "This is another sentence to be encoded."
                 seq_1 = ["what", "a", "weird", "test", "weirdly", "weird"]
-                xpaths_1 = [[i, i, i, i] for i in range(len(seq_1))]
+                xpaths_1 = ["html/body" for i in range(len(seq_1))]
                 seq1_tokens = tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)
                 if abs(len(seq0_tokens["input_ids"]) - len(seq1_tokens["input_ids"])) <= 2:
                     seq1_tokens_input_ids = seq1_tokens["input_ids"] + seq1_tokens["input_ids"]
                     seq_1 = tokenizer.decode(seq1_tokens_input_ids, clean_up_tokenization_spaces=False)
                     seq_1 = seq_1.split(" ")
-                    xpaths_1 = [[i, i, i, i] for i in range(len(seq_1))]
+                    xpaths_1 = ["html/body" for i in range(len(seq_1))]
                 seq1_tokens = tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)
 
                 self.assertGreater(len(seq1_tokens["input_ids"]), 2 + stride)
@@ -1784,8 +1777,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                 question_1, seq_2, xpaths=xpaths_2, padding=padding_state, truncation=False
                             )
                             self.assertNotEqual(len(output["input_ids"]), model_max_length)
-                            self.assertEqual(len(output["xpath_tags_seq"]), model_max_length)
-                            self.assertEqual(len(output["xpath_subs_seq"]), model_max_length)
+                            self.assertNotEqual(len(output["xpath_tags_seq"]), model_max_length)
+                            self.assertNotEqual(len(output["xpath_subs_seq"]), model_max_length)
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
@@ -1799,8 +1792,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                 [question_1], [seq_2], xpaths=[xpaths_2], padding=padding_state, truncation=False
                             )
                             self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
-                            self.assertEqual(len(output["xpath_tags_seq"][0]), model_max_length)
-                        self.assertEqual(len(output["xpath_subs_seq"][0]), model_max_length)
+                            self.assertNotEqual(len(output["xpath_tags_seq"][0]), model_max_length)
+                            self.assertNotEqual(len(output["xpath_subs_seq"][0]), model_max_length)
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
@@ -1832,31 +1825,31 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     overflow_first_sequence if len(seq0_tokens) > len(seq1_tokens) else overflow_second_sequence
                 )
 
-                bbox_first = [[0, 0, 0, 0]] * (len(seq_0) - 2)
-                bbox_first_sequence = bbox_first + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["bbox"]
-                overflowing_token_bbox_first_sequence_slow = [[0, 0, 0, 0]] * (2 + stride)
-                overflowing_token_bbox_first_sequence_fast = [[0, 0, 0, 0]] * (2 + stride) + tokenizer(
+                xpath_tags_seq_first = ["html/body"] * (len(seq_0) - 2)
+                xpath_tags_seq_first_sequence = xpath_tags_seq_first + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["xpath_tags_seq"]
+                overflowing_token_xpath_tags_seq_first_sequence_slow = ["html/body"] * (2 + stride)
+                overflowing_token_xpath_tags_seq_first_sequence_fast = ["html/body"] * (2 + stride) + tokenizer(
                     seq_1, xpaths=xpaths_1, add_special_tokens=False
-                )["bbox"]
+                )["xpath_tags_seq"]
 
-                bbox_second = [[0, 0, 0, 0]] * len(seq_0)
-                bbox_second_sequence = (
-                    bbox_second + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["bbox"][:-2]
+                xpath_tags_seq_second = [[0, 0, 0, 0]] * len(seq_0)
+                xpath_tags_seq_second_sequence = (
+                    xpath_tags_seq_second + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["xpath_tags_seq"][:-2]
                 )
-                overflowing_token_bbox_second_sequence_slow = tokenizer(
+                overflowing_xpath_tags_seq_second_sequence_slow = tokenizer(
                     seq_1, xpaths=xpaths_1, add_special_tokens=False
-                )["bbox"][-(2 + stride) :]
-                overflowing_token_bbox_second_sequence_fast = [[0, 0, 0, 0]] * len(seq_0) + tokenizer(
+                )["xpath_tags_seq"][-(2 + stride) :]
+                overflowing_xpath_tags_seq_second_sequence_fast = [[0, 0, 0, 0]] * len(seq_0) + tokenizer(
                     seq_1, xpaths=xpaths_1, add_special_tokens=False
-                )["bbox"][-(2 + stride) :]
+                )["xpath_tags_seq"][-(2 + stride) :]
 
-                bbox_longest_sequence = (
-                    bbox_first_sequence if len(seq0_tokens) > len(seq1_tokens) else bbox_second_sequence
+                xpath_tags_seq_longest_sequence = (
+                    xpath_tags_seq_first_sequence if len(seq0_tokens) > len(seq1_tokens) else xpath_tags_seq_second_sequence
                 )
-                overflowing_token_bbox_longest_sequence_fast = (
-                    overflowing_token_bbox_first_sequence_fast
+                overflowing_xpath_tags_seq_longest_sequence_fast = (
+                    overflowing_xpath_tags_seq_first_sequence_fast
                     if len(seq0_tokens) > len(seq1_tokens)
-                    else overflowing_token_bbox_second_sequence_fast
+                    else overflowing_xpath_tags_seq_second_sequence_fast
                 )
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
@@ -1874,8 +1867,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     )
                     truncated_sequence = information["input_ids"][0]
                     overflowing_tokens = information["input_ids"][1]
-                    bbox = information["bbox"][0]
-                    overflowing_bbox = information["bbox"][1]
+                    xpath_tags_seq = information["xpath_tags_seq"][0]
+                    overflowing_xpath_tags_seq = information["xpath_tags_seq"][1]
                     self.assertEqual(len(information["input_ids"]), 2)
 
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
@@ -1883,10 +1876,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
                     self.assertEqual(overflowing_tokens, overflow_longest_sequence)
-                    self.assertEqual(bbox, bbox_longest_sequence)
+                    self.assertEqual(bbox, xpath_tags_seq_longest_sequence)
 
-                    self.assertEqual(len(overflowing_bbox), 2 + stride + len(smallest))
-                    self.assertEqual(overflowing_bbox, overflowing_token_bbox_longest_sequence_fast)
+                    self.assertEqual(len(overflowing_xpath_tags_seq), 2 + stride + len(smallest))
+                    self.assertEqual(overflowing_xpath_tags_seq, overflowing_xpath_tags_seq_longest_sequence_fast)
                 else:
                     # No overflowing tokens when using 'longest' in python tokenizers
                     with self.assertRaises(ValueError) as context:
@@ -1925,8 +1918,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     )
                     truncated_sequence = information["input_ids"][0]
                     overflowing_tokens = information["input_ids"][1]
-                    bbox = information["bbox"][0]
-                    overflowing_bbox = information["bbox"][1]
+                    xpath_tags_seq = information["xpath_tags_seq"][0]
+                    overflowing_xpath_tags_seq = information["xpath_tags_seq"][1]
                     self.assertEqual(len(information["input_ids"]), 2)
 
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
@@ -1934,8 +1927,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
                     self.assertEqual(overflowing_tokens, overflow_longest_sequence)
-                    self.assertEqual(bbox, bbox_longest_sequence)
-                    self.assertEqual(overflowing_bbox, overflowing_token_bbox_longest_sequence_fast)
+                    self.assertEqual(bbox, xpath_tags_seq_longest_sequence)
+                    self.assertEqual(overflowing_xpath_tags_seq, overflowing_xpath_tags_seq_longest_sequence_fast)
                 else:
                     # No overflowing tokens when using 'longest' in python tokenizers
                     with self.assertRaises(ValueError) as context:
@@ -1974,8 +1967,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 if isinstance(tokenizer, MarkupLMTokenizerFast):
                     truncated_sequence = information_first_truncated["input_ids"][0]
                     overflowing_tokens = information_first_truncated["input_ids"][1]
-                    bbox = information_first_truncated["bbox"][0]
-                    overflowing_bbox = information_first_truncated["bbox"][1]
+                    xpath_tags_seq = information_first_truncated["xpath_tags_seq"][0]
+                    overflowing_xpath_tags_seq = information_first_truncated["xpath_tags_seq"][1]
                     self.assertEqual(len(information_first_truncated["input_ids"]), 2)
 
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
@@ -1983,21 +1976,21 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq1_tokens["input_ids"]))
                     self.assertEqual(overflowing_tokens, overflow_first_sequence)
-                    self.assertEqual(bbox, bbox_first_sequence)
-                    self.assertEqual(overflowing_bbox, overflowing_token_bbox_first_sequence_fast)
+                    self.assertEqual(xpath_tags_seq, xpath_tags_seq_first_sequence)
+                    self.assertEqual(overflowing_xpath_tags_seq, overflowing_xpath_tags_seq_first_sequence_fast)
                 else:
                     truncated_sequence = information_first_truncated["input_ids"]
                     overflowing_tokens = information_first_truncated["overflowing_tokens"]
-                    overflowing_bbox = information_first_truncated["overflowing_token_xpaths"]
-                    bbox = information_first_truncated["bbox"]
+                    overflowing_xpath_tags_seq = information_first_truncated["overflowing_xpath_tags_seq"]
+                    xpath_tags_seq = information_first_truncated["xpath_tags_seq"]
 
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
                     self.assertEqual(truncated_sequence, truncated_first_sequence)
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, seq0_tokens["input_ids"][-(2 + stride) :])
-                    self.assertEqual(bbox, bbox_first_sequence)
-                    self.assertEqual(overflowing_bbox, overflowing_token_bbox_first_sequence_slow)
+                    self.assertEqual(bbox, xpath_tags_seq_first_sequence)
+                    self.assertEqual(overflowing_xpath_tags_seq, overflowing_xpath_tags_seq_first_sequence_slow)
 
                 information_second_truncated = tokenizer(
                     question_0,
@@ -2014,8 +2007,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 if isinstance(tokenizer, MarkupLMTokenizerFast):
                     truncated_sequence = information_second_truncated["input_ids"][0]
                     overflowing_tokens = information_second_truncated["input_ids"][1]
-                    bbox = information_second_truncated["bbox"][0]
-                    overflowing_bbox = information_second_truncated["bbox"][1]
+                    xpath_tags_seq = information_second_truncated["xpath_tags_seq"][0]
+                    overflowing_xpath_tags_seq = information_second_truncated["xpath_tags_seq"][1]
 
                     self.assertEqual(len(information_second_truncated["input_ids"]), 2)
 
@@ -2024,21 +2017,21 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq0_tokens["input_ids"]))
                     self.assertEqual(overflowing_tokens, overflow_second_sequence)
-                    self.assertEqual(bbox, bbox_second_sequence)
-                    self.assertEqual(overflowing_bbox, overflowing_token_bbox_second_sequence_fast)
+                    self.assertEqual(bbox, xpath_tags_seq_second_sequence)
+                    self.assertEqual(overflowing_xpath_tags_seq, overflowing_xpath_tags_seq_second_sequence_fast)
                 else:
                     truncated_sequence = information_second_truncated["input_ids"]
                     overflowing_tokens = information_second_truncated["overflowing_tokens"]
-                    bbox = information_second_truncated["bbox"]
-                    overflowing_bbox = information_second_truncated["overflowing_token_xpaths"]
+                    xpath_tags_seq = information_second_truncated["xpath_tags_seq"]
+                    overflowing_xpath_tags_seq = information_second_truncated["overflowing_xpath_tags_seq"]
 
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
                     self.assertEqual(truncated_sequence, truncated_second_sequence)
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, seq1_tokens["input_ids"][-(2 + stride) :])
-                    self.assertEqual(bbox, bbox_second_sequence)
-                    self.assertEqual(overflowing_bbox, overflowing_token_bbox_second_sequence_slow)
+                    self.assertEqual(bbox, xpath_tags_seq_second_sequence)
+                    self.assertEqual(overflowing_xpath_tags_seq, overflowing_xpath_tags_seq_second_sequence_slow)
 
     def test_maximum_encoding_length_single_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
@@ -2096,8 +2089,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         with self.assertLogs("transformers", level="WARNING") as cm:
                             output = tokenizer(seq_1, xpaths=xpaths_1, padding=padding_state, truncation=False)
                             self.assertNotEqual(len(output["input_ids"]), model_max_length)
-                            self.assertEqual(len(output["xpath_tags_seq"]), model_max_length)
-                            self.assertEqual(len(output["xpath_subs_seq"]), model_max_length)
+                            self.assertNotEqual(len(output["xpath_tags_seq"]), model_max_length)
+                            self.assertNotEqual(len(output["xpath_subs_seq"]), model_max_length)
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
@@ -2109,8 +2102,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         with self.assertLogs("transformers", level="WARNING") as cm:
                             output = tokenizer([seq_1], xpaths=[xpaths_1], padding=padding_state, truncation=False)
                             self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
-                            self.assertEqual(len(output["xpath_tags_seq"][0]), model_max_length)
-                            self.assertEqual(len(output["xpath_subs_seq"][0]), model_max_length)
+                            self.assertNotEqual(len(output["xpath_tags_seq"][0]), model_max_length)
+                            self.assertNotEqual(len(output["xpath_subs_seq"][0]), model_max_length)
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
