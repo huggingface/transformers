@@ -1517,9 +1517,8 @@ class ModelTesterMixin:
 
                 tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
                 tf_model.save_weights(tf_checkpoint_path)
-                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path).to(
-                    torch_device
-                )
+                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
+                pt_model = pt_model.to(torch_device)
 
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
             pt_model.eval()
