@@ -16,7 +16,7 @@
 
 
 import unittest
-from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
+from transformers.models.maskformer.configuration_maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerOutput,
@@ -38,19 +38,19 @@ if is_torch_available():
     import torch
 
     from transformers import MaskFormerForInstanceSegmentation, MaskFormerModel
-    from transformers.models.maskformer.modeling_maskformer import MASK_FORMER_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.maskformer import MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DetrFeatureExtractor
+    from transformers import MaskFormerFeatureExtractor
 
 
 class MaskFormerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         is_training=True,
         use_auxilary_loss=False,
         num_queries=100,
@@ -107,7 +107,8 @@ class MaskFormerModelTester:
         # the correct shape of result.transformer_decoder_hidden_states ensure the correcteness of the
         # encoder and pixel decoder
         self.parent.assertEqual(
-            result.transformer_decoder_hidden_states, (self.batch_size, self.num_queries, self.mask_feature_size)
+            result.transformer_decoder_last_hidden_state.shape,
+            (self.batch_size, self.num_queries, self.mask_feature_size),
         )
         # let's ensure the other two hidden state exists
         self.parent.assertFalse(result.pixel_decoder_last_hidden_state is not None)
@@ -175,10 +176,10 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_maskformer_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_maskformer_model(*config_and_inputs)
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.create_and_check_maskformer_model(config, **inputs)
 
-    def test_detr_instance_segmentation_head_model(self):
+    def test_maskformer_instance_segmentation_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_maskformer_instance_segmentation_head_model(*config_and_inputs)
 
@@ -200,7 +201,7 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MASK_FORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = MaskFormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -212,6 +213,10 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_outputs_auxilary_loss(self):
         self.parent.assertTrue(False)
+
+    def test_attention_outputs(self):
+        # TODO, what should I output from the model?
+        self.assertFalse(True)
 
 
 TOLERANCE = 1e-4
@@ -228,7 +233,11 @@ def prepare_img():
 class MaskFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return MaskFormerFeatureExtractor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
+        return (
+            MaskFormerFeatureExtractor.from_pretrained(MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP[0])
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_no_head(self):

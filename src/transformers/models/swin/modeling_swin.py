@@ -641,7 +641,7 @@ class SwinLayer(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            # TODO why this was call layers_outputs?
+
             block_hidden_states = block_module(
                 hidden_states,
                 input_dimensions,
