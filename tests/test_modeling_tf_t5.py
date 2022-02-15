@@ -456,6 +456,34 @@ class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
 @require_tf
 @require_sentencepiece
 @require_tokenizers
+class TFT5GenerationIntegrationTests(unittest.TestCase):
+    @slow
+    def test_greedy_generate(self):
+        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        sentences = ["Yesterday, my name was", "Today is a beautiful day and"]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+
+        generation_kwargs = {
+            "bad_words_ids": [tokenizer("my").input_ids, tokenizer("ein schöner").input_ids],
+            "no_repeat_ngram_size": 3,
+            "do_sample": False,
+            "repetition_penalty": 2.2,
+        }
+
+        output_ids = model.generate(input_ids, **generation_kwargs)
+
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+        expected_output_string = ["Yesterday, my name was", "Heute ist ein schöne Tag und"]
+
+        self.assertListEqual(expected_output_string, output_strings)
+
+
+@require_tf
+@require_sentencepiece
+@require_tokenizers
 class TFT5ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):

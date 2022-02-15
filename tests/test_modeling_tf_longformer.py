@@ -36,14 +36,7 @@ if is_tf_available():
         TFLongformerModel,
         TFLongformerSelfAttention,
     )
-
-    def shape_list(x):
-        """
-        copied from transformers.modeling_tf_utils
-        """
-        static = x.shape.as_list()
-        dynamic = tf.shape(x)
-        return [dynamic[i] if s is None else s for i, s in enumerate(static)]
+    from transformers.tf_utils import shape_list
 
 
 class TFLongformerModelTester:
