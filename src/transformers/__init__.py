@@ -1592,6 +1592,14 @@ if is_tf_available():
     _import_structure["activations_tf"] = []
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
+    _import_structure["generation_tf_logits_process"] = [
+        "TFLogitsProcessor",
+        "TFLogitsProcessorList",
+        "TFMinLengthLogitsProcessor",
+        "TFNoBadWordsLogitsProcessor",
+        "TFNoRepeatNGramLogitsProcessor",
+        "TFRepetitionPenaltyLogitsProcessor",
+    ]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
     _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
     _import_structure["modeling_tf_outputs"] = []
@@ -2046,6 +2054,7 @@ if is_tf_available():
         ]
     )
     _import_structure["optimization_tf"] = ["AdamWeightDecay", "GradientAccumulator", "WarmUp", "create_optimizer"]
+    _import_structure["tf_utils"] = []
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
 else:
@@ -3572,6 +3581,14 @@ if TYPE_CHECKING:
 
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
+        from .generation_tf_logits_process import (
+            TFLogitsProcessor,
+            TFLogitsProcessorList,
+            TFMinLengthLogitsProcessor,
+            TFNoBadWordsLogitsProcessor,
+            TFNoRepeatNGramLogitsProcessor,
+            TFRepetitionPenaltyLogitsProcessor,
+        )
         from .generation_tf_utils import tf_top_k_top_p_filtering
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
         from .modeling_tf_layoutlm import (
