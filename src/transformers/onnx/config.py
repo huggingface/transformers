@@ -17,7 +17,8 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
-import requests
+import numpy as np
+
 from transformers import (
     PretrainedConfig,
     PreTrainedTokenizer,
@@ -209,6 +210,15 @@ class OnnxConfig(ABC):
             >= EXTERNAL_DATA_FORMAT_SIZE_LIMIT
         )
 
+    def _generate_dummy_images(
+        self, batch_size: int = 2, num_channels: int = 3, image_height: int = 40, image_width: int = 40
+    ):
+        images = []
+        for _ in range(batch_size):
+            data = np.random.rand(image_height, image_width, num_channels) * 255
+            images.append(Image.fromarray(data.astype("uint8")).convert("RGB"))
+        return images
+
     def generate_dummy_inputs(
         self,
         preprocessor: Union[PreTrainedTokenizer, FeatureExtractionMixin],
@@ -217,6 +227,9 @@ class OnnxConfig(ABC):
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
         tokenizer: PreTrainedTokenizer = None,
+        num_channels: int = 3,
+        image_width: int = 40,
+        image_height: int = 40,
     ) -> Mapping[str, Any]:
         """
         Generate inputs to provide to the ONNX exporter for the specific framework
@@ -258,9 +271,10 @@ class OnnxConfig(ABC):
             dummy_input = [" ".join([preprocessor.unk_token]) * seq_length] * batch_size
             return dict(preprocessor(dummy_input, return_tensors=framework))
         elif isinstance(preprocessor, FeatureExtractionMixin) and is_vision_available():
-            url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-            image = Image.open(requests.get(url, stream=True).raw)
-            return dict(preprocessor(images=image, return_tensors=framework))
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH)
+            dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
+            return dict(preprocessor(images=dummy_input, return_tensors=framework))
         else:
             raise ValueError(
                 "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
