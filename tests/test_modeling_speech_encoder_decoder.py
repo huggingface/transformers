@@ -308,6 +308,11 @@ class EncoderDecoderMixin:
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
 
+        # make sure EOS token is set to None to prevent early stopping of generation
+        enc_dec_model.config.eos_token_id = None
+        if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
+            enc_dec_model.config.decoder.eos_token_id = None
+
         inputs = input_values if input_features is None else input_features
 
         # Bert does not have a bos token id, so use pad_token_id instead
