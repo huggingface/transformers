@@ -106,15 +106,17 @@ class MaskFormerModelTester:
 
         self.parent.assertTrue(len(encoder_hidden_states), len(config.backbone.depths))
         self.parent.assertTrue(len(pixel_decoder_hidden_states), len(config.backbone.depths))
-        self.parent.assertTrue(len(transformer_decoder_hidden_states), len(config.transformer_decoder.decoder_layers))
+        self.parent.assertTrue(len(transformer_decoder_hidden_states), config.transformer_decoder.decoder_layers)
 
-    def create_and_check_maskformer_model(self, config, pixel_values, pixel_mask, output_hidden_state=False, **kwargs):
+    def create_and_check_maskformer_model(
+        self, config, pixel_values, pixel_mask, output_hidden_states=False, **kwargs
+    ):
         model = MaskFormerModel(config=config)
         model.to(torch_device)
         model.eval()
 
         output: MaskFormerOutput = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-        output: MaskFormerOutput = model(pixel_values)
+        output: MaskFormerOutput = model(pixel_values, output_hidden_states=True)
         # the correct shape of output.transformer_decoder_hidden_states ensure the correcteness of the
         # encoder and pixel decoder
         self.parent.assertEqual(
@@ -125,7 +127,7 @@ class MaskFormerModelTester:
         self.parent.assertTrue(output.pixel_decoder_last_hidden_state is not None)
         self.parent.assertTrue(output.encoder_last_hidden_state is not None)
 
-        if output_hidden_state:
+        if output_hidden_states:
             self.check_output_hidden_state(output, config)
 
     def create_and_check_maskformer_instance_segmentation_head_model(
@@ -187,12 +189,14 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=MaskFormerConfig, has_text_modality=False)
 
     def test_config(self):
+        # TO ASK, maskformer doesn't have a hidden_size
         self.config_tester.run_common_tests()
 
-    @parameterized.expand([(True,), (False,)])
-    def test_maskformer_model(self, output_hidden_state):
+    def test_maskformer_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.create_and_check_maskformer_model(config, **inputs, output_hidden_state=output_hidden_state)
+        self.model_tester.create_and_check_maskformer_model(config, **inputs, output_hidden_states=False)
+
+        self.model_tester.create_and_check_maskformer_model(config, **inputs, output_hidden_states=True)
 
     def test_maskformer_instance_segmentation_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
