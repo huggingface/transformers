@@ -108,11 +108,11 @@ class MaskFormerModelTester:
         # encoder and pixel decoder
         self.parent.assertEqual(
             result.transformer_decoder_last_hidden_state.shape,
-            (self.batch_size, self.num_queries, self.mask_feature_size),
+            (1, self.batch_size * self.num_queries, self.mask_feature_size),
         )
         # let's ensure the other two hidden state exists
-        self.parent.assertFalse(result.pixel_decoder_last_hidden_state is not None)
-        self.parent.assertFalse(result.encoder_last_hidden_state is not None)
+        self.parent.assertTrue(result.pixel_decoder_last_hidden_state is not None)
+        self.parent.assertTrue(result.encoder_last_hidden_state is not None)
 
     def create_and_check_maskformer_instance_segmentation_head_model(
         self, config, pixel_values, pixel_mask, mask_labels, classes_labels
