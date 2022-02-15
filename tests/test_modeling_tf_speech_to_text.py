@@ -474,7 +474,7 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
                 # num_return_sequences = 1
                 self._check_generated_ids(model.generate(input_features, do_sample=True))
 
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ValueError):
                 # generating multiple sequences when no beam search generation
                 # is not allowed as it would always generate the same sequences
                 model.generate(input_features, do_sample=False, num_return_sequences=2)

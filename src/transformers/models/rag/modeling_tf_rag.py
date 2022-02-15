@@ -1269,6 +1269,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         )
 
         if return_dict_in_generate:
+            # TODO(Patrick): `encoder_outputs`, `past` hack.
+            # Remove after cleaning encoder-decoder outputs
             if output_attentions:
                 model_kwargs["encoder_attentions"] = encoder_outputs.attentions
             if output_hidden_states:
@@ -1350,28 +1352,35 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 **model_kwargs,  # encoder_outputs is here as in Pytorch's version
             )
         else:
-            return self._generate_no_beam_search(
-                decoder_input_ids,
-                cur_len=cur_len,
-                max_length=max_length,
-                min_length=min_length,
-                do_sample=do_sample,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
+            pre_processor = self._get_logits_processor(
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
+                min_length=min_length,
+                eos_token_id=eos_token_id,
+            )
+            # TODO(Patrick) clean-up once generate is fully cleaned up
+            model_kwargs["attention_mask"] = context_attention_mask
+            # TODO(Patrick) remove once generate is fully cleaned up
+            model_kwargs.pop("output_hidden_states", None)
+            model_kwargs.pop("output_attentions", None)
+            model_kwargs.pop("output_scores", None)
+
+            # TODO(Patrick): `encoder_outputs`, `past` hack.
+            # Remove after cleaning encoder-decoder outputs
+            model_kwargs["past"] = encoder_outputs
+
+            return self.greedy_search(
+                input_ids=decoder_input_ids,
+                max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                batch_size=batch_size,
-                vocab_size=vocab_size,
-                attention_mask=context_attention_mask,
-                use_cache=use_cache,
-                forced_bos_token_id=None,
-                forced_eos_token_id=None,
+                logits_processor=pre_processor,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
-                **model_kwargs,  # encoder_outputs is here as in Pytorch's version
+                **model_kwargs,
             )
 
     def get_input_embeddings(self):

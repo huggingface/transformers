@@ -54,6 +54,7 @@ from .file_utils import (
 )
 from .generation_tf_utils import TFGenerationMixin
 from .modeling_tf_outputs import TFSeq2SeqLMOutput
+from .tf_utils import shape_list
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
@@ -2039,29 +2040,6 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
-
-
-def shape_list(tensor: Union[tf.Tensor, np.ndarray]) -> List[int]:
-    """
-    Deal with dynamic shape in tensorflow cleanly.
-
-    Args:
-        tensor (`tf.Tensor` or `np.ndarray`): The tensor we want the shape of.
-
-    Returns:
-        `List[int]`: The shape of the tensor as a list.
-    """
-    if isinstance(tensor, np.ndarray):
-        return list(tensor.shape)
-
-    dynamic = tf.shape(tensor)
-
-    if tensor.shape == tf.TensorShape(None):
-        return dynamic
-
-    static = tensor.shape.as_list()
-
-    return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
 def get_initializer(initializer_range: float = 0.02) -> tf.initializers.TruncatedNormal:

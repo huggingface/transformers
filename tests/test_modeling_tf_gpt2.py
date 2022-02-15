@@ -26,14 +26,15 @@ from .test_modeling_tf_core import TFCoreModelTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
+    from transformers import GPT2Tokenizer
     from transformers.models.gpt2.modeling_tf_gpt2 import (
         TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFGPT2DoubleHeadsModel,
         TFGPT2ForSequenceClassification,
         TFGPT2LMHeadModel,
         TFGPT2Model,
-        shape_list,
     )
+    from transformers.tf_utils import shape_list
 
 
 class TFGPT2ModelTester:
@@ -428,60 +429,53 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 @require_tf
 class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
-    def test_lm_generate_gpt2(self):
-        model = TFGPT2LMHeadModel.from_pretrained("gpt2")
-        input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
-        expected_output_ids = [
-            464,
-            3290,
-            373,
-            1043,
-            287,
-            257,
-            2214,
-            1474,
-            262,
-            16246,
-            286,
-            2688,
-            290,
-            2688,
-            27262,
-            13,
-            198,
-            198,
-            464,
-            3290,
-        ]  # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
+    def test_lm_generate_distilgpt2(self):
+        model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
+        input_ids = tf.convert_to_tensor([[464, 1893]], dtype=tf.int32)  # The president
+
+        # The president of the United States, and the president of the United Kingdom, have been in the White
+        # fmt: off
+        expected_output_ids = [464, 1893, 286, 262, 1578, 1829, 11, 290, 262, 1893, 286, 262, 1578, 7526, 11, 423, 587, 287, 262, 2635]
+        # fmt: on
+
         output_ids = model.generate(input_ids, do_sample=False)
         self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
 
     @slow
-    def test_lm_generate_distilgpt2(self):
+    def test_lm_generate_distilgpt2_batch_special(self):
         model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
-        input_ids = tf.convert_to_tensor([[464, 1893]], dtype=tf.int32)  # The president
-        expected_output_ids = [
-            464,
-            1893,
-            286,
-            262,
-            1578,
-            1829,
-            11,
-            290,
-            262,
-            1893,
-            286,
-            262,
-            1578,
-            7526,
-            11,
-            423,
-            587,
-            287,
-            262,
-            2635,
-        ]  # The president of the United States, and the president of the United Kingdom, have been in the White
+        tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
 
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        sentences = ["Today is a beautiful day and", "Yesterday was"]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+
+        generation_kwargs = {
+            "bad_words_ids": [tokenizer("is").input_ids, tokenizer("angry about").input_ids],
+            "no_repeat_ngram_size": 2,
+            "do_sample": False,
+            "repetition_penalty": 1.3,
+        }
+
+        output_ids = model.generate(input_ids, **generation_kwargs)
+
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        expected_output_string = [
+            "Today is a beautiful day and I am so happy to be able take part in this amazing event.",
+            "Yesterday was a very busy day for the first time since I started writing this post",
+        ]
+        self.assertListEqual(output_strings, expected_output_string)
+
+    @slow
+    def test_lm_generate_gpt2(self):
+        model = TFGPT2LMHeadModel.from_pretrained("gpt2")
+        input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
+
+        # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
+        # fmt: off
+        expected_output_ids = [464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290]
+        # fmt: on
         output_ids = model.generate(input_ids, do_sample=False)
         self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
