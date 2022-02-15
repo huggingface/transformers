@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from inspect import signature
 from itertools import chain
 from pathlib import Path
@@ -78,7 +79,7 @@ def export_pytorch(
     Args:
         preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
             The preprocessor used for encoding the data.
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model ([`PreTrainedModel`]):
             The model to export.
         config ([`~onnx.config.OnnxConfig`]):
             The ONNX configuration associated with the exported model.
@@ -86,13 +87,16 @@ def export_pytorch(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
+    if tokenizer:
+        warnings.warn(
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            FutureWarning,
+        )
     if issubclass(type(model), PreTrainedModel):
         import torch
         from torch.onnx import export as onnx_export
@@ -170,7 +174,7 @@ def export_tensorflow(
     Args:
         preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
             The preprocessor used for encoding the data.
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model ([`TFPreTrainedModel`]):
             The model to export.
         config ([`~onnx.config.OnnxConfig`]):
             The ONNX configuration associated with the exported model.
@@ -178,8 +182,6 @@ def export_tensorflow(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
@@ -189,6 +191,12 @@ def export_tensorflow(
 
     import onnx
     import tf2onnx
+
+    if tokenizer:
+        warnings.warn(
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            FutureWarning,
+        )
 
     model.config.return_dict = True
 
@@ -234,8 +242,6 @@ def export(
             The version of the ONNX operator set to use.
         output (`Path`):
             Directory to store the exported ONNX model.
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data.
 
     Returns:
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
@@ -245,6 +251,11 @@ def export(
         raise ImportError(
             "Cannot convert because neither PyTorch nor TensorFlow are not installed. "
             "Please install torch or tensorflow first."
+        )
+    if tokenizer:
+        warnings.warn(
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            FutureWarning,
         )
 
     if is_torch_available():
