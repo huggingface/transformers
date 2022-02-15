@@ -20,7 +20,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 from PIL import Image
 
 import requests
-from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType, is_torch_available
+from transformers import PretrainedConfig, PreTrainedTokenizer, PreTrainedTokenizerFast, TensorType, is_torch_available
 
 from ..feature_extraction_utils import FeatureExtractionMixin
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
@@ -224,7 +224,7 @@ class OnnxConfig(ABC):
         """
         if isinstance(preprocessor, PreTrainedTokenizer) and tokenizer:
             raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
-        if isinstance(preprocessor, PreTrainedTokenizer) or tokenizer:
+        if isinstance(preprocessor, PreTrainedTokenizer) or isinstance(preprocessor, PreTrainedTokenizerFast):
             if tokenizer:
                 preprocessor = tokenizer
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
