@@ -365,9 +365,16 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         audio_tiled = np.tile(audio, n_repeats)
 
         output = speech_recognizer([audio_tiled], batch_size=2)
-
         self.assertEqual(output, [{"text": ANY(str)}])
         self.assertEqual(output[0]["text"][:6], "<s> <s")
+
+        # Making sure the argument are passed to the decoder
+        # Since no change happens in the result, check the error comes from
+        # the `decode_beams` function.
+        with self.assertRaises(TypeError) as e:
+            output = speech_recognizer([audio_tiled], decoder_kwargs={"num_beams": 2})
+            self.assertContains(e.msg, "TypeError: decode_beams() got an unexpected keyword argument 'num_beams'")
+        output = speech_recognizer([audio_tiled], decoder_kwargs={"beam_width": 2})
 
     @require_torch
     @require_pyctcdecode
