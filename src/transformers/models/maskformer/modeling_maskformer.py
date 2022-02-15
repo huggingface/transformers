@@ -36,6 +36,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
     requires_backends,
+    is_scipy_available,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
