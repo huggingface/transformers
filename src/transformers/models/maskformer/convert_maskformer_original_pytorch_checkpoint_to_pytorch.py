@@ -32,10 +32,10 @@ from transformers.models.maskformer.feature_extraction_maskformer import MaskFor
 StateDict = Dict[str, Tensor]
 from transformers.utils import logging
 
-# hugging face logger doesn't write on console
 logging.set_verbosity_info()
-logging.add_handler(logging.logging.StreamHandler())
-logger = logging.get_logger(__name__)
+logger = logging.get_logger()
+
+torch.manual_seed(0)
 
 
 class TrackedStateDict:
@@ -312,37 +312,26 @@ class OriginalMaskFormerCheckpoinToOursConverter:
                         ),
                     ]
                 )
-                # hidden states norms
-                renamed_keys.extend(
-                    [
-                        (
-                            f"{src_prefix}.norm{layer_idx}.weight",
-                            f"{dst_prefix}.hidden_states_norms.{layer_idx}.weight",
-                        ),
-                        (
-                            f"{src_prefix}.norm{layer_idx}.bias",
-                            f"{dst_prefix}.hidden_states_norms.{layer_idx}.bias",
-                        ),
-                    ]
-                )
-            else:
-                renamed_keys.extend(
-                    [
-                        (
-                            f"{src_prefix}.norm3.weight",
-                            f"{dst_prefix}.model.layernorm.weight",
-                        ),
-                        (
-                            f"{src_prefix}.norm3.bias",
-                            f"{dst_prefix}.model.layernorm.bias",
-                        ),
-                    ]
-                )
+
+            # hidden states norms
+            renamed_keys.extend(
+                [
+                    (
+                        f"{src_prefix}.norm{layer_idx}.weight",
+                        f"{dst_prefix}.hidden_states_norms.{layer_idx}.weight",
+                    ),
+                    (
+                        f"{src_prefix}.norm{layer_idx}.bias",
+                        f"{dst_prefix}.hidden_states_norms.{layer_idx}.bias",
+                    ),
+                ]
+            )
+
         # model.layernorm.weight and our hiddin_state_norms[3] have to be the same
-        assert torch.allclose(
-            dst_state_dict[f"{dst_prefix}.hidden_states_norms.3.weight"],
-            dst_state_dict[f"{dst_prefix}.model.layernorm.weight"],
-        )
+        # assert torch.allclose(
+        #     dst_state_dict[f"{dst_prefix}.hidden_states_norms.3.weight"],
+        #     dst_state_dict[f"{dst_prefix}.model.layernorm.weight"],
+        # )
         # dst_state_dict[f"{dst_prefix}.hidden_states_norms.3.weight"].copy_(
         #     dst_state_dict[f"{dst_prefix}.model.layernorm.weight"]
         # )
@@ -528,9 +517,9 @@ class OriginalMaskFormerCheckpoinToOursConverter:
         self.replace_pixel_module(dst_state_dict, src_state_dict)
         self.replace_transformer_module(dst_state_dict, src_state_dict)
 
-        print(f"Missed keys are {pformat(dst_state_dict.diff())}")
-        print(f"Not copied keys are {pformat(src_state_dict.keys())}")
-        print("🙌 Done")
+        logger.info(f"Missed keys are {pformat(dst_state_dict.diff())}")
+        logger.info(f"Not copied keys are {pformat(src_state_dict.keys())}")
+        logger.info("🙌 Done")
 
         mask_former.load_state_dict(dst_state_dict)
 
@@ -572,11 +561,11 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation):
         original_model = original_model.eval()
         our_model = our_model.eval()
 
-        x = torch.zeros((1, 3, 384, 384))
+        x = torch.rand((1, 3, 384, 384))
 
-        original_model_backbone_features = original_model.backbone(x)
+        original_model_backbone_features = original_model.backbone(x.clone())
 
-        our_model_output: MaskFormerOutput = our_model.model(x, output_hidden_states=True)
+        our_model_output: MaskFormerOutput = our_model.model(x.clone(), output_hidden_states=True)
 
         for original_model_feature, our_model_feature in zip(
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states

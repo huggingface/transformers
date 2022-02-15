@@ -634,36 +634,34 @@ class SwinLayer(nn.Module):
         self, hidden_states, input_dimensions, head_mask=None, output_attentions=False, output_hidden_states=False
     ):
         all_hidden_states = () if output_hidden_states else None
-        layer_hidden_states = ()
+
         height, width = input_dimensions
         for i, block_module in enumerate(self.blocks):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            layer_outputs = block_module(
+            # TODO why this was call layers_outputs?
+            block_hidden_states = block_module(
                 hidden_states,
                 input_dimensions,
                 layer_head_mask,
                 output_attentions,
             )
 
-            hidden_states = layer_outputs[0]
+            hidden_states = block_hidden_states[0]
 
             if output_hidden_states:
-                layer_hidden_states += (hidden_states,)
+                all_hidden_states += (hidden_states,)
 
         if self.downsample is not None:
-
             height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
             output_dimensions = (height, width, height_downsampled, width_downsampled)
-            layer_hidden_states = (self.downsample(layer_outputs[0], input_dimensions),) + layer_hidden_states
+            hidden_states = self.downsample(hidden_states, input_dimensions)
         else:
             output_dimensions = (height, width, height, width)
-            layer_hidden_states = (hidden_states,) + layer_hidden_states
 
-        return layer_hidden_states, output_dimensions
+        return hidden_states, output_dimensions, all_hidden_states
 
 
 class SwinEncoder(nn.Module):
@@ -716,11 +714,11 @@ class SwinEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs, output_dimensions = torch.utils.checkpoint.checkpoint(
+                layer_hidden_states, output_dimensions, layer_all_hidden_states = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module), hidden_states, layer_head_mask
                 )
             else:
-                layer_outputs, output_dimensions = layer_module(
+                layer_hidden_states, output_dimensions, layer_all_hidden_states = layer_module(
                     hidden_states,
                     input_dimensions,
                     layer_head_mask,
@@ -731,12 +729,13 @@ class SwinEncoder(nn.Module):
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
             all_input_dimensions += (input_dimensions,)
             if output_hidden_states:
-                all_hidden_states += (layer_outputs,)
+                all_hidden_states += (layer_all_hidden_states,)
 
-            hidden_states = layer_outputs[0]
+            hidden_states = layer_hidden_states
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                # TODO no idea if that is correct
+                all_self_attentions = all_self_attentions + (layer_all_hidden_states[1],)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)

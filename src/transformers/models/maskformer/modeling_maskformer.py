@@ -606,7 +606,7 @@ class SwinTransformerBackbone(nn.Module):
         self.model = SwinModel(config)
         self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(out_shape) for out_shape in self.outputs_shapes])
         # little hack, our swin transformer has already the last norm, so let's switch the refence of the last item
-        self.hidden_states_norms[-1] = self.model.layernorm
+        # self.hidden_states_norms[-1] = self.model.layernorm
 
     def forward(self, *args, **kwargs) -> List[Tensor]:
         output = self.model(*args, **kwargs, output_hidden_states=True)
