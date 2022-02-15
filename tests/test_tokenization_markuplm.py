@@ -23,16 +23,8 @@ import unittest
 from typing import List
 
 from transformers import AddedToken, MarkupLMTokenizerFast, SpecialTokensMixin, is_tf_available, is_torch_available
-from transformers.models.markuplm.tokenization_markuplm import (
-    VOCAB_FILES_NAMES,
-    MarkupLMTokenizer,
-)
-from transformers.testing_utils import (
-    is_pt_tf_cross_test,
-    require_tokenizers,
-    require_torch,
-    slow,
-)
+from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES, MarkupLMTokenizer
+from transformers.testing_utils import is_pt_tf_cross_test, require_tokenizers, require_torch, slow
 
 from .test_tokenization_common import (
     SMALL_TRAINING_CORPUS,
@@ -458,8 +450,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
                 )
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
-                input_r = tokenizer_r.encode(question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
-                input_p = tokenizer_p.encode(question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
+                input_r = tokenizer_r.encode(
+                    question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
+                )
+                input_p = tokenizer_p.encode(
+                    question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
+                )
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
                 input_r = tokenizer_r.encode(question, nodes, xpaths=xpaths, padding=True)
                 input_p = tokenizer_p.encode(question, nodes, xpaths=xpaths, padding="longest")
@@ -680,7 +676,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     tokenizer.encode_plus(nodes_example, xpaths=xpaths_example)
                     for nodes_example, xpaths_example in zip(nodes, xpaths)
                 ]
-                encoded_sequences_batch = tokenizer.batch_encode_plus(nodes, is_pair=False, xpaths=xpaths, padding=False)
+                encoded_sequences_batch = tokenizer.batch_encode_plus(
+                    nodes, is_pair=False, xpaths=xpaths, padding=False
+                )
                 self.assertListEqual(
                     encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
                 )
@@ -810,7 +808,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertNotEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
 
                     # Should also work with truncation
-                    normal_tokens = tokenizer(nodes, xpaths=xpaths, padding=True, truncation=True, pad_to_multiple_of=8)
+                    normal_tokens = tokenizer(
+                        nodes, xpaths=xpaths, padding=True, truncation=True, pad_to_multiple_of=8
+                    )
                     for key, value in normal_tokens.items():
                         self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
 
@@ -1020,7 +1020,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(len(output["token_type_ids"]), len(output["attention_mask"]))
 
                 self.assertIn(0, output["token_type_ids"])
-                self.assertIn(1, output["token_type_ids"])
 
     def test_offsets_mapping(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
@@ -1150,7 +1149,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths)
 
                 for key in filter(
-                    lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"], input_p.keys()
+                    lambda x: x
+                    in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"],
+                    input_p.keys(),
                 ):
                     self.assertSequenceEqual(input_p[key], input_r[key])
 
@@ -1158,7 +1159,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_pairs_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths)
 
                 for key in filter(
-                    lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"], input_p.keys()
+                    lambda x: x
+                    in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"],
+                    input_p.keys(),
                 ):
                     self.assertSequenceEqual(input_pairs_p[key], input_pairs_r[key])
 
@@ -1170,7 +1173,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, max_length=512, truncation=True)
 
                 for key in filter(
-                    lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"], input_p.keys()
+                    lambda x: x
+                    in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"],
+                    input_p.keys(),
                 ):
                     self.assertSequenceEqual(input_p[key], input_r[key])
 
@@ -1183,7 +1188,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 for key in filter(
-                    lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"], input_p.keys()
+                    lambda x: x
+                    in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"],
+                    input_p.keys(),
                 ):
                     self.assertSequenceEqual(input_p[key], input_r[key][0])
 
@@ -1303,7 +1310,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         return_tensors="tf",
                     )
                 else:
-                    pytorch_tensor = tokenizer.batch_encode_plus(nodes, xpaths=xpaths, padding=True, return_tensors="pt")
+                    pytorch_tensor = tokenizer.batch_encode_plus(
+                        nodes, xpaths=xpaths, padding=True, return_tensors="pt"
+                    )
                     tensorflow_tensor = tokenizer.batch_encode_plus(
                         nodes, xpaths=xpaths, padding="longest", return_tensors="tf"
                     )
@@ -2166,7 +2175,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @slow
     def test_only_label_first_subword(self):
         nodes = ["hello", "niels"]
-        xpaths = [[1000, 1000, 1000, 1000] for _ in range(len(nodes))]
+        xpaths = ["/html/body/div/li[1]/div/span" for _ in range(len(nodes))]
         word_labels = [0, 1]
 
         # test slow tokenizer
@@ -2174,22 +2183,11 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer_p(nodes, xpaths=xpaths, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
-        tokenizer_p = MarkupLMTokenizer.from_pretrained(
-            "microsoft/markuplm-base", only_label_first_subword=False
-        )
+        tokenizer_p = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base", only_label_first_subword=False)
         encoding = tokenizer_p(nodes, xpaths=xpaths, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
 
-        # test fast tokenizer
-        tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base")
-        encoding = tokenizer_r(nodes, xpaths=xpaths, word_labels=word_labels)
-        self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
-
-        tokenizer_r = MarkupLMTokenizer.from_pretrained(
-            "microsoft/markuplm-base", only_label_first_subword=False
-        )
-        encoding = tokenizer_r(nodes, xpaths=xpaths, word_labels=word_labels)
-        self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
+        # TODO test fast tokenizer (see test in LayoutLMv2)
 
     @slow
     def test_markuplm_integration_test(self):

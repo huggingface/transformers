@@ -217,6 +217,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         max_depth=50,
         max_width=1000,
         pad_width=1001,
+        pad_token_label=-100,
+        only_label_first_subword=True,
         **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
@@ -245,6 +247,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             max_depth=max_depth,
             max_width=max_width,
             pad_width=pad_width,
+            pad_token_label=pad_token_label,
+            only_label_first_subword=only_label_first_subword,
             **kwargs,
         )
 
@@ -274,6 +278,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         self.pad_tag_id = self.unk_tag_id + 1
         self.pad_xpath_tags_seq = [self.pad_tag_id] * self.max_depth
         self.pad_xpath_subs_seq = [self.pad_width] * self.max_depth
+        self.pad_token_label = pad_token_label
+        self.only_label_first_subword = only_label_first_subword
 
     def get_xpath_seq(self, xpath):
         """
@@ -477,9 +483,10 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Args:
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not
         make use of token type ids, therefore a list of zeros is returned.
+        
+        Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
             token_ids_1 (`List[int]`, *optional*):
@@ -1179,7 +1186,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
             xpath_tags_ids = self.build_xpath_tags_with_special_tokens(xpath_tags_seq, pair_xpath_tags_seq)
             xpath_subs_ids = self.build_xpath_subs_with_special_tokens(xpath_subs_seq, pair_xpath_subs_seq)
-
+            if labels:
+                labels = [self.pad_token_label] + labels + [self.pad_token_label]
             # xpath_tags_ids = (
             #     [self.pad_xpath_tags_seq] + xpath_tags_seq + [self.pad_xpath_tags_seq] + pair_xpath_tags_seq
             # )
@@ -1203,6 +1211,9 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
             else:
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
+
+        if labels:
+            encoded_inputs["labels"] = labels
 
         # Check lengths
         self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
@@ -1423,6 +1434,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                     encoded_inputs["xpath_subs_seq"] = (
                         encoded_inputs["xpath_subs_seq"] + [self.pad_xpath_subs_seq] * difference
                     )
+                if "labels" in encoded_inputs:
+                    encoded_inputs["labels"] = encoded_inputs["labels"] + [self.pad_token_label] * difference
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
@@ -1441,6 +1454,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                     encoded_inputs["xpath_subs_seq"] = [self.pad_xpath_subs_seq] * difference + encoded_inputs[
                         "xpath_subs_seq"
                     ]
+                if "labels" in encoded_inputs:
+                    encoded_inputs["labels"] = [self.pad_token_label] * difference + encoded_inputs["labels"]
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
