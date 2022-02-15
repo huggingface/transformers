@@ -17,13 +17,22 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
-from PIL import Image
-
 import requests
-from transformers import PretrainedConfig, PreTrainedTokenizer, PreTrainedTokenizerFast, TensorType, is_torch_available
+from transformers import (
+    PretrainedConfig,
+    PreTrainedTokenizer,
+    PreTrainedTokenizerFast,
+    TensorType,
+    is_torch_available,
+    is_vision_available,
+)
 
 from ..feature_extraction_utils import FeatureExtractionMixin
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
+
+
+if is_vision_available():
+    from PIL import Image
 
 
 DEFAULT_ONNX_OPSET = 11
@@ -213,11 +222,18 @@ class OnnxConfig(ABC):
         Generate inputs to provide to the ONNX exporter for the specific framework
 
         Args:
-            tokenizer: The tokenizer associated with this model configuration
-            batch_size: The batch size (int) to export the model for (-1 means dynamic axis)
-            seq_length: The sequence length (int) to export the model for (-1 means dynamic axis)
-            is_pair: Indicate if the input is a pair (sentence 1, sentence 2)
-            framework: The framework (optional) the tokenizer will generate tensor for
+            preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
+                The preprocessor associated with this model configuration.
+            batch_size (`int`):
+                The batch size (int) to export the model for (-1 means dynamic axis)
+            seq_length (`int`):
+                The sequence length (int) to export the model for (-1 means dynamic axis)
+            is_pair (`bool`):
+                Indicate if the input is a pair (sentence 1, sentence 2)
+            framework (`TensorType`):
+                The framework (optional) the tokenizer will generate tensor for
+            tokenizer ([`PreTrainedTokenizer`]):
+                The tokenizer associated with this model configuration
 
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
@@ -241,7 +257,7 @@ class OnnxConfig(ABC):
             # Generate dummy inputs according to compute batch and sequence
             dummy_input = [" ".join([preprocessor.unk_token]) * seq_length] * batch_size
             return dict(preprocessor(dummy_input, return_tensors=framework))
-        elif isinstance(preprocessor, FeatureExtractionMixin):
+        elif isinstance(preprocessor, FeatureExtractionMixin) and is_vision_available():
             url = "http://images.cocodataset.org/val2017/000000039769.jpg"
             image = Image.open(requests.get(url, stream=True).raw)
             return dict(preprocessor(images=image, return_tensors=framework))

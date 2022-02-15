@@ -19,7 +19,7 @@ if is_torch_available() or is_tf_available():
     from transformers.onnx.features import FeaturesManager
 
 from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
-from transformers.testing_utils import require_onnx, require_tf, require_torch, slow
+from transformers.testing_utils import require_onnx, require_tf, require_torch, require_vision, slow
 
 
 @require_onnx
@@ -270,6 +270,7 @@ class OnnxExportTestCaseV2(TestCase):
     @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_MODELS))
     @slow
     @require_torch
+    @require_vision
     def test_pytorch_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
@@ -290,6 +291,7 @@ class OnnxExportTestCaseV2(TestCase):
     @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_DEFAULT_MODELS))
     @slow
     @require_tf
+    @require_vision
     def test_tensorflow_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
