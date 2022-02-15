@@ -80,9 +80,9 @@ class ImageSegmentationPipeline(Pipeline):
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
             raw_image (`bool`, *optional*, defaults to False):
-                If this is set to True, the `mask` description of the objects will be real `PIL.Image` (grey level).
-                If set to False, then, `mask` will be a base64 encoded of a PNG of this image. Which is
-                easier to send/save.
+                If this is set to True, the `mask` description of the objects will be real `PIL.Image` (grey level). If
+                set to False, then, `mask` will be a base64 encoded of a PNG of this image. Which is easier to
+                send/save.
             threshold (`float`, *optional*, defaults to 0.9):
                 The probability necessary to make a prediction.
             mask_threshold (`float`, *optional*, defaults to 0.5):
@@ -97,10 +97,10 @@ class ImageSegmentationPipeline(Pipeline):
 
             - **label** (`str`) -- The class label identified by the model.
             - **score** (`float`) -- The score attributed by the model for that label.
-            - **mask** (`str` or `PIL.Image`) -- base64 string of a grayscale (single-channel) PNG image that contain masks
-              information. The PNG image has size (heigth, width) of the original image. Pixel values in the image are
-              either 0 or 255 (i.e. mask is absent VS mask is present).
-              if `raw_image` is set to `True`, then the `mask` is the raw boolean `PIL.Image`.
+            - **mask** (`str` or `PIL.Image`) -- base64 string of a grayscale (single-channel) PNG image that contain
+              masks information. The PNG image has size (heigth, width) of the original image. Pixel values in the
+              image are either 0 or 255 (i.e. mask is absent VS mask is present). if `raw_image` is set to `True`, then
+              the `mask` is the raw boolean `PIL.Image`.
         """
 
         return super().__call__(*args, **kwargs)
