@@ -469,7 +469,13 @@ class AutoTokenizer:
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         config_tokenizer_class = tokenizer_config.get("tokenizer_class")
-        tokenizer_auto_map = tokenizer_config.get("auto_map")
+        tokenizer_auto_map = None
+        if "auto_map" in tokenizer_config:
+            if isinstance(tokenizer_config["auto_map"], (tuple, list)):
+                # Legacy format for dynamic tokenizers
+                tokenizer_auto_map = tokenizer_config["auto_map"]
+            else:
+                tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
