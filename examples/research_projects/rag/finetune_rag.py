@@ -254,7 +254,7 @@ class GenerativeQAModule(BaseTransformer):
     def training_step(self, batch, batch_idx) -> Dict:
         loss_tensors = self._step(batch)
 
-        logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
+        logs = {name: loss.detach() for name, loss in zip(self.loss_names, loss_tensors)}
         # tokens per batch
         tgt_pad_token_id = (
             self.tokenizer.generator.pad_token_id
@@ -517,7 +517,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
             raise RuntimeError("Please install Ray to use the Ray " "distributed retriever.")
         # Connect to an existing Ray cluster.
         try:
-            ray.init(address=args.ray_address)
+            ray.init(address=args.ray_address, namespace="rag")
         except (ConnectionError, ValueError):
             logger.warning(
                 "Connection to Ray cluster failed. Make sure a Ray"
