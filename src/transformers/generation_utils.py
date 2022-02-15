@@ -901,8 +901,8 @@ class GenerationMixin:
                 If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
                 `decoder_input_ids`.
             bad_words_ids(`List[List[int]]`, *optional*):
-                List of token ids that are not allowed to be generated. In order to get the tokens of the words that
-                should not appear in the generated text, use `tokenizer(bad_word, add_prefix_space=True,
+                List of token ids that are not allowed to be generated. In order to get the token ids of the words that
+                should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
                 add_special_tokens=False).input_ids`.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch.
