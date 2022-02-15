@@ -41,7 +41,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
         scores = tf.ones((batch_size, length), dtype=tf.float32) / length
         return scores
 
-    def test_min_lenght_dist_processor(self):
+    def test_min_length_dist_processor(self):
         vocab_size = 20
         batch_size = 4
         eos_token_id = 0
