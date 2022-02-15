@@ -387,12 +387,14 @@ def main():
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )
 
-    def preprocess_wikisql_function(examples, is_training=False):
+    def preprocess_tableqa_function(examples, is_training=False):
         """
         The is_training FLAG is used to identify if we could use the supervision
         to truncate the table content if it is required.
         """
 
+        # this function is specific for WikiSQL since the util function need the data structure
+        # to retrieve the WikiSQL answer for each question
         def _convert_table_types(_table):
             """Runs the type converter over the table cells."""
             ret_table = deepcopy(_table)
@@ -427,6 +429,8 @@ def main():
             # you can choose other delimiters to split each answer
             answers.append(answer_list)
 
+        # IMPORTANT: we cannot pass by answers during evaluation, answers passed during training are used to
+        # truncate large tables in the train set!
         if is_training:
             model_inputs = encoder_tokenizer(tables, questions, answers,
                                              max_length=data_args.max_source_length,
@@ -437,6 +441,7 @@ def main():
                                              max_length=data_args.max_source_length,
                                              padding=padding,
                                              truncation=True)
+
         with decoder_tokenizer.as_target_tokenizer():
             labels = decoder_tokenizer([", ".join(answer).lower() for answer in answers],
                                        max_length=max_target_length,
@@ -455,7 +460,7 @@ def main():
         return model_inputs
 
     # in training, we can use the answer as extra information to truncate large tables
-    preprocess_wikisql_function_training = partial(preprocess_wikisql_function, is_training=True)
+    preprocess_tableqa_function_training = partial(preprocess_tableqa_function, is_training=True)
 
     if training_args.do_train:
         if "train" not in datasets:
@@ -464,7 +469,7 @@ def main():
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
         train_dataset = train_dataset.map(
-            preprocess_wikisql_function_training,
+            preprocess_tableqa_function_training,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
@@ -479,7 +484,7 @@ def main():
         if data_args.max_eval_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
         eval_dataset = eval_dataset.map(
-            preprocess_wikisql_function,
+            preprocess_tableqa_function,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
@@ -494,7 +499,7 @@ def main():
         if data_args.max_predict_samples is not None:
             predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
         predict_dataset = predict_dataset.map(
-            preprocess_wikisql_function,
+            preprocess_tableqa_function,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
