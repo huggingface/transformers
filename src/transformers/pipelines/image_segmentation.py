@@ -168,7 +168,7 @@ class ImageSegmentationPipeline(Pipeline):
 
         return annotation
 
-    def _get_mask_str(self, img: Image) -> str:
+    def _get_mask_str(self, img: "Image") -> str:
         """
         Turns mask numpy array into mask base64 str.
 
