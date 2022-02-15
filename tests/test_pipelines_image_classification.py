@@ -113,19 +113,13 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
     @require_torch
     def test_small_model_pt(self):
-        small_model = "lysandre/tiny-vit-random"
+        small_model = "hf-internal-testing/tiny-random-vit"
         image_classifier = pipeline("image-classification", model=small_model)
 
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            [
-                {"score": 0.0015, "label": "chambered nautilus, pearly nautilus, nautilus"},
-                {"score": 0.0015, "label": "pajama, pyjama, pj's, jammies"},
-                {"score": 0.0014, "label": "trench coat"},
-                {"score": 0.0014, "label": "handkerchief, hankie, hanky, hankey"},
-                {"score": 0.0014, "label": "baboon"},
-            ],
+            [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
         )
 
         outputs = image_classifier(
@@ -138,32 +132,20 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                [
-                    {"score": 0.0015, "label": "chambered nautilus, pearly nautilus, nautilus"},
-                    {"score": 0.0015, "label": "pajama, pyjama, pj's, jammies"},
-                ],
-                [
-                    {"score": 0.0015, "label": "chambered nautilus, pearly nautilus, nautilus"},
-                    {"score": 0.0015, "label": "pajama, pyjama, pj's, jammies"},
-                ],
+                [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
+                [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
             ],
         )
 
     @require_tf
     def test_small_model_tf(self):
-        small_model = "lysandre/tiny-vit-random"
+        small_model = "hf-internal-testing/tiny-random-vit"
         image_classifier = pipeline("image-classification", model=small_model)
 
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            [
-                {"score": 0.0015, "label": "chambered nautilus, pearly nautilus, nautilus"},
-                {"score": 0.0015, "label": "pajama, pyjama, pj's, jammies"},
-                {"score": 0.0014, "label": "trench coat"},
-                {"score": 0.0014, "label": "handkerchief, hankie, hanky, hankey"},
-                {"score": 0.0014, "label": "baboon"},
-            ],
+            [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
         )
 
         outputs = image_classifier(
@@ -176,14 +158,8 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                [
-                    {"score": 0.0015, "label": "chambered nautilus, pearly nautilus, nautilus"},
-                    {"score": 0.0015, "label": "pajama, pyjama, pj's, jammies"},
-                ],
-                [
-                    {"score": 0.0015, "label": "chambered nautilus, pearly nautilus, nautilus"},
-                    {"score": 0.0015, "label": "pajama, pyjama, pj's, jammies"},
-                ],
+                [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
+                [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
             ],
         )
 
@@ -191,7 +167,9 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         tokenizer = PreTrainedTokenizer()
 
         # Assert that the pipeline can be initialized with a feature extractor that is not in any mapping
-        image_classifier = pipeline("image-classification", model="lysandre/tiny-vit-random", tokenizer=tokenizer)
+        image_classifier = pipeline(
+            "image-classification", model="hf-internal-testing/tiny-random-vit", tokenizer=tokenizer
+        )
 
         self.assertIs(image_classifier.tokenizer, tokenizer)
 
