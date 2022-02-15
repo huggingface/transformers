@@ -101,27 +101,27 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return nodes, xpaths
 
     def get_nodes_and_xpaths_batch(self):
-        nodes = [["hello", "world"], ["hello", "my", "name", "is", "bob"]]
+        nodes = [["hello world", "running"], ["hello my name is bob"]]
         xpaths = [
-            [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
-            [[961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69]],
+            ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"],
+            ["/html/body/div/li[2]/div/span"],
         ]
 
         return nodes, xpaths
 
-    def get_question_words_and_xpaths(self):
+    def get_question_nodes_and_xpaths(self):
         question = "what's his name?"
-        nodes = ["hello", "world"]
+        nodes = ["hello world"]
         xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"]
 
         return question, nodes, xpaths
 
-    def get_question_words_and_xpaths_batch(self):
+    def get_question_nodes_and_xpaths_batch(self):
         questions = ["what's his name?", "how is he called?"]
-        nodes = [["a", "weirdly", "test"], ["what", "a", "laif", "gastn"]]
+        nodes = [["hello world", "running"], ["hello my name is bob"]]
         xpaths = [
-            [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
-            [[256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69]],
+            ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"],
+            ["/html/body/div/li[2]/div/span"],
         ]
 
         return questions, nodes, xpaths
@@ -171,10 +171,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(added_toks, len(new_toks))
                 self.assertEqual(all_size_2, all_size + len(new_toks))
 
-                words = "aaaaa bbbbbb low cccccccccdddddddd l".split()
-                xpaths = ["/html/body/div/li[1]/div/span" for _ in range(len(words))]
+                nodes = "aaaaa bbbbbb low cccccccccdddddddd l".split()
+                xpaths = ["/html/body/div/li[1]/div/span" for _ in range(len(nodes))]
 
-                tokens = tokenizer.encode(words, xpaths=xpaths, add_special_tokens=False)
+                tokens = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
 
                 self.assertGreaterEqual(len(tokens), 4)
                 self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
@@ -190,11 +190,11 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(added_toks_2, len(new_toks_2))
                 self.assertEqual(all_size_3, all_size_2 + len(new_toks_2))
 
-                words = ">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l".split()
-                xpaths = ["/html/body/div/li[1]/div/span" for _ in range(len(words))]
+                nodes = ">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l".split()
+                xpaths = ["/html/body/div/li[1]/div/span" for _ in range(len(nodes))]
 
                 tokens = tokenizer.encode(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     add_special_tokens=False,
                 )
@@ -212,7 +212,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
 
                 new_toks = [AddedToken("[ABC]", normalized=False), AddedToken("[DEF]", normalized=False)]
                 tokenizer.add_tokens(new_toks)
@@ -233,15 +233,15 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
 
                 # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, words)
+                self._check_no_pad_token_padding(tokenizer, nodes)
 
                 padding_size = 10
                 padding_idx = tokenizer.pad_token_id
 
-                encoded_sequence = tokenizer.encode_plus(words, xpaths=xpaths, return_special_tokens_mask=True)
+                encoded_sequence = tokenizer.encode_plus(nodes, xpaths=xpaths, return_special_tokens_mask=True)
                 input_ids = encoded_sequence["input_ids"]
                 special_tokens_mask = encoded_sequence["special_tokens_mask"]
                 sequence_length = len(input_ids)
@@ -250,7 +250,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer.padding_side = "right"
 
                 not_padded_sequence = tokenizer.encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     padding=False,
                     return_special_tokens_mask=True,
@@ -265,7 +265,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_tokens_mask == not_padded_special_tokens_mask)
 
                 not_padded_sequence = tokenizer.encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     padding=False,
                     return_special_tokens_mask=True,
@@ -283,7 +283,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer.padding_side = "right"
 
                 right_padded_sequence = tokenizer.encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     max_length=sequence_length + padding_size,
                     padding="max_length",
@@ -301,7 +301,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Test left padding
                 tokenizer.padding_side = "left"
                 left_padded_sequence = tokenizer.encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     max_length=sequence_length + padding_size,
                     padding="max_length",
@@ -335,13 +335,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
 
                 tokens = []
-                for word in words:
+                for word in nodes:
                     tokens.extend(tokenizer.tokenize(word))
                 ids = tokenizer.convert_tokens_to_ids(tokens)
-                ids_2 = tokenizer.encode(words, xpaths=xpaths, add_special_tokens=False)
+                ids_2 = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
                 self.assertListEqual(ids, ids_2)
 
                 tokens_2 = tokenizer.convert_ids_to_tokens(ids)
@@ -353,13 +353,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(fast=False, do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
 
                 if (
                     tokenizer.build_inputs_with_special_tokens.__qualname__.split(".")[0] != "PreTrainedTokenizer"
                     and "token_type_ids" in tokenizer.model_input_names
                 ):
-                    information = tokenizer.encode_plus(words, xpaths=xpaths, add_special_tokens=True)
+                    information = tokenizer.encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
                     sequences, mask = information["input_ids"], information["token_type_ids"]
                     self.assertEqual(len(sequences), len(mask))
 
@@ -369,10 +369,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
 
                 # test 1: single sequence
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
 
-                sequences = tokenizer.encode(words, xpaths=xpaths, add_special_tokens=False)
-                attached_sequences = tokenizer.encode(words, xpaths=xpaths, add_special_tokens=True)
+                sequences = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
+                attached_sequences = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=True)
 
                 # Method is implemented (e.g. not GPT-2)
                 if len(attached_sequences) != 2:
@@ -381,10 +381,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     )
 
                 # test 2: two sequences
-                question, words, xpaths = self.get_question_words_and_xpaths()
+                question, nodes, xpaths = self.get_question_nodes_and_xpaths()
 
-                sequences = tokenizer.encode(question, words, xpaths=xpaths, add_special_tokens=False)
-                attached_sequences = tokenizer.encode(question, words, xpaths=xpaths, add_special_tokens=True)
+                sequences = tokenizer.encode(question, nodes, xpaths=xpaths, add_special_tokens=False)
+                attached_sequences = tokenizer.encode(question, nodes, xpaths=xpaths, add_special_tokens=True)
 
                 # Method is implemented (e.g. not GPT-2)
                 if len(attached_sequences) != 2:
@@ -397,32 +397,32 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
                 padding_size = 10
 
                 # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, words)
+                self._check_no_pad_token_padding(tokenizer, nodes)
 
                 padding_idx = tokenizer.pad_token_id
 
                 # Check that it correctly pads when a maximum length is specified along with the padding flag set to True
                 tokenizer.padding_side = "right"
-                encoded_sequence = tokenizer.encode(words, xpaths=xpaths)
+                encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths)
                 sequence_length = len(encoded_sequence)
                 # FIXME: the next line should be padding(max_length) to avoid warning
                 padded_sequence = tokenizer.encode(
-                    words, xpaths=xpaths, max_length=sequence_length + padding_size, pad_to_max_length=True
+                    nodes, xpaths=xpaths, max_length=sequence_length + padding_size, pad_to_max_length=True
                 )
                 padded_sequence_length = len(padded_sequence)
                 assert sequence_length + padding_size == padded_sequence_length
                 assert encoded_sequence + [padding_idx] * padding_size == padded_sequence
 
                 # Check that nothing is done when a maximum length is not specified
-                encoded_sequence = tokenizer.encode(words, xpaths=xpaths)
+                encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths)
                 sequence_length = len(encoded_sequence)
 
                 tokenizer.padding_side = "right"
-                padded_sequence_right = tokenizer.encode(words, xpaths=xpaths, pad_to_max_length=True)
+                padded_sequence_right = tokenizer.encode(nodes, xpaths=xpaths, pad_to_max_length=True)
                 padded_sequence_right_length = len(padded_sequence_right)
                 assert sequence_length == padded_sequence_right_length
                 assert encoded_sequence == padded_sequence_right
@@ -437,47 +437,47 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 pad_token_id = tokenizer_p.pad_token_id
 
                 # Encode - Simple input
-                words, xpaths = self.get_nodes_and_xpaths()
-                input_r = tokenizer_r.encode(words, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode(words, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
+                nodes, xpaths = self.get_nodes_and_xpaths()
+                input_r = tokenizer_r.encode(nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
+                input_p = tokenizer_p.encode(nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
-                input_r = tokenizer_r.encode(words, xpaths=xpaths, max_length=max_length, padding="max_length")
-                input_p = tokenizer_p.encode(words, xpaths=xpaths, max_length=max_length, padding="max_length")
+                input_r = tokenizer_r.encode(nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
+                input_p = tokenizer_p.encode(nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
-                input_r = tokenizer_r.encode(words, xpaths=xpaths, padding="longest")
-                input_p = tokenizer_p.encode(words, xpaths=xpaths, padding=True)
+                input_r = tokenizer_r.encode(nodes, xpaths=xpaths, padding="longest")
+                input_p = tokenizer_p.encode(nodes, xpaths=xpaths, padding=True)
                 self.assert_padded_input_match(input_r, input_p, len(input_r), pad_token_id)
 
                 # Encode - Pair input
-                question, words, xpaths = self.get_question_words_and_xpaths()
+                question, nodes, xpaths = self.get_question_nodes_and_xpaths()
                 input_r = tokenizer_r.encode(
-                    question, words, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
+                    question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
                 )
                 input_p = tokenizer_p.encode(
-                    question, words, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
+                    question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
                 )
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
-                input_r = tokenizer_r.encode(question, words, xpaths=xpaths, max_length=max_length, padding="max_length")
-                input_p = tokenizer_p.encode(question, words, xpaths=xpaths, max_length=max_length, padding="max_length")
+                input_r = tokenizer_r.encode(question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
+                input_p = tokenizer_p.encode(question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
-                input_r = tokenizer_r.encode(question, words, xpaths=xpaths, padding=True)
-                input_p = tokenizer_p.encode(question, words, xpaths=xpaths, padding="longest")
+                input_r = tokenizer_r.encode(question, nodes, xpaths=xpaths, padding=True)
+                input_p = tokenizer_p.encode(question, nodes, xpaths=xpaths, padding="longest")
                 self.assert_padded_input_match(input_r, input_p, len(input_r), pad_token_id)
 
                 # Encode_plus - Simple input
-                words, xpaths = self.get_nodes_and_xpaths()
-                input_r = tokenizer_r.encode_plus(words, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode_plus(words, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
+                nodes, xpaths = self.get_nodes_and_xpaths()
+                input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
+                input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True)
                 self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
                 self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-                input_r = tokenizer_r.encode_plus(words, xpaths=xpaths, max_length=max_length, padding="max_length")
-                input_p = tokenizer_p.encode_plus(words, xpaths=xpaths, max_length=max_length, padding="max_length")
+                input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
+                input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
                 self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
 
-                input_r = tokenizer_r.encode_plus(words, xpaths=xpaths, padding="longest")
-                input_p = tokenizer_p.encode_plus(words, xpaths=xpaths, padding=True)
+                input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, padding="longest")
+                input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, padding=True)
                 self.assert_padded_input_match(
                     input_r["input_ids"], input_p["input_ids"], len(input_r["input_ids"]), pad_token_id
                 )
@@ -485,41 +485,41 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
 
                 # Encode_plus - Pair input
-                question, words, xpaths = self.get_question_words_and_xpaths()
+                question, nodes, xpaths = self.get_question_nodes_and_xpaths()
                 input_r = tokenizer_r.encode_plus(
-                    question, words, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
+                    question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
                 )
                 input_p = tokenizer_p.encode_plus(
-                    question, words, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
+                    question, nodes, xpaths=xpaths, max_length=max_length, pad_to_max_length=True
                 )
                 self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
                 self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
                 input_r = tokenizer_r.encode_plus(
-                    question, words, xpaths=xpaths, max_length=max_length, padding="max_length"
+                    question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
                 )
                 input_p = tokenizer_p.encode_plus(
-                    question, words, xpaths=xpaths, max_length=max_length, padding="max_length"
+                    question, nodes, xpaths=xpaths, max_length=max_length, padding="max_length"
                 )
                 self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
                 self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-                input_r = tokenizer_r.encode_plus(question, words, xpaths=xpaths, padding="longest")
-                input_p = tokenizer_p.encode_plus(question, words, xpaths=xpaths, padding=True)
+                input_r = tokenizer_r.encode_plus(question, nodes, xpaths=xpaths, padding="longest")
+                input_p = tokenizer_p.encode_plus(question, nodes, xpaths=xpaths, padding=True)
                 self.assert_padded_input_match(
                     input_r["input_ids"], input_p["input_ids"], len(input_r["input_ids"]), pad_token_id
                 )
                 self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
 
                 # Batch_encode_plus - Simple input
-                words, xpaths = self.get_nodes_and_xpaths_batch()
+                nodes, xpaths = self.get_nodes_and_xpaths_batch()
 
                 input_r = tokenizer_r.batch_encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     max_length=max_length,
                     pad_to_max_length=True,
                 )
                 input_p = tokenizer_p.batch_encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     max_length=max_length,
                     pad_to_max_length=True,
@@ -527,13 +527,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
                 input_r = tokenizer_r.batch_encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     max_length=max_length,
                     padding="max_length",
                 )
                 input_p = tokenizer_p.batch_encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     max_length=max_length,
                     padding="max_length",
@@ -541,28 +541,28 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
                 input_r = tokenizer_r.batch_encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     max_length=max_length,
                     padding="longest",
                 )
                 input_p = tokenizer_p.batch_encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     max_length=max_length,
                     padding=True,
                 )
                 self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
 
-                input_r = tokenizer_r.batch_encode_plus(words, xpaths=xpaths, padding="longest")
-                input_p = tokenizer_p.batch_encode_plus(words, xpaths=xpaths, padding=True)
+                input_r = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths, padding="longest")
+                input_p = tokenizer_p.batch_encode_plus(nodes, xpaths=xpaths, padding=True)
                 self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
 
                 # Batch_encode_plus - Pair input
-                questions, words, xpaths = self.get_question_words_and_xpaths_batch()
+                questions, nodes, xpaths = self.get_question_nodes_and_xpaths_batch()
 
                 input_r = tokenizer_r.batch_encode_plus(
-                    list(zip(questions, words)),
+                    list(zip(questions, nodes)),
                     is_pair=True,
                     xpaths=xpaths,
                     max_length=max_length,
@@ -570,7 +570,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     padding="max_length",
                 )
                 input_p = tokenizer_p.batch_encode_plus(
-                    list(zip(questions, words)),
+                    list(zip(questions, nodes)),
                     is_pair=True,
                     xpaths=xpaths,
                     max_length=max_length,
@@ -580,13 +580,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
                 input_r = tokenizer_r.batch_encode_plus(
-                    list(zip(questions, words)),
+                    list(zip(questions, nodes)),
                     is_pair=True,
                     xpaths=xpaths,
                     padding=True,
                 )
                 input_p = tokenizer_p.batch_encode_plus(
-                    list(zip(questions, words)),
+                    list(zip(questions, nodes)),
                     is_pair=True,
                     xpaths=xpaths,
                     padding="longest",
@@ -594,11 +594,11 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
 
                 # Using pad on single examples after tokenization
-                words, xpaths = self.get_nodes_and_xpaths()
-                input_r = tokenizer_r.encode_plus(words, xpaths=xpaths)
+                nodes, xpaths = self.get_nodes_and_xpaths()
+                input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths)
                 input_r = tokenizer_r.pad(input_r)
 
-                input_p = tokenizer_r.encode_plus(words, xpaths=xpaths)
+                input_p = tokenizer_r.encode_plus(nodes, xpaths=xpaths)
                 input_p = tokenizer_r.pad(input_p)
 
                 self.assert_padded_input_match(
@@ -606,24 +606,24 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 # Using pad on single examples after tokenization
-                input_r = tokenizer_r.encode_plus(words, xpaths=xpaths)
+                input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths)
                 input_r = tokenizer_r.pad(input_r, max_length=max_length, padding="max_length")
 
-                input_p = tokenizer_r.encode_plus(words, xpaths=xpaths)
+                input_p = tokenizer_r.encode_plus(nodes, xpaths=xpaths)
                 input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
 
                 self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
 
                 # Using pad after tokenization
-                words, xpaths = self.get_nodes_and_xpaths_batch()
+                nodes, xpaths = self.get_nodes_and_xpaths_batch()
                 input_r = tokenizer_r.batch_encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                 )
                 input_r = tokenizer_r.pad(input_r)
 
                 input_p = tokenizer_r.batch_encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                 )
                 input_p = tokenizer_r.pad(input_p)
@@ -631,15 +631,15 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
 
                 # Using pad after tokenization
-                words, xpaths = self.get_nodes_and_xpaths_batch()
+                nodes, xpaths = self.get_nodes_and_xpaths_batch()
                 input_r = tokenizer_r.batch_encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                 )
                 input_r = tokenizer_r.pad(input_r, max_length=max_length, padding="max_length")
 
                 input_p = tokenizer_r.batch_encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                 )
                 input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
@@ -652,21 +652,21 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 # Test not batched
-                words, xpaths = self.get_nodes_and_xpaths()
-                encoded_sequences_1 = tokenizer.encode_plus(words, xpaths=xpaths)
-                encoded_sequences_2 = tokenizer(words, xpaths=xpaths)
+                nodes, xpaths = self.get_nodes_and_xpaths()
+                encoded_sequences_1 = tokenizer.encode_plus(nodes, xpaths=xpaths)
+                encoded_sequences_2 = tokenizer(nodes, xpaths=xpaths)
                 self.assertEqual(encoded_sequences_1, encoded_sequences_2)
 
                 # Test not batched pairs
-                question, words, xpaths = self.get_question_words_and_xpaths()
-                encoded_sequences_1 = tokenizer.encode_plus(words, xpaths=xpaths)
-                encoded_sequences_2 = tokenizer(words, xpaths=xpaths)
+                question, nodes, xpaths = self.get_question_nodes_and_xpaths()
+                encoded_sequences_1 = tokenizer.encode_plus(nodes, xpaths=xpaths)
+                encoded_sequences_2 = tokenizer(nodes, xpaths=xpaths)
                 self.assertEqual(encoded_sequences_1, encoded_sequences_2)
 
                 # Test batched
-                words, xpaths = self.get_nodes_and_xpaths_batch()
-                encoded_sequences_1 = tokenizer.batch_encode_plus(words, is_pair=False, xpaths=xpaths)
-                encoded_sequences_2 = tokenizer(words, xpaths=xpaths)
+                nodes, xpaths = self.get_nodes_and_xpaths_batch()
+                encoded_sequences_1 = tokenizer.batch_encode_plus(nodes, is_pair=False, xpaths=xpaths)
+                encoded_sequences_2 = tokenizer(nodes, xpaths=xpaths)
                 self.assertEqual(encoded_sequences_1, encoded_sequences_2)
 
     def test_batch_encode_plus_batch_sequence_length(self):
@@ -674,13 +674,13 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, xpaths = self.get_nodes_and_xpaths_batch()
+                nodes, xpaths = self.get_nodes_and_xpaths_batch()
 
                 encoded_sequences = [
-                    tokenizer.encode_plus(words_example, xpaths=xpaths_example)
-                    for words_example, xpaths_example in zip(words, xpaths)
+                    tokenizer.encode_plus(nodes_example, xpaths=xpaths_example)
+                    for nodes_example, xpaths_example in zip(nodes, xpaths)
                 ]
-                encoded_sequences_batch = tokenizer.batch_encode_plus(words, is_pair=False, xpaths=xpaths, padding=False)
+                encoded_sequences_batch = tokenizer.batch_encode_plus(nodes, is_pair=False, xpaths=xpaths, padding=False)
                 self.assertListEqual(
                     encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
                 )
@@ -690,17 +690,17 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, words)
+                self._check_no_pad_token_padding(tokenizer, nodes)
 
                 encoded_sequences_padded = [
                     tokenizer.encode_plus(
-                        words_example, xpaths=xpaths_example, max_length=maximum_length, padding="max_length"
+                        nodes_example, xpaths=xpaths_example, max_length=maximum_length, padding="max_length"
                     )
-                    for words_example, xpaths_example in zip(words, xpaths)
+                    for nodes_example, xpaths_example in zip(nodes, xpaths)
                 ]
 
                 encoded_sequences_batch_padded = tokenizer.batch_encode_plus(
-                    words, is_pair=False, xpaths=xpaths, padding=True
+                    nodes, is_pair=False, xpaths=xpaths, padding=True
                 )
                 self.assertListEqual(
                     encoded_sequences_padded,
@@ -709,10 +709,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # check 'longest' is unsensitive to a max length
                 encoded_sequences_batch_padded_1 = tokenizer.batch_encode_plus(
-                    words, is_pair=False, xpaths=xpaths, padding=True
+                    nodes, is_pair=False, xpaths=xpaths, padding=True
                 )
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
-                    words, is_pair=False, xpaths=xpaths, max_length=maximum_length + 10, padding="longest"
+                    nodes, is_pair=False, xpaths=xpaths, max_length=maximum_length + 10, padding="longest"
                 )
                 for key in encoded_sequences_batch_padded_1.keys():
                     self.assertListEqual(
@@ -722,10 +722,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # check 'no_padding' is unsensitive to a max length
                 encoded_sequences_batch_padded_1 = tokenizer.batch_encode_plus(
-                    words, is_pair=False, xpaths=xpaths, padding=False
+                    nodes, is_pair=False, xpaths=xpaths, padding=False
                 )
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
-                    words, is_pair=False, xpaths=xpaths, max_length=maximum_length + 10, padding=False
+                    nodes, is_pair=False, xpaths=xpaths, max_length=maximum_length + 10, padding=False
                 )
                 for key in encoded_sequences_batch_padded_1.keys():
                     self.assertListEqual(
@@ -744,21 +744,21 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, xpaths = self.get_nodes_and_xpaths_batch()
+                nodes, xpaths = self.get_nodes_and_xpaths_batch()
 
                 max_length = 100
 
                 # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, words)
+                self._check_no_pad_token_padding(tokenizer, nodes)
 
                 encoded_sequences = [
                     tokenizer.encode_plus(
-                        words_example, xpaths=xpaths_example, max_length=max_length, padding="max_length"
+                        nodes_example, xpaths=xpaths_example, max_length=max_length, padding="max_length"
                     )
-                    for words_example, xpaths_example in zip(words, xpaths)
+                    for nodes_example, xpaths_example in zip(nodes, xpaths)
                 ]
                 encoded_sequences_batch = tokenizer.batch_encode_plus(
-                    words, is_pair=False, xpaths=xpaths, max_length=max_length, padding="max_length"
+                    nodes, is_pair=False, xpaths=xpaths, max_length=max_length, padding="max_length"
                 )
                 self.assertListEqual(
                     encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
@@ -769,21 +769,21 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 tokenizer.padding_side = "left"
-                words, xpaths = self.get_nodes_and_xpaths_batch()
+                nodes, xpaths = self.get_nodes_and_xpaths_batch()
 
                 max_length = 100
 
                 # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, words)
+                self._check_no_pad_token_padding(tokenizer, nodes)
 
                 encoded_sequences = [
                     tokenizer.encode_plus(
-                        words_example, xpaths=xpaths_example, max_length=max_length, padding="max_length"
+                        nodes_example, xpaths=xpaths_example, max_length=max_length, padding="max_length"
                     )
-                    for words_example, xpaths_example in zip(words, xpaths)
+                    for nodes_example, xpaths_example in zip(nodes, xpaths)
                 ]
                 encoded_sequences_batch = tokenizer.batch_encode_plus(
-                    words, is_pair=False, xpaths=xpaths, max_length=max_length, padding="max_length"
+                    nodes, is_pair=False, xpaths=xpaths, max_length=max_length, padding="max_length"
                 )
                 self.assertListEqual(
                     encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
@@ -796,21 +796,21 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 if tokenizer.pad_token is None:
                     self.skipTest("No padding token.")
                 else:
-                    words, xpaths = self.get_nodes_and_xpaths()
+                    nodes, xpaths = self.get_nodes_and_xpaths()
 
                     # empty_tokens = tokenizer([""], [[]], padding=True, pad_to_multiple_of=8)
-                    normal_tokens = tokenizer(words, xpaths=xpaths, padding=True, pad_to_multiple_of=8)
+                    normal_tokens = tokenizer(nodes, xpaths=xpaths, padding=True, pad_to_multiple_of=8)
                     # for key, value in empty_tokens.items():
                     #     self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
                     for key, value in normal_tokens.items():
                         self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
 
-                    normal_tokens = tokenizer(words, xpaths=xpaths, pad_to_multiple_of=8)
+                    normal_tokens = tokenizer(nodes, xpaths=xpaths, pad_to_multiple_of=8)
                     for key, value in normal_tokens.items():
                         self.assertNotEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
 
                     # Should also work with truncation
-                    normal_tokens = tokenizer(words, xpaths=xpaths, padding=True, truncation=True, pad_to_multiple_of=8)
+                    normal_tokens = tokenizer(nodes, xpaths=xpaths, padding=True, truncation=True, pad_to_multiple_of=8)
                     for key, value in normal_tokens.items():
                         self.assertEqual(len(value) % 8, 0, f"BatchEncoding.{key} is not multiple of 8")
 
@@ -818,7 +818,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertRaises(
                         ValueError,
                         tokenizer.__call__,
-                        words,
+                        nodes,
                         xpaths=xpaths,
                         padding=True,
                         truncation=True,
@@ -845,9 +845,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
                 # Input tokens id
-                words, xpaths = self.get_nodes_and_xpaths()
-                input_simple = tokenizer_p.encode(words, xpaths=xpaths, add_special_tokens=False)
-                input_pair = tokenizer_p.encode(words, xpaths=xpaths, add_special_tokens=False)
+                nodes, xpaths = self.get_nodes_and_xpaths()
+                input_simple = tokenizer_p.encode(nodes, xpaths=xpaths, add_special_tokens=False)
+                input_pair = tokenizer_p.encode(nodes, xpaths=xpaths, add_special_tokens=False)
 
                 # Generate output
                 output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
@@ -863,10 +863,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, xpaths = self.get_nodes_and_xpaths()
-                encoded_sequence = tokenizer.encode(words, xpaths=xpaths, add_special_tokens=False)
+                nodes, xpaths = self.get_nodes_and_xpaths()
+                encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
                 encoded_sequence_dict = tokenizer.encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     add_special_tokens=True,
                     return_special_tokens_mask=True,
@@ -886,11 +886,11 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
                 # Testing single inputs
-                encoded_sequence = tokenizer.encode(words, xpaths=xpaths, add_special_tokens=False)
+                encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
                 encoded_sequence_dict = tokenizer.encode_plus(
-                    words, xpaths=xpaths, add_special_tokens=True, return_special_tokens_mask=True
+                    nodes, xpaths=xpaths, add_special_tokens=True, return_special_tokens_mask=True
                 )
                 encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
                 special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
@@ -911,15 +911,15 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 # Isolate this from the other tests because we save additional tokens/etc
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
                 tmpdirname = tempfile.mkdtemp()
 
-                before_tokens = tokenizer.encode(words, xpaths=xpaths, add_special_tokens=False)
+                before_tokens = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
                 before_vocab = tokenizer.get_vocab()
                 tokenizer.save_pretrained(tmpdirname)
 
                 after_tokenizer = tokenizer.__class__.from_pretrained(tmpdirname)
-                after_tokens = after_tokenizer.encode(words, xpaths=xpaths, add_special_tokens=False)
+                after_tokens = after_tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
                 after_vocab = after_tokenizer.get_vocab()
                 self.assertListEqual(before_tokens, after_tokens)
                 self.assertDictEqual(before_vocab, after_vocab)
@@ -930,7 +930,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
                 sequence = "Sequence"
                 padding_size = 10
 
@@ -941,10 +941,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # RIGHT PADDING - Check that it correctly pads when a maximum length is specified along with the padding flag set to True
                 tokenizer.padding_side = "right"
-                encoded_sequence = tokenizer.encode(words, xpaths=xpaths)
+                encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths)
                 sequence_length = len(encoded_sequence)
                 padded_sequence = tokenizer.encode(
-                    words, xpaths=xpaths, max_length=sequence_length + padding_size, padding="max_length"
+                    nodes, xpaths=xpaths, max_length=sequence_length + padding_size, padding="max_length"
                 )
                 padded_sequence_length = len(padded_sequence)
                 assert sequence_length + padding_size == padded_sequence_length
@@ -952,39 +952,39 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # LEFT PADDING - Check that it correctly pads when a maximum length is specified along with the padding flag set to True
                 tokenizer.padding_side = "left"
-                encoded_sequence = tokenizer.encode(words, xpaths=xpaths)
+                encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths)
                 sequence_length = len(encoded_sequence)
                 padded_sequence = tokenizer.encode(
-                    words, xpaths=xpaths, max_length=sequence_length + padding_size, padding="max_length"
+                    nodes, xpaths=xpaths, max_length=sequence_length + padding_size, padding="max_length"
                 )
                 padded_sequence_length = len(padded_sequence)
                 assert sequence_length + padding_size == padded_sequence_length
                 assert [padding_idx] * padding_size + encoded_sequence == padded_sequence
 
                 # RIGHT & LEFT PADDING - Check that nothing is done for 'longest' and 'no_padding'
-                encoded_sequence = tokenizer.encode(words, xpaths=xpaths)
+                encoded_sequence = tokenizer.encode(nodes, xpaths=xpaths)
                 sequence_length = len(encoded_sequence)
 
                 tokenizer.padding_side = "right"
-                padded_sequence_right = tokenizer.encode(words, xpaths=xpaths, padding=True)
+                padded_sequence_right = tokenizer.encode(nodes, xpaths=xpaths, padding=True)
                 padded_sequence_right_length = len(padded_sequence_right)
                 assert sequence_length == padded_sequence_right_length
                 assert encoded_sequence == padded_sequence_right
 
                 tokenizer.padding_side = "left"
-                padded_sequence_left = tokenizer.encode(words, xpaths=xpaths, padding="longest")
+                padded_sequence_left = tokenizer.encode(nodes, xpaths=xpaths, padding="longest")
                 padded_sequence_left_length = len(padded_sequence_left)
                 assert sequence_length == padded_sequence_left_length
                 assert encoded_sequence == padded_sequence_left
 
                 tokenizer.padding_side = "right"
-                padded_sequence_right = tokenizer.encode(words, xpaths=xpaths)
+                padded_sequence_right = tokenizer.encode(nodes, xpaths=xpaths)
                 padded_sequence_right_length = len(padded_sequence_right)
                 assert sequence_length == padded_sequence_right_length
                 assert encoded_sequence == padded_sequence_right
 
                 tokenizer.padding_side = "left"
-                padded_sequence_left = tokenizer.encode(words, xpaths=xpaths, padding=False)
+                padded_sequence_left = tokenizer.encode(nodes, xpaths=xpaths, padding=False)
                 padded_sequence_left_length = len(padded_sequence_left)
                 assert sequence_length == padded_sequence_left_length
                 assert encoded_sequence == padded_sequence_left
@@ -995,9 +995,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
 
                 # test 1: single sequence
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
 
-                output = tokenizer(words, xpaths=xpaths, return_token_type_ids=True)
+                output = tokenizer(nodes, xpaths=xpaths, return_token_type_ids=True)
 
                 # Assert that the token type IDs have the same length as the input IDs
                 self.assertEqual(len(output["token_type_ids"]), len(output["input_ids"]))
@@ -1008,10 +1008,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertIn(0, output["token_type_ids"])
                 self.assertNotIn(1, output["token_type_ids"])
 
-                # test 2: two sequences (question + words)
-                question, words, xpaths = self.get_question_words_and_xpaths()
+                # test 2: two sequences (question + nodes)
+                question, nodes, xpaths = self.get_question_nodes_and_xpaths()
 
-                output = tokenizer(question, words, xpaths, return_token_type_ids=True)
+                output = tokenizer(question, nodes, xpaths, return_token_type_ids=True)
 
                 # Assert that the token type IDs have the same length as the input IDs
                 self.assertEqual(len(output["token_type_ids"]), len(output["input_ids"]))
@@ -1101,10 +1101,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 # Build sequence
-                words, xpaths = self.get_nodes_and_xpaths()
-                encoded_sequence = tokenizer.encode_plus(words, xpaths=xpaths, return_tensors="pt")
+                nodes, xpaths = self.get_nodes_and_xpaths()
+                encoded_sequence = tokenizer.encode_plus(nodes, xpaths=xpaths, return_tensors="pt")
                 batch_encoded_sequence = tokenizer.batch_encode_plus(
-                    [words, words], [xpaths, xpaths], return_tensors="pt"
+                    [nodes, nodes], [xpaths, xpaths], return_tensors="pt"
                 )
                 # This should not fail
 
@@ -1123,14 +1123,14 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
 
-        words, xpaths = self.get_nodes_and_xpaths()
+        nodes, xpaths = self.get_nodes_and_xpaths()
 
-        ids = tokenizer.encode(words, xpaths=xpaths, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(words, xpaths=xpaths, add_special_tokens=False)
+        ids = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
         self.assertListEqual(ids, rust_ids)
 
-        ids = tokenizer.encode(words, xpaths=xpaths, add_special_tokens=True)
-        rust_ids = rust_tokenizer.encode(words, xpaths=xpaths, add_special_tokens=True)
+        ids = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=True)
+        rust_ids = rust_tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=True)
         self.assertListEqual(ids, rust_ids)
 
     def test_tokenization_python_rust_equals(self):
@@ -1143,31 +1143,31 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
 
                 # Ensure basic input match
-                input_p = tokenizer_p.encode_plus(words, xpaths=xpaths)
-                input_r = tokenizer_r.encode_plus(words, xpaths=xpaths)
+                input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths)
+                input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths)
 
                 for key in filter(
                     lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"], input_p.keys()
                 ):
                     self.assertSequenceEqual(input_p[key], input_r[key])
 
-                input_pairs_p = tokenizer_p.encode_plus(words, xpaths=xpaths)
-                input_pairs_r = tokenizer_r.encode_plus(words, xpaths=xpaths)
+                input_pairs_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths)
+                input_pairs_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths)
 
                 for key in filter(
                     lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"], input_p.keys()
                 ):
                     self.assertSequenceEqual(input_pairs_p[key], input_pairs_r[key])
 
-                words = ["hello" for _ in range(1000)]
+                nodes = ["hello" for _ in range(1000)]
                 xpaths = [[1000, 1000, 1000, 1000] for _ in range(1000)]
 
                 # Ensure truncation match
-                input_p = tokenizer_p.encode_plus(words, xpaths=xpaths, max_length=512, truncation=True)
-                input_r = tokenizer_r.encode_plus(words, xpaths=xpaths, max_length=512, truncation=True)
+                input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, max_length=512, truncation=True)
+                input_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, max_length=512, truncation=True)
 
                 for key in filter(
                     lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "xpath_tags_seq", "xpath_subs_seq"], input_p.keys()
@@ -1176,10 +1176,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Ensure truncation with stride match
                 input_p = tokenizer_p.encode_plus(
-                    words, xpaths=xpaths, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
+                    nodes, xpaths=xpaths, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
                 )
                 input_r = tokenizer_r.encode_plus(
-                    words, xpaths=xpaths, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
+                    nodes, xpaths=xpaths, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
                 )
 
                 for key in filter(
@@ -1196,14 +1196,14 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
                 tokens_r = tokenizer_r.encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     add_special_tokens=True,
                 )
                 tokens_p = tokenizer_p.encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     add_special_tokens=True,
                 )
@@ -1225,20 +1225,20 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 simple_num_special_tokens_to_add = tokenizer_r.num_special_tokens_to_add(pair=False)
 
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
                 # tokenize()
-                no_special_tokens = tokenizer_r.tokenize(" ".join(words), add_special_tokens=False)
-                with_special_tokens = tokenizer_r.tokenize(" ".join(words), add_special_tokens=True)
+                no_special_tokens = tokenizer_r.tokenize(" ".join(nodes), add_special_tokens=False)
+                with_special_tokens = tokenizer_r.tokenize(" ".join(nodes), add_special_tokens=True)
                 self.assertEqual(len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add)
 
                 # encode()
-                no_special_tokens = tokenizer_r.encode(words, xpaths=xpaths, add_special_tokens=False)
-                with_special_tokens = tokenizer_r.encode(words, xpaths=xpaths, add_special_tokens=True)
+                no_special_tokens = tokenizer_r.encode(nodes, xpaths=xpaths, add_special_tokens=False)
+                with_special_tokens = tokenizer_r.encode(nodes, xpaths=xpaths, add_special_tokens=True)
                 self.assertEqual(len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add)
 
                 # encode_plus()
-                no_special_tokens = tokenizer_r.encode_plus(words, xpaths=xpaths, add_special_tokens=False)
-                with_special_tokens = tokenizer_r.encode_plus(words, xpaths=xpaths, add_special_tokens=True)
+                no_special_tokens = tokenizer_r.encode_plus(nodes, xpaths=xpaths, add_special_tokens=False)
+                with_special_tokens = tokenizer_r.encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
                 for key in no_special_tokens.keys():
                     self.assertEqual(
                         len(no_special_tokens[key]),
@@ -1246,29 +1246,29 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     )
 
                 # # batch_encode_plus
-                words, xpaths = self.get_nodes_and_xpaths_batch()
+                nodes, xpaths = self.get_nodes_and_xpaths_batch()
 
-                no_special_tokens = tokenizer_r.batch_encode_plus(words, xpaths=xpaths, add_special_tokens=False)
-                with_special_tokens = tokenizer_r.batch_encode_plus(words, xpaths=xpaths, add_special_tokens=True)
+                no_special_tokens = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths, add_special_tokens=False)
+                with_special_tokens = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
                 for key in no_special_tokens.keys():
                     for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
                         self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
 
     @slow
     def test_markuplm_truncation_integration_test(self):
-        words, xpaths = self.get_nodes_and_xpaths()
+        nodes, xpaths = self.get_nodes_and_xpaths()
 
         tokenizer = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base", model_max_length=512)
 
         for i in range(12, 512):
-            new_encoded_inputs = tokenizer.encode(words, xpaths=xpaths, max_length=i, truncation=True)
+            new_encoded_inputs = tokenizer.encode(nodes, xpaths=xpaths, max_length=i, truncation=True)
 
             # Ensure that the input IDs are less than the max length defined.
             self.assertLessEqual(len(new_encoded_inputs), i)
 
         tokenizer.model_max_length = 20
-        new_encoded_inputs = tokenizer.encode(words, xpaths=xpaths, truncation=True)
-        dropped_encoded_inputs = tokenizer.encode(words, xpaths=xpaths, truncation=True)
+        new_encoded_inputs = tokenizer.encode(nodes, xpaths=xpaths, truncation=True)
+        dropped_encoded_inputs = tokenizer.encode(nodes, xpaths=xpaths, truncation=True)
 
         # Ensure that the input IDs are still truncated when no max_length is specified
         self.assertListEqual(new_encoded_inputs, dropped_encoded_inputs)
@@ -1279,17 +1279,17 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, xpaths = self.get_nodes_and_xpaths_batch()
+                nodes, xpaths = self.get_nodes_and_xpaths_batch()
 
                 # A Tensor cannot be build by sequences which are not the same size
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, words, xpaths=xpaths, return_tensors="pt")
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, words, xpaths=xpaths, return_tensors="tf")
+                self.assertRaises(ValueError, tokenizer.batch_encode_plus, nodes, xpaths=xpaths, return_tensors="pt")
+                self.assertRaises(ValueError, tokenizer.batch_encode_plus, nodes, xpaths=xpaths, return_tensors="tf")
 
                 if tokenizer.pad_token_id is None:
                     self.assertRaises(
                         ValueError,
                         tokenizer.batch_encode_plus,
-                        words,
+                        nodes,
                         xpaths=xpaths,
                         padding=True,
                         return_tensors="pt",
@@ -1297,17 +1297,17 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertRaises(
                         ValueError,
                         tokenizer.batch_encode_plus,
-                        words,
+                        nodes,
                         xpaths=xpaths,
                         padding="longest",
                         return_tensors="tf",
                     )
                 else:
-                    pytorch_tensor = tokenizer.batch_encode_plus(words, xpaths=xpaths, padding=True, return_tensors="pt")
+                    pytorch_tensor = tokenizer.batch_encode_plus(nodes, xpaths=xpaths, padding=True, return_tensors="pt")
                     tensorflow_tensor = tokenizer.batch_encode_plus(
-                        words, xpaths=xpaths, padding="longest", return_tensors="tf"
+                        nodes, xpaths=xpaths, padding="longest", return_tensors="tf"
                     )
-                    encoded_sequences = tokenizer.batch_encode_plus(words, xpaths=xpaths, padding=True)
+                    encoded_sequences = tokenizer.batch_encode_plus(nodes, xpaths=xpaths, padding=True)
 
                     for key in encoded_sequences.keys():
                         pytorch_value = pytorch_tensor[key].tolist()
@@ -1349,9 +1349,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
-                words = "Hey this is a <special> token".split()
-                xpaths = [[1000, 1000, 1000, 1000] for _ in range(len(words))]
-                r_output = tokenizer_r.encode(words, xpaths=xpaths)
+                nodes = "Hey this is a <special> token".split()
+                xpaths = [[1000, 1000, 1000, 1000] for _ in range(len(nodes))]
+                r_output = tokenizer_r.encode(nodes, xpaths=xpaths)
 
                 special_token_id = tokenizer_r.encode(
                     ["<special>"], xpaths=[1000, 1000, 1000, 1000], add_special_tokens=False
@@ -1367,11 +1367,11 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         pretrained_name, additional_special_tokens=added_tokens, **kwargs
                     )
 
-                    words = "Hey this is a <special> token".split()
-                    xpaths = [[1000, 1000, 1000, 1000] for _ in range(len(words))]
+                    nodes = "Hey this is a <special> token".split()
+                    xpaths = [[1000, 1000, 1000, 1000] for _ in range(len(nodes))]
 
-                    p_output = tokenizer_p.encode(words, xpaths=xpaths)
-                    cr_output = tokenizer_cr.encode(words, xpaths=xpaths)
+                    p_output = tokenizer_p.encode(nodes, xpaths=xpaths)
+                    cr_output = tokenizer_cr.encode(nodes, xpaths=xpaths)
 
                     self.assertEqual(p_output, r_output)
                     self.assertEqual(cr_output, r_output)
@@ -1505,9 +1505,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens_extended)
 
         # Test we can use the new tokenizer with something not seen during training
-        words = [["this", "is"], ["hello", "🤗"]]
+        nodes = [["this", "is"], ["hello", "🤗"]]
         xpaths = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[1, 2, 3, 4], [5, 6, 7, 8]]]
-        inputs = new_tokenizer(words, xpaths=xpaths)
+        inputs = new_tokenizer(nodes, xpaths=xpaths)
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
         expected_result = "this is"
@@ -1523,10 +1523,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             if tokenizer.__class__.__name__ == "MarkupLMTokenizerFast":
                 continue
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, xpaths = self.get_nodes_and_xpaths()
-                prepared_input_dict = tokenizer.prepare_for_model(words, xpaths=xpaths, add_special_tokens=True)
+                nodes, xpaths = self.get_nodes_and_xpaths()
+                prepared_input_dict = tokenizer.prepare_for_model(nodes, xpaths=xpaths, add_special_tokens=True)
 
-                input_dict = tokenizer.encode_plus(words, xpaths=xpaths, add_special_tokens=True)
+                input_dict = tokenizer.encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
 
                 self.assertEqual(input_dict, prepared_input_dict)
 
@@ -1542,10 +1542,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
 
-                words, xpaths = self.get_nodes_and_xpaths_batch()
+                nodes, xpaths = self.get_nodes_and_xpaths_batch()
 
-                input_r = tokenizer_r.batch_encode_plus(words, xpaths=xpaths)
-                input_p = tokenizer_r.batch_encode_plus(words, xpaths=xpaths)
+                input_r = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths)
+                input_p = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths)
 
                 # rename encoded batch to "inputs"
                 input_r["inputs"] = input_r[tokenizer_r.model_input_names[0]]
@@ -1590,9 +1590,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     returned_tensor = "jax"
 
                 # Single example
-                words, xpaths = self.get_nodes_and_xpaths()
+                nodes, xpaths = self.get_nodes_and_xpaths()
                 tokens = tokenizer.encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     max_length=6,
                     padding=True,
@@ -1609,9 +1609,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Batch of examples
                 # For these 2 examples, 3 training examples will be created
-                words, xpaths = self.get_nodes_and_xpaths_batch()
+                nodes, xpaths = self.get_nodes_and_xpaths_batch()
                 tokens = tokenizer.batch_encode_plus(
-                    words,
+                    nodes,
                     xpaths=xpaths,
                     max_length=6,
                     padding=True,
@@ -1638,7 +1638,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         toks = list(
             filter(
                 lambda t: [t[0]]
-                == tokenizer.encode(t[1].split(" "), xpaths=len(t[1]) * [[1, 1, 1, 1]], add_special_tokens=False),
+                == tokenizer.encode(t[1].split(" "), xpaths=len(t[1]) * ["html/body"], add_special_tokens=False),
                 toks,
             )
         )
@@ -1660,13 +1660,12 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             )
         if with_prefix_space:
             output_txt = " " + output_txt
-        words = output_txt.split(" ")
-        xpaths = [[i, i, i, i] for i in range(len(words))]
-        output_ids = tokenizer.encode(words, xpaths=xpaths, add_special_tokens=False)
+        nodes = output_txt.split(" ")
+        xpaths = ["html/body" for i in range(len(nodes))]
+        output_ids = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
 
-        return words, xpaths, output_ids
+        return nodes, xpaths, output_ids
 
-    # @unittest.skip("MarkupLM tokenizer requires xpaths besides sequences.")
     def test_maximum_encoding_length_pair_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
         for tokenizer in tokenizers:
@@ -2032,7 +2031,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(bbox, bbox_second_sequence)
                     self.assertEqual(overflowing_bbox, overflowing_token_bbox_second_sequence_slow)
 
-    # @unittest.skip("MarkupLM tokenizer requires xpaths besides sequences.")
     def test_maximum_encoding_length_single_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
         for tokenizer in tokenizers:
@@ -2070,7 +2068,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                     truncation=truncation_state,
                                 )
                                 self.assertEqual(len(output["input_ids"]), model_max_length)
-                                self.assertEqual(len(output["bbox"]), model_max_length)
+                                self.assertEqual(len(output["xpath_tags_seq"]), model_max_length)
+                                self.assertEqual(len(output["xpath_subs_seq"]), model_max_length)
 
                                 output = tokenizer(
                                     [seq_1],
@@ -2079,7 +2078,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                     truncation=truncation_state,
                                 )
                                 self.assertEqual(len(output["input_ids"][0]), model_max_length)
-                                self.assertEqual(len(output["bbox"][0]), model_max_length)
+                                self.assertEqual(len(output["xpath_tags_seq"][0]), model_max_length)
+                                self.assertEqual(len(output["xpath_subs_seq"][0]), model_max_length)
 
                         # Simple with no truncation
                         # Reset warnings
@@ -2087,7 +2087,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         with self.assertLogs("transformers", level="WARNING") as cm:
                             output = tokenizer(seq_1, xpaths=xpaths_1, padding=padding_state, truncation=False)
                             self.assertNotEqual(len(output["input_ids"]), model_max_length)
-                            self.assertNotEqual(len(output["bbox"]), model_max_length)
+                            self.assertEqual(len(output["xpath_tags_seq"]), model_max_length)
+                            self.assertEqual(len(output["xpath_subs_seq"]), model_max_length)
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
@@ -2099,14 +2100,15 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         with self.assertLogs("transformers", level="WARNING") as cm:
                             output = tokenizer([seq_1], xpaths=[xpaths_1], padding=padding_state, truncation=False)
                             self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
-                            self.assertNotEqual(len(output["bbox"][0]), model_max_length)
+                            self.assertEqual(len(output["xpath_tags_seq"][0]), model_max_length)
+                            self.assertEqual(len(output["xpath_subs_seq"][0]), model_max_length)
                         self.assertEqual(len(cm.records), 1)
                         self.assertTrue(
                             cm.records[0].message.startswith(
                                 "Token indices sequence length is longer than the specified maximum sequence length for this model"
                             )
                         )
-                # Check the order of Sequence of input ids, overflowing tokens and bbox sequence with truncation
+                # Check the order of Sequence of input ids, overflowing tokens, xpath_tags_seq and xpath_subs_seq sequence with truncation
                 stride = 2
                 information = tokenizer(
                     seq_0,
@@ -2116,15 +2118,16 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     stride=stride,
                     truncation=True,
                     return_overflowing_tokens=True,
-                    # add_prefix_space=False,
                 )
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
                 if isinstance(tokenizer, MarkupLMTokenizerFast):
                     truncated_sequence = information["input_ids"][0]
                     overflowing_tokens = information["input_ids"][1]
-                    bbox = information["bbox"][0]
-                    overflowing_bbox = information["bbox"][1]
+                    xpath_tags_seq = information["xpath_tags_seq"][0]
+                    xpath_subs_seq = information["xpath_subs_seq"][0]
+                    overflowing_xpath_tags_seq = information["xpath_tags_seq"][1]
+                    overflowing_xpath_subs_seq = information["xpath_subs_seq"][1]
                     self.assertEqual(len(information["input_ids"]), 2)
 
                     self.assertEqual(len(truncated_sequence), total_length - 2)
@@ -2133,20 +2136,20 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, sequence["input_ids"][-(2 + stride) :])
 
-                    self.assertEqual(bbox, sequence["bbox"][:-2])
-                    self.assertEqual(overflowing_bbox, sequence["bbox"][-(2 + stride) :])
+                    self.assertEqual(xpath_tags_seq, sequence["xpath_tags_seq"][:-2])
+                    self.assertEqual(overflowing_xpath_tags_seq, sequence["xpath_tags_seq"][-(2 + stride) :])
                 else:
                     truncated_sequence = information["input_ids"]
                     overflowing_tokens = information["overflowing_tokens"]
-                    bbox = information["bbox"]
-                    overflowing_bbox = information["overflowing_token_xpaths"]
+                    xpath_tags_seq = information["xpath_tags_seq"]
+                    overflowing_xpath_tags_seq = information["overflowing_xpath_tags_seq"]
                     self.assertEqual(len(truncated_sequence), total_length - 2)
                     self.assertEqual(truncated_sequence, sequence["input_ids"][:-2])
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, sequence["input_ids"][-(2 + stride) :])
-                    self.assertEqual(bbox, sequence["bbox"][:-2])
-                    self.assertEqual(overflowing_bbox, sequence["bbox"][-(2 + stride) :])
+                    self.assertEqual(xpath_tags_seq, sequence["xpath_tags_seq"][:-2])
+                    self.assertEqual(overflowing_xpath_tags_seq, sequence["xpath_tags_seq"][-(2 + stride) :])
 
     @unittest.skip("MarkupLM tokenizer requires xpaths besides sequences.")
     def test_pretokenized_inputs(self):
@@ -2162,30 +2165,30 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_only_label_first_subword(self):
-        words = ["hello", "niels"]
-        xpaths = [[1000, 1000, 1000, 1000] for _ in range(len(words))]
+        nodes = ["hello", "niels"]
+        xpaths = [[1000, 1000, 1000, 1000] for _ in range(len(nodes))]
         word_labels = [0, 1]
 
         # test slow tokenizer
         tokenizer_p = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base")
-        encoding = tokenizer_p(words, xpaths=xpaths, word_labels=word_labels)
+        encoding = tokenizer_p(nodes, xpaths=xpaths, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
         tokenizer_p = MarkupLMTokenizer.from_pretrained(
             "microsoft/markuplm-base", only_label_first_subword=False
         )
-        encoding = tokenizer_p(words, xpaths=xpaths, word_labels=word_labels)
+        encoding = tokenizer_p(nodes, xpaths=xpaths, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
 
         # test fast tokenizer
         tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base")
-        encoding = tokenizer_r(words, xpaths=xpaths, word_labels=word_labels)
+        encoding = tokenizer_r(nodes, xpaths=xpaths, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
         tokenizer_r = MarkupLMTokenizer.from_pretrained(
             "microsoft/markuplm-base", only_label_first_subword=False
         )
-        encoding = tokenizer_r(words, xpaths=xpaths, word_labels=word_labels)
+        encoding = tokenizer_r(nodes, xpaths=xpaths, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
 
     @slow
@@ -2196,7 +2199,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # There are 3 cases:
         # CASE 1: document image classification (training + inference), document image token classification (inference),
-        # in which case only words and normalized bounding xpaths are provided to the tokenizer
+        # in which case only nodes and normalized bounding xpaths are provided to the tokenizer
         # CASE 2: document image token classification (training),
         # in which case one also provides word labels to the tokenizer
         # CASE 3: document image visual question answering (inference),
@@ -2205,76 +2208,76 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # We need to test all 3 cases both on batched and non-batched inputs.
 
         # CASE 1: not batched
-        words, xpaths = self.get_nodes_and_xpaths()
+        nodes, xpaths = self.get_nodes_and_xpaths()
 
         # fmt: off
         expected_results = {'input_ids': [101, 1037, 6881, 2135, 3231, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'bbox': [[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # noqa: E231
         # fmt: on
 
-        encoding_p = tokenizer_p(words, xpaths=xpaths, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(words, xpaths=xpaths, padding="max_length", max_length=20)
+        encoding_p = tokenizer_p(nodes, xpaths=xpaths, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(nodes, xpaths=xpaths, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 1: batched
-        words, xpaths = self.get_nodes_and_xpaths_batch()
+        nodes, xpaths = self.get_nodes_and_xpaths_batch()
 
         # fmt: off
         expected_results = {'input_ids': [[101, 1037, 6881, 2135, 3231, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [101, 7592, 2026, 2171, 2003, 3960, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'bbox': [[[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E231
         # fmt: on
 
-        encoding_p = tokenizer_p(words, xpaths=xpaths, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(words, xpaths=xpaths, padding="max_length", max_length=20)
+        encoding_p = tokenizer_p(nodes, xpaths=xpaths, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(nodes, xpaths=xpaths, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 2: not batched
-        words, xpaths = self.get_nodes_and_xpaths()
+        nodes, xpaths = self.get_nodes_and_xpaths()
         word_labels = [1, 2, 3]
 
         # fmt: off
         expected_results = {'input_ids': [101, 1037, 6881, 2135, 3231, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'bbox': [[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'labels': [-100, 1, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], 'attention_mask': [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # noqa: E231
         # fmt: on
 
-        encoding_p = tokenizer_p(words, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(words, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
+        encoding_p = tokenizer_p(nodes, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(nodes, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 2: batched
-        words, xpaths = self.get_nodes_and_xpaths_batch()
+        nodes, xpaths = self.get_nodes_and_xpaths_batch()
         word_labels = [[1, 2, 3], [2, 46, 17, 22, 3]]
 
         # fmt: off
         expected_results = {'input_ids': [[101, 1037, 6881, 2135, 3231, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [101, 7592, 2026, 2171, 2003, 3960, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'bbox': [[[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'labels': [[-100, 1, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], [-100, 2, 46, 17, 22, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E231
         # fmt: on
 
-        encoding_p = tokenizer_p(words, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(words, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
+        encoding_p = tokenizer_p(nodes, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(nodes, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 3: not batched
-        question, words, xpaths = self.get_question_words_and_xpaths()
+        question, nodes, xpaths = self.get_question_nodes_and_xpaths()
 
         # fmt: off
         expected_results = {'input_ids': [101, 2054, 1005, 1055, 2010, 2171, 1029, 102, 1037, 6881, 2135, 3231, 102, 0, 0, 0, 0, 0, 0, 0], 'bbox': [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0]}  # noqa: E231
         # fmt: on
 
-        encoding_p = tokenizer_p(question, words, xpaths, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(question, words, xpaths, padding="max_length", max_length=20)
+        encoding_p = tokenizer_p(question, nodes, xpaths, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(question, nodes, xpaths, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 3: batched
-        questions, words, xpaths = self.get_question_words_and_xpaths_batch()
+        questions, nodes, xpaths = self.get_question_nodes_and_xpaths_batch()
 
         # fmt: off
         expected_results = {'input_ids': [[101, 2054, 1005, 1055, 2010, 2171, 1029, 102, 1037, 6881, 2135, 3231, 102, 0, 0, 0, 0, 0, 0, 0], [101, 2129, 2003, 2002, 2170, 1029, 102, 2054, 1037, 21110, 2546, 3806, 2102, 2078, 102, 0, 0, 0, 0, 0]], 'bbox': [[[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [336, 42, 353, 57], [34, 42, 66, 69], [34, 42, 66, 69], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]]}  # noqa: E231
         # fmt: on
 
-        encoding_p = tokenizer_p(questions, words, xpaths, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(questions, words, xpaths, padding="max_length", max_length=20)
+        encoding_p = tokenizer_p(questions, nodes, xpaths, padding="max_length", max_length=20)
+        encoding_r = tokenizer_r(questions, nodes, xpaths, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 

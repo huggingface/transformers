@@ -1301,6 +1301,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 ids = ids[:-num_tokens_to_remove]
                 xpath_tags_seq = xpath_tags_seq[:-num_tokens_to_remove]
                 xpath_subs_seq = xpath_subs_seq[:-num_tokens_to_remove]
+                labels = labels[:-num_tokens_to_remove]
             else:
                 error_msg = (
                     f"We need to remove {num_tokens_to_remove} to truncate the input "
@@ -1324,6 +1325,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                     ids = ids[:-1]
                     xpath_tags_seq = xpath_tags_seq[:-1]
                     xpath_subs_seq = xpath_subs_seq[:-1]
+                    labels = labels[:-1]
                 else:
                     pair_ids = pair_ids[:-1]
                     pair_xpath_tags_seq = pair_xpath_tags_seq[:-1]
@@ -1352,6 +1354,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             pair_ids,
             pair_xpath_tags_seq,
             pair_xpath_subs_seq,
+            labels,
             overflowing_tokens,
             overflowing_xpath_tags_seq,
             overflowing_xpath_subs_seq,
