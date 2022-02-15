@@ -1621,7 +1621,7 @@ class TFGenerationMixin:
                 [What are attention masks?](../glossary#attention-mask)
             decoder_start_token_id (`int`, *optional*):
                 If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
-            use_cache: (`bool`, *optional*, defaults to `True`):
+            use_cache (`bool`, *optional*, defaults to `True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
             output_attentions (`bool`, *optional*, defaults to `False`):
@@ -1667,59 +1667,50 @@ class TFGenerationMixin:
 
         ```python
         tokenizer = AutoTokenizer.from_pretrained("distilgpt2")  # Initialize tokenizer
-        model = TFAutoModelWithLMHead.from_pretrained(
-            "distilgpt2"
-        )  # Download model and configuration from huggingface.co and cache.
-        outputs = model.generate(max_length=40)  # do greedy decoding
+        model = TFAutoModelWithLMHead.from_pretrained("distilgpt2")
+        # Greedy decoding
+        outputs = model.generate(max_length=40)
         print(f"Generated: {tokenizer.decode(outputs[0], skip_special_tokens=True)}")
 
-        tokenizer = AutoTokenizer.from_pretrained("openai-gpt")  # Initialize tokenizer
-        model = TFAutoModelWithLMHead.from_pretrained(
-            "openai-gpt"
-        )  # Download model and configuration from huggingface.co and cache.
+        tokenizer = AutoTokenizer.from_pretrained("openai-gpt")
+        model = TFAutoModelWithLMHead.from_pretrained("openai-gpt")
         input_context = "The dog"
         input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
-        outputs = model.generate(
-            input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5
-        )  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
-        for i in range(3):  #  3 output sequences were generated
+        # Generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
+        outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5)
+        # 3 output sequences were generated
+        for i in range(3):
             print(f"Generated {i}: {tokenizer.decode(outputs[i], skip_special_tokens=True)}")
 
-        tokenizer = AutoTokenizer.from_pretrained("distilgpt2")  # Initialize tokenizer
-        model = TFAutoModelWithLMHead.from_pretrained(
-            "distilgpt2"
-        )  # Download model and configuration from huggingface.co and cache.
+        tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+        model = TFAutoModelWithLMHead.from_pretrained("distilgpt2")
         input_context = "The dog"
-        input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")
+        # Generate 3 candidates using sampling
         outputs = model.generate(
             input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3, do_sample=True
-        )  # generate 3 candidates using sampling
-        for i in range(3):  #  3 output sequences were generated
+        )
+        #  3 output sequences were generated
+        for i in range(3):
             print(f"Generated {i}: {tokenizer.decode(outputs[i], skip_special_tokens=True)}")
 
-        tokenizer = AutoTokenizer.from_pretrained("ctrl")  # Initialize tokenizer
-        model = TFAutoModelWithLMHead.from_pretrained(
-            "ctrl"
-        )  # Download model and configuration from huggingface.co and cache.
-        input_context = "Legal My neighbor is"  # "Legal" is one of the control codes for ctrl
-        input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
-        outputs = model.generate(
-            input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2
-        )  # generate sequences
+        tokenizer = AutoTokenizer.from_pretrained("ctrl")
+        model = TFAutoModelWithLMHead.from_pretrained("ctrl")
+        # "Legal" is one of the control codes for ctrl
+        input_context = "Legal My neighbor is"
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")
+        outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)
         print(f"Generated: {tokenizer.decode(outputs[0], skip_special_tokens=True)}")
 
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")  # Initialize tokenizer
-        model = TFAutoModelWithLMHead.from_pretrained(
-            "gpt2"
-        )  # Download model and configuration from huggingface.co and cache.
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        model = TFAutoModelWithLMHead.from_pretrained("gpt2")
         input_context = "My cute dog"
         bad_words_ids = [
             tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ["idiot", "stupid", "shut up"]
         ]
-        input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
-        outputs = model.generate(
-            input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids
-        )  # generate sequences without allowing bad_words to be generated
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")
+        # generate sequences without allowing bad_words to be generated
+        outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)
         ```"""
         # 1. Set generation parameters if not already defined
         max_length = max_length if max_length is not None else self.config.max_length
@@ -1787,7 +1778,10 @@ class TFGenerationMixin:
 
         if input_ids.shape[-1] >= max_length:
             raise ValueError(
-                f"The context has {input_ids.shape[-1]} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
+                f"The context has {input_ids.shape[-1]} number of tokens, "
+                f"but `max_length` is only {max_length}. "
+                "Please make sure that `max_length` is bigger than the number of tokens, "
+                "by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
             )
 
         # 5. determine generation mode

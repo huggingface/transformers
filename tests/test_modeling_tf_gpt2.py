@@ -432,28 +432,11 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_distilgpt2(self):
         model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
         input_ids = tf.convert_to_tensor([[464, 1893]], dtype=tf.int32)  # The president
-        expected_output_ids = [
-            464,
-            1893,
-            286,
-            262,
-            1578,
-            1829,
-            11,
-            290,
-            262,
-            1893,
-            286,
-            262,
-            1578,
-            7526,
-            11,
-            423,
-            587,
-            287,
-            262,
-            2635,
-        ]  # The president of the United States, and the president of the United Kingdom, have been in the White
+
+        # The president of the United States, and the president of the United Kingdom, have been in the White
+        # fmt: off
+        expected_output_ids = [464, 1893, 286, 262, 1578, 1829, 11, 290, 262, 1893, 286, 262, 1578, 7526, 11, 423, 587, 287, 262, 2635]
+        # fmt: on
 
         output_ids = model.generate(input_ids, do_sample=False)
         self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
@@ -486,30 +469,13 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(output_strings, expected_output_string)
 
     @slow
-    def a_test_lm_generate_gpt2(self):
+    def test_lm_generate_gpt2(self):
         model = TFGPT2LMHeadModel.from_pretrained("gpt2")
         input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
-        expected_output_ids = [
-            464,
-            3290,
-            373,
-            1043,
-            287,
-            257,
-            2214,
-            1474,
-            262,
-            16246,
-            286,
-            2688,
-            290,
-            2688,
-            27262,
-            13,
-            198,
-            198,
-            464,
-            3290,
-        ]  # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
+
+        # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
+        # fmt: off
+        expected_output_ids = [464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290]
+        # fmt: on
         output_ids = model.generate(input_ids, do_sample=False)
         self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)

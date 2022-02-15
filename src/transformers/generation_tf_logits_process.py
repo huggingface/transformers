@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import inspect
-from abc import ABC
 from typing import List
 
 import numpy as np
@@ -48,7 +47,7 @@ TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 """
 
 
-class TFLogitsProcessor(ABC):
+class TFLogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
     @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -244,7 +243,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
 class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
     r"""
     [`TFLogitsProcessor`] that enforces no repetition of n-grams. See
-    [Fairseq](https://github.com/pytf/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
+    [Fairseq](https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
 
     Args:
         ngram_size (`int`):

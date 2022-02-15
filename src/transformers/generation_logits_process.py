@@ -15,7 +15,6 @@
 
 import inspect
 import math
-from abc import ABC
 from typing import Callable, Iterable, List, Optional
 
 import numpy as np
@@ -49,7 +48,7 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 """
 
 
-class LogitsProcessor(ABC):
+class LogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -60,7 +59,7 @@ class LogitsProcessor(ABC):
         )
 
 
-class LogitsWarper(ABC):
+class LogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
