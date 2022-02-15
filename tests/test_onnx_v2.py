@@ -4,7 +4,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from parameterized import parameterized
-from transformers import AutoConfig, AutoTokenizer, is_tf_available, is_torch_available
+from transformers import AutoConfig, AutoFeatureExtractor, AutoTokenizer, is_tf_available, is_torch_available
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -178,6 +178,7 @@ PYTORCH_EXPORT_MODELS = {
     ("roberta", "roberta-base"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
+    ("vit", "google/vit-base-patch16-224"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
@@ -240,25 +241,30 @@ class OnnxExportTestCaseV2(TestCase):
     def _onnx_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         from transformers.onnx import export
 
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        config = AutoConfig.from_pretrained(model_name)
-
-        # Useful for causal lm models that do not use pad tokens.
-        if not getattr(config, "pad_token_id", None):
-            config.pad_token_id = tokenizer.eos_token_id
-
         model_class = FeaturesManager.get_model_class_for_feature(feature)
+        config = AutoConfig.from_pretrained(model_name)
         model = model_class.from_config(config)
         onnx_config = onnx_config_class_constructor(model.config)
+
+        # Check the modality of the inputs and instantiate the appropriate preprocessor
+        if model.main_input_name == "input_ids":
+            preprocessor = AutoTokenizer.from_pretrained(model_name)
+            # Useful for causal lm models that do not use pad tokens.
+            if not getattr(config, "pad_token_id", None):
+                config.pad_token_id = preprocessor.eos_token_id
+        elif model.main_input_name == "pixel_values":
+            preprocessor = AutoFeatureExtractor.from_pretrained(model_name)
+        else:
+            raise ValueError(f"Unsupported model input name: {model.main_input_name}")
 
         with NamedTemporaryFile("w") as output:
             try:
                 onnx_inputs, onnx_outputs = export(
-                    tokenizer, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name)
+                    preprocessor, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name)
                 )
                 validate_model_outputs(
                     onnx_config,
-                    tokenizer,
+                    preprocessor,
                     model,
                     Path(output.name),
                     onnx_outputs,
