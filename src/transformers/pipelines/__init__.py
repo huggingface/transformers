@@ -621,15 +621,20 @@ def pipeline(
                     import kenlm  # to trigger `ImportError` if not installed
                     from pyctcdecode import BeamSearchDecoderCTC
 
-                    language_model_glob = os.path.join(BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*")
-                    alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
-                    allow_regex = [language_model_glob, alphabet_filename]
+                    if os.path.isdir(model_name) or os.path.isfile(model_name):
+                        decoder = BeamSearchDecoderCTC.load_from_dir(model_name)
+                    else:
+                        language_model_glob = os.path.join(
+                            BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*"
+                        )
+                        alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
+                        allow_regex = [language_model_glob, alphabet_filename]
+                        decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name, allow_regex=allow_regex)
 
-                    decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name, allow_regex=allow_regex)
                     kwargs["decoder"] = decoder
                 except ImportError as e:
                     logger.warning(
-                        "Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Try to install `pyctcdecode` and `kenlm`: (`pip install pyctcdecode`, `pip install https://github.com/kpu/kenlm/archive/master.zip`): Error: {e}"
+                        f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Try to install `pyctcdecode` and `kenlm`: (`pip install pyctcdecode`, `pip install https://github.com/kpu/kenlm/archive/master.zip`): Error: {e}"
                     )
 
     if task == "translation" and model.config.task_specific_params:

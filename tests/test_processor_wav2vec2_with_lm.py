@@ -31,6 +31,7 @@ from .test_feature_extraction_wav2vec2 import floats_list
 
 
 if is_pyctcdecode_available():
+    from huggingface_hub import snapshot_download
     from pyctcdecode import BeamSearchDecoderCTC
     from transformers.models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
 
@@ -303,3 +304,20 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         # https://huggingface.co/hf-internal-testing/processor_with_lm/tree/main
         # are downloaded and none of the rest (e.g. README.md, ...)
         self.assertListEqual(downloaded_decoder_files, expected_decoder_files)
+
+    def test_decoder_local_files(self):
+        local_dir = snapshot_download("hf-internal-testing/processor_with_lm")
+
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained(local_dir)
+
+        language_model = processor.decoder.model_container[processor.decoder._model_key]
+        path_to_cached_dir = Path(language_model._kenlm_model.path.decode("utf-8")).parent.parent.absolute()
+
+        local_decoder_files = os.listdir(local_dir)
+        expected_decoder_files = os.listdir(path_to_cached_dir)
+
+        local_decoder_files.sort()
+        expected_decoder_files.sort()
+
+        # test that both decoder form hub and local files in cache are the same
+        self.assertListEqual(local_decoder_files, expected_decoder_files)

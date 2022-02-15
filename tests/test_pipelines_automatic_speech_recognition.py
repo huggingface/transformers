@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 from datasets import load_dataset
 
+from huggingface_hub import snapshot_download
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
@@ -354,6 +355,27 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     def test_with_lm_fast(self):
         speech_recognizer = pipeline(
             model="hf-internal-testing/processor_with_lm",
+        )
+        self.assertEqual(speech_recognizer.type, "ctc_with_lm")
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        n_repeats = 2
+        audio_tiled = np.tile(audio, n_repeats)
+
+        output = speech_recognizer([audio_tiled], batch_size=2)
+
+        self.assertEqual(output, [{"text": ANY(str)}])
+        self.assertEqual(output[0]["text"][:6], "<s> <s")
+
+    @require_torch
+    @require_pyctcdecode
+    def test_with_local_lm_fast(self):
+        local_dir = snapshot_download("hf-internal-testing/processor_with_lm")
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model=local_dir,
         )
         self.assertEqual(speech_recognizer.type, "ctc_with_lm")
 
