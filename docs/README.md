@@ -39,7 +39,8 @@ check how they look like before committing for instance). You don't have to comm
 
 ## Building the documentation
 
-Once you have setup the `doc-builder` and additional packages, you can generate the documentation by typing the following command:
+Once you have setup the `doc-builder` and additional packages, you can generate the documentation by 
+typing the following command:
 
 ```bash
 doc-builder build transformers docs/source/ --build_dir ~/tmp/test-build
@@ -288,8 +289,8 @@ easily.
 Good documentation oftens comes with an example of how a specific function or class should be used. 
 Each model class should contain at least one example showcasing
 how to use this model class in inference. *E.g.* the class [Wav2Vec2ForCTC](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2ForCTC) 
-includes an example of how to transcribe speech to text in the [docstring of its 
-forward function](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2ForCTC.forward).
+includes an example of how to transcribe speech to text in the 
+[docstring of its forward function](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2ForCTC.forward).
 
 ## Writing documenation examples
 
@@ -332,13 +333,14 @@ works as expected.
 
 ## Docstring testing
 
-To do so each example should be included in the doctests. We use pytests' [doctest integration](https://docs.pytest.org/en/6.2.x/doctest.html) to verify that all of our examples run 
-correctly. For Transformers, the doctests are run on a daily basis via GitHub Actions as can be 
+To do so each example should be included in the doctests. 
+We use pytests' [doctest integration](https://docs.pytest.org/doctest.html) to verify that all of our examples run correctly. 
+For Transformers, the doctests are run on a daily basis via GitHub Actions as can be 
 seen [here](https://github.com/huggingface/transformers/actions/workflows/doctests.yml).
 
 To include your example in the daily doctests, you need add the filename that
 contains the example docstring to the [documentation_tests.txt](../utils/documentation_tests.txt).
-You can test that the example works as expected locally as follows:
+You can test the example locally as follows:
 
 - For Python files ending with *.py*:
 ```
