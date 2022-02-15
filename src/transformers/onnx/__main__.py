@@ -48,12 +48,10 @@ def main():
         args.output.parent.mkdir(parents=True)
 
     # Allocate the model
-    tokenizer = None
-    feature_extractor = None
     if args.modality == "text":
-        tokenizer = AutoTokenizer.from_pretrained(args.model)
+        preprocessor = AutoTokenizer.from_pretrained(args.model)
     if args.modality == "image":
-        feature_extractor = AutoFeatureExtractor.from_pretrained(args.model)
+        preprocessor = AutoFeatureExtractor.from_pretrained(args.model)
     model = FeaturesManager.get_model_from_feature(args.feature, args.model)
     model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=args.feature)
     onnx_config = model_onnx_config(model.config)
@@ -69,18 +67,18 @@ def main():
         )
 
     onnx_inputs, onnx_outputs = export(
-        tokenizer=tokenizer,
-        model=model,
-        config=onnx_config,
-        opset=args.opset,
-        output=args.output,
-        feature_extractor=feature_extractor,
+        preprocessor,
+        model,
+        onnx_config,
+        args.opset,
+        args.output,
+        # feature_extractor=feature_extractor,
     )
 
     if args.atol is None:
         args.atol = onnx_config.atol_for_validation
 
-    validate_model_outputs(onnx_config, tokenizer, model, args.output, onnx_outputs, args.atol, feature_extractor)
+    validate_model_outputs(onnx_config, preprocessor, model, args.output, onnx_outputs, args.atol)
     logger.info(f"All good, model saved at: {args.output.as_posix()}")
 
 

@@ -65,12 +65,12 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 
 def export_pytorch(
+    preprocessor: Union[PreTrainedTokenizer, FeatureExtractionMixin],
+    model: PreTrainedModel,
+    config: OnnxConfig,
+    opset: int,
+    output: Path,
     tokenizer: PreTrainedTokenizer = None,
-    model: PreTrainedModel = None,
-    config: OnnxConfig = None,
-    opset: int = None,
-    output: Path = None,
-    feature_extractor: FeatureExtractionMixin = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a PyTorch model to an ONNX Intermediate Representation (IR)
@@ -109,9 +109,7 @@ def export_pytorch(
 
             # Ensure inputs match
             # TODO: Check when exporting QA we provide "is_pair=True"
-            model_inputs = config.generate_dummy_inputs(
-                tokenizer=tokenizer, feature_extractor=feature_extractor, framework=TensorType.PYTORCH
-            )
+            model_inputs = config.generate_dummy_inputs(preprocessor=preprocessor, framework=TensorType.PYTORCH)
             inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
             onnx_outputs = list(config.outputs.keys())
 
@@ -208,12 +206,13 @@ def export_tensorflow(
 
 
 def export(
-    tokenizer: PreTrainedTokenizer,
+    preprocessor: Union[PreTrainedTokenizer, FeatureExtractionMixin],
     model: Union[PreTrainedModel, TFPreTrainedModel],
     config: OnnxConfig,
     opset: int,
     output: Path,
-    feature_extractor: FeatureExtractionMixin = None,
+    tokenizer: PreTrainedTokenizer = None
+    # feature_extractor: FeatureExtractionMixin = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a Pytorch or TensorFlow model to an ONNX Intermediate Representation (IR)
@@ -247,19 +246,19 @@ def export(
             raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
     if is_torch_available() and issubclass(type(model), PreTrainedModel):
-        return export_pytorch(tokenizer, model, config, opset, output, feature_extractor)
+        return export_pytorch(preprocessor, model, config, opset, output, tokenizer=tokenizer)
     elif is_tf_available() and issubclass(type(model), TFPreTrainedModel):
-        return export_tensorflow(tokenizer, model, config, opset, output)
+        return export_tensorflow(preprocessor, model, config, opset, output, tokenizer=tokenizer)
 
 
 def validate_model_outputs(
     config: OnnxConfig,
-    tokenizer: PreTrainedTokenizer,
+    preprocessor: Union[PreTrainedTokenizer, FeatureExtractionMixin],
     reference_model: Union[PreTrainedModel, TFPreTrainedModel],
     onnx_model: Path,
     onnx_named_outputs: List[str],
     atol: float,
-    feature_extractor: FeatureExtractionMixin = None,
+    tokenizer: PreTrainedTokenizer = None,
 ):
     from onnxruntime import InferenceSession, SessionOptions
 
@@ -269,10 +268,11 @@ def validate_model_outputs(
     # dynamic input shapes.
     if issubclass(type(reference_model), PreTrainedModel):
         reference_model_inputs = config.generate_dummy_inputs(
-            tokenizer, framework=TensorType.PYTORCH, feature_extractor=feature_extractor
+            preprocessor,
+            framework=TensorType.PYTORCH,
         )
     else:
-        reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.TENSORFLOW)
+        reference_model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.TENSORFLOW)
 
     # Create ONNX Runtime session
     options = SessionOptions()
