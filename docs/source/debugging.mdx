@@ -16,13 +16,13 @@ specific language governing permissions and limitations under the License.
 
 When training or inferencing with `DistributedDataParallel` and multiple GPU, if you run into issue of inter-communication between processes and/or nodes, you can use the following script to diagnose network issues.
 
-```
+```bash
 wget https://raw.githubusercontent.com/huggingface/transformers/master/scripts/distributed/torch-distributed-gpu-test.py
 ```
 
 For example to test how 2 GPUs interact do:
 
-```
+```bash
 python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 torch-distributed-gpu-test.py
 ```
 If both processes can talk to each and allocate GPU memory each will print an OK status.
@@ -33,7 +33,7 @@ You will find a lot more details inside the diagnostics script and even a recipe
 
 An additional level of debug is to add `NCCL_DEBUG=INFO` environment variable as follows:
 
-```
+```bash
 NCCL_DEBUG=INFO python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 torch-distributed-gpu-test.py
 ```
 
