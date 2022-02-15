@@ -69,7 +69,7 @@ class TFLogitsProcessorList(list):
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, **kwargs) -> tf.Tensor:
         for processor in self:
             function_args = inspect.signature(processor.__call__).parameters
-            if len(function_args) > 3:
+            if len(function_args) > 2:
                 if not all(arg in kwargs for arg in list(function_args.keys())[2:]):
                     raise ValueError(
                         f"Make sure that all the required parameters: {list(function_args.keys())} for "
