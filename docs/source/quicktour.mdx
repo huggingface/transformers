@@ -118,7 +118,7 @@ Next, load a dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co
 Now you can iterate over the dataset with the pipeline. `KeyDataset` retrieves the item in the dictionary returned by the dataset:
 
 ```py
->>> from transformers.pipelines.base import KeyDataset
+>>> from transformers.pipelines.pt_utils import KeyDataset
 >>> from tqdm.auto import tqdm
 
 >>> for out in tqdm(speech_recognizer(KeyDataset(dataset, "file"))):
