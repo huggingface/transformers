@@ -29,7 +29,6 @@ from transformers.testing_utils import is_pt_tf_cross_test, require_tokenizers, 
 from .test_tokenization_common import (
     SMALL_TRAINING_CORPUS,
     TokenizerTesterMixin,
-    filter_non_english,
     merge_model_tokenizer_mappings,
 )
 
@@ -1626,7 +1625,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     return_overflowing_tokens=True,
                 )
 
-                for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):  
+                for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
                     self.assertEqual(len(tokens[key].shape), 2)
                     self.assertEqual(tokens[key].shape[-1], 6)
 
@@ -1800,7 +1799,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                                 "Token indices sequence length is longer than the specified maximum sequence length for this model"
                             )
                         )
-                # Check the order of Sequence of input ids, overflowing tokens and bbox sequence with truncation
+                # Check the order of Sequence of input ids, overflowing tokens and xpath_tags_seq sequence with truncation
                 truncated_first_sequence = (
                     tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)["input_ids"][:-2]
                     + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["input_ids"]
@@ -1826,7 +1825,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 xpath_tags_seq_first = ["html/body"] * (len(seq_0) - 2)
-                xpath_tags_seq_first_sequence = xpath_tags_seq_first + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["xpath_tags_seq"]
+                xpath_tags_seq_first_sequence = (
+                    xpath_tags_seq_first
+                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["xpath_tags_seq"]
+                )
                 overflowing_token_xpath_tags_seq_first_sequence_slow = ["html/body"] * (2 + stride)
                 overflowing_token_xpath_tags_seq_first_sequence_fast = ["html/body"] * (2 + stride) + tokenizer(
                     seq_1, xpaths=xpaths_1, add_special_tokens=False
@@ -1834,7 +1836,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 xpath_tags_seq_second = [[0, 0, 0, 0]] * len(seq_0)
                 xpath_tags_seq_second_sequence = (
-                    xpath_tags_seq_second + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["xpath_tags_seq"][:-2]
+                    xpath_tags_seq_second
+                    + tokenizer(seq_1, xpaths=xpaths_1, add_special_tokens=False)["xpath_tags_seq"][:-2]
                 )
                 overflowing_xpath_tags_seq_second_sequence_slow = tokenizer(
                     seq_1, xpaths=xpaths_1, add_special_tokens=False
@@ -1844,7 +1847,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )["xpath_tags_seq"][-(2 + stride) :]
 
                 xpath_tags_seq_longest_sequence = (
-                    xpath_tags_seq_first_sequence if len(seq0_tokens) > len(seq1_tokens) else xpath_tags_seq_second_sequence
+                    xpath_tags_seq_first_sequence
+                    if len(seq0_tokens) > len(seq1_tokens)
+                    else xpath_tags_seq_second_sequence
                 )
                 overflowing_xpath_tags_seq_longest_sequence_fast = (
                     overflowing_xpath_tags_seq_first_sequence_fast
@@ -1876,7 +1881,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
                     self.assertEqual(overflowing_tokens, overflow_longest_sequence)
-                    self.assertEqual(bbox, xpath_tags_seq_longest_sequence)
+                    self.assertEqual(xpath_tags_seq, xpath_tags_seq_longest_sequence)
 
                     self.assertEqual(len(overflowing_xpath_tags_seq), 2 + stride + len(smallest))
                     self.assertEqual(overflowing_xpath_tags_seq, overflowing_xpath_tags_seq_longest_sequence_fast)
@@ -1927,7 +1932,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
                     self.assertEqual(overflowing_tokens, overflow_longest_sequence)
-                    self.assertEqual(bbox, xpath_tags_seq_longest_sequence)
+                    self.assertEqual(xpath_tags_seq, xpath_tags_seq_longest_sequence)
                     self.assertEqual(overflowing_xpath_tags_seq, overflowing_xpath_tags_seq_longest_sequence_fast)
                 else:
                     # No overflowing tokens when using 'longest' in python tokenizers
@@ -1972,6 +1977,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(len(information_first_truncated["input_ids"]), 2)
 
                     self.assertEqual(len(truncated_sequence), len(sequence["input_ids"]) - 2)
+                    ## ISSUE HAPPENING HERE
                     self.assertEqual(truncated_sequence, truncated_first_sequence)
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq1_tokens["input_ids"]))
@@ -1989,7 +1995,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, seq0_tokens["input_ids"][-(2 + stride) :])
-                    self.assertEqual(bbox, xpath_tags_seq_first_sequence)
+                    self.assertEqual(xpath_tags_seq, xpath_tags_seq_first_sequence)
                     self.assertEqual(overflowing_xpath_tags_seq, overflowing_xpath_tags_seq_first_sequence_slow)
 
                 information_second_truncated = tokenizer(
@@ -2017,7 +2023,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride + len(seq0_tokens["input_ids"]))
                     self.assertEqual(overflowing_tokens, overflow_second_sequence)
-                    self.assertEqual(bbox, xpath_tags_seq_second_sequence)
+                    self.assertEqual(xpath_tags_seq, xpath_tags_seq_second_sequence)
                     self.assertEqual(overflowing_xpath_tags_seq, overflowing_xpath_tags_seq_second_sequence_fast)
                 else:
                     truncated_sequence = information_second_truncated["input_ids"]
@@ -2030,7 +2036,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, seq1_tokens["input_ids"][-(2 + stride) :])
-                    self.assertEqual(bbox, xpath_tags_seq_second_sequence)
+                    self.assertEqual(xpath_tags_seq, xpath_tags_seq_second_sequence)
                     self.assertEqual(overflowing_xpath_tags_seq, overflowing_xpath_tags_seq_second_sequence_slow)
 
     def test_maximum_encoding_length_single_input(self):
@@ -2186,7 +2192,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_markuplm_integration_test(self):
 
         tokenizer_p = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base")
-        tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base")
+        # no fast tokenizer for now
+        # tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base")
 
         # There are 3 cases:
         # CASE 1: document image classification (training + inference), document image token classification (inference),
@@ -2206,9 +2213,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         encoding_p = tokenizer_p(nodes, xpaths=xpaths, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(nodes, xpaths=xpaths, padding="max_length", max_length=20)
+        # encoding_r = tokenizer_r(nodes, xpaths=xpaths, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
-        self.assertDictEqual(dict(encoding_r), expected_results)
+        # self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 1: batched
         nodes, xpaths = self.get_nodes_and_xpaths_batch()
@@ -2218,9 +2225,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         encoding_p = tokenizer_p(nodes, xpaths=xpaths, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(nodes, xpaths=xpaths, padding="max_length", max_length=20)
+        # encoding_r = tokenizer_r(nodes, xpaths=xpaths, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
-        self.assertDictEqual(dict(encoding_r), expected_results)
+        # self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 2: not batched
         nodes, xpaths = self.get_nodes_and_xpaths()
@@ -2231,9 +2238,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         encoding_p = tokenizer_p(nodes, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(nodes, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
+        # encoding_r = tokenizer_r(nodes, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
-        self.assertDictEqual(dict(encoding_r), expected_results)
+        # self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 2: batched
         nodes, xpaths = self.get_nodes_and_xpaths_batch()
@@ -2244,9 +2251,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         encoding_p = tokenizer_p(nodes, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(nodes, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
+        # encoding_r = tokenizer_r(nodes, xpaths=xpaths, word_labels=word_labels, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
-        self.assertDictEqual(dict(encoding_r), expected_results)
+        # self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 3: not batched
         question, nodes, xpaths = self.get_question_nodes_and_xpaths()
@@ -2256,9 +2263,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         encoding_p = tokenizer_p(question, nodes, xpaths, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(question, nodes, xpaths, padding="max_length", max_length=20)
+        # encoding_r = tokenizer_r(question, nodes, xpaths, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
-        self.assertDictEqual(dict(encoding_r), expected_results)
+        # self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 3: batched
         questions, nodes, xpaths = self.get_question_nodes_and_xpaths_batch()
@@ -2268,9 +2275,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         encoding_p = tokenizer_p(questions, nodes, xpaths, padding="max_length", max_length=20)
-        encoding_r = tokenizer_r(questions, nodes, xpaths, padding="max_length", max_length=20)
+        # encoding_r = tokenizer_r(questions, nodes, xpaths, padding="max_length", max_length=20)
         self.assertDictEqual(dict(encoding_p), expected_results)
-        self.assertDictEqual(dict(encoding_r), expected_results)
+        # self.assertDictEqual(dict(encoding_r), expected_results)
 
     @unittest.skip("Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
