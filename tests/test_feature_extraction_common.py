@@ -40,8 +40,6 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
-
 
 SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
@@ -119,7 +117,7 @@ class FeatureExtractionSavingTestMixin:
 
 
 @is_staging_test
-class ConfigPushToHubTester(unittest.TestCase):
+class FeatureExtractorPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = login(username=USER, password=PASS)
