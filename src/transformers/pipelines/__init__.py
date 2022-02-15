@@ -444,7 +444,7 @@ def pipeline(
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
             provided.
-        revision(`str`, *optional*, defaults to `"main"`):
+        revision (`str`, *optional*, defaults to `"main"`):
             When passing a task name or a string model identifier: The specific model version to use. It can be a
             branch name, a tag name, or a commit id, since we use a git-based system for storing models and other
             artifacts on huggingface.co, so `revision` can be any identifier allowed by git.
@@ -452,8 +452,7 @@ def pipeline(
             Whether or not to use a Fast tokenizer if possible (a [`PreTrainedTokenizerFast`]).
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`). revision(`str`, *optional*, defaults to
-            `"main"`):
+            when running `transformers-cli login` (stored in `~/.huggingface`).
         model_kwargs:
             Additional dictionary of keyword arguments passed along to the model's `from_pretrained(...,
             **model_kwargs)` function.
