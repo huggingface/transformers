@@ -16,6 +16,7 @@
 Speech processor class for Wav2Vec2
 """
 import warnings
+from itertools import groupby
 from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
@@ -71,6 +72,15 @@ class Wav2Vec2Processor(ProcessorMixin):
         [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
         return self.current_processor(*args, **kwargs)
+
+    def _retrieve_time_stamps(self, token_ids, stride):
+        frame_context_in_seconds = stride / self.feature_extractor.sampling_rate
+        grouped_token_ids, token_repetitions = zip(*((token, len(list(group_iter))) for token, group_iter in groupby(token_ids)))
+
+        if len(grouped_token_ids) != len(token_repetitions):
+            raise ValueError(f"Grouped token ids and token repetitions have to have to the same length")
+
+        import ipdb; ipdb.set_trace()
 
     def pad(self, *args, **kwargs):
         """
