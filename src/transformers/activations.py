@@ -61,7 +61,7 @@ class GELUActivation(nn.Module):
 
 class FastGELUActivation(nn.Module):
     """
-    Applies GELU approximation that is slower but more accurate. See: https://github.com/hendrycks/GELUs
+    Applies GELU approximation that is slower than QuickGELU but more accurate. See: https://github.com/hendrycks/GELUs
     """
 
     def __init__(self):
