@@ -593,7 +593,6 @@ class SwinPatchEmbeddings(nn.Module):
         return embeddings_flat, output_dimensions
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPatchMerging
 class SwinPatchMerging(nn.Module):
     """
     Patch Merging Layer.
@@ -831,7 +830,6 @@ class SwinOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinBlock
 class SwinBlock(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
         super().__init__()
@@ -839,13 +837,6 @@ class SwinBlock(nn.Module):
         self.shift_size = shift_size
         self.window_size = config.window_size
         self.input_resolution = input_resolution
-        # # TODO check this in the original implementation
-        # if min(self.input_resolution) <= self.window_size:
-        #     # if window size is larger than input resolution, we don't partition windows
-        #     self.shift_size = 0
-        #     self.window_size = min(self.input_resolution)
-        #     print("asddsadsa", dim, self.input_resolution)
-
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = SwinAttention(config, dim, num_heads)
         self.drop_path = SwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
