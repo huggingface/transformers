@@ -14,9 +14,17 @@
 
 import unittest
 
-from transformers import AutoFeatureExtractor, AutoModel, AutoTokenizer, is_vision_available
+from transformers import (
+    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+    AutoFeatureExtractor,
+    AutoModel,
+    AutoTokenizer,
+    is_vision_available,
+)
 from transformers.pipelines import ZeroShotImageClassificationPipeline, pipeline
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, require_vision
+
+from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
 if is_vision_available():
@@ -31,88 +39,45 @@ else:
 
 @require_vision
 @require_torch
-class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
-    pipeline_task = "zero-shot-image-classification"
-    small_models = ["openai/clip-vit-base-patch32"]  # Models tested without the @slow decorator
-    simple_inputs = [
-        {"images": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-        {"images": "./tests/fixtures/tests_samples/COCO/000000039769.png"},
-        {"images": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")},
-    ]
-    batched_inputs = [
-        {
-            "images": [
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-            ]
-        },
-        {
-            "images": [
-                "./tests/fixtures/tests_samples/COCO/000000039769.png",
-                "./tests/fixtures/tests_samples/COCO/000000039769.png",
-            ]
-        },
-        {
-            "images": [
-                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-            ]
-        },
-        {
-            "images": [
-                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-                "./tests/fixtures/tests_samples/COCO/000000039769.png",
-            ]
-        },
-    ]
+@is_pipeline_test
+class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+    model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
-    def test_small_model_from_factory(self):
-        for small_model in self.small_models:
-            image_classifier = pipeline("zero-shot-image-classification", model=small_model)
+    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+        if tokenizer is None:
+            # Side effect of no Fast Tokenizer class for these model, so skipping
+            # But the slow tokenizer test should still run as they're quite small
+            self.skipTest("No tokenizer available")
+            return
+            # return None, None
 
-            candidate_labels = ["a dog", "a cat"]
+        speech_recognizer = ZeroShotImageClassificationPipeline(
+            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
 
-            for valid_input in self.simple_inputs:
-                output = image_classifier(**valid_input, candidate_labels=candidate_labels)
-                self.assertTrue(isinstance(output, list))
-                self.assertEqual(len(output), 2)
-                for label_result in output:
-                    self.assertTrue(isinstance(label_result, dict))
-                    self.assertEqual(set(label_result.keys()), {"label", "score"})
+        # test with a raw waveform
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        image2 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        return speech_recognizer, [image, image2]
 
-            for valid_input in self.batched_inputs:
-                output = image_classifier(**valid_input, candidate_labels=candidate_labels)
-                self.assertTrue(isinstance(output, list))
-                self.assertEqual(len(output), 2)
-                for item in output:
-                    for label_result in item:
-                        self.assertTrue(isinstance(label_result, dict))
-                        self.assertEqual(set(label_result.keys()), {"label", "score"})
+    def run_pipeline_test(self, pipe, examples):
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        outputs = pipe(image, candidate_labels=["A", "B"])
+        self.assertEqual(outputs, {"text": ANY(str)})
 
-    def test_small_model_from_pipeline(self):
-        for small_model in self.small_models:
-            model = AutoModel.from_pretrained(small_model)
-            feature_extractor = AutoFeatureExtractor.from_pretrained(small_model)
-            tokenizer = AutoTokenizer.from_pretrained(small_model)
-            image_classifier = ZeroShotImageClassificationPipeline(
-                model=model, feature_extractor=feature_extractor, tokenizer=tokenizer
-            )
+        # Batching
+        outputs = pipe([image] * 3, batch_size=2, candidate_labels=["A", "B"])
 
-            candidate_labels = ["a dog", "a cat"]
+    @require_tf
+    def test_small_model_tf(self):
+        self.skipTest("Not implemented in Tensorflow")
 
-            for valid_input in self.simple_inputs:
-                output = image_classifier(**valid_input, candidate_labels=candidate_labels)
-                self.assertTrue(isinstance(output, list))
-                self.assertEqual(len(output), 2)
-                for label_result in output:
-                    self.assertTrue(isinstance(label_result, dict))
-                    self.assertEqual(set(label_result.keys()), {"label", "score"})
-
-            for valid_input in self.batched_inputs:
-                output = image_classifier(**valid_input, candidate_labels=candidate_labels)
-                self.assertTrue(isinstance(output, list))
-                self.assertEqual(len(output), 2)
-                for item in output:
-                    for label_result in item:
-                        self.assertTrue(isinstance(label_result, dict))
-                        self.assertEqual(set(label_result.keys()), {"label", "score"})
+    @require_torch
+    def test_small_model_pt(self):
+        speech_recognizer = pipeline(
+            task="zero-shot-image-classification",
+            model="hf-internal-testing/tiny-random-clip",
+        )
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        output = speech_recognizer(image, candidate_labels=["A", "B", "C"])
+        self.assertEqual(output, {"text": "(Applaudissements)"})

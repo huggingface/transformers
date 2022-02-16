@@ -245,6 +245,7 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {"pt": "openai/clip-vit-base-patch32"},
+        "type": "multimodal",
     },
     "conversational": {
         "impl": ConversationalPipeline,

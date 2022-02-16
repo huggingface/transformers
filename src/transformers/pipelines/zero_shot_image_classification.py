@@ -36,27 +36,14 @@ class ZeroShotImageClassificationPipeline(Pipeline):
     <https://huggingface.co/models?filter=image-classification>`__.
     """
 
-    def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        feature_extractor: PreTrainedFeatureExtractor,
-        tokenizer: PreTrainedTokenizer,
-        framework: Optional[str] = None,
-        **kwargs
-    ):
-        super().__init__(
-            model, feature_extractor=feature_extractor, tokenizer=tokenizer, framework=framework, **kwargs
-        )
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
-        if self.framework == "tf":
+        if self.framework != "pt":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
         requires_backends(self, "vision")
-
-        # self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
-
-        self.feature_extractor = feature_extractor
-        self.tokenizer = tokenizer
+        self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
 
     @staticmethod
     def load_image(image: Union[str, "Image.Image"]):
