@@ -173,7 +173,6 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
             model = model_class(config)
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_stages = self.model_tester.num_stages
