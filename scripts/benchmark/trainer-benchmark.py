@@ -2,7 +2,7 @@
 
 # HF Trainer benchmarking tool
 #
-# This tool can be used to run and compare multiple dimensions of the HF Trainers args
+# This tool can be used to run and compare multiple dimensions of the HF Trainers args.
 #
 # It then prints a report once in github format with all the information that needs to be shared
 # with others and second time in a console-friendly format, so it's easier to use for tuning things up.
@@ -12,6 +12,9 @@
 #     ./trainer-benchmark.py --base-cmd '<cmd args that don't change>' \
 #     --variations '--tf32 0|--tf32 1' '--fp16 0|--fp16 1|--bf16 1' \
 #     --target-metric-key train_samples_per_second
+#
+# The variations can be any command line argument that you want to compare and not just dtype as in
+# the example.
 #
 # --variations allows you to compare variations in multiple dimensions.
 #
@@ -139,12 +142,15 @@ class Tee:
         self.file.write(re.sub(r"^.*\r", "", msg, 0, re.M))
 
 
-def get_orig_cmd(max_width=80, full_python_path=False):
+def get_original_command(max_width=80, full_python_path=False):
     """
-    Return the original command line string that can be replayed nicely and wrapped for 80 char width
+    Return the original command line string that can be replayed nicely and wrapped for 80 char width.
+
     Args:
-        - max_width: the width to wrap for. defaults to 80
-        - full_python_path: whether to replicate the full path or just the last part (i.e. `python`). default to `False`
+        max_width (`int`, `optional`, defaults to 80):
+            The width to wrap for.
+        full_python_path (`bool`, `optional`, defaults to `False`):
+             Whether to replicate the full path or just the last segment (i.e. `python`).
     """
 
     cmd = []
@@ -174,7 +180,7 @@ def get_orig_cmd(max_width=80, full_python_path=False):
     return "\\\n".join(lines)
 
 
-def get_base_cmd(args, output_dir):
+def get_base_command(args, output_dir):
 
     # unwrap multi-line input
     args.base_cmd = re.sub(r"[\\\n]+", " ", args.base_cmd)
@@ -191,7 +197,10 @@ def get_base_cmd(args, output_dir):
 
 
 def process_run_single(id, cmd, variation, output_dir, target_metric_key, metric_keys, verbose):
-    # enable to debug everything but the run itself, to do it fast and see the progress
+
+    # Enable to debug everything but the run itself, to do it fast and see the progress.
+    # This is useful for debugging the output formatting quickly - we can remove it later once
+    # everybody is happy with the output
     if 0:
         import random
         from time import sleep
@@ -325,7 +334,7 @@ def process_results(results, target_metric_key, report_metric_keys, base_variati
     report += ["*** Results:", df_github.to_markdown(index=False, floatfmt=".2f")]
     report += ["```"]
     report += ["*** Setup:", get_versions()]
-    report += ["*** The benchmark command line was:", get_orig_cmd()]
+    report += ["*** The benchmark command line was:", get_original_command()]
     report += ["```"]
     report += ["----------8<-----------------8<--------"]
     report += ["*** Results (console):", df_console.to_markdown(index=False, floatfmt=".2f")]
@@ -376,6 +385,12 @@ def main():
         help="How many times to re-run each variation - an average will be reported",
     )
     parser.add_argument(
+        "--output_dir",
+        default="output_benchmark",
+        type=str,
+        help="The output directory where all the benchmark reports will go to and additionally this directory will be used to override --output_dir in the script that is being benchmarked",
+    )
+    parser.add_argument(
         "--verbose",
         default=False,
         action="store_true",
@@ -383,9 +398,9 @@ def main():
     )
     args = parser.parse_args()
 
-    output_dir = "output_benchmark"
+    output_dir = args.output_dir
     Path(output_dir).mkdir(exist_ok=True)
-    base_cmd = get_base_cmd(args, output_dir)
+    base_cmd = get_base_command(args, output_dir)
 
     # split each dimension into its --foo variations
     dims = [list(map(str.strip, re.split(r"\|", x))) for x in args.variations]
@@ -406,8 +421,6 @@ def main():
 
     print(f"\n*** Running {len(variations)} benchmarks:")
     print(f"Base command: {' '.join(base_cmd)}")
-
-    # keys = {}
 
     variation_key = "variation"
     results = []
