@@ -2953,6 +2953,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         len_ids = len(ids)
         len_pair_ids = len(pair_ids) if pair else 0
 
+        # Load from model defaults
+        if return_token_type_ids is None:
+            return_token_type_ids = "token_type_ids" in self.model_input_names
+        if return_attention_mask is None:
+            return_attention_mask = "attention_mask" in self.model_input_names
+        
+        # Parameter sanity check
         if return_token_type_ids and not add_special_tokens:
             raise ValueError(
                 "Asking to return token_type_ids while setting add_special_tokens to False "
@@ -2970,12 +2977,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "`longest_first`. Please select another truncation strategy than `longest_first`, "
                 "for instance `only_second` or `only_first`."
             )
-
-        # Load from model defaults
-        if return_token_type_ids is None:
-            return_token_type_ids = "token_type_ids" in self.model_input_names
-        if return_attention_mask is None:
-            return_attention_mask = "attention_mask" in self.model_input_names
 
         encoded_inputs = {}
 
