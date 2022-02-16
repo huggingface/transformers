@@ -850,6 +850,7 @@ if is_torch_available():
     _import_structure["models.data2vec"].extend(
         [
             "DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Data2VecForAudioModel",
             "Data2VecForCausalLM",
             "Data2VecForMaskedLM",
             "Data2VecForMultipleChoice",
@@ -2945,6 +2946,7 @@ if TYPE_CHECKING:
         )
         from .models.data2vec import (
             DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Data2VecForAudioModel,
             Data2VecForCausalLM,
             Data2VecForMaskedLM,
             Data2VecForMultipleChoice,

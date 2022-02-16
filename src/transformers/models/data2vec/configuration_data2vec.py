@@ -30,10 +30,10 @@ DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Data2VecConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Data2VecForTextModel`], identical to
-    [`BertConfig]. It is used to instantiate a Data2Vec model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    Data2Vec [edugp/data2vec-nlp-base](https://huggingface.co/edugp/data2vec-nlp-base) architecture.
+    This is the configuration class to store the configuration of a [`Data2VecForTextModel`] and
+    [`Data2VecForAudioModel`]. It is used to instantiate a Data2Vec model according to the specified arguments,
+    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
+    to that of the Data2Vec [edugp/data2vec-nlp-base](https://huggingface.co/edugp/data2vec-nlp-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -115,6 +115,22 @@ class Data2VecConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
+        # Here starts audio-only parameters
+        feat_extract_norm="layer",
+        feat_extract_activation="gelu",
+        num_conv_pos_embeddings=19,
+        conv_dim=(512, 512, 512, 512, 512, 512, 512),
+        conv_stride=(5, 2, 2, 2, 2, 2, 2),
+        conv_kernel=(10, 3, 3, 3, 3, 2, 2),
+        conv_bias=False,
+        feat_proj_dropout=0.0,
+        mask_time_prob=0.05,
+        do_stable_layer_norm=False,
+        num_conv_pos_embedding_groups=16,
+        activation_dropout=0.1,
+        add_adapter=False,
+        final_dropout=0.1,
+        proj_codevector_dim=256,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -134,6 +150,27 @@ class Data2VecConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
+        # Here starts audio-only parameters
+        self.feat_extract_norm = feat_extract_norm
+        self.feat_extract_activation = feat_extract_activation
+        self.num_conv_pos_embeddings = num_conv_pos_embeddings
+        self.conv_dim = conv_dim
+        self.conv_stride = conv_stride
+        self.conv_kernel = conv_kernel
+        self.conv_bias = conv_bias
+        self.num_feat_extract_layers = len(self.conv_dim)
+        self.feat_proj_dropout = feat_proj_dropout
+        self.mask_time_prob = mask_time_prob
+        self.do_stable_layer_norm = do_stable_layer_norm
+        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
+        # Using the same dropout as for text
+        self.hidden_dropout = self.hidden_dropout_prob
+        # Using the same dropout as for text
+        self.attention_dropout = self.attention_probs_dropout_prob
+        self.activation_dropout = activation_dropout
+        self.add_adapter = add_adapter
+        self.final_dropout = final_dropout
+        self.proj_codevector_dim = proj_codevector_dim
 
 
 class Data2VecOnnxConfig(OnnxConfig):
