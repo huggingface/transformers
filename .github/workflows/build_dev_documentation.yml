@@ -114,6 +114,7 @@ jobs:
       - name: Make HTML documentation
         run: |
           cd doc-builder
+          git fetch origin kit
           git switch kit
           cp -R ../doc-build-dev/transformers/pr_${PR_NUMBER}/* kit/src/routes/
           cd kit
