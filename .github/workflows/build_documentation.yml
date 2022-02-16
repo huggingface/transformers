@@ -98,7 +98,7 @@ jobs:
           cp -R ../doc-build-tmp/transformers/$branch/* kit/src/routes/
           cd kit
 
-          npm install
+          npm ci
           NODE_OPTIONS='--max-old-space-size=6656' DOCS_VERSION=$branch npm run build
           cd ../
 

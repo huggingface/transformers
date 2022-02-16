@@ -125,7 +125,7 @@ jobs:
           cp -R ../doc-build-dev/transformers/pr_${PR_NUMBER}/* kit/src/routes/
           cd kit
 
-          npm install
+          npm ci
           DOCS_VERSION=pr_${PR_NUMBER} npm run build
           cd ../
 
