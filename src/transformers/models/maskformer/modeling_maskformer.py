@@ -2406,11 +2406,10 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
 
         ```python
         >>> from transformers import MaskFormerFeatureExtractor, MaskFormerForObjectDetection
-        >>> from PIL import
-        Image >>> import requests
+        >>> from PIL import Image
+        >>> import requests
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image =
-        Image.open(requests.get(url, stream=True).raw)
+        >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> feature_extractor = MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-base-ade-640")
         >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade-640")
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
