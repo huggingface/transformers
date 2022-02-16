@@ -1,4 +1,5 @@
 from __future__ import annotations
+from cmath import log
 
 import logging
 from argparse import ArgumentParser
@@ -584,7 +585,7 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation):
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
 
-            assert torch.allclose(original_model_feature, our_model_feature, atol=1e-2)
+            assert torch.allclose(original_model_feature, our_model_feature, atol=1e-3)
 
         original_model_pixel_out = original_model.sem_seg_head.pixel_decoder.forward_features(
             original_model_backbone_features
@@ -603,9 +604,31 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation):
 
         our_segmentation = feature_extractor.post_process_segmentation(our_model_out, target_size=(384, 384))
 
-        assert torch.allclose(original_segmentation, our_segmentation, atol=1e-2)
+        assert torch.allclose(original_segmentation, our_segmentation, atol=1e-3)
 
         logger.info("✅ Test passed!")
+
+
+def get_name(checkpoint_file: Path):
+    model_name_raw: str = checkpoint_file.stem
+    # model_name_raw is something like maskformer_panoptic_swin_base_IN21k_384_bs64_554k
+    parent_name: str = checkpoint_file.parents[0].stem
+    backbone = "swin"
+    dataset = ""
+    if "coco" in parent_name:
+        dataset = "coco"
+    elif "ade" in parent_name:
+        dataset = "ade"
+    else:
+        raise ValueError(f"{parent_name} must be wrong since we didn't find 'coco' or 'ade' in it ")
+
+    backbone_types = ["tiny", "small", "base", "large"]
+
+    backbone_type = list(filter(lambda x: x in model_name_raw, backbone_types))[0]
+
+    model_name = f"maskformer-{backbone}-{backbone_type}-{dataset}"
+
+    return model_name
 
 
 if __name__ == "__main__":
@@ -675,9 +698,11 @@ if __name__ == "__main__":
 
         test(original_model, mask_former_for_instance_segmentation)
 
-        model_name: str = f"{checkpoint_file.parents[0].stem.replace('-', '_')}-{checkpoint_file.stem}"
-
-        logger.info(model_name)
+        model_name = get_name(checkpoint_file)
+        logger.info(f"🪄 Saving {model_name}")
 
         feature_extractor.save_pretrained(save_directory / model_name)
         mask_former_for_instance_segmentation.save_pretrained(save_directory / model_name)
+
+        feature_extractor.push_to_hub(model_name)
+        mask_former_for_instance_segmentation.push_to_hub(model_name)
