@@ -118,6 +118,11 @@ jobs:
           git switch kit
           cp -R ../doc-build-dev/transformers/pr_${PR_NUMBER}/* kit/src/routes/
           cd kit
+
+          apt install -y npm
+          npm intall -g n
+          n 14
+
           npm install
           DOCS_VERSION=pr_${PR_NUMBER} npm run build
           cd ../
