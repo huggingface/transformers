@@ -60,7 +60,10 @@ def processor_class_from_name(class_name: str):
 
             module = importlib.import_module(f".{module_name}", "transformers.models")
             return getattr(module, class_name)
-            break
+
+    for processor in PROCESSOR_MAPPING._extra_content.values():
+        if getattr(processor, "__name__", None) == class_name:
+            return processor
 
     return None
 
@@ -231,3 +234,15 @@ class AutoProcessor:
             f"its {FEATURE_EXTRACTOR_NAME}, or one of the following `model_type` keys in its {CONFIG_NAME}: "
             f"{', '.join(c for c in PROCESSOR_MAPPING_NAMES.keys())}"
         )
+
+    @staticmethod
+    def register(config_class, processor_class):
+        """
+        Register a new processor for this class.
+
+        Args:
+            config_class ([`PretrainedConfig`]):
+                The configuration corresponding to the model to register.
+            processor_class ([`FeatureExtractorMixin`]): The processor to register.
+        """
+        PROCESSOR_MAPPING.register(config_class, processor_class)
