@@ -2405,17 +2405,24 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
         Examples:
 
         ```python
-         >>> from transformers import MaskFormerFeatureExtractor, MaskFormerForObjectDetection >>> from PIL import
-        Image >>> import requests >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg" >>> image =
-        Image.open(requests.get(url, stream=True).raw) >>> feature_extractor =
-        MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-base-ade-640") >>> model =
-        MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade-640") >>> inputs =
-        feature_extractor(images=image, return_tensors="pt") >>> outputs = model(**inputs) >>> # model predicts
-        class_queries_logits of shape `(batch_size, num_queries)` >>> # and masks_queries_logits of shape `(batch_size,
-        num_queries, height, width)` >>> class_queries_logits = outputs.class_queries_logits >>> masks_queries_logits =
-        outputs.masks_queries_logits >>> # you can pass them to feature_extractor for postprocessing >>> output =
-        feature_extractor.post_process_segmentation(outputs) >>> output =
-        eature_extractor.post_process_panoptic_segmentation(outputs)"""
+        >>> from transformers import MaskFormerFeatureExtractor, MaskFormerForObjectDetection
+        >>> from PIL import
+        Image >>> import requests
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image =
+        Image.open(requests.get(url, stream=True).raw)
+        >>> feature_extractor = MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-base-ade-640")
+        >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade-640") >>> inputs =
+        feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> # model predicts class_queries_logits of shape `(batch_size, num_queries)`
+        >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
+        >>> class_queries_logits = outputs.class_queries_logits
+        >>> masks_queries_logits = outputs.masks_queries_logits
+        >>> # you can pass them to feature_extractor for postprocessing
+        >>> output = feature_extractor.post_process_segmentation(outputs)
+        >>> output = feature_extractor.post_process_panoptic_segmentation(outputs)
+        """
 
         outputs: MaskFormerOutput = self.model(pixel_values, pixel_mask, output_hidden_states, return_dict)
 
