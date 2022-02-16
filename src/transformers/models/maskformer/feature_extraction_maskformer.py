@@ -20,7 +20,7 @@ import numpy as np
 from PIL import Image
 from torch.nn.functional import interpolate
 
-from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput, upsample_like
+from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType, is_torch_available
@@ -47,8 +47,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
 
     Args:
-        format (`str`, *optional*, defaults to `"coco_detection"`):
-            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input to a certain `size`.
         size (`int`, *optional*, defaults to 800):
@@ -234,11 +232,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             if not valid_annotations:
                 raise ValueError(
                     """
-                    Annotations must of type `Dict` (single image) or `List[Dict]` (batch of images). In case of object
-                    detection, each dictionary should contain the keys 'image_id' and 'annotations', with the latter
-                    being a list of annotations in COCO format. In case of panoptic segmentation, each dictionary
-                    should contain the keys 'file_name', 'image_id' and 'segments_info', with the latter being a list
-                    of annotations in COCO format.
+                    Annotations must of type `Dict` (single image) or `List[Dict]` (batch of images). The annotations must be numpy arrays in the following format: { "masks" : the target mask,
+                    with shape [C,H,W], "labels" : the target labels, with shape [C]}
                     """
                 )
 
