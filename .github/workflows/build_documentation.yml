@@ -106,7 +106,7 @@ jobs:
           cp -R kit/build  ../doc-build/transformers/$branch
           cd ../
         env:
-          branch: doc-build-test
+          branch: master
 
       - name: Push to repositories
         run: |
