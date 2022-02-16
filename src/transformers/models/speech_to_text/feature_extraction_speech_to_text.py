@@ -86,7 +86,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         Get mel-filter bank features using TorchAudio. Note that TorchAudio requires 16-bit signed integers as inputs
         and hence the waveform should not be normalized before feature extraction.
         """
-        waveform = waveform * (2 ** 15)  # Kaldi compliance: 16-bit signed integers
+        waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
         waveform = torch.from_numpy(waveform).unsqueeze(0)
         features = ta_kaldi.fbank(waveform, num_mel_bins=self.num_mel_bins, sample_frequency=self.sampling_rate)
         return features.numpy()

@@ -15,19 +15,33 @@
 
 import json
 import os
+import sys
 import tempfile
 import unittest
+from pathlib import Path
 from shutil import copyfile
 
+from huggingface_hub import Repository, delete_repo, login
+from requests.exceptions import HTTPError
 from transformers import AutoProcessor, AutoTokenizer, Wav2Vec2Config, Wav2Vec2FeatureExtractor, Wav2Vec2Processor
-from transformers.file_utils import FEATURE_EXTRACTOR_NAME
+from transformers.file_utils import FEATURE_EXTRACTOR_NAME, is_tokenizers_available
+from transformers.testing_utils import PASS, USER, is_staging_test
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
+
+
+sys.path.append(str(Path(__file__).parent.parent / "utils"))
+
+from test_module.custom_feature_extraction import CustomFeatureExtractor  # noqa E402
+from test_module.custom_processing import CustomProcessor  # noqa E402
+from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 
 
 SAMPLE_PROCESSOR_CONFIG = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "fixtures/dummy_feature_extractor_config.json"
 )
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/vocab.json")
+
+SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
 
 class AutoFeatureExtractorTest(unittest.TestCase):
@@ -115,3 +129,93 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             processor = AutoProcessor.from_pretrained(tmpdirname)
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
+
+    def test_from_pretrained_dynamic_processor(self):
+        processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor", trust_remote_code=True)
+        self.assertTrue(processor.special_attribute_present)
+        self.assertEqual(processor.__class__.__name__, "NewProcessor")
+
+        feature_extractor = processor.feature_extractor
+        self.assertTrue(feature_extractor.special_attribute_present)
+        self.assertEqual(feature_extractor.__class__.__name__, "NewFeatureExtractor")
+
+        tokenizer = processor.tokenizer
+        self.assertTrue(tokenizer.special_attribute_present)
+        if is_tokenizers_available():
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
+
+            # Test we can also load the slow version
+            processor = AutoProcessor.from_pretrained(
+                "hf-internal-testing/test_dynamic_processor", trust_remote_code=True, use_fast=False
+            )
+            tokenizer = processor.tokenizer
+            self.assertTrue(tokenizer.special_attribute_present)
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+        else:
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+
+
+@is_staging_test
+class ProcessorPushToHubTester(unittest.TestCase):
+    vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "bla", "blou"]
+
+    @classmethod
+    def setUpClass(cls):
+        cls._token = login(username=USER, password=PASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            delete_repo(token=cls._token, name="test-dynamic-processor")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub_dynamic_processor(self):
+        CustomFeatureExtractor.register_for_auto_class()
+        CustomTokenizer.register_for_auto_class()
+        CustomProcessor.register_for_auto_class()
+
+        feature_extractor = CustomFeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            vocab_file = os.path.join(tmp_dir, "vocab.txt")
+            with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+            tokenizer = CustomTokenizer(vocab_file)
+
+        processor = CustomProcessor(feature_extractor, tokenizer)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-processor", use_auth_token=self._token)
+            processor.save_pretrained(tmp_dir)
+
+            # This has added the proper auto_map field to the feature extractor config
+            self.assertDictEqual(
+                processor.feature_extractor.auto_map,
+                {
+                    "AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor",
+                    "AutoProcessor": "custom_processing.CustomProcessor",
+                },
+            )
+
+            # This has added the proper auto_map field to the tokenizer config
+            with open(os.path.join(tmp_dir, "tokenizer_config.json")) as f:
+                tokenizer_config = json.load(f)
+            self.assertDictEqual(
+                tokenizer_config["auto_map"],
+                {
+                    "AutoTokenizer": ["custom_tokenization.CustomTokenizer", None],
+                    "AutoProcessor": "custom_processing.CustomProcessor",
+                },
+            )
+
+            # The code has been copied from fixtures
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_feature_extraction.py")))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_tokenization.py")))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_processing.py")))
+
+            repo.push_to_hub()
+
+        new_processor = AutoProcessor.from_pretrained(f"{USER}/test-dynamic-processor", trust_remote_code=True)
+        # Can't make an isinstance check because the new_processor is from the CustomProcessor class of a dynamic module
+        self.assertEqual(new_processor.__class__.__name__, "CustomProcessor")
