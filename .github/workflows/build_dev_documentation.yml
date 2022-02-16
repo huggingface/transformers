@@ -30,6 +30,12 @@ jobs:
           repository: 'huggingface/notebooks'
           path: notebooks
 
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+          # cache: 'npm'
+          # cache-dependency-path: doc-builder/kit/package-lock.json
+
       - name: Set env
         run: echo "WRITE=$(cat /mnt/WRITE)" >> $GITHUB_ENV
 
@@ -118,8 +124,6 @@ jobs:
           git switch kit
           cp -R ../doc-build-dev/transformers/pr_${PR_NUMBER}/* kit/src/routes/
           cd kit
-
-          apt install -y npm
 
           npm install
           DOCS_VERSION=pr_${PR_NUMBER} npm run build
