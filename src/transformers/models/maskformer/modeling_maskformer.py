@@ -16,9 +16,9 @@
 
 from __future__ import annotations
 
-import math
 import collections.abc
 import logging
+import math
 import random
 from dataclasses import dataclass
 from numbers import Number
@@ -74,7 +74,6 @@ def get_world_size() -> int:
     return dist.get_world_size()
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinModelOutputWithPooling
 @dataclass
 class SwinModelOutputWithPooling(ModelOutput):
     """
@@ -109,7 +108,6 @@ class SwinModelOutputWithPooling(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.swin.modeling_swin.class SwinBaseModelOutput:
 @dataclass
 class SwinBaseModelOutput(ModelOutput):
     """
@@ -956,7 +954,6 @@ class SwinBlock(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinLayer
 class SwinLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
@@ -1017,7 +1014,6 @@ class SwinLayer(nn.Module):
         return hidden_states, output_dimensions, all_hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinEncoder
 class SwinEncoder(nn.Module):
     def __init__(self, config, grid_size):
         super().__init__()
