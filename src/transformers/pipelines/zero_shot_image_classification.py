@@ -19,14 +19,13 @@ logger = logging.get_logger(__name__)
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ZeroShotImageClassificationPipeline(ChunkPipeline):
     """
-    Image classification pipeline using any :obj:`AutoModelForZeroShotImageClassification`. This pipeline predicts the
+    Image classification pipeline using any `AutoModelForZeroShotImageClassification`. This pipeline predicts the
     class of an image.
 
-    This image classification pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"image-classification"`.
+    This image classification pipeline can currently be loaded from [`pipeline`] using the following
+    task identifier: `"image-classification"`.
 
-    See the list of available models on `huggingface.co/models
-    <https://huggingface.co/models?filter=image-classification>`__.
+    See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=image-classification).
     """
 
     def __init__(self, **kwargs):
@@ -44,7 +43,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
         Assign labels to the image(s) passed as inputs.
 
         Args:
-            images (:obj:`str`, :obj:`List[str]`, :obj:`PIL.Image` or :obj:`List[PIL.Image]`):
+            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
@@ -54,10 +53,10 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
                 The pipeline accepts either a single image or a batch of images, which must then be passed as a string.
                 Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
                 images.
-            candidate_labels (:obj:`List[str]`):
+            candidate_labels (`List[str]`):
                 The candidate labels for this image
-            hypothesis_template (:obj:`str`, `optional`, defaults to :obj:`"This is a photo of a {}"`):
-                The sentence used in cunjunction with `candidate_labels` to attempt the image classification by
+            hypothesis_template (`str`, *optional*, defaults to `"This is a photo of a {}"`):
+                The sentence used in cunjunction with *candidate_labels* to attempt the image classification by
                 replacing the placeholder with the candidate_labels. Then likelihood is estimated by using
                 likelihood_per_image
 
@@ -68,8 +67,8 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
 
             The dictionaries contain the following keys:
 
-            - **label** (:obj:`str`) -- The label identified by the model.
-            - **score** (:obj:`int`) -- The score attributed by the model for that label.
+            - **label** (`str`) -- The label identified by the model.
+            - **score** (`int`) -- The score attributed by the model for that label.
         """
         return super().__call__(images, **kwargs)
 
