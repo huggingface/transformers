@@ -14,8 +14,8 @@
 # limitations under the License.
 """ MaskFormer model configuration"""
 from __future__ import annotations
-import copy
 
+import copy
 from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig

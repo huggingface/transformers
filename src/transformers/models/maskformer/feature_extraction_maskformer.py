@@ -232,8 +232,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             if not valid_annotations:
                 raise ValueError(
                     """
-                    Annotations must of type `Dict` (single image) or `List[Dict]` (batch of images). The annotations must be numpy arrays in the following format: { "masks" : the target mask,
-                    with shape [C,H,W], "labels" : the target labels, with shape [C]}
+                    Annotations must of type `Dict` (single image) or `List[Dict]` (batch of images). The annotations
+                    must be numpy arrays in the following format: { "masks" : the target mask, with shape [C,H,W],
+                    "labels" : the target labels, with shape [C]}
                     """
                 )
 
