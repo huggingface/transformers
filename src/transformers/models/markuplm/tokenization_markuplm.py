@@ -1052,6 +1052,10 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+        print("Text:", text)
+        print("Text pair:", text_pair)
+        print("Xpaths:", xpaths)
+
         tokens = []
         pair_tokens = []
         xpath_tags_seq = []
@@ -1092,6 +1096,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             # CASE 3: web page question answering (inference)
             # text = question
             # text_pair = nodes
+            print("Text:", text)
             tokens = self.tokenize(text)
             # TODO properly create xpath_tags_seq and xpath_subs_seq
             xpath_tags_seq = [self.pad_xpath_tags_seq for _ in range(len(tokens))]
@@ -1252,8 +1257,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         stride: int = 0,
     ) -> Tuple[List[int], List[int], List[int]]:
         """
-        Args:
         Truncates a sequence pair in-place following the strategy.
+        Args:
             ids (`List[int]`):
                 Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
                 `convert_tokens_to_ids` methods.
@@ -1270,8 +1275,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 XPath sub IDs of the second sequence.
             num_tokens_to_remove (`int`, *optional*, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
-            truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to
-            `False`):
+            truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
                 The strategy to follow for truncation. Can be:
                 - `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
                   maximum acceptable input length for the model if that argument is not provided. This will truncate
@@ -1308,13 +1312,25 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         ):
             if len(ids) > num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
-                overflowing_tokens = ids[-window_len:]
-                overflowing_xpath_tags_seq = xpath_tags_seq[-window_len:]
-                overflowing_xpath_subs_seq = xpath_subs_seq[-window_len:]
-                ids = ids[:-num_tokens_to_remove]
-                xpath_tags_seq = xpath_tags_seq[:-num_tokens_to_remove]
-                xpath_subs_seq = xpath_subs_seq[:-num_tokens_to_remove]
-                labels = labels[:-num_tokens_to_remove]
+                if self.truncation_side == "left":
+                    overflowing_tokens = ids[:window_len]
+                    overflowing_xpath_tags_seq = xpath_tags_seq[:window_len]
+                    overflowing_xpath_subs_seq = xpath_subs_seq[:window_len]
+                    ids = ids[num_tokens_to_remove:]
+                    xpath_tags_seq = xpath_tags_seq[num_tokens_to_remove:]
+                    xpath_subs_seq = xpath_subs_seq[num_tokens_to_remove:]
+                    labels = labels[num_tokens_to_remove:]
+                elif self.truncation_side == "right":
+                    overflowing_tokens = ids[-window_len:]
+                    overflowing_xpath_tags_seq = xpath_tags_seq[-window_len:]
+                    overflowing_xpath_subs_seq = xpath_subs_seq[-window_len:]
+                    ids = ids[:-num_tokens_to_remove]
+                    xpath_tags_seq = xpath_tags_seq[:-num_tokens_to_remove]
+                    xpath_subs_seq = xpath_subs_seq[:-num_tokens_to_remove]
+                    labels = labels[:-num_tokens_to_remove]
+                else:
+                    raise ValueError(f"invalid truncation strategy: {self.truncation_side}, use 'left' or 'right'.")
+
             else:
                 error_msg = (
                     f"We need to remove {num_tokens_to_remove} to truncate the input "
@@ -1335,23 +1351,46 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             )
             for _ in range(num_tokens_to_remove):
                 if pair_ids is None or len(ids) > len(pair_ids):
-                    ids = ids[:-1]
-                    xpath_tags_seq = xpath_tags_seq[:-1]
-                    xpath_subs_seq = xpath_subs_seq[:-1]
-                    labels = labels[:-1]
+                    if self.truncation_side == "right":
+                        ids = ids[:-1]
+                        xpath_tags_seq = xpath_tags_seq[:-1]
+                        xpath_subs_seq = xpath_subs_seq[:-1]
+                        labels = labels[:-1]
+                    elif self.truncation_side == "left":
+                        ids = ids[1:]
+                        xpath_tags_seq = xpath_tags_seq[1:]
+                        xpath_subs_seq = xpath_subs_seq[1:]
+                        labels = labels[1:]
+                    else:
+                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
                 else:
-                    pair_ids = pair_ids[:-1]
-                    pair_xpath_tags_seq = pair_xpath_tags_seq[:-1]
-                    pair_xpath_subs_seq = pair_xpath_subs_seq[:-1]
+                    if self.truncation_side == "right":
+                        pair_ids = pair_ids[:-1]
+                        pair_xpath_tags_seq = pair_xpath_tags_seq[:-1]
+                        pair_xpath_subs_seq = pair_xpath_subs_seq[:-1]
+                        labels = labels[:-1]
+                    elif self.truncation_side == "left":
+                        pair_ids = pair_ids[1:]
+                        pair_xpath_tags_seq = pair_xpath_tags_seq[1:]
+                        pair_xpath_subs_seq = pair_xpath_subs_seq[1:]
+                        labels = labels[1:]
+                    else:
+                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
-                overflowing_tokens = pair_ids[-window_len:]
-                overflowing_xpath_tags_seq = xpath_tags_seq[-window_len:]
-                overflowing_xpath_subs_seq = xpath_subs_seq[-window_len:]
-                pair_ids = pair_ids[:-num_tokens_to_remove]
-                pair_xpath_tags_seq = pair_xpath_tags_seq[:-num_tokens_to_remove]
-                pair_xpath_subs_seq = pair_xpath_subs_seq[:-num_tokens_to_remove]
+                if self.truncation_side == "right":
+                    overflowing_tokens = pair_ids[-window_len:]
+                    overflowing_xpath_tags_seq = xpath_tags_seq[-window_len:]
+                    overflowing_xpath_subs_seq = xpath_subs_seq[-window_len:]
+                    pair_ids = pair_ids[:-num_tokens_to_remove]
+                elif self.truncation_side == "left":
+                    overflowing_tokens = pair_ids[:window_len]
+                    overflowing_xpath_tags_seq = xpath_tags_seq[:window_len]
+                    overflowing_xpath_subs_seq = xpath_subs_seq[:window_len]
+                    pair_ids = pair_ids[num_tokens_to_remove:]
+                else:
+                    raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
             else:
                 logger.error(
                     f"We need to remove {num_tokens_to_remove} to truncate the input "

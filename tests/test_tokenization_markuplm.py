@@ -26,11 +26,7 @@ from transformers import AddedToken, MarkupLMTokenizerFast, SpecialTokensMixin, 
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES, MarkupLMTokenizer
 from transformers.testing_utils import is_pt_tf_cross_test, require_tokenizers, require_torch, slow
 
-from .test_tokenization_common import (
-    SMALL_TRAINING_CORPUS,
-    TokenizerTesterMixin,
-    merge_model_tokenizer_mappings,
-)
+from .test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixin, merge_model_tokenizer_mappings
 
 
 @require_tokenizers
