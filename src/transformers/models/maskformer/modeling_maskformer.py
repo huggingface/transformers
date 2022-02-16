@@ -41,7 +41,7 @@ from ...file_utils import (
     requires_backends,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from ..detr import DetrConfig
 from ..swin import SwinConfig
@@ -518,7 +518,6 @@ def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
     return input * random_tensor
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinEmbeddings
 class SwinEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings.
@@ -556,7 +555,6 @@ class SwinEmbeddings(nn.Module):
         return embeddings, output_dimensions
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPatchEmbeddings
 class SwinPatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
@@ -659,7 +657,6 @@ class SwinDropPath(nn.Module):
         return drop_path(input, self.drop_prob, self.training, self.scale_by_keep)
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfAttention
 class SwinSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads):
         super().__init__()
