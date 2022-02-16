@@ -2412,8 +2412,8 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
         >>> image =
         Image.open(requests.get(url, stream=True).raw)
         >>> feature_extractor = MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-base-ade-640")
-        >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade-640") >>> inputs =
-        feature_extractor(images=image, return_tensors="pt")
+        >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade-640")
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> # model predicts class_queries_logits of shape `(batch_size, num_queries)`
         >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
