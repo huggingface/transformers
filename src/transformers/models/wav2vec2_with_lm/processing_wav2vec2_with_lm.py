@@ -138,6 +138,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         else:
             # BeamSearchDecoderCTC has no auto class
             kwargs.pop("_from_auto", None)
+            # snapshot_download has no `trust_remote_code` flag
+            kwargs.pop("trust_remote_code", None)
 
             # make sure that only relevant filenames are downloaded
             language_model_filenames = os.path.join(BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*")
