@@ -66,7 +66,7 @@ Load the DistilBERT tokenizer to process the `question` and `context` fields:
 There are a few preprocessing steps particular to question answering that you should be aware of:
 
 1. Some examples in a dataset may have a very long `context` that exceeds the maximum input length of the model. Truncate only the `context` by setting `truncation="only_second"`.
-2. Next, you need to map the start and end positions of the answer to the original `context` by setting
+2. Next, map the start and end positions of the answer to the original `context` by setting
    `return_offset_mapping=True`.
 3. With the mapping in hand, you can find the start and end tokens of the answer. Use the [`sequence_ids`](https://huggingface.co/docs/tokenizers/python/latest/api/reference.html#tokenizers.Encoding.sequence_ids) method to
    find which part of the offset corresponds to the `question` and which corresponds to the `context`.

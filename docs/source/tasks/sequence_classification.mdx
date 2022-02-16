@@ -59,14 +59,14 @@ Load the DistilBERT tokenizer to process the `text` field:
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 ```
 
-Create a preprocessing function to tokenize `text` and add a truncation strategy to truncate sequences to be no longer than DistilBERT's maximum input length:
+Create a preprocessing function to tokenize `text` and truncate sequences to be no longer than DistilBERT's maximum input length:
 
 ```py
 >>> def preprocess_function(examples):
 ...     return tokenizer(examples["text"], truncation=True)
 ```
 
-Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) function to apply the preprocessing function to the entire dataset. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
+Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) function to apply the preprocessing function over the entire dataset. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
 
 ```py
 tokenized_imdb = imdb.map(preprocess_function, batched=True)

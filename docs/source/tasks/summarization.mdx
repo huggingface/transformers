@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 <Youtube id="yHnr5Dk2zCI"/>
 
-Summarization creates a shorter version of a long document that captures all the important information. Along with translation, it is another example of a task that can be formulated as a sequence-to-sequence task. Summarization can be:
+Summarization creates a shorter version of a document or an article that captures all the important information. Along with translation, it is another example of a task that can be formulated as a sequence-to-sequence task. Summarization can be:
 
 - Extractive: extract the most relevant information from a document.
 - Abstractive: generate new text that captures the most relevant information. 
@@ -56,7 +56,7 @@ The `text` field is the input and the `summary` field is the target.
 
 ## Preprocess
 
-Load the T5 tokenizer to process the `text` and `summary`:
+Load the T5 tokenizer to process `text` and `summary`:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -67,7 +67,8 @@ Load the T5 tokenizer to process the `text` and `summary`:
 The preprocessing function needs to:
 
 1. Prefix the input with a prompt so T5 knows this is a summarization task. Some models capable of multiple NLP tasks require prompting for specific tasks.
-2. Use a context manager to parallelize the tokenization with the `as_target_tokenizer()` function. This will tokenize the `text` field first, followed by the `summary`.
+2. Use a context manager with the `as_target_tokenizer()` function to parallelize tokenization of inputs and labels.
+3. Truncate sequences to be no longer than the maximum length set by the `max_length` parameter.
 
 ```py
 >>> prefix = "summarize: "

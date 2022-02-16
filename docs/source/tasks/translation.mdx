@@ -67,6 +67,7 @@ The preprocessing function needs to:
 
 1. Prefix the input with a prompt so T5 knows this is a translation task. Some models capable of multiple NLP tasks require prompting for specific tasks.
 2. Tokenize the input (English) and target (French) separately. You can't tokenize French text with a tokenizer pretrained on an English vocabulary. A context manager will help set the tokenizer to French first before tokenizing it.
+3. Truncate sequences to be no longer than the maximum length set by the `max_length` parameter.
 
 ```py
 >>> source_lang = "en"

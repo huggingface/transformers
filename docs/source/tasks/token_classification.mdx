@@ -44,7 +44,7 @@ Then take a look at an example:
 }
 ```
 
-Each label number in `ner_tags` represents an entity. Convert the label number to a label name for more information:
+Each number in `ner_tags` represents an entity. Convert the number to a label name for more information:
 
 ```py
 >>> label_list = wnut["train"].features[f"ner_tags"].feature.names
