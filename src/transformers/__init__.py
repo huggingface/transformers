@@ -363,6 +363,7 @@ _import_structure = {
         "TokenClassificationPipeline",
         "TranslationPipeline",
         "ZeroShotClassificationPipeline",
+        "ZeroShotImageClassificationPipeline",
         "pipeline",
     ],
     "processing_utils": ["ProcessorMixin"],
