@@ -827,8 +827,10 @@ def requires_backends(obj, backends):
         backends = [backends]
 
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not all(BACKENDS_MAPPING[backend][0]() for backend in backends):
-        raise ImportError("".join([BACKENDS_MAPPING[backend][1].format(name) for backend in backends]))
+    checks = (BACKENDS_MAPPING[backend] for backend in backends)
+    failed = [msg.format(name) for available, msg in checks if not available()]
+    if failed:
+        raise ImportError("".join(failed))
 
 
 class DummyObject(type):
@@ -2300,16 +2302,14 @@ def get_file_from_repo(
             use_auth_token=use_auth_token,
         )
 
-    except RepositoryNotFoundError as err:
-        logger.error(err)
+    except RepositoryNotFoundError:
         raise EnvironmentError(
             f"{path_or_repo} is not a local folder and is not a valid model identifier "
             "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
             "pass a token having permission to this repo with `use_auth_token` or log in with "
             "`huggingface-cli login` and pass `use_auth_token=True`."
         )
-    except RevisionNotFoundError as err:
-        logger.error(err)
+    except RevisionNotFoundError:
         raise EnvironmentError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
             "for this model name. Check the model page at "
