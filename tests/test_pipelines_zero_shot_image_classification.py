@@ -25,7 +25,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import PipelineTestCaseMeta
+from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
 if is_vision_available():
@@ -91,13 +91,38 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         output = speech_recognizer([image] * 5, candidate_labels=["A", "B", "C"], batch_size=2)
         self.assertEqual(
             nested_simplify(output),
+            # Pipeline outputs are supposed to be deterministic and
+            # So we could in theory have real values "A", "B", "C" instead
+            # of ANY(str).
+            # However it seems that in this particular case, the floating
+            # scores are so close, we enter floating error approximation
+            # and the order is not guaranteed anymore with batching.
             [
-                [{"score": 0.333, "label": "B"}, {"score": 0.333, "label": "A"}, {"score": 0.333, "label": "C"}],
-                # Very odd inversion, but it's a random model, floating errors might account for this since all scores are similar.
-                [{"score": 0.333, "label": "A"}, {"score": 0.333, "label": "C"}, {"score": 0.333, "label": "B"}],
-                [{"score": 0.333, "label": "B"}, {"score": 0.333, "label": "A"}, {"score": 0.333, "label": "C"}],
-                [{"score": 0.333, "label": "A"}, {"score": 0.333, "label": "C"}, {"score": 0.333, "label": "B"}],
-                [{"score": 0.333, "label": "B"}, {"score": 0.333, "label": "A"}, {"score": 0.333, "label": "C"}],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
             ],
         )
 

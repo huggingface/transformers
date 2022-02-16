@@ -115,6 +115,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
     def postprocess(self, model_outputs, multi_label=False):
         candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
         logits = torch.cat([output["logits_per_image"] for output in model_outputs])
+        print("Logits", logits)
         probs = logits.softmax(dim=0)
         scores = probs.tolist()
 
