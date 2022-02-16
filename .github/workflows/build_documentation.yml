@@ -99,7 +99,7 @@ jobs:
           cd kit
 
           npm install
-          KIT_CONCURRENCY=1 DOCS_VERSION=$branch npm run build
+          NODE_OPTIONS='--max-old-space-size=6656' KIT_CONCURRENCY=1 DOCS_VERSION=$branch npm run build
           cd ../
 
           rm -Rf ../doc-build-tmp/transformers/$branch/
