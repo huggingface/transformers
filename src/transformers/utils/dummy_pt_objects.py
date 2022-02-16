@@ -1214,6 +1214,13 @@ class CTRLPreTrainedModel(metaclass=DummyObject):
 DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class Data2VecForAudioModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Data2VecForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
