@@ -181,7 +181,6 @@ class TFConvNextStage(tf.keras.layers.Layer):
     def __init__(
         self, config, in_channels, out_channels, kernel_size=2, stride=2, depth=2, drop_path_rates=None, **kwargs
     ):
-        # (sayakpaul): need to figure out the names.
         super().__init__(**kwargs)
         base_name = kwargs.get("name")
         if in_channels != out_channels or stride > 1:

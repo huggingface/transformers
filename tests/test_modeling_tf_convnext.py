@@ -218,12 +218,14 @@ def prepare_img():
 class TFConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return ConvNextFeatureExtractor.from_pretrained("acebook/convnext-tiny-224") if is_vision_available() else None
+        return (
+            ConvNextFeatureExtractor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
         model = TFConvNextForImageClassification.from_pretrained(
-            "acebook/convnext-tiny-224",
+            "facebook/convnext-tiny-224",
             from_pt=True,
         )
 

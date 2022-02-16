@@ -309,9 +309,6 @@ def booleans_processing(config, **kwargs):
     final_booleans = {}
 
     if tf.executing_eagerly():
-        # final_booleans["output_attentions"] = (
-        #     kwargs["output_attentions"] if kwargs["output_attentions"] else config.output_attentions
-        # )
         final_booleans["output_attentions"] = kwargs.get("output_attentions", None)
         if not final_booleans["output_attentions"]:
             final_booleans["output_attentions"] = config.output_attentions
