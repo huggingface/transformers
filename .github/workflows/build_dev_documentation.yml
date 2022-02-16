@@ -120,8 +120,6 @@ jobs:
           cd kit
 
           apt install -y npm
-          npm install -g n
-          n 14
 
           npm install
           DOCS_VERSION=pr_${PR_NUMBER} npm run build
