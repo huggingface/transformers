@@ -1,21 +1,14 @@
-import os
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import List, Union
 
-import requests
-
-from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..file_utils import add_end_docstrings, is_torch_available, is_vision_available, requires_backends
-from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import logging
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import PIPELINE_INIT_ARGS, ChunkPipeline
 
-
-if TYPE_CHECKING:
-    from ..modeling_tf_utils import TFPreTrainedModel
-    from ..modeling_utils import PreTrainedModel
 
 if is_vision_available():
     from PIL import Image
+
+    from ..image_utils import load_image
 
 if is_torch_available():
     import torch
@@ -24,7 +17,7 @@ logger = logging.get_logger(__name__)
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
-class ZeroShotImageClassificationPipeline(Pipeline):
+class ZeroShotImageClassificationPipeline(ChunkPipeline):
     """
     Image classification pipeline using any :obj:`AutoModelForZeroShotImageClassification`. This pipeline predicts the
     class of an image.
@@ -43,30 +36,10 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
         requires_backends(self, "vision")
-        self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
+        # No specific FOR_XXX available yet
+        # self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
 
-    @staticmethod
-    def load_image(image: Union[str, "Image.Image"]):
-        if isinstance(image, str):
-            if image.startswith("http://") or image.startswith("https://"):
-                # We need to actually check for a real protocol, otherwise it's impossible to use a local file
-                # like http_huggingface_co.png
-                return Image.open(requests.get(image, stream=True).raw)
-            elif os.path.isfile(image):
-                return Image.open(image)
-        elif isinstance(image, Image.Image):
-            return image
-
-        raise ValueError(
-            "Incorrect format used for image. Should be an url linking to an image, a local path, or a PIL image."
-        )
-
-    def __call__(
-        self,
-        images: Union[str, List[str], "Image", List["Image"]],
-        candidate_labels: List[str],
-        hypothesis_template: str = "a photo of {}",
-    ):
+    def __call__(self, images: Union[str, List[str], "Image", List["Image"]], **kwargs):
         """
         Assign labels to the image(s) passed as inputs.
 
@@ -98,36 +71,55 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             - **label** (:obj:`str`) -- The label identified by the model.
             - **score** (:obj:`int`) -- The score attributed by the model for that label.
         """
-        is_batched = isinstance(images, list)
+        return super().__call__(images, **kwargs)
 
-        if not is_batched:
-            images = [images]
+    def _sanitize_parameters(self, **kwargs):
+        preprocess_params = {}
+        if "candidate_labels" in kwargs:
+            preprocess_params["candidate_labels"] = kwargs["candidate_labels"]
+        if "hypothesis_template" in kwargs:
+            preprocess_params["hypothesis_template"] = kwargs["hypothesis_template"]
 
-        images = [self.load_image(image) for image in images]
+        postprocess_params = {}
+        if "multi_label" in kwargs:
+            postprocess_params["multi_label"] = kwargs["multi_label"]
+        return preprocess_params, {}, postprocess_params
 
-        with torch.no_grad():
-            images = self.feature_extractor(images=images, return_tensors="pt")
-            inputs = self.tokenizer(candidate_labels, return_tensors="pt")
+    def preprocess(self, image, candidate_labels=None, hypothesis_template="This is a photo of {}."):
+        n = len(candidate_labels)
+        for i, candidate_label in enumerate(candidate_labels):
+            image = load_image(image)
+            images = self.feature_extractor(images=[image], return_tensors="pt")
+            sequence = hypothesis_template.format(candidate_label)
+            inputs = self.tokenizer(sequence, return_tensors="pt")
             inputs["pixel_values"] = images.pixel_values
-            outputs = self.model(**inputs)
+            yield {"is_last": i == n - 1, "candidate_label": candidate_label, **inputs}
 
-            logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-            probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
-            scores = probs.tolist()
+    def _forward(self, model_inputs):
+        is_last = model_inputs.pop("is_last")
+        candidate_label = model_inputs.pop("candidate_label")
+        outputs = self.model(**model_inputs)
 
-        if not is_batched:
-            scores = scores[0]
-            labels = [
-                {"score": score, "label": candidate_label}
-                for score, candidate_label in sorted(zip(scores, candidate_labels), key=lambda x: -x[0])
-            ]
-        else:
-            labels = []
-            all_scores = scores
-            for scores in all_scores:
-                element_labels = [
-                    {"score": score, "label": candidate_label}
-                    for score, candidate_label in sorted(zip(scores, candidate_labels), key=lambda x: -x[0])
-                ]
-                labels.append(element_labels)
-        return labels
+        # Clip does crossproduct scoring by default, so we're only
+        # interested in the results where image and text and in the same
+        # batch position.
+        logits_per_image = torch.diagonal(outputs.logits_per_image)
+
+        model_outputs = {
+            "is_last": is_last,
+            "candidate_label": candidate_label,
+            "logits_per_image": logits_per_image,
+        }
+        return model_outputs
+
+    def postprocess(self, model_outputs, multi_label=False):
+        candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
+        logits = torch.cat([output["logits_per_image"] for output in model_outputs])
+        probs = logits.softmax(dim=0)
+        scores = probs.tolist()
+
+        result = [
+            {"score": score, "label": candidate_label}
+            for score, candidate_label in sorted(zip(scores, candidate_labels), key=lambda x: -x[0])
+        ]
+        return result

@@ -84,7 +84,12 @@ def _pad(items, key, padding_value, padding_side):
         dtype = items[0][key].dtype
 
         if dim == 2:
-            tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
+            try:
+                tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
+            except Exception:
+                import ipdb
+
+                ipdb.set_trace()
         elif dim == 3:
             tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
 
@@ -105,7 +110,6 @@ def _pad(items, key, padding_value, padding_side):
 
 
 def pad_collate_fn(tokenizer, feature_extractor):
-    padding_side = "right"
     if tokenizer is None and feature_extractor is None:
         raise ValueError("Pipeline without tokenizer or feature_extractor cannot do batching")
     if tokenizer is not None:
@@ -115,12 +119,12 @@ def pad_collate_fn(tokenizer, feature_extractor):
                 "`pipe.tokenizer.pad_token_id = model.config.eos_token_id`."
             )
         else:
-            padding_value = tokenizer.pad_token_id
-            padding_side = tokenizer.padding_side
+            t_padding_value = tokenizer.pad_token_id
+            t_padding_side = tokenizer.padding_side
     if feature_extractor is not None:
         # Feature extractor can be images, where no padding is expected
-        padding_value = getattr(feature_extractor, "padding_value", None)
-        padding_side = getattr(feature_extractor, "padding_side", None)
+        f_padding_value = getattr(feature_extractor, "padding_value", None)
+        f_padding_side = getattr(feature_extractor, "padding_side", None)
 
     def inner(items):
         keys = set(items[0].keys())
@@ -132,13 +136,19 @@ def pad_collate_fn(tokenizer, feature_extractor):
         # input_values, input_pixels, input_ids, ...
         padded = {}
         for key in keys:
-            if key.startswith("input_"):
-                _padding_value = padding_value
+            if key == "input_ids":
+                _padding_value = t_padding_value
+                _padding_side = t_padding_side
+            if key in {"input_values", "pixel_values", "input_features"}:
+                _padding_value = f_padding_value
+                _padding_side = f_padding_side
             elif key == "p_mask":
                 _padding_value = 1
+                _padding_side = t_padding_side
             else:
                 _padding_value = 0
-            padded[key] = _pad(items, key, _padding_value, padding_side)
+                _padding_side = f_padding_side
+            padded[key] = _pad(items, key, _padding_value, _padding_side)
         return padded
 
     return inner

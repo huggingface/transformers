@@ -14,17 +14,18 @@
 
 import unittest
 
-from transformers import (
-    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-    AutoFeatureExtractor,
-    AutoModel,
-    AutoTokenizer,
-    is_vision_available,
+from transformers import is_vision_available
+from transformers.pipelines import pipeline
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_tf,
+    require_torch,
+    require_vision,
+    slow,
 )
-from transformers.pipelines import ZeroShotImageClassificationPipeline, pipeline
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, require_vision
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import PipelineTestCaseMeta
 
 
 if is_vision_available():
@@ -41,32 +42,34 @@ else:
 @require_torch
 @is_pipeline_test
 class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-    model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+    # Deactivating auto tests since we don't have a good MODEL_FOR_XX mapping,
+    # and only CLIP would be there for now.
+    # model_mapping = {CLIPConfig: CLIPModel}
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        if tokenizer is None:
-            # Side effect of no Fast Tokenizer class for these model, so skipping
-            # But the slow tokenizer test should still run as they're quite small
-            self.skipTest("No tokenizer available")
-            return
-            # return None, None
+    # def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    #     if tokenizer is None:
+    #         # Side effect of no Fast Tokenizer class for these model, so skipping
+    #         # But the slow tokenizer test should still run as they're quite small
+    #         self.skipTest("No tokenizer available")
+    #         return
+    #         # return None, None
 
-        speech_recognizer = ZeroShotImageClassificationPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
-        )
+    #     speech_recognizer = ZeroShotImageClassificationPipeline(
+    #         model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+    #     )
 
-        # test with a raw waveform
-        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        image2 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        return speech_recognizer, [image, image2]
+    #     # test with a raw waveform
+    #     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    #     image2 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    #     return speech_recognizer, [image, image2]
 
-    def run_pipeline_test(self, pipe, examples):
-        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        outputs = pipe(image, candidate_labels=["A", "B"])
-        self.assertEqual(outputs, {"text": ANY(str)})
+    # def run_pipeline_test(self, pipe, examples):
+    #     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    #     outputs = pipe(image, candidate_labels=["A", "B"])
+    #     self.assertEqual(outputs, {"text": ANY(str)})
 
-        # Batching
-        outputs = pipe([image] * 3, batch_size=2, candidate_labels=["A", "B"])
+    #     # Batching
+    #     outputs = pipe([image] * 3, batch_size=2, candidate_labels=["A", "B"])
 
     @require_tf
     def test_small_model_tf(self):
@@ -75,9 +78,58 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     @require_torch
     def test_small_model_pt(self):
         speech_recognizer = pipeline(
-            task="zero-shot-image-classification",
-            model="hf-internal-testing/tiny-random-clip",
+            model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification",
         )
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        output = speech_recognizer(image, candidate_labels=["A", "B", "C"])
-        self.assertEqual(output, {"text": "(Applaudissements)"})
+        output = speech_recognizer(image, candidate_labels=["a", "b", "c"])
+
+        self.assertEqual(
+            nested_simplify(output),
+            [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
+        )
+
+        output = speech_recognizer([image] * 5, candidate_labels=["A", "B", "C"], batch_size=2)
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                [{"score": 0.333, "label": "B"}, {"score": 0.333, "label": "A"}, {"score": 0.333, "label": "C"}],
+                # Very odd inversion, but it's a random model, floating errors might account for this since all scores are similar.
+                [{"score": 0.333, "label": "A"}, {"score": 0.333, "label": "C"}, {"score": 0.333, "label": "B"}],
+                [{"score": 0.333, "label": "B"}, {"score": 0.333, "label": "A"}, {"score": 0.333, "label": "C"}],
+                [{"score": 0.333, "label": "A"}, {"score": 0.333, "label": "C"}, {"score": 0.333, "label": "B"}],
+                [{"score": 0.333, "label": "B"}, {"score": 0.333, "label": "A"}, {"score": 0.333, "label": "C"}],
+            ],
+        )
+
+    @slow
+    @require_torch
+    def test_large_model_pt(self):
+        speech_recognizer = pipeline(
+            task="zero-shot-image-classification",
+            model="openai/clip-vit-base-patch32",
+        )
+        # This is an image of 2 cats with remotes and no planes
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        output = speech_recognizer(image, candidate_labels=["cat", "plane", "remote"])
+
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                {"score": 0.941, "label": "cat"},
+                {"score": 0.055, "label": "remote"},
+                {"score": 0.003, "label": "plane"},
+            ],
+        )
+
+        output = speech_recognizer([image] * 5, candidate_labels=["cat", "plane", "remote"], batch_size=2)
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                [
+                    {"score": 0.941, "label": "cat"},
+                    {"score": 0.055, "label": "remote"},
+                    {"score": 0.003, "label": "plane"},
+                ],
+            ]
+            * 5,
+        )
