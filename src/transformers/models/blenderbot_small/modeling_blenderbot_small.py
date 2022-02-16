@@ -146,7 +146,7 @@ class BlenderbotSmallAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1258,6 +1258,9 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
             if decoder_input_ids is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
@@ -1357,7 +1360,7 @@ class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall, facebook/bart-large->facebook/blenderbot_small-90M
 class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
@@ -1479,8 +1482,10 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
         ```python
         >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForCausalLM
 
-        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/bart-large")
-        >>> model = BlenderbotSmallForCausalLM.from_pretrained("facebook/bart-large", add_cross_attention=False)
+        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+        >>> model = BlenderbotSmallForCausalLM.from_pretrained(
+        ...     "facebook/blenderbot_small-90M", add_cross_attention=False
+        ... )
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

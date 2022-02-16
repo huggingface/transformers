@@ -28,13 +28,8 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
-from ...modeling_tf_utils import (
-    TFPreTrainedModel,
-    booleans_processing,
-    get_initializer,
-    keras_serializable,
-    shape_list,
-)
+from ...modeling_tf_utils import TFPreTrainedModel, booleans_processing, get_initializer, keras_serializable
+from ...tf_utils import shape_list
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from .configuration_hubert import HubertConfig
@@ -736,8 +731,12 @@ class TFHubertAttention(tf.keras.layers.Layer):
         self.num_heads = num_heads
         self.dropout = tf.keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
@@ -1288,6 +1287,13 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
             "attention_mask": tf.cast(tf.not_equal(input_values, pad_token), tf.float32),
         }
         return dummy_inputs
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        logger.warning(
+            f"\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. If you wish "
+            "to train/fine-tine this model, you need a GPU or a TPU"
+        )
 
     @tf.function
     def serving(self, inputs):

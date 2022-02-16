@@ -17,6 +17,7 @@
 
 import collections.abc
 import math
+import warnings
 from dataclasses import dataclass
 
 import torch
@@ -25,8 +26,19 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
+from ...file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    MaskedLMOutput,
+    SemanticSegmentationModelOutput,
+    SequenceClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_beit import BeitConfig
@@ -34,8 +46,17 @@ from .configuration_beit import BeitConfig
 
 logger = logging.get_logger(__name__)
 
+# General docstring
 _CONFIG_FOR_DOC = "BeitConfig"
-_CHECKPOINT_FOR_DOC = "microsoft/beit-base-patch16-224"
+_FEAT_EXTRACTOR_FOR_DOC = "BeitFeatureExtractor"
+
+# Base docstring
+_CHECKPOINT_FOR_DOC = "microsoft/beit-base-patch16-224-pt22k"
+_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+
+# Image classification docstring
+_IMAGE_CLASS_CHECKPOINT = "microsoft/beit-base-patch16-224"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/beit-base-patch16-224",
@@ -613,7 +634,14 @@ class BeitModel(BeitPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BeitModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=BeitModelOutputWithPooling,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     def forward(
         self,
         pixel_values=None,
@@ -623,26 +651,6 @@ class BeitModel(BeitPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import BeitFeatureExtractor, BeitModel
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
-        >>> model = BeitModel.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
-        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -813,7 +821,13 @@ class BeitForImageClassification(BeitPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    )
     def forward(
         self,
         pixel_values=None,
@@ -828,31 +842,8 @@ class BeitForImageClassification(BeitPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import BeitFeatureExtractor, BeitForImageClassification
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224")
-        >>> model = BeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = logits.argmax(-1).item()
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        ```"""
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.beit(
             pixel_values,
             head_mask=head_mask,
@@ -1130,11 +1121,8 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def compute_loss(self, logits, auxiliary_logits, labels):
+    def compute_loss(self, upsampled_logits, auxiliary_logits, labels):
         # upsample logits to the images' original size
-        upsampled_logits = nn.functional.interpolate(
-            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-        )
         if auxiliary_logits is not None:
             upsampled_auxiliary_logits = nn.functional.interpolate(
                 auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
@@ -1148,7 +1136,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         return loss
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=SemanticSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -1157,11 +1145,17 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        legacy_output=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+        legacy_output (`bool`, *optional*):
+            Whether to return the legacy outputs or not (with logits of shape `height / 4 , width / 4`). Will default
+            to `self.config.legacy_output`.
+
+            This argument is only present for backward compatibility reasons and will be removed in v5 of Transformers.
 
         Returns:
 
@@ -1180,13 +1174,21 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> # logits are of shape (batch_size, num_labels, height/4, width/4)
+        >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        legacy_output = legacy_output if legacy_output is not None else self.config.legacy_output
+        if not legacy_output:
+            warnings.warn(
+                "The output of this model has changed in v4.17.0 and the logits now have the same size as the inputs. "
+                "You can activate the previous behavior by passing `legacy_output=True` to this call or the "
+                "configuration of this model (only until v5, then that argument will be removed).",
+                FutureWarning,
+            )
 
         outputs = self.beit(
             pixel_values,
@@ -1213,6 +1215,11 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
             features[i] = ops[i](features[i])
 
         logits = self.decode_head(features)
+
+        upsampled_logits = nn.functional.interpolate(
+            logits, size=pixel_values.shape[-2:], mode="bilinear", align_corners=False
+        )
+
         auxiliary_logits = None
         if self.auxiliary_head is not None:
             auxiliary_logits = self.auxiliary_head(features)
@@ -1222,18 +1229,26 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
             if self.config.num_labels == 1:
                 raise ValueError("The number of labels should be greater than one")
             else:
-                loss = self.compute_loss(logits, auxiliary_logits, labels)
+                loss = self.compute_loss(upsampled_logits, auxiliary_logits, labels)
 
         if not return_dict:
             if output_hidden_states:
-                output = (logits,) + outputs[2:]
+                output = (logits if legacy_output else upsampled_logits,) + outputs[2:]
             else:
-                output = (logits,) + outputs[3:]
+                output = (logits if legacy_output else upsampled_logits,) + outputs[3:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
-        )
+        if legacy_output:
+            return SequenceClassifierOutput(
+                loss=loss,
+                logits=logits,
+                hidden_states=outputs.hidden_states if output_hidden_states else None,
+                attentions=outputs.attentions,
+            )
+        else:
+            return SemanticSegmentationModelOutput(
+                loss=loss,
+                logits=upsampled_logits,
+                hidden_states=outputs.hidden_states if output_hidden_states else None,
+                attentions=outputs.attentions,
+            )

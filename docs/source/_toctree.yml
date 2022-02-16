@@ -11,22 +11,30 @@
     title: Glossary
   title: Get started
 - sections:
+  - local: pipeline_tutorial
+    title: Pipelines for inference
+  - local: autoclass_tutorial
+    title: Load pretrained instances with an AutoClass
+  - local: preprocessing
+    title: Preprocess
   - local: task_summary
     title: Summary of the tasks
   - local: model_summary
     title: Summary of the models
-  - local: preprocessing
-    title: Preprocessing data
   - local: training
-    title: Fine-tuning a pretrained model
+    title: Fine-tune a pretrained model
+  - local: accelerate
+    title: Distributed training with 🤗 Accelerate
   - local: model_sharing
-    title: Model sharing and uploading
+    title: Share a model
   - local: tokenizer_summary
     title: Summary of the tokenizers
   - local: multilingual
     title: Multi-lingual models
-  title: "Using 🤗 Transformers"
+  title: Tutorials
 - sections:
+  - local: create_a_model
+    title: Create a custom model
   - local: examples
     title: Examples
   - local: troubleshooting
@@ -60,7 +68,9 @@
   - local: debugging
     title: Debugging
   - local: serialization
-    title: Exporting transformers models
+    title: Exporting 🤗 Transformers models
+  - local: custom_models
+    title: Sharing custom models
   - local: pr_checks
     title: Checks on a Pull Request
   title: Advanced guides
@@ -86,6 +96,8 @@
       title: Logging
     - local: main_classes/model
       title: Models
+    - local: main_classes/onnx
+      title: ONNX
     - local: main_classes/optimizer_schedules
       title: Optimization
     - local: main_classes/output
@@ -140,6 +152,8 @@
       title: CamemBERT
     - local: model_doc/canine
       title: CANINE
+    - local: model_doc/convnext
+      title: ConvNeXT
     - local: model_doc/clip
       title: CLIP
     - local: model_doc/convbert
@@ -214,6 +228,8 @@
       title: MPNet
     - local: model_doc/mt5
       title: MT5
+    - local: model_doc/nystromformer
+      title: Nyströmformer
     - local: model_doc/openai-gpt
       title: OpenAI GPT
     - local: model_doc/gpt2
@@ -236,6 +252,8 @@
       title: QDQBert
     - local: model_doc/rag
       title: RAG
+    - local: model_doc/realm
+      title: REALM
     - local: model_doc/reformer
       title: Reformer
     - local: model_doc/rembert
@@ -262,6 +280,8 @@
       title: Splinter
     - local: model_doc/squeezebert
       title: SqueezeBERT
+    - local: model_doc/swin
+      title: Swin Transformer
     - local: model_doc/t5
       title: T5
     - local: model_doc/t5v1.1
@@ -276,12 +296,16 @@
       title: UniSpeech
     - local: model_doc/unispeech-sat
       title: UniSpeech-SAT
+    - local: model_doc/vilt
+      title: ViLT
     - local: model_doc/vision-encoder-decoder
       title: Vision Encoder Decoder Models
     - local: model_doc/vision-text-dual-encoder
       title: Vision Text Dual Encoder
     - local: model_doc/vit
       title: Vision Transformer (ViT)
+    - local: model_doc/vit_mae
+      title: ViTMAE
     - local: model_doc/visual_bert
       title: VisualBERT
     - local: model_doc/wav2vec2
@@ -290,18 +314,24 @@
       title: Wav2Vec2Phoneme
     - local: model_doc/wavlm
       title: WavLM
+    - local: model_doc/xglm
+      title: XGLM
     - local: model_doc/xlm
       title: XLM
     - local: model_doc/xlm-prophetnet
       title: XLM-ProphetNet
     - local: model_doc/xlm-roberta
       title: XLM-RoBERTa
+    - local: model_doc/xlm-roberta-xl
+      title: XLM-RoBERTa-XL
     - local: model_doc/xlnet
       title: XLNet
     - local: model_doc/xlsr_wav2vec2
       title: XLSR-Wav2Vec2
     - local: model_doc/xls_r
       title: XLS-R
+    - local: model_doc/yoso
+      title: YOSO
     title: Models
   - sections:
     - local: internal/modeling_utils

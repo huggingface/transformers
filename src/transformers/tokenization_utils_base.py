@@ -31,13 +31,17 @@ from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequenc
 import numpy as np
 from packaging import version
 
-import requests
+from requests import HTTPError
 
 from . import __version__
+from .dynamic_module_utils import custom_object_save
 from .file_utils import (
+    EntryNotFoundError,
     ExplicitEnum,
     PaddingStrategy,
     PushToHubMixin,
+    RepositoryNotFoundError,
+    RevisionNotFoundError,
     TensorType,
     _is_jax,
     _is_numpy,
@@ -47,7 +51,7 @@ from .file_utils import (
     add_end_docstrings,
     cached_path,
     copy_func,
-    get_list_of_files,
+    get_file_from_repo,
     hf_bucket_url,
     is_flax_available,
     is_offline_mode,
@@ -1379,6 +1383,8 @@ INIT_TOKENIZER_DOCSTRING = r"""
         - **model_input_names** (`List[str]`) -- A list of inputs expected in the forward pass of the model.
         - **padding_side** (`str`) -- The default value for the side on which the model should have padding applied.
           Should be `'right'` or `'left'`.
+        - **truncation_side** (`str`) -- The default value for the side on which the model should have truncation
+          applied. Should be `'right'` or `'left'`.
 
     Args:
         model_max_length (`int`, *optional*):
@@ -1386,8 +1392,11 @@ INIT_TOKENIZER_DOCSTRING = r"""
             loaded with [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], this will be set to the
             value stored for the associated model in `max_model_input_sizes` (see above). If no value is provided, will
             default to VERY_LARGE_INTEGER (`int(1e30)`).
-        padding_side: (`str`, *optional*):
+        padding_side (`str`, *optional*):
             The side on which the model should have padding applied. Should be selected between ['right', 'left'].
+            Default value is picked from the class attribute of the same name.
+        truncation_side (`str`, *optional*):
+            The side on which the model should have truncation applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
         model_input_names (`List[string]`, *optional*):
             The list of inputs accepted by the forward pass of the model (like `"token_type_ids"` or
@@ -1432,6 +1441,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     pretrained_vocab_files_map: Dict[str, Dict[str, str]] = {}
     pretrained_init_configuration: Dict[str, Dict[str, Any]] = {}
     max_model_input_sizes: Dict[str, Optional[int]] = {}
+    _auto_class: Optional[str] = None
 
     # first name has to correspond to main model input name
     # to make sure `tokenizer.pad(...)` works correctly
@@ -1451,12 +1461,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
 
-        # Padding side is right by default and overridden in subclasses. If specified in the kwargs, it is changed.
+        # Padding and truncation side are right by default and overridden in subclasses. If specified in the kwargs, it
+        # is changed.
         self.padding_side = kwargs.pop("padding_side", self.padding_side)
-        assert self.padding_side in [
-            "right",
-            "left",
-        ], f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
+        if self.padding_side not in ["right", "left"]:
+            raise ValueError(
+                f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
+            )
+
+        self.truncation_side = kwargs.pop("truncation_side", self.truncation_side)
+        if self.truncation_side not in ["right", "left"]:
+            raise ValueError(
+                f"Padding side should be selected between 'right' and 'left', current value: {self.truncation_side}"
+            )
+
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
         self.deprecation_warnings = (
@@ -1646,20 +1664,36 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             vocab_files[file_id] = pretrained_model_name_or_path
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
-            fast_tokenizer_file = get_fast_tokenizer_file(
-                pretrained_model_name_or_path,
-                revision=revision,
-                use_auth_token=use_auth_token,
-                local_files_only=local_files_only,
-            )
             additional_files_names = {
                 "added_tokens_file": ADDED_TOKENS_FILE,
                 "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
                 "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                "tokenizer_file": fast_tokenizer_file,
             }
+            vocab_files_target = {**cls.vocab_files_names, **additional_files_names}
+
+            if "tokenizer_file" in vocab_files_target:
+                # Try to get the tokenizer config to see if there are versioned tokenizer files.
+                fast_tokenizer_file = FULL_TOKENIZER_FILE
+                resolved_config_file = get_file_from_repo(
+                    pretrained_model_name_or_path,
+                    TOKENIZER_CONFIG_FILE,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    use_auth_token=use_auth_token,
+                    revision=revision,
+                    local_files_only=local_files_only,
+                )
+                if resolved_config_file is not None:
+                    with open(resolved_config_file, encoding="utf-8") as reader:
+                        tokenizer_config = json.load(reader)
+                        if "fast_tokenizer_files" in tokenizer_config:
+                            fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+                vocab_files_target["tokenizer_file"] = fast_tokenizer_file
+
             # Look for the tokenizer files
-            for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
+            for file_id, file_name in vocab_files_target.items():
                 if os.path.isdir(pretrained_model_name_or_path):
                     if subfolder is not None:
                         full_file_name = os.path.join(pretrained_model_name_or_path, subfolder, file_name)
@@ -1704,9 +1738,26 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     else:
                         raise error
 
-                except requests.exceptions.HTTPError as err:
+                except RepositoryNotFoundError:
+                    raise EnvironmentError(
+                        f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
+                        "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
+                        "pass a token having permission to this repo with `use_auth_token` or log in with "
+                        "`huggingface-cli login` and pass `use_auth_token=True`."
+                    )
+                except RevisionNotFoundError:
+                    raise EnvironmentError(
+                        f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
+                        "for this model name. Check the model page at "
+                        f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
+                    )
+                except EntryNotFoundError:
+                    logger.debug(f"{pretrained_model_name_or_path} does not contain a file named {file_path}.")
+                    resolved_vocab_files[file_id] = None
+
+                except HTTPError as err:
                     if "404 Client Error" in str(err):
-                        logger.debug(err)
+                        logger.debug(f"Connection problem to access {file_path}.")
                         resolved_vocab_files[file_id] = None
                     else:
                         raise err
@@ -1718,17 +1769,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
-            msg = (
-                f"Can't load tokenizer for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
-                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
-                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
+            raise EnvironmentError(
+                f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                f"containing all relevant files for a {cls.__name__} tokenizer."
             )
-
-            if revision is not None:
-                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
-
-            raise EnvironmentError(msg)
 
         for file_id, file_path in vocab_files.items():
             if file_id not in resolved_vocab_files:
@@ -2037,6 +2083,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config["auto_map"] = self._auto_map
         if getattr(self, "_processor_class", None) is not None:
             tokenizer_config["processor_class"] = self._processor_class
+
+        # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self._auto_class is not None:
+            custom_object_save(self, save_directory, config=tokenizer_config)
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
@@ -3358,6 +3409,32 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         yield
 
+    @classmethod
+    def register_for_auto_class(cls, auto_class="AutoTokenizer"):
+        """
+        Register this class with a given auto class. This should only be used for custom tokenizers as the ones in the
+        library are already mapped with `AutoTokenizer`.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"AutoTokenizer"`):
+                The auto class to register this new tokenizer with.
+        """
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
+        cls._auto_class = auto_class
+
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -3478,37 +3555,18 @@ For a more complete example, see the implementation of `prepare_seq2seq_batch`.
         return model_inputs
 
 
-def get_fast_tokenizer_file(
-    path_or_repo: Union[str, os.PathLike],
-    revision: Optional[str] = None,
-    use_auth_token: Optional[Union[bool, str]] = None,
-    local_files_only: bool = False,
-) -> str:
+def get_fast_tokenizer_file(tokenization_files: List[str]) -> str:
     """
-    Get the tokenizer file to use for this version of transformers.
+    Get the tokenization file to use for this version of transformers.
 
     Args:
-        path_or_repo (`str` or `os.PathLike`):
-            Can be either the id of a repo on huggingface.co or a path to a *directory*.
-        revision(`str`, *optional*, defaults to `"main"`):
-            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
-            identifier allowed by git.
-        use_auth_token (`str` or *bool*, *optional*):
-            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
-        local_files_only (`bool`, *optional*, defaults to `False`):
-            Whether or not to only rely on local files and not to attempt to download any files.
+        tokenization_files (`List[str]`): The list of available configuration files.
 
     Returns:
-        `str`: The tokenizer file to use.
+        `str`: The tokenization file to use.
     """
-    # Inspect all files from the repo/folder.
-    all_files = get_list_of_files(
-        path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
-    )
     tokenizer_files_map = {}
-    for file_name in all_files:
+    for file_name in tokenization_files:
         search = _re_tokenizer_file.search(file_name)
         if search is not None:
             v = search.groups()[0]

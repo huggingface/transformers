@@ -1219,7 +1219,7 @@ class BigBirdPegasusDecoderAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1619,19 +1619,21 @@ BIGBIRD_PEGASUS_START_DOCSTRING = r"""
 """
 
 BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Summarization example:
 
-        >>> from transformers import PegasusTokenizer, BigBirdPegasusForConditionalGeneration, BigBirdPegasusConfig
+    ```python
+    >>> from transformers import PegasusTokenizer, BigBirdPegasusForConditionalGeneration
 
-        >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained('google/bigbird-pegasus-large-arxiv') >>>
-        tokenizer = PegasusTokenizer.from_pretrained('google/bigbird-pegasus-large-arxiv')
+    >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained("google/bigbird-pegasus-large-arxiv")
+    >>> tokenizer = PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs." >>> inputs =
-        tokenizer([ARTICLE_TO_SUMMARIZE], max_length=4096, return_tensors='pt', truncation=True)
+    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=4096, return_tensors="pt", truncation=True)
 
-        >>> # Generate Summary >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5,
-        early_stopping=True) >>> print([tokenizer.decode(g, skip_special_tokens=True,
-        clean_up_tokenization_spaces=False) for g in summary_ids])
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    ```
 """
 
 BIGBIRD_PEGASUS_INPUTS_DOCSTRING = r"""
@@ -2511,6 +2513,9 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id

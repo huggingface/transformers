@@ -20,9 +20,9 @@ from collections import OrderedDict
 from typing import List, Union
 
 from ...configuration_utils import PretrainedConfig
+from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...file_utils import CONFIG_NAME
 from ...utils import logging
-from .dynamic import get_class_from_dynamic_module
 
 
 logger = logging.get_logger(__name__)
@@ -30,6 +30,14 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("convnext", "ConvNextConfig"),
+        ("yoso", "YosoConfig"),
+        ("swin", "SwinConfig"),
+        ("vilt", "ViltConfig"),
+        ("vit_mae", "ViTMAEConfig"),
+        ("realm", "RealmConfig"),
+        ("nystromformer", "NystromformerConfig"),
+        ("xglm", "XGLMConfig"),
         ("imagegpt", "ImageGPTConfig"),
         ("qdqbert", "QDQBertConfig"),
         ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
@@ -69,6 +77,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("albert", "AlbertConfig"),
         ("bert-generation", "BertGenerationConfig"),
         ("camembert", "CamembertConfig"),
+        ("xlm-roberta-xl", "XLMRobertaXLConfig"),
         ("xlm-roberta", "XLMRobertaConfig"),
         ("pegasus", "PegasusConfig"),
         ("marian", "MarianConfig"),
@@ -116,6 +125,14 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
+        ("convnext", "CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vit_mae", "VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("realm", "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("nystromformer", "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("xglm", "XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -190,6 +207,14 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("convnext", "ConvNext"),
+        ("yoso", "YOSO"),
+        ("swin", "Swin"),
+        ("vilt", "ViLT"),
+        ("vit_mae", "ViTMAE"),
+        ("realm", "Realm"),
+        ("nystromformer", "Nystromformer"),
+        ("xglm", "XGLM"),
         ("imagegpt", "ImageGPT"),
         ("qdqbert", "QDQBert"),
         ("vision-encoder-decoder", "Vision Encoder decoder"),
@@ -229,6 +254,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("bert-generation", "Bert Generation"),
         ("camembert", "CamemBERT"),
         ("xlm-roberta", "XLM-RoBERTa"),
+        ("xlm-roberta-xl", "XLM-RoBERTa-XL"),
         ("pegasus", "Pegasus"),
         ("blenderbot", "Blenderbot"),
         ("marian", "Marian"),
@@ -600,7 +626,7 @@ class AutoConfig:
                     "the option `trust_remote_code=True` to remove this error."
                 )
             if kwargs.get("revision", None) is None:
-                logger.warn(
+                logger.warning(
                     "Explicitly passing a `revision` is encouraged when loading a configuration with custom code to "
                     "ensure no malicious code has been contributed in a newer revision."
                 )

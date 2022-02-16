@@ -43,6 +43,7 @@ if is_torch_available():
         "MODEL_FOR_OBJECT_DETECTION_MAPPING",
         "MODEL_FOR_PRETRAINING_MAPPING",
         "MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+        "MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
         "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
         "MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
         "MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
@@ -65,6 +66,7 @@ if is_torch_available():
         "AutoModelForObjectDetection",
         "AutoModelForPreTraining",
         "AutoModelForQuestionAnswering",
+        "AutoModelForSemanticSegmentation",
         "AutoModelForSeq2SeqLM",
         "AutoModelForSequenceClassification",
         "AutoModelForSpeechSeq2Seq",
@@ -85,8 +87,10 @@ if is_tf_available():
         "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
         "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
         "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+        "TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
         "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
         "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+        "TF_MODEL_FOR_VISION_2_SEQ_MAPPING",
         "TF_MODEL_MAPPING",
         "TF_MODEL_WITH_LM_HEAD_MAPPING",
         "TFAutoModel",
@@ -98,8 +102,10 @@ if is_tf_available():
         "TFAutoModelForQuestionAnswering",
         "TFAutoModelForSeq2SeqLM",
         "TFAutoModelForSequenceClassification",
+        "TFAutoModelForSpeechSeq2Seq",
         "TFAutoModelForTableQuestionAnswering",
         "TFAutoModelForTokenClassification",
+        "TFAutoModelForVision2Seq",
         "TFAutoModelWithLMHead",
     ]
 
@@ -153,6 +159,7 @@ if TYPE_CHECKING:
             MODEL_FOR_OBJECT_DETECTION_MAPPING,
             MODEL_FOR_PRETRAINING_MAPPING,
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
             MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
@@ -175,6 +182,7 @@ if TYPE_CHECKING:
             AutoModelForObjectDetection,
             AutoModelForPreTraining,
             AutoModelForQuestionAnswering,
+            AutoModelForSemanticSegmentation,
             AutoModelForSeq2SeqLM,
             AutoModelForSequenceClassification,
             AutoModelForSpeechSeq2Seq,
@@ -195,8 +203,10 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
             TF_MODEL_MAPPING,
             TF_MODEL_WITH_LM_HEAD_MAPPING,
             TFAutoModel,
@@ -208,8 +218,10 @@ if TYPE_CHECKING:
             TFAutoModelForQuestionAnswering,
             TFAutoModelForSeq2SeqLM,
             TFAutoModelForSequenceClassification,
+            TFAutoModelForSpeechSeq2Seq,
             TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
+            TFAutoModelForVision2Seq,
             TFAutoModelWithLMHead,
         )
 
@@ -244,4 +256,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

@@ -209,8 +209,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else None
     )
-    fx_ready_model_classes = all_model_classes
-    fx_dynamic_ready_model_classes = all_model_classes
+    fx_compatible = True
     test_pruning = True
     test_torchscript = True
     test_resize_embeddings = True
@@ -284,7 +283,8 @@ class DistilBertModelIntergrationTest(unittest.TestCase):
         model = DistilBertModel.from_pretrained("distilbert-base-uncased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        output = model(input_ids, attention_mask=attention_mask)[0]
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(

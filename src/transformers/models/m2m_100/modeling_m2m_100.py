@@ -170,7 +170,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
             position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
         # expand embeddings if needed
-        max_pos = self.padding_idx + 1 + seq_len
+        max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
@@ -217,7 +217,7 @@ class M2M100Attention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -566,17 +566,19 @@ M2M_100_START_DOCSTRING = r"""
 M2M_100_GENERATION_EXAMPLE = r"""
     Translation example::
 
-        >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
+    ```python
+    >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
 
-        >>> model = M2M100ForConditionalGeneration.from_pretrained('facebook/m2m100_418M') >>> tokenizer =
-        M2M100Tokenizer.from_pretrained('facebook/m2m100_418M')
+    >>> model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
+    >>> tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M")
 
-        >>> text_to_translate = "Life is like a box of chocolates" >>> model_inputs = tokenizer(text_to_translate,
-        return_tensors='pt')
+    >>> text_to_translate = "Life is like a box of chocolates"
+    >>> model_inputs = tokenizer(text_to_translate, return_tensors="pt")
 
-        >>> # translate to French >>> gen_tokens = model.generate( **model_inputs,
-        forced_bos_token_id=tokenizer.get_lang_id("fr")) >>> print(tokenizer.batch_decode(gen_tokens,
-        skip_special_tokens=True))
+    >>> # translate to French
+    >>> gen_tokens = model.generate(**model_inputs, forced_bos_token_id=tokenizer.get_lang_id("fr"))
+    >>> print(tokenizer.batch_decode(gen_tokens, skip_special_tokens=True))
+    ```
 """
 
 M2M_100_INPUTS_DOCSTRING = r"""

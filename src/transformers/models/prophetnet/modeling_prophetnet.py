@@ -674,7 +674,7 @@ class ProphetNetAttention(nn.Module):
         ], f"Size of hidden states should be {batch_size, tgt_len, hidden_size}, but is {hidden_states.size()}"
 
         # previous time steps are cached - no need to recompute key and value if they are static
-        query_states = self.query_proj(hidden_states) / (self.head_dim ** 0.5)
+        query_states = self.query_proj(hidden_states) / (self.head_dim**0.5)
 
         if is_cross_attention and past_key_value is not None:
             # reuse k,v, cross_attentions
@@ -855,7 +855,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         value_states = self.value_proj(hidden_states)
 
         # normalize
-        query_states = query_states / (self.head_dim ** 0.5)
+        query_states = query_states / (self.head_dim**0.5)
 
         # reshape
         query_states = self._shape(query_states, ngram_sequence_length, batch_size)
@@ -1471,7 +1471,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
         >>> model = ProphetNetDecoder.from_pretrained("microsoft/prophetnet-large-uncased", add_cross_attention=False)
-        >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 

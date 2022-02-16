@@ -33,6 +33,8 @@ class TestTFActivations(unittest.TestCase):
         get_tf_activation("gelu_new")
         get_tf_activation("gelu_fast")
         get_tf_activation("mish")
+        get_tf_activation("quick_gelu")
+        get_tf_activation("glu")
         with self.assertRaises(KeyError):
             get_tf_activation("bogus")
         with self.assertRaises(KeyError):
