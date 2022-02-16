@@ -102,8 +102,8 @@ jobs:
           NODE_OPTIONS='--max-old-space-size=6656' DOCS_VERSION=$branch npm run build
           cd ../
 
-          rm -Rf ../doc-build-tmp/transformers/$branch/
-          cp -R kit/build  ../doc-build-tmp/transformers/$branch
+          rm -Rf ../doc-build/transformers/$branch/
+          cp -R kit/build  ../doc-build/transformers/$branch
           cd ../
         env:
           branch: doc-build-test
