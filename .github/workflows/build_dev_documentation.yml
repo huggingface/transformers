@@ -120,7 +120,7 @@ jobs:
           cd kit
 
           apt install -y npm
-          npm intall -g n
+          npm install -g n
           n 14
 
           npm install
