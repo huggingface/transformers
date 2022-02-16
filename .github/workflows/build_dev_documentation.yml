@@ -107,9 +107,23 @@ jobs:
           rm -rf doc-build-dev
           git clone https://HuggingFaceDocBuilder:$WRITE@github.com/huggingface/doc-build-dev
 
-      - name: Make documentation
+      - name: Make MDX documentation
         run: |
           doc-builder build transformers transformers/docs/source --build_dir doc-build-dev --notebook_dir notebooks/transformers_doc --clean --version pr_$PR_NUMBER
+
+      - name: Make HTML documentation
+        run: |
+          cd doc-builder
+          git switch kit
+          cp -R ../doc-build-dev/transformers/pr_${PR_NUMBER}/* kit/src/routes/
+          cd kit
+          npm install
+          DOCS_VERSION=pr_${PR_NUMBER} npm run build
+          cd ../
+
+          rm -Rf ../doc-build-dev/transformers/pr_${PR_NUMBER}/
+          cp -R kit/build  ../doc-build-dev/transformers/pr_${PR_NUMBER}
+          cd ../
 
       - name: Push to repositories
         run: |
