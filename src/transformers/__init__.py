@@ -2569,6 +2569,7 @@ if TYPE_CHECKING:
         TokenClassificationPipeline,
         TranslationPipeline,
         ZeroShotClassificationPipeline,
+        ZeroShotImageClassificationPipeline,
         pipeline,
     )
     from .processing_utils import ProcessorMixin
