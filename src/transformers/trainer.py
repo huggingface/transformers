@@ -1638,7 +1638,7 @@ class Trainer:
                 try:
                     torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
                 except Exception as e:
-                    logger.infor(
+                    logger.info(
                         f"Didn't manage to set back the RNG states of the GPU because of the following error:\n {e}"
                         "\nThis won't yield the same results as if the training had not been interrupted."
                     )

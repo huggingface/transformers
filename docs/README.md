@@ -39,8 +39,8 @@ check how they look like before committing for instance). You don't have to comm
 
 ## Building the documentation
 
-Once you have setup the `doc-builder` and additional packages, you can generate the documentation by typing th
-following command:
+Once you have setup the `doc-builder` and additional packages, you can generate the documentation by 
+typing the following command:
 
 ```bash
 doc-builder build transformers docs/source/ --build_dir ~/tmp/test-build
@@ -283,3 +283,71 @@ We have an automatic script running with the `make style` comment that will make
 This script may have some weird failures if you made a syntax mistake or if you uncover a bug. Therefore, it's
 recommended to commit your changes before running `make style`, so you can revert the changes done by that script
 easily.
+
+# Testing documentation examples
+
+Good documentation oftens comes with an example of how a specific function or class should be used. 
+Each model class should contain at least one example showcasing
+how to use this model class in inference. *E.g.* the class [Wav2Vec2ForCTC](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2ForCTC) 
+includes an example of how to transcribe speech to text in the 
+[docstring of its forward function](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2ForCTC.forward).
+
+## Writing documenation examples
+
+The syntax for Example docstrings can look as follows:
+
+```
+    Example:
+
+    ```python
+    >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
+    >>> from datasets import load_dataset
+    >>> import torch
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+    >>> model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+    >>> predicted_ids = torch.argmax(logits, dim=-1)
+
+    >>> # transcribe speech
+    >>> transcription = processor.batch_decode(predicted_ids)
+    >>> transcription[0]
+    'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'
+    ```
+```
+
+The docstring should give a minimal, clear example of how the respective model 
+is to be used in inference and also include the expected (ideally sensible)
+output.
+Often, readers will try out the example before even going through the function 
+or class definitions. Therefore it is of utmost importance that the example 
+works as expected.
+
+## Docstring testing
+
+To do so each example should be included in the doctests. 
+We use pytests' [doctest integration](https://docs.pytest.org/doctest.html) to verify that all of our examples run correctly. 
+For Transformers, the doctests are run on a daily basis via GitHub Actions as can be 
+seen [here](https://github.com/huggingface/transformers/actions/workflows/doctests.yml).
+
+To include your example in the daily doctests, you need add the filename that
+contains the example docstring to the [documentation_tests.txt](../utils/documentation_tests.txt).
+You can test the example locally as follows:
+
+- For Python files ending with *.py*:
+```
+pytest --doctest-modules src/transformers/models/wav2vec2/modeling_wav2vec2.py::transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC.forward -sv --doctest-continue-on-failure
+```
+
+- For Markdown files ending with *.mdx*:
+```
+pytest --doctest-modules docs/source/quicktour.mdx -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
+```

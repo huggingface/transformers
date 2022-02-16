@@ -525,12 +525,6 @@ class GenerationMixin:
             decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
             return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * decoder_start_token_id
 
-    def _get_pad_token_id(self, pad_token_id: int = None, eos_token_id: int = None) -> int:
-        if pad_token_id is None and eos_token_id is not None:
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
-            pad_token_id = eos_token_id
-        return pad_token_id
-
     def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
         decoder_start_token_id = (
             decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
@@ -907,8 +901,8 @@ class GenerationMixin:
                 If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
                 `decoder_input_ids`.
             bad_words_ids(`List[List[int]]`, *optional*):
-                List of token ids that are not allowed to be generated. In order to get the tokens of the words that
-                should not appear in the generated text, use `tokenizer(bad_word, add_prefix_space=True,
+                List of token ids that are not allowed to be generated. In order to get the token ids of the words that
+                should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
                 add_special_tokens=False).input_ids`.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch.
@@ -1063,8 +1057,14 @@ class GenerationMixin:
 
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+
         if eos_token_id is None and hasattr(self.config, "decoder"):
             eos_token_id = self.config.decoder.eos_token_id
+
+        if pad_token_id is None and eos_token_id is not None:
+            # special case if pad_token_id is not defined
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            pad_token_id = eos_token_id
 
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1074,11 +1074,6 @@ class GenerationMixin:
         return_dict_in_generate = (
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
-
-        if pad_token_id is None and eos_token_id is not None:
-            # special case if pad_token_id is not defined
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
-            pad_token_id = eos_token_id
 
         # 2. Define model inputs
         # inputs_tensor has to be defined
