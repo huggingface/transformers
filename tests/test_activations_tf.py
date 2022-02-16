@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
 import unittest
 
-import numpy as np
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf
 
@@ -28,7 +28,7 @@ if is_tf_available():
 class TestTFActivations(unittest.TestCase):
 
     def test_gelu_10(self):
-        x = tf.tensor([-100, -1, -0.1, 0, 0.1, 1.0, 100])
+        x = tf.constant([-100, -1, -0.1, 0, 0.1, 1.0, 100])
         gelu = get_tf_activation("gelu")
         gelu10 = get_tf_activation("gelu_10")
 
