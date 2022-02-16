@@ -2298,10 +2298,6 @@ class MaskFormerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-def load_tf_weights_in_maskformer(*args, **kwargs):
-    requires_backends(load_tf_weights_in_maskformer, ["torch"])
-
-
 class MBartForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
