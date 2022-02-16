@@ -80,7 +80,7 @@ jobs:
           apt-get -y update && apt-get install -y libsndfile1-dev
 
           pip uninstall -y doc-builder
-          pip install git+https://github.com/huggingface/doc-builder -U
+          pip install git+https://github.com/huggingface/doc-builder@kit -U
           cd transformers
           pip install .[dev]
           cd ..
@@ -102,7 +102,9 @@ jobs:
           git config --global user.email docs@huggingface.co
           
           cd doc-builder
-          git pull origin main
+          # git pull origin main
+          git fetch origin kit
+          git switch kit
           cd ..
 
           cd notebooks
@@ -120,8 +122,6 @@ jobs:
       - name: Make HTML documentation
         run: |
           cd doc-builder
-          git fetch origin kit
-          git switch kit
           cp -R ../doc-build-dev/transformers/pr_${PR_NUMBER}/* kit/src/routes/
           cd kit
 
