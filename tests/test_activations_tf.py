@@ -39,7 +39,7 @@ class TestTFActivations(unittest.TestCase):
 
         clipped_mask = tf.where(y_gelu_10 < 10.0, 1, 0)
 
-        self.assertTrue(tf.max(y_gelu_10).numpy().item() == 10.0)
+        self.assertEqual(tf.math.max(y_gelu_10).numpy().item(), 10.0)
         self.assertTrue(np.allclose(y_gelu * clipped_mask, y_gelu_10 * clipped_mask))
 
     def test_get_activation(self):
