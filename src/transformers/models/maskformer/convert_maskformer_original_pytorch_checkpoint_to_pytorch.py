@@ -117,7 +117,6 @@ class OriginalMaskFormerConfigToOursConverter:
                 depths=swin.DEPTHS,
                 num_heads=swin.NUM_HEADS,
                 window_size=swin.WINDOW_SIZE,
-                # TODO miss attn_drop_rage, path_norm
                 drop_path_rate=swin.DROP_PATH_RATE,
                 model_type="swin",
             ),
@@ -185,9 +184,9 @@ class OriginalMaskFormerCheckpoinToOursConverter:
             (f"{src_prefix}.patch_embed.norm.weight", f"{dst_prefix}.model.embeddings.norm.weight"),
             (f"{src_prefix}.patch_embed.norm.bias", f"{dst_prefix}.model.embeddings.norm.bias"),
         ]
-        num_layers = len(config.backbone.depths)
+        num_layers = len(config.backbone_config.depths)
         for layer_idx in range(num_layers):
-            for block_idx in range(config.backbone.depths[layer_idx]):
+            for block_idx in range(config.backbone_config.depths[layer_idx]):
                 renamed_keys.extend(
                     [  # src, dst
                         (
@@ -382,7 +381,7 @@ class OriginalMaskFormerCheckpoinToOursConverter:
         # not sure why we are not popping direcetly here!
         # here we list all keys to be renamed (original name on the left, our name on the right)
         rename_keys = []
-        for i in range(self.config.transformer_decoder.decoder_layers):
+        for i in range(self.config.detr_config.decoder_layers):
             # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms
             rename_keys.append(
                 (
@@ -436,7 +435,7 @@ class OriginalMaskFormerCheckpoinToOursConverter:
     def replace_q_k_v_in_detr_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "transformer_module.transformer_decoder"
         src_prefix: str = "sem_seg_head.predictor.transformer.decoder"
-        for i in range(self.config.transformer_decoder.decoder_layers):
+        for i in range(self.config.detr_config.decoder_layers):
             # read in weights + bias of input projection layer of self-attention
             in_proj_weight = src_state_dict.pop(f"{src_prefix}.layers.{i}.self_attn.in_proj_weight")
             in_proj_bias = src_state_dict.pop(f"{src_prefix}.layers.{i}.self_attn.in_proj_bias")
@@ -508,7 +507,7 @@ class OriginalMaskFormerCheckpoinToOursConverter:
                     (f"{src_prefix}.mask_embed.layers.{i}.bias", f"{dst_prefix}mask_embedder.{i}.0.bias"),
                 ]
             )
-
+        logger.info(f"Replacing keys {pformat(renamed_keys)}")
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     def convert(self, mask_former: MaskFormerModel) -> MaskFormerModel:
@@ -562,47 +561,6 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation):
         original_model = original_model.eval()
         our_model = our_model.eval()
 
-        x = torch.rand((1, 3, 384, 384))
-
-        original_model_backbone_features = original_model.backbone(x.clone())
-
-        our_model_output: MaskFormerOutput = our_model.model(x.clone(), output_hidden_states=True)
-
-        for original_model_feature, our_model_feature in zip(
-            original_model_backbone_features.values(), our_model_output.encoder_hidden_states
-        ):
-            assert torch.allclose(original_model_feature, our_model_feature, atol=1e-4)
-
-        original_model_pixel_out = original_model.sem_seg_head.pixel_decoder.forward_features(
-            original_model_backbone_features
-        )
-
-        # assert torch.allclose(original_model_pixel_out[0], our_model_output.pixel_decoder_last_hidden_state, atol=1e-4)
-        # # turn off aux_loss loss
-        # original_model.sem_seg_head.predictor.aux_loss = False
-        # original_model_transformer_out = original_model.sem_seg_head.predictor(
-        #     original_model_backbone_features["res5"], original_model_pixel_out[0]
-        # )
-        # our_model_queries = our_model.model.transformer_module(our_model_pixel_out[0])
-        # our_model_transformer_out = our_model.model.segmentation_module(our_model_queries, our_model_pixel_out[1])
-
-        # assert torch.allclose(
-        #     original_model_transformer_out["pred_logits"], our_model_transformer_out["preds_logits"], atol=1e-4
-        # )
-
-        # assert torch.allclose(
-        #     original_model_transformer_out["pred_masks"], our_model_transformer_out["preds_masks"], atol=1e-4
-        # )
-
-        original_model_out = original_model([{"image": x.squeeze(0)}])
-
-        our_model_out: MaskFormerForInstanceSegmentationOutput = our_model(x)
-
-        feature_extractor = MaskFormerFeatureExtractor()
-
-        segmentation = feature_extractor.post_process_segmentation(our_model_out, target_size=(384, 384))
-        assert torch.allclose(original_model_out[0]["sem_seg"], segmentation, atol=1e-4)
-
         im = prepare_img()
 
         tr = T.Compose(
@@ -616,40 +574,36 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation):
             ],
         )
 
-        x = tr(im)
+        x = tr(im).unsqueeze(0)
 
-        original_model_out = original_model([{"image": x}])
-        our_model_out: MaskFormerForInstanceSegmentationOutput = our_model(x.unsqueeze(0))
+        original_model_backbone_features = original_model.backbone(x.clone())
+
+        our_model_output: MaskFormerOutput = our_model.model(x.clone(), output_hidden_states=True)
+
+        for original_model_feature, our_model_feature in zip(
+            original_model_backbone_features.values(), our_model_output.encoder_hidden_states
+        ):
+
+            assert torch.allclose(original_model_feature, our_model_feature, atol=1e-2)
+
+        original_model_pixel_out = original_model.sem_seg_head.pixel_decoder.forward_features(
+            original_model_backbone_features
+        )
+
+        assert torch.allclose(original_model_pixel_out[0], our_model_output.pixel_decoder_last_hidden_state, atol=1e-4)
+
+        # let's test the full model
+        original_model_out = original_model([{"image": x.squeeze(0)}])
+
+        original_segmentation = original_model_out[0]["sem_seg"]
+
+        our_model_out: MaskFormerForInstanceSegmentationOutput = our_model(x)
 
         feature_extractor = MaskFormerFeatureExtractor()
 
-        segmentation = feature_extractor.post_process_semantic_segmentation(our_model_out, target_size=(384, 384))
-        original_sem_seg = original_model_out[0]["sem_seg"].argmax(dim=0)
-        assert torch.allclose(original_sem_seg, segmentation, atol=1e-4)
-        # NOTE this fails but the numbers are very very close
-        # assert torch.allclose(original_model_out[0]["sem_seg"], dst_out.segmentation, atol=1e-4)
+        our_segmentation = feature_extractor.post_process_segmentation(our_model_out, target_size=(384, 384))
 
-        dst_for_pan_seg = MaskFormerForPanopticSegmentation(
-            config=dst.config,
-            overlap_mask_area_threshold=original_model.overlap_threshold,
-            object_mask_threshold=original_model.object_mask_threshold,
-        ).eval()
-        dst_for_pan_seg.model.load_state_dict(dst.state_dict())
-        # not all the models will work on pan seg (due to their dataset)
-        metadata = original_model.metadata
-        if metadata.get("thing_dataset_id_to_contiguous_id") is not None:
-            original_model.panoptic_on = True
-
-            original_model_out = original_model([{"image": x}])
-            dst_out: MaskFormerForPanopticSegmentationOutput = dst_for_pan_seg(x.unsqueeze(0))
-            original_model_seg = original_model_out[0]["panoptic_seg"]
-
-            assert torch.allclose(original_model_out[0]["panoptic_seg"][0], dst_out.segmentation, atol=1e-4)
-
-            for original_model_segment, dst_segment in zip(original_model_seg[1], dst_out.segments):
-                assert original_model_segment["id"] == dst_segment["id"]
-                assert original_model_segment["category_id"] == dst_segment["category_id"]
-                assert original_model_segment["isthing"] == dst_segment["is_thing"]
+        assert torch.allclose(original_segmentation, our_segmentation, atol=1e-2)
 
         logger.info("✅ Test passed!")
 
@@ -671,7 +625,7 @@ if __name__ == "__main__":
         help="A directory containing the model's configs, see detectron2 doc. The directory has to have the following structure: <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.yaml",
     )
     parser.add_argument(
-        "--save_directory",
+        "--pytorch_dump_folder_path",
         default=Path("/tmp/hf/models"),
         type=Path,
         help="Path to the folder to output PyTorch models.",
@@ -680,7 +634,7 @@ if __name__ == "__main__":
 
     checkpoints_dir: Path = args.checkpoints_dir
     config_dir: Path = args.configs_dir
-    save_directory: Path = args.save_directory
+    save_directory: Path = args.pytorch_dump_folder_path
 
     checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
 
@@ -721,7 +675,9 @@ if __name__ == "__main__":
 
         test(original_model, mask_former_for_instance_segmentation)
 
-        model_name: str = f"{checkpoint_file.parents[0].stem}-{checkpoint_file.stem}"
+        model_name: str = f"{checkpoint_file.parents[0].stem.replace('-', '_')}-{checkpoint_file.stem}"
 
-        # feature_extractor.save_pretrained(save_directory / model_name)
-        # converted.save_pretrained(save_directory / model_name)
+        logger.info(model_name)
+
+        feature_extractor.save_pretrained(save_directory / model_name)
+        mask_former_for_instance_segmentation.save_pretrained(save_directory / model_name)

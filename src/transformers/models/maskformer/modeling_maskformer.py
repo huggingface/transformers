@@ -713,8 +713,8 @@ class FPNModel(nn.Module):
         other_features: List[Tensor] = features[:-1]
         output: Tensor = self.stem(last_feature)
         for layer, left in zip(self.layers, other_features[::-1]):
-            x = layer(output, left)
-            fpn_features.append(x)
+            output = layer(output, left)
+            fpn_features.append(output)
         return fpn_features
 
 
@@ -799,7 +799,7 @@ class MaskformerMLPPredictionHead(nn.Sequential):
 
         layers: List[nn.Module] = []
         for i, (in_dim, out_dim) in enumerate(zip(in_dims, out_dims)):
-            # TODO should name them, e.g. fc, act ...
+
             layer: nn.Module = nn.Sequential(
                 nn.Linear(in_dim, out_dim), nn.ReLU(inplace=True) if i < num_layers - 1 else nn.Identity()
             )
@@ -814,7 +814,7 @@ class MaskFormerPixelLevelModule(nn.Module):
         Segmentation](https://arxiv.org/abs/2107.06278). It runs the input image trough a backbone and a pixel decoder,
         generating a image features and pixel embeddings."""
         super().__init__()
-        self.encoder = SwinTransformerBackbone(config.backbone)
+        self.encoder = SwinTransformerBackbone(config.backbone_config)
         self.decoder = MaskFormerPixelDecoder(
             in_features=self.encoder.outputs_shapes[-1],
             feature_size=config.fpn_feature_size,
@@ -841,12 +841,12 @@ class MaskFormerTransformerModule(nn.Module):
 
     def __init__(self, in_features: int, config: MaskFormerConfig):
         super().__init__()
-        hidden_size: int = config.transformer_decoder.hidden_size
+        hidden_size: int = config.detr_config.hidden_size
         self.position_embedder = PositionEmbeddingSine(num_pos_feats=hidden_size // 2, normalize=True)
-        self.queries_embedder = nn.Embedding(config.transformer_decoder.num_queries, hidden_size)
+        self.queries_embedder = nn.Embedding(config.detr_config.num_queries, hidden_size)
         should_project = in_features != hidden_size
         self.input_projection = nn.Conv2d(in_features, hidden_size, kernel_size=1) if should_project else None
-        self.transformer_decoder = DetrDecoder(config=config.transformer_decoder)
+        self.transformer_decoder = DetrDecoder(config=config.detr_config)
 
     def forward(self, image_features: Tensor, output_hidden_states: Optional[bool] = False) -> DetrDecoderOutput:
         if self.input_projection is not None:
@@ -1004,7 +1004,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPretrainedModel):
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
         self.model = MaskFormerModel(config)
-        hidden_size: int = config.transformer_decoder.hidden_size
+        hidden_size: int = config.detr_config.hidden_size
         # + 1 because we add the "null" class
         self.class_predictor = nn.Linear(hidden_size, config.num_labels + 1)
         self.mask_embedder = MaskformerMLPPredictionHead(hidden_size, hidden_size, config.mask_feature_size)

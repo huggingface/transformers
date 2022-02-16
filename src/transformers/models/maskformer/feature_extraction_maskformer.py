@@ -380,6 +380,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         class_queries_logits = outputs.class_queries_logits
         # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
         masks_queries_logits = outputs.masks_queries_logits
+        if target_size is not None:
+            masks_queries_logits: Tensor = interpolate(
+                masks_queries_logits,
+                size=target_size,
+                mode="bilinear",
+                align_corners=False,
+            )
         # remove the null class `[..., :-1]`
         masks_classes: Tensor = class_queries_logits.softmax(dim=-1)[..., :-1]
         # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
@@ -391,13 +398,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
         segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
-        if target_size is not None:
-            segmentation: Tensor = interpolate(
-                segmentation,
-                size=target_size,
-                mode="bilinear",
-                align_corners=False,
-            )
         return segmentation
 
     def remove_low_and_no_objects(

@@ -493,11 +493,12 @@ class SwinBlock(nn.Module):
         self.shift_size = shift_size
         self.window_size = config.window_size
         self.input_resolution = input_resolution
-        # TODO check this in the original implementation
-        if min(self.input_resolution) <= self.window_size:
-            # if window size is larger than input resolution, we don't partition windows
-            self.shift_size = 0
-            self.window_size = min(self.input_resolution)
+        # # TODO check this in the original implementation
+        # if min(self.input_resolution) <= self.window_size:
+        #     # if window size is larger than input resolution, we don't partition windows
+        #     self.shift_size = 0
+        #     self.window_size = min(self.input_resolution)
+        #     print("asddsadsa", dim, self.input_resolution)
 
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = SwinAttention(config, dim, num_heads)

@@ -14,6 +14,7 @@
 # limitations under the License.
 """ MaskFormer model configuration"""
 from __future__ import annotations
+import copy
 
 from typing import Dict, Optional
 
@@ -102,7 +103,7 @@ class MaskFormerConfig(PretrainedConfig):
     ):
         if backbone_config is None:
             # fall back to https://huggingface.co/microsoft/swin-base-patch4-window12-384-in22k
-            backbone = SwinConfig(
+            backbone_config = SwinConfig(
                 image_size=384,
                 in_channels=3,
                 patch_size=4,
@@ -118,17 +119,17 @@ class MaskFormerConfig(PretrainedConfig):
                 raise ValueError(
                     f"Backbone {backbone_model_type} not supported, please use one of {','.join(self.backbones_supported)}"
                 )
-            backbone = AutoConfig.for_model(backbone_model_type, **backbone_config)
+            backbone_config = AutoConfig.for_model(backbone_model_type, **backbone_config)
 
         if detr_config is None:
-            transformer_decoder = DetrConfig()
+            detr_config = DetrConfig()
 
         else:
-            transformer_decoder = DetrConfig(**detr_config)
+            detr_config = DetrConfig(**detr_config)
 
-        self.backbone = backbone
+        self.backbone_config = backbone_config
 
-        self.transformer_decoder = transformer_decoder
+        self.detr_config = detr_config
 
         self.fpn_feature_size = fpn_feature_size
         self.mask_feature_size = mask_feature_size
@@ -171,3 +172,16 @@ class MaskFormerConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.mask_feature_size
+
+    def to_dict(self) -> Dict[str, any]:
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["backbone_config"] = self.backbone_config.to_dict()
+        output["detr_config"] = self.detr_config.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output
