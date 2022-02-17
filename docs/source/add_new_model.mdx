@@ -802,11 +802,11 @@ checkpoint and to get the required access rights to be able to upload the model 
 from pathlib import Path
 
 brand_new_bert.push_to_hub(
-            repo_path_or_name=Path("/path/to/checkpoint/"),
-            organization="<YOUR_USERNAME>",
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
+    repo_path_or_name=Path("/path/to/checkpoint/"),
+    organization="<YOUR_USERNAME>",
+    commit_message="Add model",
+    use_temp_dir=True,
+)
 ```
 
 It is worth spending some time to create fitting model cards for each checkpoint. The model cards should highlight the
