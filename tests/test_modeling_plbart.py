@@ -549,7 +549,7 @@ class PLBartStandaloneDecoderModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
 
     def create_and_check_decoder_model_attention_mask_past(
         self,
