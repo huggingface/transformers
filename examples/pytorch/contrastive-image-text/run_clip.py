@@ -357,7 +357,7 @@ def main():
 
     def preprocess(examples):
         # select the fist caption
-        captions = [example[caption_column][0] for example in examples]
+        captions = [example[caption_column] for example in examples]
 
         # encode captions
         examples["labels"] = tokenizer(
