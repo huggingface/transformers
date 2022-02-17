@@ -114,6 +114,14 @@ class DataTrainingArguments:
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
     data_dir: Optional[str] = field(default=None, metadata={"help": "The data directory containing input files."})
+    image_column: Optional[str] = field(
+        default=None,
+        metadata={"help": "The name of the column in the datasets containing the full image file paths."},
+    )
+    caption_column: Optional[str] = field(
+        default=None,
+        metadata={"help": "The name of the column in the datasets containing the image captions."},
+    )
     train_file: Optional[str] = field(
         default=None, metadata={"help": "The input training data file (a jsonlines file)."}
     )
