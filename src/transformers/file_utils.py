@@ -322,7 +322,7 @@ HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOIN
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
-TORCH_FX_REQUIRED_VERSION = version.parse("1.9")
+TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
@@ -827,8 +827,10 @@ def requires_backends(obj, backends):
         backends = [backends]
 
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not all(BACKENDS_MAPPING[backend][0]() for backend in backends):
-        raise ImportError("".join([BACKENDS_MAPPING[backend][1].format(name) for backend in backends]))
+    checks = (BACKENDS_MAPPING[backend] for backend in backends)
+    failed = [msg.format(name) for available, msg in checks if not available()]
+    if failed:
+        raise ImportError("".join(failed))
 
 
 class DummyObject(type):
@@ -1288,6 +1290,58 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     ```
 """
 
+PT_VISION_BASE_MODEL_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
+    >>> from datasets import load_dataset
+
+    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> image = dataset["test"]["image"][0]
+
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> inputs = feature_extractor(image, return_tensors="pt")
+
+    >>> with torch.no_grad():
+    ...     outputs = model(**inputs)
+
+    >>> last_hidden_states = outputs.last_hidden_state
+    >>> list(last_hidden_states.shape)
+    {expected_output}
+    ```
+"""
+
+PT_VISION_SEQ_CLASS_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
+    >>> from datasets import load_dataset
+
+    >>> dataset = load_dataset("huggingface/cats-image")
+    >>> image = dataset["test"]["image"][0]
+
+    >>> feature_extractor = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> inputs = feature_extractor(image, return_tensors="pt")
+
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
+    >>> # model predicts one of the 1000 ImageNet classes
+    >>> predicted_label = logits.argmax(-1).item()
+    >>> print(model.config.id2label[predicted_label])
+    {expected_output}
+    ```
+"""
+
+
 PT_SAMPLE_DOCSTRINGS = {
     "SequenceClassification": PT_SEQUENCE_CLASSIFICATION_SAMPLE,
     "QuestionAnswering": PT_QUESTION_ANSWERING_SAMPLE,
@@ -1301,6 +1355,8 @@ PT_SAMPLE_DOCSTRINGS = {
     "AudioClassification": PT_SPEECH_SEQ_CLASS_SAMPLE,
     "AudioFrameClassification": PT_SPEECH_FRAME_CLASS_SAMPLE,
     "AudioXVector": PT_SPEECH_XVECTOR_SAMPLE,
+    "VisionBaseModel": PT_VISION_BASE_MODEL_SAMPLE,
+    "ImageClassification": PT_VISION_SEQ_CLASS_SAMPLE,
 }
 
 
@@ -1639,8 +1695,12 @@ def add_code_sample_docstrings(
             code_sample = sample_docstrings["AudioXVector"]
         elif "Model" in model_class and modality == "audio":
             code_sample = sample_docstrings["SpeechBaseModel"]
+        elif "Model" in model_class and modality == "vision":
+            code_sample = sample_docstrings["VisionBaseModel"]
         elif "Model" in model_class or "Encoder" in model_class:
             code_sample = sample_docstrings["BaseModel"]
+        elif "ImageClassification" in model_class:
+            code_sample = sample_docstrings["ImageClassification"]
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")
 
@@ -2242,16 +2302,14 @@ def get_file_from_repo(
             use_auth_token=use_auth_token,
         )
 
-    except RepositoryNotFoundError as err:
-        logger.error(err)
+    except RepositoryNotFoundError:
         raise EnvironmentError(
             f"{path_or_repo} is not a local folder and is not a valid model identifier "
             "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
             "pass a token having permission to this repo with `use_auth_token` or log in with "
             "`huggingface-cli login` and pass `use_auth_token=True`."
         )
-    except RevisionNotFoundError as err:
-        logger.error(err)
+    except RevisionNotFoundError:
         raise EnvironmentError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
             "for this model name. Check the model page at "

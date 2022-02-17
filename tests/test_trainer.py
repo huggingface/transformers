@@ -21,6 +21,7 @@ import random
 import re
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -60,6 +61,7 @@ from transformers.testing_utils import (
     require_torch_non_multi_gpu,
     require_torch_tf32,
     require_torch_up_to_2_gpus,
+    require_wandb,
     slow,
 )
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
@@ -288,6 +290,7 @@ if is_torch_available():
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
         output_dir = kwargs.pop("output_dir", "./regression")
+        preprocess_logits_for_metrics = kwargs.pop("preprocess_logits_for_metrics", None)
 
         args = RegressionTrainingArguments(output_dir, a=a, b=b, **kwargs)
         return Trainer(
@@ -299,6 +302,7 @@ if is_torch_available():
             compute_metrics=compute_metrics,
             optimizers=optimizers,
             model_init=model_init,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         )
 
 
@@ -681,6 +685,22 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         expected_loss = ((pred - y) ** 2).mean()
         self.assertAlmostEqual(results["eval_loss"], expected_loss)
         expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+        # With logits preprocess
+        trainer = get_regression_trainer(
+            a=1.5,
+            b=2.5,
+            compute_metrics=AlmostAccuracy(),
+            preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
+        )
+        results = trainer.evaluate()
+
+        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
         self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
     def test_predict(self):
@@ -1525,12 +1545,17 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             )
             trainer.train()
 
+            # Wait for the async pushes to be finished
+            while trainer.push_in_progress is not None and not trainer.push_in_progress.is_done:
+                time.sleep(0.5)
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-epoch", use_auth_token=self._token)
             commits = self.get_commit_history(tmp_dir)
-            expected_commits = [f"Training in progress, epoch {i}" for i in range(3, 0, -1)]
-            expected_commits.append("initial commit")
-            self.assertListEqual(commits, expected_commits)
+            self.assertIn("initial commit", commits)
+            # We can't test that epoch 2 and 3 are in the commits without being flaky as those might be skipped if
+            # the push for epoch 1 wasn't finished at the time.
+            self.assertIn("Training in progress, epoch 1", commits)
 
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, get_gpu_count())
@@ -1547,13 +1572,17 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             )
             trainer.train()
 
+            # Wait for the async pushes to be finished
+            while trainer.push_in_progress is not None and not trainer.push_in_progress.is_done:
+                time.sleep(0.5)
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-step", use_auth_token=self._token)
             commits = self.get_commit_history(tmp_dir)
-            total_steps = 20 // num_gpus
-            expected_commits = [f"Training in progress, step {i}" for i in range(total_steps, 0, -5)]
-            expected_commits.append("initial commit")
-            self.assertListEqual(commits, expected_commits)
+            self.assertIn("initial commit", commits)
+            # We can't test that epoch 2 and 3 are in the commits without being flaky as those might be skipped if
+            # the push for epoch 1 wasn't finished at the time.
+            self.assertIn("Training in progress, step 5", commits)
 
 
 @require_torch
@@ -1810,3 +1839,59 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         with patch.dict("sys.modules", {"apex.optimizers": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
+
+
+@require_torch
+@require_wandb
+class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        args = TrainingArguments(".")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
+
+    def test_hyperparameter_search(self):
+        class MyTrialShortNamer(TrialShortNamer):
+            DEFAULTS = {"a": 0, "b": 0}
+
+        def hp_space(trial):
+
+            return {
+                "method": "random",
+                "metric": {},
+                "parameters": {
+                    "a": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
+                    "b": {"distribution": "int_uniform", "min": 1, "max": 6},
+                },
+            }
+
+        def model_init(config):
+            if config is None:
+                a = 0
+                b = 0
+            else:
+                a = config["a"]
+                b = config["b"]
+            model_config = RegressionModelConfig(a=a, b=b, double_output=False)
+
+            return RegressionPreTrainedModel(model_config)
+
+        def hp_name(params):
+            return MyTrialShortNamer.shortname(params)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                learning_rate=0.1,
+                logging_steps=1,
+                evaluation_strategy=IntervalStrategy.EPOCH,
+                save_strategy=IntervalStrategy.EPOCH,
+                num_train_epochs=4,
+                disable_tqdm=True,
+                load_best_model_at_end=True,
+                logging_dir="runs",
+                run_name="test",
+                model_init=model_init,
+            )
+            trainer.hyperparameter_search(
+                direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="wandb", n_trials=4, anonymous="must"
+            )

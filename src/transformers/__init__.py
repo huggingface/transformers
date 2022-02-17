@@ -95,7 +95,7 @@ _import_structure = {
     "dependency_versions_table": [],
     "dynamic_module_utils": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
-    "feature_extraction_utils": ["BatchFeature"],
+    "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
@@ -201,6 +201,7 @@ _import_structure = {
         "CLIPVisionConfig",
     ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
+    "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
@@ -365,6 +366,7 @@ _import_structure = {
         "ZeroShotClassificationPipeline",
         "pipeline",
     ],
+    "processing_utils": ["ProcessorMixin"],
     "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
@@ -515,6 +517,7 @@ if is_vision_available():
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.clip"].append("CLIPProcessor")
+    _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
@@ -611,7 +614,12 @@ if is_torch_available():
         "TextDatasetForNextSentencePrediction",
     ]
     _import_structure["deepspeed"] = []
-    _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer"]
+    _import_structure["generation_beam_constraints"] = [
+        "Constraint",
+        "ConstraintListState",
+        "PhrasalConstraint",
+    ]
+    _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]
     _import_structure["generation_logits_process"] = [
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
@@ -690,6 +698,7 @@ if is_torch_available():
             "AutoModelForObjectDetection",
             "AutoModelForPreTraining",
             "AutoModelForQuestionAnswering",
+            "AutoModelForSemanticSegmentation",
             "AutoModelForSeq2SeqLM",
             "AutoModelForSequenceClassification",
             "AutoModelForSpeechSeq2Seq",
@@ -837,6 +846,14 @@ if is_torch_available():
             "ConvBertModel",
             "ConvBertPreTrainedModel",
             "load_tf_weights_in_convbert",
+        ]
+    )
+    _import_structure["models.convnext"].extend(
+        [
+            "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConvNextForImageClassification",
+            "ConvNextModel",
+            "ConvNextPreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -1572,6 +1589,7 @@ if is_torch_available():
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
     ]
+    _import_structure["pytorch_utils"] = []
     _import_structure["sagemaker"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
@@ -1586,6 +1604,14 @@ if is_tf_available():
     _import_structure["activations_tf"] = []
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
+    _import_structure["generation_tf_logits_process"] = [
+        "TFLogitsProcessor",
+        "TFLogitsProcessorList",
+        "TFMinLengthLogitsProcessor",
+        "TFNoBadWordsLogitsProcessor",
+        "TFNoRepeatNGramLogitsProcessor",
+        "TFRepetitionPenaltyLogitsProcessor",
+    ]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
     _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
     _import_structure["modeling_tf_outputs"] = []
@@ -1621,6 +1647,7 @@ if is_tf_available():
             "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+            "TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
             "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "TF_MODEL_FOR_VISION_2_SEQ_MAPPING",
@@ -1635,6 +1662,7 @@ if is_tf_available():
             "TFAutoModelForQuestionAnswering",
             "TFAutoModelForSeq2SeqLM",
             "TFAutoModelForSequenceClassification",
+            "TFAutoModelForSpeechSeq2Seq",
             "TFAutoModelForTableQuestionAnswering",
             "TFAutoModelForTokenClassification",
             "TFAutoModelForVision2Seq",
@@ -1946,6 +1974,14 @@ if is_tf_available():
             "TFRoFormerPreTrainedModel",
         ]
     )
+    _import_structure["models.speech_to_text"].extend(
+        [
+            "TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSpeech2TextForConditionalGeneration",
+            "TFSpeech2TextModel",
+            "TFSpeech2TextPreTrainedModel",
+        ]
+    )
     _import_structure["models.t5"].extend(
         [
             "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2030,6 +2066,7 @@ if is_tf_available():
         ]
     )
     _import_structure["optimization_tf"] = ["AdamWeightDecay", "GradientAccumulator", "WarmUp", "create_optimizer"]
+    _import_structure["tf_utils"] = []
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
 else:
@@ -2297,7 +2334,7 @@ if TYPE_CHECKING:
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
     # Feature Extractor
-    from .feature_extraction_utils import BatchFeature
+    from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Files and general utilities
     from .file_utils import (
@@ -2403,6 +2440,7 @@ if TYPE_CHECKING:
         CLIPVisionConfig,
     )
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
+    from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
@@ -2545,6 +2583,7 @@ if TYPE_CHECKING:
         ZeroShotClassificationPipeline,
         pipeline,
     )
+    from .processing_utils import ProcessorMixin
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer
@@ -2668,6 +2707,7 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
+        from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.imagegpt import ImageGPTFeatureExtractor
@@ -2738,7 +2778,8 @@ if TYPE_CHECKING:
             TextDataset,
             TextDatasetForNextSentencePrediction,
         )
-        from .generation_beam_search import BeamScorer, BeamSearchScorer
+        from .generation_beam_constraints import Constraint, ConstraintListState, PhrasalConstraint
+        from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .generation_logits_process import (
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
@@ -2811,6 +2852,7 @@ if TYPE_CHECKING:
             AutoModelForObjectDetection,
             AutoModelForPreTraining,
             AutoModelForQuestionAnswering,
+            AutoModelForSemanticSegmentation,
             AutoModelForSeq2SeqLM,
             AutoModelForSequenceClassification,
             AutoModelForSpeechSeq2Seq,
@@ -2934,6 +2976,12 @@ if TYPE_CHECKING:
             ConvBertModel,
             ConvBertPreTrainedModel,
             load_tf_weights_in_convbert,
+        )
+        from .models.convnext import (
+            CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvNextForImageClassification,
+            ConvNextModel,
+            ConvNextPreTrainedModel,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3555,6 +3603,14 @@ if TYPE_CHECKING:
 
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
+        from .generation_tf_logits_process import (
+            TFLogitsProcessor,
+            TFLogitsProcessorList,
+            TFMinLengthLogitsProcessor,
+            TFNoBadWordsLogitsProcessor,
+            TFNoRepeatNGramLogitsProcessor,
+            TFRepetitionPenaltyLogitsProcessor,
+        )
         from .generation_tf_utils import tf_top_k_top_p_filtering
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
         from .modeling_tf_layoutlm import (
@@ -3589,6 +3645,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
@@ -3603,6 +3660,7 @@ if TYPE_CHECKING:
             TFAutoModelForQuestionAnswering,
             TFAutoModelForSeq2SeqLM,
             TFAutoModelForSequenceClassification,
+            TFAutoModelForSpeechSeq2Seq,
             TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
             TFAutoModelForVision2Seq,
@@ -3850,6 +3908,12 @@ if TYPE_CHECKING:
             TFRoFormerLayer,
             TFRoFormerModel,
             TFRoFormerPreTrainedModel,
+        )
+        from .models.speech_to_text import (
+            TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSpeech2TextForConditionalGeneration,
+            TFSpeech2TextModel,
+            TFSpeech2TextPreTrainedModel,
         )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -38,8 +38,8 @@ from ...modeling_tf_utils import (
     get_initializer,
     input_processing,
     keras_serializable,
-    shape_list,
 )
+from ...tf_utils import shape_list
 from ...utils import logging
 from .configuration_longformer import LongformerConfig
 
@@ -405,13 +405,10 @@ def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_se
     else:
         # last token is separation token and should not be counted and in the middle are two separation tokens
         question_end_index = tf.tile(question_end_index + 1, (1, input_ids_shape[1]))
-        attention_mask = (
-            tf.cast(
-                attention_mask > question_end_index,
-                dtype=question_end_index.dtype,
-            )
-            * tf.cast(attention_mask < input_ids_shape[-1], dtype=question_end_index.dtype)
-        )
+        attention_mask = tf.cast(
+            attention_mask > question_end_index,
+            dtype=question_end_index.dtype,
+        ) * tf.cast(attention_mask < input_ids_shape[-1], dtype=question_end_index.dtype)
 
     return attention_mask
 

@@ -16,7 +16,6 @@
 The Trainer class, to easily train a 🤗 Transformers from scratch or finetune it on a new task.
 """
 
-import collections
 import contextlib
 import inspect
 import math
@@ -43,16 +42,18 @@ from .integrations import (  # isort: split
     is_optuna_available,
     is_ray_tune_available,
     is_sigopt_available,
+    is_wandb_available,
     run_hp_search_optuna,
     run_hp_search_ray,
     run_hp_search_sigopt,
+    run_hp_search_wandb,
 )
 
 import numpy as np
 import torch
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
+from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from huggingface_hub import Repository
@@ -124,6 +125,7 @@ from .trainer_utils import (
     default_hp_space,
     denumpify_detensorize,
     get_last_checkpoint,
+    has_length,
     number_of_arguments,
     set_seed,
     speed_metrics,
@@ -251,6 +253,12 @@ class Trainer:
         optimizers (`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, *optional*): A tuple
             containing the optimizer and the scheduler to use. Will default to an instance of [`AdamW`] on your model
             and a scheduler given by [`get_linear_schedule_with_warmup`] controlled by `args`.
+        preprocess_logits_for_metrics (`Callable[[torch.Tensor, torch.Tensor], torch.Tensor]`, *optional*):
+            A function that preprocess the logits right before caching them at each evaluation step. Must take two
+            tensors, the logits and the labels, and return the logits once processed as desired. The modifications made
+            by this function will be reflected in the predictions received by `compute_metrics`.
+
+            Note that the labels (second parameter) will be `None` if the dataset does not have them.
 
     Important attributes:
 
@@ -284,6 +292,7 @@ class Trainer:
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        preprocess_logits_for_metrics: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None,
     ):
         if args is None:
             output_dir = "tmp_trainer"
@@ -385,6 +394,7 @@ class Trainer:
         self.model = model
 
         self.compute_metrics = compute_metrics
+        self.preprocess_logits_for_metrics = preprocess_logits_for_metrics
         self.optimizer, self.lr_scheduler = optimizers
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
@@ -419,7 +429,7 @@ class Trainer:
         if args.max_steps > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
 
-        if train_dataset is not None and not isinstance(train_dataset, collections.abc.Sized) and args.max_steps <= 0:
+        if train_dataset is not None and not has_length(train_dataset) and args.max_steps <= 0:
             raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
 
         if (
@@ -575,7 +585,7 @@ class Trainer:
             return dataset.remove_columns(ignored_columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
-        if not isinstance(self.train_dataset, collections.abc.Sized):
+        if not has_length(self.train_dataset):
             return None
 
         generator = None
@@ -937,10 +947,12 @@ class Trainer:
             params.pop("wandb", None)
         elif self.hp_search_backend == HPSearchBackend.SIGOPT:
             params = {k: int(v) if isinstance(v, str) else v for k, v in trial.assignments.items()}
+        elif self.hp_search_backend == HPSearchBackend.WANDB:
+            params = trial
 
         for key, value in params.items():
             if not hasattr(self.args, key):
-                logger.warn(
+                logger.warning(
                     f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
                 )
                 continue
@@ -953,6 +965,8 @@ class Trainer:
             logger.info("Trial:", trial.params)
         if self.hp_search_backend == HPSearchBackend.SIGOPT:
             logger.info(f"SigOpt Assignments: {trial.assignments}")
+        if self.hp_search_backend == HPSearchBackend.WANDB:
+            logger.info(f"W&B Sweep parameters: {trial}")
         if self.args.deepspeed:
             # Rebuild the deepspeed config to reflect the updated training parameters
             from transformers.deepspeed import HfDeepSpeedConfig
@@ -1151,7 +1165,7 @@ class Trainer:
                 config = PretrainedConfig.from_json_file(os.path.join(resume_from_checkpoint, CONFIG_NAME))
                 checkpoint_version = config.transformers_version
                 if checkpoint_version is not None and checkpoint_version != __version__:
-                    logger.warn(
+                    logger.warning(
                         f"You are resuming training from a checkpoint trained with {checkpoint_version} of "
                         f"Transformers but your current version is {__version__}. This is not recommended and could "
                         "yield to errors or unwanted behaviors."
@@ -1176,7 +1190,7 @@ class Trainer:
             self.model_wrapped = self.model
 
         # Keeping track whether we can can len() on the dataset or not
-        train_dataset_is_sized = isinstance(self.train_dataset, collections.abc.Sized)
+        train_dataset_is_sized = has_length(self.train_dataset)
 
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
@@ -1520,7 +1534,7 @@ class Trainer:
                     # If the model is on the GPU, it still works!
                     self._load_state_dict_in_model(state_dict)
             else:
-                logger.warn(
+                logger.warning(
                     f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
                     "on multiple nodes, you should activate `--save_on_each_node`."
                 )
@@ -1553,9 +1567,11 @@ class Trainer:
             ):
                 self.model.tie_weights()
             else:
-                logger.warn(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
+                logger.warning(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
         if len(load_result.unexpected_keys) != 0:
-            logger.warn(f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}.")
+            logger.warning(
+                f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}."
+            )
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, ignore_keys_for_eval):
         if self.control.should_log:
@@ -1622,7 +1638,7 @@ class Trainer:
                 try:
                     torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
                 except Exception as e:
-                    logger.infor(
+                    logger.info(
                         f"Didn't manage to set back the RNG states of the GPU because of the following error:\n {e}"
                         "\nThis won't yield the same results as if the training had not been interrupted."
                     )
@@ -1646,6 +1662,10 @@ class Trainer:
                 run_id = tune.get_trial_id()
             elif self.hp_search_backend == HPSearchBackend.SIGOPT:
                 run_id = trial.id
+            elif self.hp_search_backend == HPSearchBackend.WANDB:
+                import wandb
+
+                run_id = wandb.run.id
             run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
             run_dir = os.path.join(self.args.output_dir, run_name)
         else:
@@ -1848,6 +1868,8 @@ class Trainer:
             )
         if backend == HPSearchBackend.SIGOPT and not is_sigopt_available():
             raise RuntimeError("You picked the sigopt backend, but it is not installed. Use `pip install sigopt`.")
+        if backend == HPSearchBackend.WANDB and not is_wandb_available():
+            raise RuntimeError("You picked the wandb backend, but it is not installed. Use `pip install wandb`.")
         self.hp_search_backend = backend
         if self.model_init is None:
             raise RuntimeError(
@@ -1862,6 +1884,7 @@ class Trainer:
             HPSearchBackend.OPTUNA: run_hp_search_optuna,
             HPSearchBackend.RAY: run_hp_search_ray,
             HPSearchBackend.SIGOPT: run_hp_search_sigopt,
+            HPSearchBackend.WANDB: run_hp_search_wandb,
         }
         best_run = backend_dict[backend](self, n_trials, direction, **kwargs)
 
@@ -2362,7 +2385,7 @@ class Trainer:
         batch_size = dataloader.batch_size
 
         logger.info(f"***** Running {description} *****")
-        if isinstance(dataloader.dataset, collections.abc.Sized):
+        if has_length(dataloader.dataset):
             logger.info(f"  Num examples = {self.num_examples(dataloader)}")
         else:
             logger.info("  Num examples: Unknown")
@@ -2412,14 +2435,16 @@ class Trainer:
             if loss is not None:
                 losses = self._nested_gather(loss.repeat(batch_size))
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
-            if logits is not None:
-                logits = self._pad_across_processes(logits)
-                logits = self._nested_gather(logits)
-                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
             if labels is not None:
                 labels = self._pad_across_processes(labels)
                 labels = self._nested_gather(labels)
                 labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
+            if logits is not None:
+                logits = self._pad_across_processes(logits)
+                logits = self._nested_gather(logits)
+                if self.preprocess_logits_for_metrics is not None:
+                    logits = self.preprocess_logits_for_metrics(logits, labels)
+                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
@@ -2455,7 +2480,7 @@ class Trainer:
             all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
 
         # Number of samples
-        if not isinstance(eval_dataset, IterableDataset):
+        if has_length(eval_dataset):
             num_samples = len(eval_dataset)
         # The instance check is weird and does not actually check for the type, but whether the dataset has the right
         # methods. Therefore we need to make sure it also has the attribute.
@@ -2849,7 +2874,7 @@ class Trainer:
         """
         args = self.args
 
-        if not isinstance(dataloader.dataset, collections.abc.Sized):
+        if not has_length(dataloader.dataset):
             raise ValueError("dataset must implement __len__")
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 

@@ -59,7 +59,7 @@ from .file_utils import (
     is_torchaudio_available,
     is_vision_available,
 )
-from .integrations import is_optuna_available, is_ray_available, is_sigopt_available
+from .integrations import is_optuna_available, is_ray_available, is_sigopt_available, is_wandb_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
@@ -586,6 +586,19 @@ def require_sigopt(test_case):
     """
     if not is_sigopt_available():
         return unittest.skip("test requires SigOpt")(test_case)
+    else:
+        return test_case
+
+
+def require_wandb(test_case):
+    """
+    Decorator marking a test that requires wandb.
+
+    These tests are skipped when wandb isn't installed.
+
+    """
+    if not is_wandb_available():
+        return unittest.skip("test requires wandb")(test_case)
     else:
         return test_case
 

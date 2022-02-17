@@ -37,6 +37,7 @@ from . import (
     canine,
     clip,
     convbert,
+    convnext,
     cpm,
     ctrl,
     deberta,

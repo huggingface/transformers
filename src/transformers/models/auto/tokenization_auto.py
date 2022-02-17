@@ -470,7 +470,13 @@ class AutoTokenizer:
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         config_tokenizer_class = tokenizer_config.get("tokenizer_class")
-        tokenizer_auto_map = tokenizer_config.get("auto_map")
+        tokenizer_auto_map = None
+        if "auto_map" in tokenizer_config:
+            if isinstance(tokenizer_config["auto_map"], (tuple, list)):
+                # Legacy format for dynamic tokenizers
+                tokenizer_auto_map = tokenizer_config["auto_map"]
+            else:
+                tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
@@ -493,7 +499,7 @@ class AutoTokenizer:
                         "the option `trust_remote_code=True` to remove this error."
                     )
                 if kwargs.get("revision", None) is None:
-                    logger.warn(
+                    logger.warning(
                         "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
                         "no malicious code has been contributed in a newer revision."
                     )

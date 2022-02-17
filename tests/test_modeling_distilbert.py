@@ -209,8 +209,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else None
     )
-    fx_ready_model_classes = all_model_classes
-    fx_dynamic_ready_model_classes = all_model_classes
+    fx_compatible = True
     test_pruning = True
     test_torchscript = True
     test_resize_embeddings = True

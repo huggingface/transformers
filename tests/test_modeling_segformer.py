@@ -133,11 +133,11 @@ class SegformerModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 4, self.image_size // 4)
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size, self.image_size)
         )
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 4, self.image_size // 4)
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size, self.image_size)
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -245,6 +245,7 @@ class SegformerModelTest(ModelTesterMixin, unittest.TestCase):
                 list(attentions[-1].shape[-3:]),
                 [self.model_tester.num_attention_heads[-1], expected_seq_len, expected_reduced_seq_len],
             )
+            out_len = len(outputs)
 
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
@@ -255,7 +256,7 @@ class SegformerModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            self.assertEqual(3, len(outputs))
+            self.assertEqual(out_len + 1, len(outputs))
 
             self_attentions = outputs.attentions
 
@@ -357,16 +358,17 @@ class SegformerModelIntegrationTest(unittest.TestCase):
         encoded_inputs = feature_extractor(images=image, return_tensors="pt")
         pixel_values = encoded_inputs.pixel_values.to(torch_device)
 
-        outputs = model(pixel_values)
+        with torch.no_grad():
+            outputs = model(pixel_values)
 
-        expected_shape = torch.Size((1, model.config.num_labels, 128, 128))
+        expected_shape = torch.Size((1, model.config.num_labels, 512, 512))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [
-                [[-4.6310, -5.5232, -6.2356], [-5.1921, -6.1444, -6.5996], [-5.4424, -6.2790, -6.7574]],
-                [[-12.1391, -13.3122, -13.9554], [-12.8732, -13.9352, -14.3563], [-12.9438, -13.8226, -14.2513]],
-                [[-12.5134, -13.4686, -14.4915], [-12.8669, -14.4343, -14.7758], [-13.2523, -14.5819, -15.0694]],
+                [[-4.6309, -4.6309, -4.7425], [-4.6309, -4.6309, -4.7425], [-4.7011, -4.7011, -4.8136]],
+                [[-12.1391, -12.1391, -12.2858], [-12.1391, -12.1391, -12.2858], [-12.2309, -12.2309, -12.3758]],
+                [[-12.5134, -12.5134, -12.6328], [-12.5134, -12.5134, -12.6328], [-12.5576, -12.5576, -12.6865]],
             ]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-4))
@@ -385,16 +387,17 @@ class SegformerModelIntegrationTest(unittest.TestCase):
         encoded_inputs = feature_extractor(images=image, return_tensors="pt")
         pixel_values = encoded_inputs.pixel_values.to(torch_device)
 
-        outputs = model(pixel_values)
+        with torch.no_grad():
+            outputs = model(pixel_values)
 
-        expected_shape = torch.Size((1, model.config.num_labels, 128, 128))
+        expected_shape = torch.Size((1, model.config.num_labels, 512, 512))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [
-                [[-13.5748, -13.9111, -12.6500], [-14.3500, -15.3683, -14.2328], [-14.7532, -16.0424, -15.6087]],
-                [[-17.1651, -15.8725, -12.9653], [-17.2580, -17.3718, -14.8223], [-16.6058, -16.8783, -16.7452]],
-                [[-3.6456, -3.0209, -1.4203], [-3.0797, -3.1959, -2.0000], [-1.8757, -1.9217, -1.6997]],
+                [[-13.5729, -13.5729, -13.6149], [-13.5729, -13.5729, -13.6149], [-13.6697, -13.6697, -13.7224]],
+                [[-17.1638, -17.1638, -17.0022], [-17.1638, -17.1638, -17.0022], [-17.1754, -17.1754, -17.0358]],
+                [[-3.6452, -3.6452, -3.5670], [-3.6452, -3.6452, -3.5670], [-3.5744, -3.5744, -3.5079]],
             ]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-1))
