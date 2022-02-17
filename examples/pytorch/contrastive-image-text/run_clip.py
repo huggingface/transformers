@@ -107,7 +107,12 @@ class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
-
+    dataset_name: Optional[str] = field(
+        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+    )
+    dataset_config_name: Optional[str] = field(
+        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    )
     data_dir: Optional[str] = field(default=None, metadata={"help": "The data directory containing input files."})
     train_file: Optional[str] = field(
         default=None, metadata={"help": "The input training data file (a jsonlines file)."}
@@ -362,9 +367,9 @@ def main():
         {
             "pixel_values": datasets.Array3D(
                 shape=(
-                    getattr(model.config.encoder, "num_channels", 3),
-                    model.config.encoder.image_size,
-                    model.config.encoder.image_size,
+                    getattr(model.config.vision_config, "num_channels", 3),
+                    model.config.vision_config.image_size,
+                    model.config.vision_config.image_size,
                 ),
                 dtype="float32",
             ),
