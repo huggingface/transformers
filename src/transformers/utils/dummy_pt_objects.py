@@ -2779,7 +2779,24 @@ class PLBartForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class PoolFormerForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class PLBartForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PoolFormerModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -2801,6 +2818,13 @@ class PLBartModel(metaclass=DummyObject):
 
 
 class PLBartPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PoolFormerPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

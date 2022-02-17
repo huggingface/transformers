@@ -84,6 +84,7 @@ from . import (
     perceiver,
     phobert,
     plbart,
+    poolformer,
     prophetnet,
     qdqbert,
     rag,
