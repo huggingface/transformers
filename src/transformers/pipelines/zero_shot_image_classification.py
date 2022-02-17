@@ -70,7 +70,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
             following keys:
 
             - **label** (`str`) -- The label identified by the model. It is one of the suggested `candidate_label`.
-            - **score** (`int`) -- The score attributed by the model for that label (between 0 and 1).
+            - **score** (`float`) -- The score attributed by the model for that label (between 0 and 1).
         """
         return super().__call__(images, **kwargs)
 
