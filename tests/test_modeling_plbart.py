@@ -33,7 +33,6 @@ if is_torch_available():
 
     from transformers import (
         AutoTokenizer,
-        BatchEncoding,
         PLBartForCausalLM,
         PLBartForConditionalGeneration,
         PLBartForSequenceClassification,

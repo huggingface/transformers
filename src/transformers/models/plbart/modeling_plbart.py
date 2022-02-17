@@ -154,7 +154,7 @@ class PLBartAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -306,8 +306,8 @@ class PLBartEncoderLayer(nn.Module):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`):
-                mask for attention heads in a given layer of size `(encoder_attention_heads,)`.
+            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
+                `(encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -675,7 +675,10 @@ class PLBartEncoder(PLBartPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
-        self.embed_positions = PLBartLearnedPositionalEmbedding(config.max_position_embeddings, embed_dim)
+        self.embed_positions = PLBartLearnedPositionalEmbedding(
+            config.max_position_embeddings,
+            embed_dim,
+        )
         self.layers = nn.ModuleList([PLBartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
@@ -844,7 +847,10 @@ class PLBartDecoder(PLBartPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
-        self.embed_positions = PLBartLearnedPositionalEmbedding(config.max_position_embeddings, config.d_model)
+        self.embed_positions = PLBartLearnedPositionalEmbedding(
+            config.max_position_embeddings,
+            config.d_model,
+        )
         self.layers = nn.ModuleList([PLBartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 

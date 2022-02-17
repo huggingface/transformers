@@ -90,7 +90,6 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [
                 value + tokenizer.fairseq_offset
                 for value in [8, 21, 84, 55, 24, 19, 7, 2, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 2, 4]
-                #                                       ^ unk: 2 + 1 = 3                  unk: 2 + 1 = 3 ^
             ],
         )
 
@@ -171,7 +170,6 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [
                 value + tokenizer.fairseq_offset
                 for value in [8, 21, 84, 55, 24, 19, 7, 2, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 2, 4]
-                #                                       ^ unk: 2 + 1 = 3                  unk: 2 + 1 = 3 ^
             ],
         )
 
