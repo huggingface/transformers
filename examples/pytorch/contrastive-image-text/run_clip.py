@@ -200,10 +200,10 @@ class Transform(torch.nn.Module):
 
 
 def collate_fn(examples):
-    pixel_values = torch.stack([example["pixel_values"] for example in examples])
-    labels = torch.tensor([example["labels"] for example in examples], dtype=torch.long)
+    pixel_values = torch.stack([torch.tensor(example["pixel_values"]) for example in examples])
+    input_ids = torch.tensor([example["input_ids"] for example in examples], dtype=torch.long)
     attention_mask = torch.tensor([example["attention_mask"] for example in examples], dtype=torch.long)
-    return {"pixel_values": pixel_values, "labels": labels, "attention_mask": attention_mask, "return_loss": True}
+    return {"pixel_values": pixel_values, "input_ids": input_ids, "attention_mask": attention_mask, "return_loss": True}
 
 
 def main():
@@ -363,7 +363,7 @@ def main():
         text_inputs = tokenizer(
             captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True
         )
-        examples["labels"] = text_inputs.input_ids
+        examples["input_ids"] = text_inputs.input_ids
         examples["attention_mask"] = text_inputs.attention_mask
 
         # encode images
@@ -386,7 +386,8 @@ def main():
                 ),
                 dtype="float32",
             ),
-            "labels": datasets.Sequence(feature=datasets.Value(dtype="int32", id=None), length=-1, id=None),
+            "input_ids": datasets.Sequence(feature=datasets.Value(dtype="int32", id=None), length=-1, id=None),
+            "attention_mask": datasets.Sequence(feature=datasets.Value(dtype="int32", id=None), length=-1, id=None),
         }
     )
 
