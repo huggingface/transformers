@@ -95,7 +95,8 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
     """
 
     text: Union[List[str], str]
-    time_stamps: List[Dict[str, Union[float, str]]] = None
+    token_time_stamps: List[Dict[str, Union[float, str]]] = None
+    word_time_stamps: List[Dict[str, Union[float, str]]] = None
 
 
 class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
@@ -230,7 +231,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         output_time_stamps: bool = False,
         stride: Optional[int] = None,
         sampling_rate: Optional[float] = None,
-    ) -> str:
+    ) -> Dict[str, Union[str, float]]:
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
         """
@@ -246,6 +247,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         # replace delimiter token
         processed_tokens = [" " if token == self.word_delimiter_token else token for token in filtered_tokens]
 
+        time_stamps = word_time_stamps = None
         if output_time_stamps:
             if stride is None:
                 raise ValueError(
@@ -286,8 +288,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             # set tokens to correct
             for i, token in enumerate(processed_tokens):
                 time_stamps[i]["token"] = token
-        else:
-            time_stamps = None
+
+            # retrieve word time stamps from time stamps
+            word_time_stamps = self._get_word_time_stamps(time_stamps)
 
         # join to string
         join_char = " " if spaces_between_special_tokens else ""
@@ -298,8 +301,33 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         return {
             "text": string,
-            "time_stamps": time_stamps,
+            "token_time_stamps": time_stamps,
+            "word_time_stamps": word_time_stamps,
         }
+
+    @staticmethod
+    def _get_word_time_stamps(time_stamps: Dict[str, Union[str, float]]) -> Dict[str, Union[str, float]]:
+        word_time_stamps = []
+        word_begin = time_stamps[0]["token"] != " "
+
+        for i, time_stamp in enumerate(time_stamps):
+            token = time_stamp["token"]
+            word_end = token == " " and i > 0
+            if word_begin:
+                word_time_stamp = {
+                    "word": "",
+                    "start_time": time_stamp["start_time"],
+                }
+
+            if word_end:
+                word_time_stamp["end_time"] = time_stamp["start_time"]
+                word_time_stamps.append(word_time_stamp)
+
+            if not word_end:
+                word_time_stamp["word"] += time_stamp["token"]
+
+            word_begin = word_end
+        return word_time_stamps
 
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         if is_split_into_words:
@@ -345,7 +373,11 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             text = self.clean_up_tokenization(text)
 
         if output_time_stamps:
-            return Wav2Vec2CTCTokenizerOutput(text=text, time_stamps=string_output["time_stamps"])
+            return Wav2Vec2CTCTokenizerOutput(
+                text=text,
+                token_time_stamps=string_output["token_time_stamps"],
+                word_time_stamps=string_output["word_time_stamps"],
+            )
         else:
             return text
 
