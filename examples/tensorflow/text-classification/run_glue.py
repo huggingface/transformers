@@ -107,7 +107,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
     )
     pad_to_max_length: bool = field(
-        default=True,
+        default=False,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
             "If False, will pad the samples dynamically when batching to the maximum length in the batch."
@@ -342,7 +342,6 @@ def main():
         data_collator = partial(default_data_collator, return_tensors="tf")
     else:
         data_collator = DataCollatorWithPadding(tokenizer, return_tensors="tf")
-
     # endregion
 
     # region Metric function
