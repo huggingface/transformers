@@ -1,6 +1,12 @@
 from typing import List, Union
 
-from ..file_utils import add_end_docstrings, is_torch_available, is_vision_available, requires_backends
+from ..file_utils import (
+    add_end_docstrings,
+    is_tf_available,
+    is_torch_available,
+    is_vision_available,
+    requires_backends,
+)
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, ChunkPipeline
 
@@ -12,6 +18,9 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
+
+if is_tf_available():
+    import tensorflow as tf
 
 logger = logging.get_logger(__name__)
 
@@ -31,9 +40,6 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-        if self.framework != "pt":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
         requires_backends(self, "vision")
         # No specific FOR_XXX available yet
@@ -81,9 +87,9 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
         n = len(candidate_labels)
         for i, candidate_label in enumerate(candidate_labels):
             image = load_image(image)
-            images = self.feature_extractor(images=[image], return_tensors="pt")
+            images = self.feature_extractor(images=[image], return_tensors=self.framework)
             sequence = hypothesis_template.format(candidate_label)
-            inputs = self.tokenizer(sequence, return_tensors="pt")
+            inputs = self.tokenizer(sequence, return_tensors=self.framework)
             inputs["pixel_values"] = images.pixel_values
             yield {"is_last": i == n - 1, "candidate_label": candidate_label, **inputs}
 
@@ -95,7 +101,8 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
         # Clip does crossproduct scoring by default, so we're only
         # interested in the results where image and text and in the same
         # batch position.
-        logits_per_image = torch.diagonal(outputs.logits_per_image)
+        diag = torch.diagonal if self.framework == "pt" else tf.linalg.diag_part
+        logits_per_image = diag(outputs.logits_per_image)
 
         model_outputs = {
             "is_last": is_last,
@@ -104,12 +111,16 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
         }
         return model_outputs
 
-    def postprocess(self, model_outputs, multi_label=False):
+    def postprocess(self, model_outputs):
         candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
-        logits = torch.cat([output["logits_per_image"] for output in model_outputs])
-        print("Logits", logits)
-        probs = logits.softmax(dim=0)
-        scores = probs.tolist()
+        if self.framework == "pt":
+            logits = torch.cat([output["logits_per_image"] for output in model_outputs])
+            probs = logits.softmax(dim=0)
+            scores = probs.tolist()
+        else:
+            logits = tf.concat([output["logits_per_image"] for output in model_outputs], axis=0)
+            probs = tf.nn.softmax(logits, axis=0)
+            scores = probs.numpy().tolist()
 
         result = [
             {"score": score, "label": candidate_label}
