@@ -16,9 +16,8 @@
 from collections import OrderedDict
 from typing import Mapping
 
-from transformers.onnx import OnnxConfigWithPast
-
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
 
@@ -94,13 +93,14 @@ class PLBartConfig(PretrainedConfig):
     ```python
     >>> from transformers import PLBartModel, PLBartConfig
 
-    >>> # Initializing a PLBART uclanlp/plbart-base style configuration >>> configuration = PLBartConfig()
-
-    >>> # Initializing a model from the uclanlp/plbart-base style configuration >>> model =
-    PLBartModel(configuration)
-
-    >>> # Accessing the model configuration >>> configuration = model.config
+    >>> # Initializing a PLBART uclanlp/plbart-base style configuration
+    >>> configuration = PLBartConfig()
+    >>> # Initializing a model from the uclanlp/plbart-base style configuration
+    >>> model = PLBartModel(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
+
     model_type = "plbart"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}

@@ -114,9 +114,7 @@ class PLBartModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-            3,
-        )
+        input_ids = input_ids.clamp(3)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -167,9 +165,10 @@ class PLBartModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_with_past_key_values = model(
+            next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values
+        )
+        output_from_past = output_with_past_key_values["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -350,9 +349,10 @@ class PLBartJavaCsIntegrationTest(AbstractSeq2SeqIntegrationTest):
 
     @slow
     def test_java_cs_generate_one(self):
-        batch: BatchEncoding = self.tokenizer(
+        batch = self.tokenizer(
             ["public int maximum(int a, int b, int c){return Math.max(a, Math.max(b, c));}"], return_tensors="pt"
-        ).to(torch_device)
+        )
+        batch = batch.to(torch_device)
         translated_tokens = self.model.generate(**batch)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         self.assertEqual(self.tgt_text[0], decoded[0])
@@ -360,18 +360,15 @@ class PLBartJavaCsIntegrationTest(AbstractSeq2SeqIntegrationTest):
 
     @slow
     def test_java_cs_generate_batch(self):
-        batch: BatchEncoding = self.tokenizer(self.src_text, return_tensors="pt", padding=True, truncation=True).to(
-            torch_device
-        )
+        batch = self.tokenizer(self.src_text, return_tensors="pt", padding=True, truncation=True)
+        batch = batch.to(torch_device)
         translated_tokens = self.model.generate(**batch)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         assert self.tgt_text == decoded
 
     def test_plbart_java_cs_config(self):
         plbart_models = ["uclanlp/plbart-java-cs"]
-        expected = {
-            "scale_embedding": True
-        }  # TODO: Check if "output_past": True is needed. Currently throws an error.
+        expected = {"scale_embedding": True}
         for name in plbart_models:
             config = PLBartConfig.from_pretrained(name)
             for k, v in expected.items():
@@ -409,10 +406,7 @@ class PLBartJavaCsIntegrationTest(AbstractSeq2SeqIntegrationTest):
 @require_tokenizers
 class PLBartBaseIntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "uclanlp/plbart-base"
-    src_text = [
-        "Is 0 the first Fibonacci number ?",
-        "Find the sum of all prime numbers .",
-    ]
+    src_text = ["Is 0 the first Fibonacci number ?", "Find the sum of all prime numbers ."]
     tgt_text = ["0 the first Fibonacci number?", "the sum of all prime numbers.......... the the"]
 
     # @unittest.skip("This test is broken, still generates english")
@@ -520,12 +514,7 @@ class PLBartStandaloneDecoderModelTester:
             is_encoder_decoder=self.is_encoder_decoder,
         )
 
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        )
+        return (config, input_ids, attention_mask, lm_labels)
 
     def create_and_check_decoder_model_past(
         self,
@@ -561,7 +550,7 @@ class PLBartStandaloneDecoderModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        self.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_decoder_model_attention_mask_past(
         self,
@@ -612,17 +601,8 @@ class PLBartStandaloneDecoderModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        ) = config_and_inputs
-
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
+        (config, input_ids, attention_mask, lm_labels) = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
 
@@ -633,9 +613,7 @@ class PLBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, 
     test_pruning = False
     is_encoder_decoder = False
 
-    def setUp(
-        self,
-    ):
+    def setUp(self):
         self.model_tester = PLBartStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=PLBartConfig)
 

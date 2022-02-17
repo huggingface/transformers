@@ -68,15 +68,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 FAIRSEQ_LANGUAGE_CODES = {
     "base": ["java", "python", "en_XX"],
-    "multi": [
-        "java",
-        "python",
-        "en_XX",
-        "javascript",
-        "php",
-        "ruby",
-        "go",
-    ],
+    "multi": ["java", "python", "en_XX", "javascript", "php", "ruby", "go"],
 }
 
 
@@ -84,10 +76,10 @@ class PLBartTokenizer(PreTrainedTokenizer):
     """
     Construct an PLBART tokenizer.
 
-    Adapted from [*RobertaTokenizer*] and [*XLNetTokenizer*]. Based on
+    Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
     [SentencePiece](https://github.com/google/sentencepiece).
 
-    The tokenization method is *<tokens> <eos> <language code>* for source language documents, and ``<language code>
+    The tokenization method is `<tokens> <eos> <language code>` for source language documents, and ``<language code>
     <tokens> <eos>``` for target language documents.
 
     Args:
@@ -338,13 +330,15 @@ class PLBartTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Args:
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. PLBart does not
-        make use of token type ids, therefore a list of zeros is returned. TODO: Check if this is correct.
+        make use of token type ids, therefore a list of zeros is returned.
+
+        Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
             token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
+
         Returns:
             `List[int]`: List of zeros.
         """

@@ -67,7 +67,7 @@ inside the context manager [`~PLBartTokenizer.as_target_tokenizer`] to encode ta
 - Generation
 
   While generating the target text set the `decoder_start_token_id` to the target language id. The following
-  example shows how to translate Python to English using the *uclanlp/plbart-python-en_XX* model.
+  example shows how to translate Python to English using the `uclanlp/plbart-python-en_XX` model.
 
 ```python
 >>> from transformers import PLBartForConditionalGeneration, PLBartTokenizer
@@ -94,14 +94,17 @@ inside the context manager [`~PLBartTokenizer.as_target_tokenizer`] to encode ta
 ## PLBartModel
 
 [[autodoc]] PLBartModel
+    - forward
 
 ## PLBartForConditionalGeneration
 
 [[autodoc]] PLBartForConditionalGeneration
+    - forward
 
 ## PLBartForSequenceClassification
 
 [[autodoc]] PLBartForSequenceClassification
+    - forward
 
 ## PLBartForCausalLM
 

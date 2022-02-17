@@ -125,10 +125,7 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         end = tokenizer.vocab_size
         language_tokens = [tokenizer.convert_ids_to_tokens(x) for x in range(end - 4, end)]
 
-        self.assertListEqual(
-            language_tokens,
-            ["java", "python", "en_XX", "<mask>"],
-        )
+        self.assertListEqual(language_tokens, ["java", "python", "en_XX", "<mask>"])
 
     def test_full_multi_tokenizer(self):
         tokenizer = PLBartTokenizer(SAMPLE_VOCAB, language_codes="multi", keep_accents=True)
@@ -208,18 +205,7 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         end = tokenizer.vocab_size
         language_tokens = [tokenizer.convert_ids_to_tokens(x) for x in range(end - 7, end)]
 
-        self.assertListEqual(
-            language_tokens,
-            [
-                "java",
-                "python",
-                "en_XX",
-                "javascript",
-                "php",
-                "ruby",
-                "go",
-            ],
-        )
+        self.assertListEqual(language_tokens, ["java", "python", "en_XX", "javascript", "php", "ruby", "go"])
 
 
 @require_torch
@@ -291,7 +277,7 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
 
     def test_python_en_tokenizer_truncation(self):
         src_text = ["def sum(a,b,c):NEW_LINE_INDENTreturn sum([a,b,c])" * 20]
-        assert isinstance(src_text[0], str)
+        self.assertIsInstance(src_text[0], str)
         desired_max_length = 10
         ids = self.tokenizer(src_text, max_length=desired_max_length, truncation=True).input_ids[0]
         self.assertEqual(ids[-2], 2)
@@ -317,10 +303,10 @@ class PLBartPythonEnIntegrationTest(unittest.TestCase):
         batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id).tolist()
 
         # fairseq batch: https://gist.github.com/sshleifer/cba08bc2109361a74ac3760a7e30e4f4
-        assert batch.input_ids[1][-2:] == [2, PYTHON_CODE]
-        assert batch.decoder_input_ids[1][0] == EN_CODE
-        assert batch.decoder_input_ids[1][-1] == 2
-        assert labels[1][-2:].tolist() == [2, EN_CODE]
+        self.assertEqual(batch.input_ids[1][-2:], [2, PYTHON_CODE])
+        self.assertEqual(batch.decoder_input_ids[1][0], EN_CODE)
+        self.assertEqual(batch.decoder_input_ids[1][-1], 2)
+        self.assertEqual(labels[1][-2:].tolist(), [2, EN_CODE])
 
     @require_torch
     def test_python_en_tokenizer_prepare_batch(self):

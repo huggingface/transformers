@@ -303,11 +303,11 @@ class PLBartEncoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                *(encoder_attention_heads,)*.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            layer_head_mask (`torch.FloatTensor`):
+                mask for attention heads in a given layer of size `(encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -387,17 +387,17 @@ class PLBartDecoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape *(batch, seq_len, embed_dim)*
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape *(batch, seq_len, embed_dim)*
+                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                *(encoder_attention_heads,)*.
+                `(encoder_attention_heads,)`.
             cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size *(decoder_attention_heads,)*.
+                size `(decoder_attention_heads,)`.
             past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -508,16 +508,6 @@ class PLBartPreTrainedModel(PreTrainedModel):
         if isinstance(module, (PLBartDecoder, PLBartEncoder)):
             module.gradient_checkpointing = value
 
-    @property
-    def dummy_inputs(self):
-        pad_token = self.config.pad_token_id
-        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]], device=self.device)
-        dummy_inputs = {
-            "attention_mask": input_ids.ne(pad_token),
-            "input_ids": input_ids,
-        }
-        return dummy_inputs
-
 
 PLBART_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -536,34 +526,27 @@ PLBART_START_DOCSTRING = r"""
 """
 
 PLBART_GENERATION_EXAMPLE = r"""
-    Token in-filling example::
+    Token in-filling example:
 
         >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration, PLBartConfig
 
         >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base') >>> tokenizer =
-        PLBartTokenizer.from_pretrained('uclanlp/plbart-base', src_lang='java', tgt_lang='java')
+        PLBartTokenizer.from_pretrained('uclanlp/plbart-base', src_lang='java', tgt_lang='java') >>> METHOD_TO_FILL =
+        "public static main (String args[0]) { data=Date(); System.out. String.format("Current Date : % tc", ));}" >>>
+        inputs = tokenizer([METHOD_TO_FILL], max_length=1024, return_tensors='pt') >>> # Generate Filled Code >>>
+        generated_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True) >>>
+        print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in
+        generated_ids])
 
-        >>> METHOD_TO_FILL = "public static main (String args[0]) { data=Date(); System.out. String.format("Current
-        Date : % tc", ));}" >>> inputs = tokenizer([METHOD_TO_FILL], max_length=1024, return_tensors='pt')
-
-        >>> # Generate Filled Code >>> generated_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5,
-        early_stopping=True) >>> print([tokenizer.decode(g, skip_special_tokens=True,
-        clean_up_tokenization_spaces=False) for g in generated_ids])
-
-    Mask-filling example::
+    Mask-filling example:
 
         >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration >>> tokenizer =
         PLBartTokenizer.from_pretrained('uclanlp/plbart-base') >>> # en_XX is the language symbol id <LID> for English
-        >>> TXT = "</s> Is 0 the <mask> Fibonacci <mask> ? </s> en_XX"
-
-        >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base') >>> input_ids =
-        tokenizer([TXT], add_special_tokens=False, return_tensors='pt')['input_ids'] >>> logits =
-        model(input_ids).logits
-
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item() >>> probs = logits[0,
-        masked_index].softmax(dim=0) >>> values, predictions = probs.topk(5)
-
-        >>> tokenizer.decode(predictions).split()
+        >>> TXT = "</s> Is 0 the <mask> Fibonacci <mask> ? </s> en_XX" >>> model =
+        PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base') >>> input_ids = tokenizer([TXT],
+        add_special_tokens=False, return_tensors='pt')['input_ids'] >>> logits = model(input_ids).logits >>>
+        masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item() >>> probs = logits[0,
+        masked_index].softmax(dim=0) >>> values, predictions = probs.topk(5) >>> tokenizer.decode(predictions).split()
 """
 
 PLBART_INPUTS_DOCSTRING = r"""
@@ -692,10 +675,7 @@ class PLBartEncoder(PLBartPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
-        self.embed_positions = PLBartLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            embed_dim,
-        )
+        self.embed_positions = PLBartLearnedPositionalEmbedding(config.max_position_embeddings, embed_dim)
         self.layers = nn.ModuleList([PLBartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
@@ -864,10 +844,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
-        self.embed_positions = PLBartLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-        )
+        self.embed_positions = PLBartLearnedPositionalEmbedding(config.max_position_embeddings, config.d_model)
         self.layers = nn.ModuleList([PLBartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
