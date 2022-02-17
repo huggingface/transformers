@@ -368,7 +368,7 @@ class FlaxEncoderDecoderMixin:
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
-    #@is_pt_flax_cross_test
+    @is_pt_flax_cross_test
     def test_pt_flax_equivalence(self):
 
         config_inputs_dict = self.prepare_config_and_inputs()
@@ -393,7 +393,7 @@ class FlaxEncoderDecoderMixin:
 
         # check without `enc_to_dec_proj` projection
         decoder_config.hidden_size = config.hidden_size
-        self.assertTrue(config.hidden_size == decoder_config.hidden_size, f"{config.hidden_size} neq {decoder_config.hidden_size}")
+        self.assertTrue(config.hidden_size == decoder_config.hidden_size)
         self.check_equivalence_pt_to_flax(config, decoder_config, inputs_dict)
         self.check_equivalence_flax_to_pt(config, decoder_config, inputs_dict)
 
