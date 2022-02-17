@@ -1713,7 +1713,7 @@ class LongformerModel(LongformerPreTrainedModel):
             # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
             sequence_output = sequence_output[:, :-padding_len]
             if output_hidden_states:
-               all_hidden_states = tuple([state[:, :-padding_len] for state in all_hidden_states])
+                all_hidden_states = tuple([state[:, :-padding_len] for state in all_hidden_states])
 
         if not return_dict:
             if output_hidden_states:
