@@ -246,6 +246,8 @@
       title: Pegasus
     - local: model_doc/phobert
       title: PhoBERT
+    - local: model_doc/poolformer
+      title: PoolFormer
     - local: model_doc/prophetnet
       title: ProphetNet
     - local: model_doc/qdqbert
