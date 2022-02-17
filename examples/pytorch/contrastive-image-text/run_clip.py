@@ -23,28 +23,31 @@ Vision models: ViT(https://huggingface.co/models?filter=vit), CLIP (https://hugg
 Text models: BERT, ROBERTa (https://huggingface.co/models?filter=fill-mask)
 """
 
-import json
 import logging
 import os
 import sys
-import time
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
+import datasets
 import torch
 from datasets import load_dataset
-from torchvision.datasets import VisionDataset
+from PIL import Image
 from torchvision.io import ImageReadMode, read_image
 from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
 from torchvision.transforms.functional import InterpolationMode
-from tqdm import tqdm
 
 import transformers
-from transformers import AutoTokenizer, HfArgumentParser, TrainingArguments, is_tensorboard_available, set_seed
+from transformers import (
+    AutoTokenizer,
+    HfArgumentParser,
+    Trainer,
+    TrainingArguments,
+    VisionTextDualEncoderModel,
+    set_seed,
+)
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
-from transformers.utils.dummy_pt_objects import VisionTextDualEncoderModel
 from transformers.utils.versions import require_version
 
 
@@ -178,6 +181,12 @@ class Transform(torch.nn.Module):
         with torch.no_grad():
             x = self.transforms(x)
         return x
+
+
+def collate_fn(examples):
+    pixel_values = torch.stack([example["pixel_values"] for example in examples])
+    labels = torch.tensor([example["labels"] for example in examples], dtype=torch.long)
+    return {"pixel_values": pixel_values, "labels": labels, "return_loss": True}
 
 
 def main():
@@ -319,7 +328,7 @@ def main():
         bools = []
         for image_file in examples[image_column]:
             try:
-                image = Image.open(image_file)
+                Image.open(image_file)
                 # feature_extractor(images=image, return_tensors="np")
                 bools.append(True)
             except Exception:
@@ -335,7 +344,7 @@ def main():
         captions = [example[caption_column][0] for example in examples]
 
         # encode captions
-        labels = tokenizer(
+        examples["labels"] = tokenizer(
             captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True, return_tensors="pt"
         )
 
@@ -345,7 +354,105 @@ def main():
             image = preprocess_image(image)
             return image
 
-        pixel_values = [_transform_images(image_file) for image_file in examples[image_column]]
-        pixel_values = torch.stack(pixel_values)
+        examples["pixel_values"] = [_transform_images(image_file) for image_file in examples[image_column]]
 
-        return {"pixel_values": pixel_values, "labels": labels}
+        return examples
+
+    features = datasets.Features(
+        {
+            "pixel_values": datasets.Array3D(
+                shape=(
+                    getattr(model.config.encoder, "num_channels", 3),
+                    model.config.encoder.image_size,
+                    model.config.encoder.image_size,
+                ),
+                dtype="float32",
+            ),
+            "labels": datasets.Sequence(feature=datasets.Value(dtype="int32", id=None), length=-1, id=None),
+        }
+    )
+
+    if training_args.do_train:
+        if "train" not in dataset:
+            raise ValueError("--do_train requires a train dataset")
+        train_dataset = dataset["train"]
+        if data_args.max_train_samples is not None:
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+
+        train_dataset = train_dataset.filter(filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers)
+        train_dataset = train_dataset.map(
+            function=preprocess,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not data_args.overwrite_cache,
+            desc=f"Running preprocessing on train dataset",
+            features=features,
+        )
+
+    if training_args.do_eval:
+        if "train" not in dataset:
+            raise ValueError("--do_train requires a train dataset")
+        eval_dataset = dataset["validation"]
+        if data_args.max_eval_samples is not None:
+            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+
+        eval_dataset = eval_dataset.filter(filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers)
+        eval_dataset = eval_dataset.map(
+            function=preprocess,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not data_args.overwrite_cache,
+            desc=f"Running preprocessing on validation dataset",
+            features=features,
+        )
+
+    if training_args.do_predict:
+        if "test" not in dataset:
+            raise ValueError("--do_train requires a train dataset")
+        test_dataset = dataset["test"]
+        if data_args.max_eval_samples is not None:
+            test_dataset = test_dataset.select(range(data_args.max_eval_samples))
+
+        test_dataset = test_dataset.filter(filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers)
+        test_dataset = test_dataset.map(
+            function=preprocess,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not data_args.overwrite_cache,
+            desc=f"Running preprocessing on test dataset",
+            features=features,
+        )
+
+    # Initalize our trainer
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset if training_args.do_train else None,
+        eval_dataset=eval_dataset if training_args.do_eval else None,
+        data_collator=collate_fn,
+    )
+
+    # Training
+    if training_args.do_train:
+        checkpoint = None
+        if training_args.resume_from_checkpoint is not None:
+            checkpoint = training_args.resume_from_checkpoint
+        elif last_checkpoint is not None:
+            checkpoint = last_checkpoint
+        train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        trainer.save_model()
+        trainer.log_metrics("train", train_result.metrics)
+        trainer.save_metrics("train", train_result.metrics)
+        trainer.save_state()
+
+    # Evaluation
+    if training_args.do_eval:
+        metrics = trainer.evaluate()
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
+
+    if training_args.push_to_hub:
+        trainer.push_to_hub()
