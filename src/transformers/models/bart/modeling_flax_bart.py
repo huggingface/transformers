@@ -118,8 +118,11 @@ BART_INPUTS_DOCSTRING = r"""
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
             For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
-            for denoising pre-training following the paper.
+            `decoder_input_ids` are provided, the model will automatically create this tensor by shifting:
+
+            - the `labels` to the right for text generation if `labels` are provided,
+            - the `input_ids` to the right for denoising pre-training following the paper if no `labels` are provided.
+
         decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
