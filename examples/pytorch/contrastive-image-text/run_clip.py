@@ -370,7 +370,7 @@ def main():
         def _transform_images(image_file):
             image = read_image(image_file, mode=ImageReadMode.RGB)
             image = preprocess_image(image)
-            return image
+            return image.numpy()
 
         examples["pixel_values"] = [_transform_images(image_file) for image_file in examples[image_column]]
 
