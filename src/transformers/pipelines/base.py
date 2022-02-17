@@ -105,7 +105,9 @@ def _pad(items, key, padding_value, padding_side):
 
 
 def pad_collate_fn(tokenizer, feature_extractor):
+    # Tokenizer
     t_padding_side = None
+    # Feature extractor
     f_padding_side = None
     if tokenizer is None and feature_extractor is None:
         raise ValueError("Pipeline without tokenizer or feature_extractor cannot do batching")

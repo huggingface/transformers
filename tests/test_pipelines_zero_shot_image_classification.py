@@ -54,14 +54,14 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     #         return
     #         # return None, None
 
-    #     speech_recognizer = ZeroShotImageClassificationPipeline(
+    #     image_classifier = ZeroShotImageClassificationPipeline(
     #         model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
     #     )
 
     #     # test with a raw waveform
     #     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     #     image2 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    #     return speech_recognizer, [image, image2]
+    #     return image_classifier, [image, image2]
 
     # def run_pipeline_test(self, pipe, examples):
     #     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -77,18 +77,18 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
 
     @require_torch
     def test_small_model_pt(self):
-        speech_recognizer = pipeline(
+        image_classifier = pipeline(
             model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification",
         )
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        output = speech_recognizer(image, candidate_labels=["a", "b", "c"])
+        output = image_classifier(image, candidate_labels=["a", "b", "c"])
 
         self.assertEqual(
             nested_simplify(output),
             [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
         )
 
-        output = speech_recognizer([image] * 5, candidate_labels=["A", "B", "C"], batch_size=2)
+        output = image_classifier([image] * 5, candidate_labels=["A", "B", "C"], batch_size=2)
         self.assertEqual(
             nested_simplify(output),
             # Pipeline outputs are supposed to be deterministic and
@@ -129,13 +129,13 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     @slow
     @require_torch
     def test_large_model_pt(self):
-        speech_recognizer = pipeline(
+        image_classifier = pipeline(
             task="zero-shot-image-classification",
             model="openai/clip-vit-base-patch32",
         )
         # This is an image of 2 cats with remotes and no planes
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        output = speech_recognizer(image, candidate_labels=["cat", "plane", "remote"])
+        output = image_classifier(image, candidate_labels=["cat", "plane", "remote"])
 
         self.assertEqual(
             nested_simplify(output),
@@ -146,7 +146,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
             ],
         )
 
-        output = speech_recognizer([image] * 5, candidate_labels=["cat", "plane", "remote"], batch_size=2)
+        output = image_classifier([image] * 5, candidate_labels=["cat", "plane", "remote"], batch_size=2)
         self.assertEqual(
             nested_simplify(output),
             [

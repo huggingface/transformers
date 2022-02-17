@@ -19,14 +19,14 @@ logger = logging.get_logger(__name__)
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ZeroShotImageClassificationPipeline(ChunkPipeline):
     """
-    Image classification pipeline using any `AutoModelForZeroShotImageClassification`. This pipeline predicts the class
-    of an image.
+    Zero shot image classification pipeline using `CLIPModel`. This pipeline predicts the class of an image when you
+    provide an image and a set of `candidate_labels`.
 
     This image classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
-    `"image-classification"`.
+    `"zero-shot-image-classification"`.
 
     See the list of available models on
-    [huggingface.co/models](https://huggingface.co/models?filter=image-classification).
+    [huggingface.co/models](https://huggingface.co/models?filter=zer-shot-image-classification).
     """
 
     def __init__(self, **kwargs):
@@ -51,25 +51,20 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
                 - A string containing a local path to an image
                 - An image loaded in PIL directly
 
-                The pipeline accepts either a single image or a batch of images, which must then be passed as a string.
-                Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
-                images.
             candidate_labels (`List[str]`):
                 The candidate labels for this image
-            hypothesis_template (`str`, *optional*, defaults to `"This is a photo of a {}"`):
+
+            hypothesis_template (`str`, *optional*, defaults to `"This is a photo of {}"`):
                 The sentence used in cunjunction with *candidate_labels* to attempt the image classification by
                 replacing the placeholder with the candidate_labels. Then likelihood is estimated by using
-                likelihood_per_image
+                logits_per_image
 
         Return:
-            A dictionary or a list of dictionaries containing result. If the input is a single image, will return a
-            dictionary, if the input is a list of several images, will return a list of dictionaries corresponding to
-            the images.
+            A list of dictionaries containing result, one dictionnary per proposed label. The dictionaries contain the
+            following keys:
 
-            The dictionaries contain the following keys:
-
-            - **label** (`str`) -- The label identified by the model.
-            - **score** (`int`) -- The score attributed by the model for that label.
+            - **label** (`str`) -- The label identified by the model. It is one of the suggested `candidate_label`.
+            - **score** (`int`) -- The score attributed by the model for that label (between 0 and 1).
         """
         return super().__call__(images, **kwargs)
 
@@ -80,10 +75,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
         if "hypothesis_template" in kwargs:
             preprocess_params["hypothesis_template"] = kwargs["hypothesis_template"]
 
-        postprocess_params = {}
-        if "multi_label" in kwargs:
-            postprocess_params["multi_label"] = kwargs["multi_label"]
-        return preprocess_params, {}, postprocess_params
+        return preprocess_params, {}, {}
 
     def preprocess(self, image, candidate_labels=None, hypothesis_template="This is a photo of {}."):
         n = len(candidate_labels)
