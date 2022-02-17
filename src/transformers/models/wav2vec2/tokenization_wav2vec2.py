@@ -20,7 +20,7 @@ import sys
 import warnings
 from dataclasses import dataclass
 from itertools import groupby
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -651,7 +651,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         result = self.decoder.get(index, self.unk_token)
         return result
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> Dict[str, Any]:
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
         """
@@ -667,9 +667,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         if self.do_lower_case:
             string = string.lower()
 
-        return {
-            "string": string,
-        }
+        return string
 
     def _decode(
         self,
