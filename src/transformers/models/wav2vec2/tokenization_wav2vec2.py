@@ -18,12 +18,13 @@ import json
 import os
 import sys
 import warnings
+from dataclasses import dataclass
 from itertools import groupby
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
+from ...file_utils import ModelOutput, PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
 from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...utils import logging
@@ -77,6 +78,24 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
             verbose (`bool`, *optional*, defaults to `True`):
                 Whether or not to print more information and warnings.
 """
+
+
+@dataclass
+class Wav2Vec2CTCTokenizerOutput(ModelOutput):
+    """
+    Output type of [` Wav2Vec2CTCTokenizer`], with transcription.
+
+    Args:
+        text (list of `str`):
+            Decoded logits in text from. Usually the speech transcription.
+        logit_score (list of `float`):
+            Total logit score of the beam associated with produced text.
+        lm_score (list of `float`):
+            Fused lm_score of the beam associated with produced text.
+    """
+
+    text: Union[List[str], str]
+    time_stamps: List[Dict[str, Union[float, str]]] = None
 
 
 class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
@@ -204,31 +223,83 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         return result
 
     def convert_tokens_to_string(
-        self, tokens: List[str], group_tokens: bool = True, spaces_between_special_tokens: bool = False
+        self,
+        tokens: List[str],
+        group_tokens: bool = True,
+        spaces_between_special_tokens: bool = False,
+        output_time_stamps: bool = False,
+        stride: Optional[int] = None,
+        sampling_rate: Optional[float] = None,
     ) -> str:
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
         """
         # group same tokens into non-repeating tokens in CTC style decoding
         if group_tokens:
-            tokens = [token_group[0] for token_group in groupby(tokens)]
+            tokens, token_repetitions = zip(*((token, len(list(group_iter))) for token, group_iter in groupby(tokens)))
+        else:
+            token_repetitions = len(tokens) * [1]
 
         # filter self.pad_token which is used as CTC-blank token
         filtered_tokens = list(filter(lambda token: token != self.pad_token, tokens))
 
-        if spaces_between_special_tokens:
-            join_token = " "
-        else:
-            join_token = ""
-
         # replace delimiter token
-        string = join_token.join(
-            [" " if token == self.word_delimiter_token else token for token in filtered_tokens]
-        ).strip()
+        processed_tokens = [" " if token == self.word_delimiter_token else token for token in filtered_tokens]
+
+        if output_time_stamps:
+            if stride is None:
+                raise ValueError(
+                    "Make sure to provide the `stride` of the audio model "
+                    "in order to retrieve the time stamps for each token."
+                    "The stride is usually defined as `model.stride`."
+                )
+
+            if sampling_rate is None:
+                raise ValueError(
+                    "Make sure to provide the `sampling_rate` of the feature extractor "
+                    "in order to retrieve the time stamps for each token."
+                    "The sampling rate is usually defined as `feature_extractor.sampling_rate`."
+                )
+
+            frame_context_in_seconds = stride / sampling_rate
+
+            end_indices = np.asarray(token_repetitions).cumsum()
+            start_indices = np.concatenate(([0], end_indices[:-1]))
+
+            # create time stamps
+            time_stamps = [
+                {"token": t, "start_time": s * frame_context_in_seconds, "end_time": e * frame_context_in_seconds}
+                for t, s, e in zip(tokens, start_indices, end_indices)
+            ]
+
+            # filter out CTC token
+            time_stamps = list(filter(lambda time_stamp: time_stamp["token"] != self.pad_token, time_stamps))
+
+            if len(time_stamps) != len(processed_tokens):
+                raise ValueError(
+                    f"`time_stamps`: {time_stamps} and `processed_tokens`: {processed_tokens}"
+                    " have to be of the same length, but are: "
+                    f"`len(time_stamps)`: {len(time_stamps)} and `len(processed_tokens)`:"
+                    f" {len(processed_tokens)}"
+                )
+
+            # set tokens to correct
+            for i, token in enumerate(processed_tokens):
+                time_stamps[i]["token"] = token
+        else:
+            time_stamps = None
+
+        # join to string
+        join_char = " " if spaces_between_special_tokens else ""
+        string = join_char.join(processed_tokens).strip()
 
         if self.do_lower_case:
             string = string.lower()
-        return string
+
+        return {
+            "text": string,
+            "time_stamps": time_stamps,
+        }
 
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         if is_split_into_words:
@@ -242,6 +313,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces: bool = True,
         group_tokens: bool = True,
         spaces_between_special_tokens: bool = False,
+        output_time_stamps: Optional[bool] = False,
+        stride: Optional[int] = None,
+        sampling_rate: Optional[int] = None,
     ) -> str:
         """
         special _decode function is needed for Wav2Vec2Tokenizer because added tokens should be treated exactly the
@@ -256,13 +330,22 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 continue
             result.append(token)
 
-        text = self.convert_tokens_to_string(
-            result, group_tokens=group_tokens, spaces_between_special_tokens=spaces_between_special_tokens
+        string_output = self.convert_tokens_to_string(
+            result,
+            group_tokens=group_tokens,
+            spaces_between_special_tokens=spaces_between_special_tokens,
+            output_time_stamps=output_time_stamps,
+            stride=stride,
+            sampling_rate=sampling_rate,
         )
 
+        text = string_output["text"]
+
         if clean_up_tokenization_spaces:
-            clean_text = self.clean_up_tokenization(text)
-            return clean_text
+            text = self.clean_up_tokenization(text)
+
+        if output_time_stamps:
+            return Wav2Vec2CTCTokenizerOutput(text=text, time_stamps=string_output["time_stamps"])
         else:
             return text
 
@@ -536,7 +619,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         result = self.decoder.get(index, self.unk_token)
         return result
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    def convert_tokens_to_string(self, tokens: List[str]) -> Dict[str, Any]:
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
         """
@@ -551,7 +634,10 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
 
         if self.do_lower_case:
             string = string.lower()
-        return string
+
+        return {
+            "string": string,
+        }
 
     def _decode(
         self,

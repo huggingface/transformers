@@ -786,6 +786,10 @@ class SEWPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
+    @property
+    def stride(self):
+        return math.prod(self.config.conv_stride)
+
 
 SEW_START_DOCSTRING = r"""
     SEW was proposed in [Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech

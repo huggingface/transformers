@@ -1123,6 +1123,10 @@ class WavLMPreTrainedModel(PreTrainedModel):
         if isinstance(module, (WavLMEncoder, WavLMEncoderStableLayerNorm, WavLMFeatureEncoder)):
             module.gradient_checkpointing = value
 
+    @property
+    def stride(self):
+        return math.prod(self.config.conv_stride)
+
 
 WAVLM_START_DOCSTRING = r"""
     WavLM was proposed in [WavLM: Unified Speech Representation Learning with Labeled and Unlabeled
