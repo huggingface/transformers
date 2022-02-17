@@ -362,6 +362,9 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = None
 
 
+MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = None
+
+
 MODEL_FOR_MASKED_LM_MAPPING = None
 
 
@@ -454,6 +457,13 @@ class AutoModelForImageClassification(metaclass=DummyObject):
 
 
 class AutoModelForImageSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForMaskedImageModeling(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -1299,6 +1309,13 @@ class DeiTForImageClassification(metaclass=DummyObject):
 
 
 class DeiTForImageClassificationWithTeacher(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DeiTForMaskedImageModeling(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -3449,6 +3466,13 @@ class SwinForImageClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class SwinForMaskedImageModeling(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SwinModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3776,6 +3800,13 @@ VIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class ViTForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTForMaskedImageModeling(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
