@@ -95,7 +95,7 @@ _import_structure = {
     "dependency_versions_table": [],
     "dynamic_module_utils": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
-    "feature_extraction_utils": ["BatchFeature"],
+    "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
@@ -365,6 +365,7 @@ _import_structure = {
         "ZeroShotClassificationPipeline",
         "pipeline",
     ],
+    "processing_utils": ["ProcessorMixin"],
     "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
@@ -1591,6 +1592,14 @@ if is_tf_available():
     _import_structure["activations_tf"] = []
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
+    _import_structure["generation_tf_logits_process"] = [
+        "TFLogitsProcessor",
+        "TFLogitsProcessorList",
+        "TFMinLengthLogitsProcessor",
+        "TFNoBadWordsLogitsProcessor",
+        "TFNoRepeatNGramLogitsProcessor",
+        "TFRepetitionPenaltyLogitsProcessor",
+    ]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
     _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
     _import_structure["modeling_tf_outputs"] = []
@@ -2045,6 +2054,7 @@ if is_tf_available():
         ]
     )
     _import_structure["optimization_tf"] = ["AdamWeightDecay", "GradientAccumulator", "WarmUp", "create_optimizer"]
+    _import_structure["tf_utils"] = []
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
 else:
@@ -2312,7 +2322,7 @@ if TYPE_CHECKING:
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
     # Feature Extractor
-    from .feature_extraction_utils import BatchFeature
+    from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Files and general utilities
     from .file_utils import (
@@ -2560,6 +2570,7 @@ if TYPE_CHECKING:
         ZeroShotClassificationPipeline,
         pipeline,
     )
+    from .processing_utils import ProcessorMixin
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer
@@ -3570,6 +3581,14 @@ if TYPE_CHECKING:
 
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
+        from .generation_tf_logits_process import (
+            TFLogitsProcessor,
+            TFLogitsProcessorList,
+            TFMinLengthLogitsProcessor,
+            TFNoBadWordsLogitsProcessor,
+            TFNoRepeatNGramLogitsProcessor,
+            TFRepetitionPenaltyLogitsProcessor,
+        )
         from .generation_tf_utils import tf_top_k_top_p_filtering
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
         from .modeling_tf_layoutlm import (

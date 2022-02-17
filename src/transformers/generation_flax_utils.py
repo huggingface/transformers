@@ -679,7 +679,7 @@ class FlaxGenerationMixin:
             not_max_length_yet = state.cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = state.running_scores[:, -1:] / (max_length ** length_penalty)
+            best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
             worst_finished_score = jnp.where(
                 state.is_sent_finished, jnp.min(state.scores, axis=1, keepdims=True), np.array(-1.0e7)
             )
@@ -769,7 +769,7 @@ class FlaxGenerationMixin:
             # - add length penalty
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
-            topk_log_probs = topk_log_probs / (state.cur_len ** length_penalty)
+            topk_log_probs = topk_log_probs / (state.cur_len**length_penalty)
             beams_in_batch_are_full = (
                 jnp.broadcast_to(state.is_sent_finished.all(axis=-1, keepdims=True), did_topk_just_finished.shape)
                 & early_stopping

@@ -58,6 +58,7 @@ config_common_kwargs = {
     "temperature": 2.0,
     "top_k": 10,
     "top_p": 0.7,
+    "typical_p": 0.2,
     "repetition_penalty": 0.8,
     "length_penalty": 0.8,
     "no_repeat_ngram_size": 5,
@@ -333,8 +334,12 @@ class ConfigurationVersioningTest(unittest.TestCase):
         import transformers as new_transformers
 
         new_transformers.configuration_utils.__version__ = "v4.0.0"
-        new_configuration = new_transformers.models.auto.AutoConfig.from_pretrained(repo)
+        new_configuration, kwargs = new_transformers.models.auto.AutoConfig.from_pretrained(
+            repo, return_unused_kwargs=True
+        )
         self.assertEqual(new_configuration.hidden_size, 2)
+        # This checks `_configuration_file` ia not kept in the kwargs by mistake.
+        self.assertDictEqual(kwargs, {"_from_auto": True})
 
         # Testing an older version by monkey-patching the version in the module it's used.
         import transformers as old_transformers

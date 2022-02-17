@@ -719,7 +719,7 @@ class FlaxBlenderbotEncoder(nn.Module):
         last_hidden_states = self.layer_norm(last_hidden_states)
 
         if not return_dict:
-            return outputs
+            return (last_hidden_states,) + outputs[1:]
 
         return FlaxBaseModelOutput(
             last_hidden_state=last_hidden_states,
@@ -797,7 +797,7 @@ class FlaxBlenderbotDecoder(nn.Module):
         last_hidden_states = self.layer_norm(last_hidden_states)
 
         if not return_dict:
-            return outputs
+            return (last_hidden_states,) + outputs[1:]
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=last_hidden_states,
