@@ -114,13 +114,87 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-
-        TODO
+        decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
+            range `[0, config.decoder.max_position_embeddings - 1]`.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            If set to `True`, the model will return a [`~file_utils.FlaxSeq2SeqLMOutput`] instead of a plain tuple.
 """
 
-SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = """TODO"""
+SPEECH_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
+    Args:
+        inputs (`jnp.ndarray` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, feature_dim)`, *optional*):
+            Float values of input raw speech waveform or speech features. Values can be obtained by loading a *.flac*
+            or *.wav* audio file into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile
+            library (*pip install soundfile*). To prepare the array into *inputs*, either the [`Wav2Vec2Processor`] or
+            [`Speech2TextProcessor`] should be used for padding and conversion into a tensor of type
+            *torch.FloatTensor*.
+        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
-SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = """TODO"""
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            If set to `True`, the model will return a [`~file_utils.FlaxBaseModelOutput`] instead of a plain tuple.
+"""
+
+SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
+    Args:
+        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
+
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
+
+            For sequence to sequence training, `decoder_input_ids` should be provided. If no `decoder_input_ids` is
+            provided, the model will create this tensor by shifting the `input_ids` to the right for denoising
+            pre-training.
+        encoder_outputs (`tuple(tuple(jnp.ndarray)`):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        encoder_attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
+            range `[0, config.decoder.max_position_embeddings - 1]`.
+        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
+            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
+            auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            If set to `True`, the model will return a [`~file_utils.FlaxCausalLMOutputWithCrossAttentions`] instead of
+            a plain tuple.
+"""
 
 
 class FlaxSpeechEncoderDecoderModule(nn.Module):
@@ -186,27 +260,26 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
 
     def __call__(
         self,
-        input_ids,
+        inputs,
         attention_mask,
         decoder_input_ids,
         decoder_attention_mask,
         decoder_position_ids,
-        mask_time_indices=None,
+        encoder_outputs=None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
     ):
-
-        encoder_outputs = self.encoder(
-            input_ids,
-            attention_mask=attention_mask,
-            mask_time_indices=mask_time_indices,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
-        )
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                inputs,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                deterministic=deterministic,
+            )
 
         encoder_hidden_states = encoder_outputs[0]
 
@@ -214,8 +287,13 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
         if self.enc_to_dec_proj is not None:
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
-        # compute correct encoder attention mask? requires function _get_feature_vector_attention_mask to be added to the
-        # Exactly! We need to add this function to `modeling_flax_wav2vec2.py` now :-)
+        # compute correct encoder attention mask
+        if attention_mask is not None:
+            encoder_attention_mask = self.encoder._get_feature_vector_attention_mask(
+                encoder_hidden_states.shape[1], attention_mask
+            )
+        else:
+            encoder_attention_mask = None
 
         # flax script modeling_flax_wav2vec2.py
         decoder_outputs = self.decoder(
@@ -223,7 +301,7 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
             attention_mask=decoder_attention_mask,
             position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -288,13 +366,13 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         encoder_input_shape, decoder_input_shape = input_shape
 
-        # init input tensors
-        input_ids = jnp.zeros(encoder_input_shape, dtype="i4")
-        attention_mask = jnp.ones_like(input_ids)
+        # init input DeviceArrays
+        inputs = jnp.zeros(encoder_input_shape, dtype="i4")
+        attention_mask = jnp.ones_like(inputs)
         decoder_input_ids = jnp.zeros(decoder_input_shape, dtype="i4")
         decoder_attention_mask = jnp.ones_like(decoder_input_ids)
 
-        batch_size, sequence_length = input_ids.shape
+        batch_size, sequence_length = inputs.shape
 
         decoder_batch_size, decoder_sequence_length = decoder_input_ids.shape
         if not decoder_batch_size == batch_size:
@@ -309,7 +387,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
         return self.module.init(
-            rngs, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, decoder_position_ids,
+            rngs, inputs, attention_mask, decoder_input_ids, decoder_attention_mask, decoder_position_ids,
         )["params"]
 
     def init_cache(self, batch_size, max_length, encoder_outputs):
@@ -360,9 +438,8 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
     @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def encode(
         self,
-        input_ids: jnp.ndarray,
+        inputs: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
-        mask_time_indices: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -391,22 +468,21 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
+            attention_mask = jnp.ones_like(inputs)
 
         # Handle any PRNG if needed
         rngs = {}
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
 
-        def _encoder_forward(module, input_ids, attention_mask, **kwargs):
+        def _encoder_forward(module, inputs, attention_mask, **kwargs):
             encode_module = module._get_encoder_module()
-            return encode_module(input_ids, attention_mask, **kwargs)
+            return encode_module(inputs, attention_mask, **kwargs)
 
         outputs = self.module.apply(
             {"params": params or self.params},
-            input_ids=jnp.array(input_ids, dtype="i4"),
+            inputs=jnp.array(inputs, dtype="i4"),
             attention_mask=jnp.array(attention_mask, dtype="i4"),
-            mask_time_indices=jnp.array(mask_time_indices, dtype="i4"),
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -457,7 +533,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         >>> encoder_outputs = model.encode(inputs)
 
         >>> decoder_start_token_id = model.config.decoder.bos_token_id
-        >>> decoder_input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.shape[0], 1), dtype="i4") * decoder_start_token_id
 
         >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
         >>> logits = outputs.logits
@@ -490,13 +566,13 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
 
-        inputs = {"params": params or self.params}
+        params = {"params": params or self.params}
 
         # if past_key_values are passed then cache is already initialized a private flag init_cache has to be
         # passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that
         # it can be changed by FlaxBartAttention module
         if past_key_values:
-            inputs["cache"] = past_key_values
+            params["cache"] = past_key_values
             mutable = ["cache"]
         else:
             mutable = False
@@ -517,7 +593,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
             )
 
         outputs = self.module.apply(
-            inputs,
+            params,
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
             decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
@@ -547,9 +623,8 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
     @replace_return_docstrings(output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def __call__(
         self,
-        input_ids: jnp.ndarray,
+        inputs: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
-        mask_time_indices: Optional[jnp.ndarray] = None,
         decoder_input_ids: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
@@ -593,7 +668,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
 
         # prepare encoder inputs
         if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
+            attention_mask = jnp.ones_like(inputs)
 
         # prepare decoder inputs
         if decoder_attention_mask is None:
@@ -609,9 +684,8 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
 
         return self.module.apply(
             {"params": params or self.params},
-            input_ids=jnp.array(input_ids, dtype="i4"),
+            inputs=jnp.array(inputs, dtype="i4"),
             attention_mask=jnp.array(attention_mask, dtype="i4"),
-            mask_time_indices=jnp.array(mask_time_indices, dtype="i4"),
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
             decoder_position_ids=jnp.array(decoder_position_ids, dtype="i4"),
@@ -635,7 +709,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         batch_size, seq_length = decoder_input_ids.shape
 
         past_key_values = self.init_cache(batch_size, max_length, encoder_outputs)
-        # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length.
+        # Note that usually one would have to put 0's in the attention_mask for x > input.shape[-1] and x < cache_length.
         # But since the decoder uses a causal mask, those positions are masked anyways.
         # Thus we can create a single static attention_mask here, which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
