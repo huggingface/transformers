@@ -41,6 +41,7 @@ from .generation_logits_process import (
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
+    TypicalLogitsWarper,
 )
 from .generation_stopping_criteria import (
     MaxLengthCriteria,
@@ -524,12 +525,6 @@ class GenerationMixin:
             decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
             return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * decoder_start_token_id
 
-    def _get_pad_token_id(self, pad_token_id: int = None, eos_token_id: int = None) -> int:
-        if pad_token_id is None and eos_token_id is not None:
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
-            pad_token_id = eos_token_id
-        return pad_token_id
-
     def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
         decoder_start_token_id = (
             decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
@@ -621,7 +616,12 @@ class GenerationMixin:
         )
 
     def _get_logits_warper(
-        self, top_k: int = None, top_p: float = None, temperature: float = None, num_beams: int = None
+        self,
+        top_k: int = None,
+        top_p: float = None,
+        typical_p: float = None,
+        temperature: float = None,
+        num_beams: int = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsWarper`] instances
@@ -631,6 +631,7 @@ class GenerationMixin:
         # init warp parameters
         top_k = top_k if top_k is not None else self.config.top_k
         top_p = top_p if top_p is not None else self.config.top_p
+        typical_p = typical_p if typical_p is not None else self.config.typical_p
         temperature = temperature if temperature is not None else self.config.temperature
         # instantiate warpers list
         warpers = LogitsProcessorList()
@@ -643,6 +644,8 @@ class GenerationMixin:
             warpers.append(TopKLogitsWarper(top_k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         if top_p is not None and top_p < 1.0:
             warpers.append(TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
+        if typical_p is not None and typical_p < 1.0:
+            warpers.append(TypicalLogitsWarper(mass=typical_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         return warpers
 
     def _get_logits_processor(
@@ -812,6 +815,7 @@ class GenerationMixin:
         temperature: Optional[float] = None,
         top_k: Optional[int] = None,
         top_p: Optional[float] = None,
+        typical_p: Optional[float] = None,
         repetition_penalty: Optional[float] = None,
         bad_words_ids: Optional[Iterable[int]] = None,
         bos_token_id: Optional[int] = None,
@@ -897,8 +901,8 @@ class GenerationMixin:
                 If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
                 `decoder_input_ids`.
             bad_words_ids(`List[List[int]]`, *optional*):
-                List of token ids that are not allowed to be generated. In order to get the tokens of the words that
-                should not appear in the generated text, use `tokenizer(bad_word, add_prefix_space=True,
+                List of token ids that are not allowed to be generated. In order to get the token ids of the words that
+                should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
                 add_special_tokens=False).input_ids`.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch.
@@ -1053,8 +1057,14 @@ class GenerationMixin:
 
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+
         if eos_token_id is None and hasattr(self.config, "decoder"):
             eos_token_id = self.config.decoder.eos_token_id
+
+        if pad_token_id is None and eos_token_id is not None:
+            # special case if pad_token_id is not defined
+            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            pad_token_id = eos_token_id
 
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1064,11 +1074,6 @@ class GenerationMixin:
         return_dict_in_generate = (
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
-
-        if pad_token_id is None and eos_token_id is not None:
-            # special case if pad_token_id is not defined
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
-            pad_token_id = eos_token_id
 
         # 2. Define model inputs
         # inputs_tensor has to be defined
@@ -1197,7 +1202,7 @@ class GenerationMixin:
         elif is_sample_gen_mode:
             # 10. prepare logits warper
             logits_warper = self._get_logits_warper(
-                top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams
+                top_k=top_k, top_p=top_p, typical_p=typical_p, temperature=temperature, num_beams=num_beams
             )
 
             # 11. expand input_ids with `num_return_sequences` additional sequences per batch
@@ -1259,7 +1264,7 @@ class GenerationMixin:
         elif is_beam_sample_gen_mode:
             # 10. prepare logits warper
             logits_warper = self._get_logits_warper(
-                top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams
+                top_k=top_k, top_p=top_p, typical_p=typical_p, temperature=temperature, num_beams=num_beams
             )
 
             if stopping_criteria.max_length is None:

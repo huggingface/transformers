@@ -38,10 +38,10 @@ Tips:
 - CTRL was trained with a causal language modeling (CLM) objective and is therefore powerful at predicting the next
   token in a sequence. Leveraging this feature allows CTRL to generate syntactically coherent text as it can be
   observed in the *run_generation.py* example script.
-- The PyTorch models can take the *past* as input, which is the previously computed key/value attention pairs. Using
-  this *past* value prevents the model from re-computing pre-computed values in the context of text generation. See
-  [reusing the past in generative models](../quickstart#using-the-past) for more information on the usage of
-  this argument.
+- The PyTorch models can take the `past_key_values` as input, which is the previously computed key/value attention pairs.
+  TensorFlow models accepts `past` as input. Using the `past_key_values` value prevents the model from re-computing
+  pre-computed values in the context of text generation. See the [`forward`](model_doc/ctrl#transformers.CTRLModel.forward)
+  method for more information on the usage of this argument.
 
 This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitishr). The original code can be found
 [here](https://github.com/salesforce/ctrl).

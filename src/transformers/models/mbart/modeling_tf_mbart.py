@@ -44,8 +44,8 @@ from ...modeling_tf_utils import (
     TFWrappedEmbeddings,
     input_processing,
     keras_serializable,
-    shape_list,
 )
+from ...tf_utils import shape_list
 from ...utils import logging
 from .configuration_mbart import MBartConfig
 
@@ -154,7 +154,7 @@ class TFMBartAttention(tf.keras.layers.Layer):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")

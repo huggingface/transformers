@@ -220,7 +220,7 @@ class XLNetRelativeAttention(nn.Module):
         self.n_head = config.n_head
         self.d_head = config.d_head
         self.d_model = config.d_model
-        self.scale = 1 / (config.d_head ** 0.5)
+        self.scale = 1 / (config.d_head**0.5)
 
         self.q = nn.Parameter(torch.FloatTensor(config.d_model, self.n_head, self.d_head))
         self.k = nn.Parameter(torch.FloatTensor(config.d_model, self.n_head, self.d_head))
