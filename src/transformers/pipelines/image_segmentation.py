@@ -143,25 +143,31 @@ class ImageSegmentationPipeline(Pipeline):
         else:
             # Default logits
             logits = model_outputs.logits
+            logits = logits.softmax(dim=1)
             if len(logits.shape) != 4:
                 raise ValueError(f"Logits don't have expected dimensions, expected [1, N, H, W], got {logits.shape}")
-            # Softmax
-            logits = logits.log_softmax(dim=1)
+            # logits = logits.log_softmax(dim=1)
             batch_size, num_labels, height, width = logits.shape
             expected_num_labels = len(self.model.config.id2label)
             if num_labels != expected_num_labels:
                 raise ValueError(
                     f"Logits don't have expected dimensions, expected [1, {num_labels}, H, W], got {logits.shape}"
                 )
-            size = model_outputs["target_size"].tolist()[0]
-            logits_reshaped = F.interpolate(logits, size=size)
+            size = model_outputs["target_size"].squeeze(0).tolist()
+            logits_reshaped = F.interpolate(logits, size=size, mode="bilinear", align_corners=False)
             classes = logits_reshaped.argmax(dim=1)[0]
             annotation = []
+
             for label_id in range(num_labels):
                 label = self.model.config.id2label[label_id]
                 mask = classes == label_id
-                score = ((mask * logits_reshaped[0, label_id]).sum() / mask.sum()).exp().item()
-                mask = Image.fromarray(mask.numpy().astype(np.int8), mode="L")
+                mask_sum = mask.sum()
+
+                # Remove empty masks.
+                if mask_sum == 0:
+                    continue
+                score = ((mask * logits_reshaped[0, label_id]).sum() / mask.sum()).item()
+                mask = Image.fromarray((mask * 255).numpy().astype(np.int8), mode="L")
                 if not raw_image:
                     mask = self._get_mask_str(mask)
                 annotation.append({"score": score, "label": label, "mask": mask})
