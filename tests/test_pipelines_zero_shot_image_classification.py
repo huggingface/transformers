@@ -39,7 +39,6 @@ else:
 
 
 @require_vision
-@require_torch
 @is_pipeline_test
 class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     # Deactivating auto tests since we don't have a good MODEL_FOR_XX mapping,
@@ -71,14 +70,61 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     #     # Batching
     #     outputs = pipe([image] * 3, batch_size=2, candidate_labels=["A", "B"])
 
-    @require_tf
-    def test_small_model_tf(self):
-        self.skipTest("Not implemented in Tensorflow")
-
     @require_torch
     def test_small_model_pt(self):
         image_classifier = pipeline(
             model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification",
+        )
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        output = image_classifier(image, candidate_labels=["a", "b", "c"])
+
+        self.assertEqual(
+            nested_simplify(output),
+            [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
+        )
+
+        output = image_classifier([image] * 5, candidate_labels=["A", "B", "C"], batch_size=2)
+        self.assertEqual(
+            nested_simplify(output),
+            # Pipeline outputs are supposed to be deterministic and
+            # So we could in theory have real values "A", "B", "C" instead
+            # of ANY(str).
+            # However it seems that in this particular case, the floating
+            # scores are so close, we enter floating error approximation
+            # and the order is not guaranteed anymore with batching.
+            [
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+            ],
+        )
+
+    @require_tf
+    def test_small_model_tf(self):
+        image_classifier = pipeline(
+            model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification", framework="tf"
         )
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         output = image_classifier(image, candidate_labels=["a", "b", "c"])
@@ -132,6 +178,38 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         image_classifier = pipeline(
             task="zero-shot-image-classification",
             model="openai/clip-vit-base-patch32",
+        )
+        # This is an image of 2 cats with remotes and no planes
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        output = image_classifier(image, candidate_labels=["cat", "plane", "remote"])
+
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                {"score": 0.941, "label": "cat"},
+                {"score": 0.055, "label": "remote"},
+                {"score": 0.003, "label": "plane"},
+            ],
+        )
+
+        output = image_classifier([image] * 5, candidate_labels=["cat", "plane", "remote"], batch_size=2)
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                [
+                    {"score": 0.941, "label": "cat"},
+                    {"score": 0.055, "label": "remote"},
+                    {"score": 0.003, "label": "plane"},
+                ],
+            ]
+            * 5,
+        )
+
+    @slow
+    @require_tf
+    def test_large_model_tf(self):
+        image_classifier = pipeline(
+            task="zero-shot-image-classification", model="openai/clip-vit-base-patch32", framework="tf"
         )
         # This is an image of 2 cats with remotes and no planes
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

@@ -242,9 +242,9 @@ SUPPORTED_TASKS = {
     },
     "zero-shot-image-classification": {
         "impl": ZeroShotImageClassificationPipeline,
-        "tf": (),
+        "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
-        "default": {"pt": "openai/clip-vit-base-patch32"},
+        "default": {"pt": "openai/clip-vit-base-patch32", "tf": "openai/clip-vit-base-patch32"},
         "type": "multimodal",
     },
     "conversational": {
