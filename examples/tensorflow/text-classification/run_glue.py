@@ -20,6 +20,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Optional
 
 import numpy as np
@@ -30,10 +31,12 @@ import transformers
 from transformers import (
     AutoConfig,
     AutoTokenizer,
+    DataCollatorWithPadding,
     HfArgumentParser,
     PretrainedConfig,
     TFAutoModelForSequenceClassification,
     TFTrainingArguments,
+    default_data_collator,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
@@ -41,48 +44,6 @@ from transformers.utils import check_min_version
 
 
 # region Helper functions
-
-
-def convert_dataset_for_tensorflow(
-    dataset, non_label_column_names, batch_size, dataset_mode="variable_batch", shuffle=True, drop_remainder=True
-):
-    """Converts a Hugging Face dataset to a Tensorflow Dataset. The dataset_mode controls whether we pad all batches
-    to the maximum sequence length, or whether we only pad to the maximum length within that batch. The former
-    is most useful when training on TPU, as a new graph compilation is required for each sequence length.
-    """
-
-    def densify_ragged_batch(features, label=None):
-        features = {
-            feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) for feature, ragged_tensor in features.items()
-        }
-        if label is None:
-            return features
-        else:
-            return features, label
-
-    feature_keys = list(set(dataset.features.keys()) - set(non_label_column_names + ["label"]))
-    if dataset_mode == "variable_batch":
-        batch_shape = {key: None for key in feature_keys}
-        data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
-    elif dataset_mode == "constant_batch":
-        data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
-        batch_shape = {
-            key: tf.concat(([batch_size], ragged_tensor.bounding_shape()[1:]), axis=0)
-            for key, ragged_tensor in data.items()
-        }
-    else:
-        raise ValueError("Unknown dataset mode!")
-
-    if "label" in dataset.features:
-        labels = tf.convert_to_tensor(np.array(dataset["label"]))
-        tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
-    else:
-        tf_dataset = tf.data.Dataset.from_tensor_slices(data)
-    if shuffle:
-        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))
-    tf_dataset = tf_dataset.batch(batch_size=batch_size, drop_remainder=drop_remainder).map(densify_ragged_batch)
-    return tf_dataset
-
 
 class SavePretrainedCallback(tf.keras.callbacks.Callback):
     # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
@@ -146,7 +107,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
     )
     pad_to_max_length: bool = field(
-        default=False,
+        default=True,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
             "If False, will pad the samples dynamically when batching to the maximum length in the batch."
@@ -377,6 +338,11 @@ def main():
 
     datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
 
+    if data_args.pad_to_max_length:
+        data_collator = partial(default_data_collator, return_tensors="tf")
+    else:
+        data_collator = DataCollatorWithPadding(tokenizer, return_tensors="tf")
+
     # endregion
 
     # region Metric function
@@ -426,11 +392,6 @@ def main():
 
         # region Convert data to a tf.data.Dataset
         tf_data = dict()
-        if isinstance(training_args.strategy, tf.distribute.TPUStrategy) or data_args.pad_to_max_length:
-            logger.info("Padding all batches to max length because argument was set or we're on TPU.")
-            dataset_mode = "constant_batch"
-        else:
-            dataset_mode = "variable_batch"
         max_samples = {
             "train": data_args.max_train_samples,
             "validation": data_args.max_eval_samples,
@@ -456,13 +417,12 @@ def main():
             dataset = datasets[key]
             if samples_limit is not None:
                 dataset = dataset.select(range(samples_limit))
-            data = convert_dataset_for_tensorflow(
-                dataset,
-                non_label_column_names,
-                batch_size=batch_size,
-                dataset_mode=dataset_mode,
-                drop_remainder=drop_remainder,
+            data = dataset.to_tf_dataset(
+                columns=list(set(dataset.column_names) - set(non_label_column_names)),
                 shuffle=shuffle,
+                batch_size=batch_size,
+                collate_fn=data_collator,
+                drop_remainder=drop_remainder,
             )
             tf_data[key] = data
         # endregion
