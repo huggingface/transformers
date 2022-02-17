@@ -418,11 +418,12 @@ def main():
             if samples_limit is not None:
                 dataset = dataset.select(range(samples_limit))
             data = dataset.to_tf_dataset(
-                columns=list(set(dataset.column_names) - set(non_label_column_names)),
+                columns=[col for col in dataset.column_names if col not in set(non_label_column_names + ["label"])],
                 shuffle=shuffle,
                 batch_size=batch_size,
                 collate_fn=data_collator,
                 drop_remainder=drop_remainder,
+                label_cols="label" if "label" in dataset.column_names else None,
             )
             tf_data[key] = data
         # endregion
