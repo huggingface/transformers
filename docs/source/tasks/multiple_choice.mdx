@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Multiple choice
 
-A multiple choice task selects the most correct input given a question and multiple possible inputs. Similar to a question answering task, multiple choice requires a model to return the most probable answer. 
+A multiple choice task is similar to question answering, except several candidate answers are provided along with a context. The model is trained to select the correct answer from multiple inputs given a context.
 
 This guide will show you how to fine-tune [BERT](https://huggingface.co/bert-base-uncased) on the `regular` configuration of the [SWAG](https://huggingface.co/datasets/swag) dataset to select the best answer given multiple options and some context.
 
@@ -43,7 +43,7 @@ Then take a look at an example:
  'video-id': 'anetv_jkn6uvmqwh4'}
 ```
 
-The `sent1` and `sent2` fields show you how a sentence begins. Each `ending` field show how a sentence could end. The model must pick the correct sentence ending - indicated by the `label` field - given the sentence beginning.
+The `sent1` and `sent2` fields show how a sentence begins, and each `ending` field shows how a sentence could end. Given the sentence beginning, the model must pick the correct sentence ending as indicated by the `label` field.
 
 ## Preprocess
 
@@ -58,8 +58,8 @@ Load the BERT tokenizer to process the start of each sentence and the four possi
 The preprocessing function needs to do:
 
 1. Make four copies of the `sent1` field so you can combine each of them with `sent2` to recreate how a sentence starts.
-2. Combine `sent2` with each one of the four possible sentence endings.
-3. Flatten these two lists so you can tokenize them, and then unflatten them afterwards so each example has a corresponding `input_ids`, `attention_mask`, and `labels` field.
+2. Combine `sent2` with each of the four possible sentence endings.
+3. Flatten these two lists so you can tokenize them, and then unflatten them afterward so each example has a corresponding `input_ids`, `attention_mask`, and `labels` field.
 
 ```py
 >>> ending_names = ["ending0", "ending1", "ending2", "ending3"]
@@ -97,7 +97,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 
 >>> @dataclass
->>> class DataCollatorForMultipleChoice:
+... class DataCollatorForMultipleChoice:
 ...     """
 ...     Data collator that will dynamically pad the inputs for multiple choice received.
 ...     """
@@ -195,7 +195,7 @@ When you create `DataCollatorForMultipleChoice`, instruct it to return `tf.Tenso
 
 
 >>> @dataclass
->>> class DataCollatorForMultipleChoice:
+... class DataCollatorForMultipleChoice:
 ...     """
 ...     Data collator that will dynamically pad the inputs for multiple choice received.
 ...     """
