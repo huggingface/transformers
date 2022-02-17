@@ -351,9 +351,8 @@ def main():
                 bools.append(False)
         return bools
 
-    # Initialize torchvision transforms and jit them for faster processing
+    # Initialize torchvision transforms.
     preprocess_image = Transform(config.vision_config.image_size)
-    preprocess_image = torch.jit.script(preprocess_image)
 
     def preprocess(examples):
         # select the fist caption
