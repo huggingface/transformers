@@ -163,7 +163,7 @@ class MarianAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -661,7 +661,7 @@ class MarianEncoder(MarianPreTrainedModel):
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
         else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+            self.embed_tokens = nn.Embedding(config.src_vocab_size, embed_dim, self.padding_idx)
 
         self.embed_positions = MarianSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -823,7 +823,7 @@ class MarianDecoder(MarianPreTrainedModel):
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
         else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+            self.embed_tokens = nn.Embedding(config.tgt_vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = MarianSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -1082,8 +1082,10 @@ class MarianModel(MarianPreTrainedModel):
     def __init__(self, config: MarianConfig):
         super().__init__(config)
 
-        padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
+        if config.share_embeddings:
+            self.shared = nn.Embedding(config.vocab_size, config.d_model, config.pad_token_id)
+        else:
+            self.shared = None
 
         self.encoder = MarianEncoder(config, self.shared)
         self.decoder = MarianDecoder(config, self.shared)
@@ -1226,7 +1228,8 @@ class MarianMTModel(MarianPreTrainedModel):
         super().__init__(config)
         self.model = MarianModel(config)
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
-        self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
+        self.vocab_size = config.vocab_size if config.share_embeddings else config.tgt_vocab_size
+        self.lm_head = nn.Linear(config.d_model, self.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1321,7 +1324,7 @@ class MarianMTModel(MarianPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
