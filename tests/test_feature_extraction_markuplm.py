@@ -16,21 +16,16 @@
 
 import unittest
 
-import numpy as np
-
-from transformers.file_utils import is_pytesseract_available, is_torch_available
-from transformers.testing_utils import require_pytesseract, require_torch
-
-from .test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
-
 # TODO add soft dependency check
 from transformers import MarkupLMFeatureExtractor
+
+from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
 
 class MarkupLMFeatureExtractionTester(unittest.TestCase):
     def __init__(self, parent):
         self.parent = parent
-    
+
     def prepare_feat_extract_dict(self):
         return {}
 
@@ -84,7 +79,7 @@ class MarkupLMFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
     @property
     def feat_extract_dict(self):
         return self.feature_extract_tester.prepare_feat_extract_dict()
-    
+
     def test_call(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class()
@@ -92,9 +87,9 @@ class MarkupLMFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
         # Test not batched input
         html_string = get_html_strings()[0]
         encoding = feature_extractor(html_string)
-        
+
         # fmt: off
-        expected_nodes = [['sample document', 'Goog', 'This is one header', 'This is a another Header', 'Travel from', 'SFO to JFK', 'on May 2, 2015 at 2:00 pm. For details go to confirm.com', 'Traveler', 'name', 'is', 'John Doe']] 
+        expected_nodes = [['sample document', 'Goog', 'This is one header', 'This is a another Header', 'Travel from', 'SFO to JFK', 'on May 2, 2015 at 2:00 pm. For details go to confirm.com', 'Traveler', 'name', 'is', 'John Doe']]
         expected_xpaths = [['/html/head/title', '/html/body/a', '/html/body/h1', '/html/body/h2', '/html/body/p', '/html/body/p/p/b[1]', '/html/body/p/p/b[2]/i', '/html/body/p/p/div/h3', '/html/body/p/p/div/h3/b', '/html/body/p/p/div/h3', '/html/body/p/p/div/h3/p']]
         # fmt: on
 
@@ -106,9 +101,11 @@ class MarkupLMFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
         encoding = feature_extractor(html_strings)
 
         # fmt: off
-        expected_nodes = ['My First Heading', 'My first paragraph.']
-        expected_xpaths = ['/html/body/h1', '/html/body/p']
+        expected_nodes = expected_nodes + [['My First Heading', 'My first paragraph.']]
+        expected_xpaths = expected_xpaths + [['/html/body/h1', '/html/body/p']]
 
-        self.assertEqual(encoding.nodes[1], expected_nodes)
-        self.assertEqual(encoding.xpaths[1], expected_xpaths)
-        
+        self.assertEqual(len(encoding.nodes), 2)
+        self.assertEqual(len(encoding.xpaths), 2)
+
+        self.assertEqual(encoding.nodes, expected_nodes)
+        self.assertEqual(encoding.xpaths, expected_xpaths)
