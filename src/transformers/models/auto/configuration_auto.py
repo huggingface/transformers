@@ -30,6 +30,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("fastspeech2", "FastSpeech2Config"),
         ("poolformer", "PoolFormerConfig"),
         ("convnext", "ConvNextConfig"),
         ("yoso", "YosoConfig"),
@@ -126,6 +127,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
+        ("fastspeech2", "FASTSPEECH2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("poolformer", "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("convnext", "CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -209,6 +211,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("fastspeech2", "FastSpeech2"),
         ("poolformer", "PoolFormer"),
         ("convnext", "ConvNext"),
         ("yoso", "YOSO"),

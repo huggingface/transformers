@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    fastspeech2,
     albert,
     auto,
     bart,

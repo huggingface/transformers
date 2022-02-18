@@ -150,6 +150,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.fastspeech2": ["FASTSPEECH2_PRETRAINED_CONFIG_ARCHIVE_MAP", "FastSpeech2Config", "FastSpeech2Tokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -428,6 +429,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.fastspeech2"].append("FastSpeech2TokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
@@ -648,6 +650,22 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.fastspeech2"].extend(
+        [
+            "FASTSPEECH2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FastSpeech2ForMaskedLM",
+            "FastSpeech2ForCausalLM",
+            "FastSpeech2ForMultipleChoice",
+            "FastSpeech2ForQuestionAnswering",
+            "FastSpeech2ForSequenceClassification",
+            "FastSpeech2ForTokenClassification",
+            "FastSpeech2Layer",
+            "FastSpeech2Model",
+            "FastSpeech2PreTrainedModel",
+            "load_tf_weights_in_fastspeech2",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2400,6 +2418,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.fastspeech2 import FASTSPEECH2_PRETRAINED_CONFIG_ARCHIVE_MAP, FastSpeech2Config, FastSpeech2Tokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2642,6 +2661,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.fastspeech2 import FastSpeech2TokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2767,6 +2787,20 @@ if TYPE_CHECKING:
         from .utils.dummy_pytorch_quantization_and_torch_objects import *
 
     if is_torch_available():
+
+        from .models.fastspeech2 import (
+            FASTSPEECH2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FastSpeech2ForMaskedLM,
+            FastSpeech2ForCausalLM,
+            FastSpeech2ForMultipleChoice,
+            FastSpeech2ForQuestionAnswering,
+            FastSpeech2ForSequenceClassification,
+            FastSpeech2ForTokenClassification,
+            FastSpeech2Layer,
+            FastSpeech2Model,
+            FastSpeech2PreTrainedModel,
+            load_tf_weights_in_fastspeech2,
+        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
