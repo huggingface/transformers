@@ -101,11 +101,6 @@ jobs:
           git config --global user.name "Hugging Face Doc Builder"
           git config --global user.email docs@huggingface.co
           
-          cd doc-builder
-          # git pull origin main
-          git fetch origin kit
-          git switch kit
-          cd ..
 
           cd notebooks
           git pull origin master
@@ -115,23 +110,9 @@ jobs:
           rm -rf doc-build-dev
           git clone https://HuggingFaceDocBuilder:$WRITE@github.com/huggingface/doc-build-dev
 
-      - name: Make MDX documentation
+      - name: Make documentation
         run: |
-          doc-builder build transformers transformers/docs/source --build_dir doc-build-dev --notebook_dir notebooks/transformers_doc --clean --version pr_$PR_NUMBER
-
-      - name: Make HTML documentation
-        run: |
-          cd doc-builder
-          cp -R ../doc-build-dev/transformers/pr_${PR_NUMBER}/* kit/src/routes/
-          cd kit
-
-          npm ci
-          DOCS_VERSION=pr_${PR_NUMBER} npm run build
-          cd ../
-
-          rm -Rf ../doc-build-dev/transformers/pr_${PR_NUMBER}/
-          cp -R kit/build  ../doc-build-dev/transformers/pr_${PR_NUMBER}
-          cd ../
+          doc-builder build transformers transformers/docs/source --build_dir doc-build-dev --notebook_dir notebooks/transformers_doc --clean --version pr_$PR_NUMBER --html
 
       - name: Push to repositories
         run: |
