@@ -1594,6 +1594,14 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
             hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
             all_hidden_states = all_hidden_states + (hidden_states_to_add,)
 
+        # undo padding
+        if output_attentions:
+            all_attentions = (
+                tuple([state[:, :, :-padding_len, :] for state in all_attentions])
+                if padding_len > 0
+                else all_attentions
+            )
+
         if not return_dict:
             return tuple(
                 v for v in [hidden_states, all_hidden_states, all_attentions, all_global_attentions] if v is not None

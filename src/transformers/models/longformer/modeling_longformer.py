@@ -1249,6 +1249,7 @@ class LongformerEncoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
+        padding_len=0,
     ):
 
         is_index_masked = attention_mask < 0
@@ -1307,6 +1308,16 @@ class LongformerEncoder(nn.Module):
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
+
+        # undo padding
+        if padding_len > 0:
+            # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
+            hidden_states = hidden_states[:, :-padding_len]
+            if output_hidden_states:
+                all_hidden_states = tuple([state[:, :-padding_len] for state in all_hidden_states])
+
+            if output_attentions:
+                all_attentions = tuple([state[:, :, :-padding_len, :] for state in all_attentions])
 
         if not return_dict:
             return tuple(
@@ -1700,31 +1711,18 @@ class LongformerModel(LongformerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            padding_len=padding_len,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        # undo padding
-        all_hidden_states = None
-        if output_hidden_states:
-            all_hidden_states = encoder_outputs[1]
-
-        if padding_len > 0:
-            # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
-            sequence_output = sequence_output[:, :-padding_len]
-            if output_hidden_states:
-                all_hidden_states = tuple([state[:, :-padding_len] for state in all_hidden_states])
-
         if not return_dict:
-            if output_hidden_states:
-                return (sequence_output, pooled_output, all_hidden_states) + encoder_outputs[2:]
-            else:
-                return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return LongformerBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=all_hidden_states,
+            hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             global_attentions=encoder_outputs.global_attentions,
         )
