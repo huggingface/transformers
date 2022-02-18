@@ -116,9 +116,9 @@ class Data2VecConfig(PretrainedConfig):
         use_cache=True,
         classifier_dropout=None,
         # Here starts audio-only parameters
+        layer_norm_eps_audio=1e-5,
         feat_extract_norm="layer",
         feat_extract_activation="gelu",
-        num_conv_pos_embeddings=19,
         conv_dim=(512, 512, 512, 512, 512, 512, 512),
         conv_stride=(5, 2, 2, 2, 2, 2, 2),
         conv_kernel=(10, 3, 3, 3, 3, 2, 2),
@@ -127,6 +127,8 @@ class Data2VecConfig(PretrainedConfig):
         mask_time_prob=0.05,
         do_stable_layer_norm=False,
         num_conv_pos_embedding_groups=16,
+        conv_pos_kernel_size=19,
+        num_conv_pos_embeddings=5,
         activation_dropout=0.1,
         add_adapter=False,
         final_dropout=0.1,
@@ -153,7 +155,6 @@ class Data2VecConfig(PretrainedConfig):
         # Here starts audio-only parameters
         self.feat_extract_norm = feat_extract_norm
         self.feat_extract_activation = feat_extract_activation
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.conv_dim = conv_dim
         self.conv_stride = conv_stride
         self.conv_kernel = conv_kernel
@@ -163,6 +164,8 @@ class Data2VecConfig(PretrainedConfig):
         self.mask_time_prob = mask_time_prob
         self.do_stable_layer_norm = do_stable_layer_norm
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
+        self.conv_pos_kernel_size = conv_pos_kernel_size
+        self.num_conv_pos_embeddings = num_conv_pos_embeddings
         # Using the same dropout as for text
         self.hidden_dropout = self.hidden_dropout_prob
         # Using the same dropout as for text

@@ -334,7 +334,6 @@ class Data2VecAudioModel(BaseFairseqModel):
         else:
             x = features
             mask_indices = None
-        print(f"Before encoder FB: {x.shape} {x}")
         x, layer_results = self.encoder(
             x,
             padding_mask=padding_mask,

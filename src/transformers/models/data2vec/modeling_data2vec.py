@@ -16,12 +16,14 @@
 
 import math
 
+from typing import Union, Optional
 import torch
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+import numpy as np
 from ...activations import ACT2FN, gelu
 from ...file_utils import (
     add_code_sample_docstrings,
@@ -29,6 +31,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
+from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -38,6 +41,7 @@ from ...modeling_outputs import (
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
+    CausalLMOutput,
 )
 from ...modeling_utils import (
     PreTrainedModel,
@@ -45,12 +49,13 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from ...modeling_utils import torch_int_div
+from ...modeling_outputs import BaseModelOutput
 from ...models.wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Adapter,
     Wav2Vec2BaseModelOutput,
     Wav2Vec2FeatureEncoder,
-    Wav2Vec2FeatureProjection,
-    Wav2Vec2PositionalConvEmbedding,
+    Wav2Vec2EncoderLayer,
 )
 from ...utils import logging
 from .configuration_data2vec import Data2VecConfig
@@ -58,9 +63,20 @@ from .configuration_data2vec import Data2VecConfig
 
 logger = logging.get_logger(__name__)
 
+
+_HIDDEN_STATES_START_POSITION = 2
+
 _CHECKPOINT_FOR_DOC = "data2vec"
 _CONFIG_FOR_DOC = "Data2VecConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
+
+# General docstring
+_CONFIG_FOR_DOC = "Wav2Vec2Config"
+_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+
+# CTC docstring
+_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
+_CTC_EXPECTED_LOSS = 53.48
 
 DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "data2vec",
@@ -582,7 +598,6 @@ class Data2VecPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel with Roberta->Data2Vec,roberta->data2vec
 class Data2VecPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -593,7 +608,6 @@ class Data2VecPreTrainedModel(PreTrainedModel):
     base_model_prefix = "data2vec"
     supports_gradient_checkpointing = True
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -607,8 +621,10 @@ class Data2VecPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, Data2VecEncoder):
@@ -690,6 +706,157 @@ DATA2VEC_INPUTS_DOCSTRING = r"""
 """
 
 
+class Data2VecPadLayer(nn.Module):
+    def __init__(self, conv_pos_kernel_size):
+        super().__init__()
+        self.num_pad_remove = 1 if conv_pos_kernel_size % 2 == 0 else 0
+
+    def forward(self, hidden_states):
+        if self.num_pad_remove > 0:
+            hidden_states = hidden_states[:, :, : -self.num_pad_remove]
+        return hidden_states
+
+
+class Data2VecPositionalConvLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.conv = nn.Conv1d(
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size=config.conv_pos_kernel_size,
+            padding=config.conv_pos_kernel_size // 2,
+            groups=config.num_conv_pos_embedding_groups,
+        )
+
+        self.padding = Data2VecPadLayer(config.conv_pos_kernel_size)
+        self.activation = ACT2FN[config.feat_extract_activation]
+        # no learnable parameters
+        self.layer_norm = nn.LayerNorm(config.hidden_size, elementwise_affine=False)
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.padding(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
+class Data2VecPositionalConvEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.layers = nn.ModuleList([Data2VecPositionalConvLayer(config) for _ in range(config.num_conv_pos_embeddings)])
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.transpose(1, 2)
+        for layer in self.layers:
+            hidden_states = layer(hidden_states)
+        hidden_states = hidden_states.transpose(1, 2)
+        return hidden_states
+
+
+class Data2VecFeatureProjection(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
+        self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
+        self.dropout = nn.Dropout(config.feat_proj_dropout)
+
+    def forward(self, hidden_states):
+        # non-projected hidden states are needed for quantization
+        norm_hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.projection(norm_hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states, norm_hidden_states
+
+
+class Data2VecAudioEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.pos_conv_embed = Data2VecPositionalConvEmbedding(config)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout)
+        self.layers = nn.ModuleList([Wav2Vec2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+    ):
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
+        if attention_mask is not None:
+            # make sure padded tokens output 0
+            hidden_states[~attention_mask] = 0.0
+
+            # extend attention_mask
+            attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
+            attention_mask = attention_mask.expand(
+                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+            )
+
+        position_embeddings = self.pos_conv_embed(hidden_states)
+        hidden_states = hidden_states + position_embeddings
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+
+        for layer in self.layers:
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            dropout_probability = np.random.uniform(0, 1)
+
+            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            if not skip_the_layer or deepspeed_zero3_is_enabled:
+                # under deepspeed zero3 all gpus must run in sync
+                if self.gradient_checkpointing and self.training:
+                    # create gradient checkpointing function
+                    def create_custom_forward(module):
+                        def custom_forward(*inputs):
+                            return module(*inputs, output_attentions)
+
+                        return custom_forward
+
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(layer),
+                        hidden_states,
+                        attention_mask,
+                    )
+                else:
+                    layer_outputs = layer(
+                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                    )
+                hidden_states = layer_outputs[0]
+
+            if skip_the_layer:
+                layer_outputs = (None, None)
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
+
+
 @add_start_docstrings(
     "The bare Data2Vec Model for audio transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_START_DOCSTRING,
@@ -699,20 +866,62 @@ class Data2VecForAudioModel(Data2VecPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.feature_extractor = Wav2Vec2FeatureEncoder(config)
-        self.feature_projection = Wav2Vec2FeatureProjection(config)
-        self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.feature_projection = Data2VecFeatureProjection(config)
         self.dropout = nn.Dropout(config.hidden_dropout)
 
         # model only needs masking vector if mask prob is > 0.0
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
             self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
+        self.encoder = Data2VecAudioEncoder(config)
+
         self.adapter = Wav2Vec2Adapter(config) if config.add_adapter else None
 
-        self.encoder = Data2VecEncoder(config)
         # Initialize weights and apply final processing
         self.post_init()
+
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
+    ):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return torch_int_div(input_length - kernel_size, stride) + 1
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        if add_adapter:
+            for _ in range(self.config.num_adapter_layers):
+                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
+
+        return input_lengths
+
+    def _get_feature_vector_attention_mask(
+        self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
+    ):
+        # Effectively attention_mask.sum(-1), but not inplace to be able to run
+        # on inference mode.
+        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
+
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
+        output_lengths = output_lengths.to(torch.long)
+
+        batch_size = attention_mask.shape[0]
+
+        attention_mask = torch.zeros(
+            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        # these two operations makes sure that all values before the output lengths idxs are attended to
+        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+        return attention_mask
 
     @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -737,13 +946,14 @@ class Data2VecForAudioModel(Data2VecPreTrainedModel):
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
-        hidden_states, extract_features = self.feature_projection(extract_features)
-        print(f"Before positional encoding HF:\n {hidden_states.shape} {hidden_states}")
 
-        position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        if attention_mask is not None:
+            # compute reduced attention_mask corresponding to feature vectors
+            attention_mask = self._get_feature_vector_attention_mask(
+                extract_features.shape[1], attention_mask, add_adapter=False
+            )
+
+        hidden_states, extract_features = self.feature_projection(extract_features)
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -763,6 +973,118 @@ class Data2VecForAudioModel(Data2VecPreTrainedModel):
             extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """Data2Vec Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
+    DATA2VEC_START_DOCSTRING,
+)
+class Data2VecForCTC(Data2VecPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.data2vec = Data2VecForAudioModel(config)
+        self.dropout = nn.Dropout(config.final_dropout)
+
+        if config.vocab_size is None:
+            raise ValueError(
+                f"You are trying to instantiate {self.__class__} with a configuration that "
+                "does not define the vocabulary size of the language model head. Please "
+                "instantiate the model as follows: `Wav2Vec2ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "or define `vocab_size` of your model's configuration."
+            )
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        self.wav2vec2.feature_extractor._freeze_parameters()
+
+    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_PROCESSOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
+    )
+    def forward(
+        self,
+        input_values,
+        attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
+            Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
+            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`.
+            All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
+            config.vocab_size - 1]`.
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.data2vec(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = self.dropout(hidden_states)
+
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+
+            if labels.max() >= self.config.vocab_size:
+                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+
+            # retrieve loss input_lengths from attention_mask
+            attention_mask = (
+                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
+            )
+            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+
+            # assuming that padded tokens are filled with -100
+            # when not being attended to
+            labels_mask = labels >= 0
+            target_lengths = labels_mask.sum(-1)
+            flattened_targets = labels.masked_select(labels_mask)
+
+            # ctc_loss doesn't support fp16
+            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+
+            with torch.backends.cudnn.flags(enabled=False):
+                loss = nn.functional.ctc_loss(
+                    log_probs,
+                    flattened_targets,
+                    input_lengths,
+                    target_lengths,
+                    blank=self.config.pad_token_id,
+                    reduction=self.config.ctc_loss_reduction,
+                    zero_infinity=self.config.ctc_zero_infinity,
+                )
+
+        if not return_dict:
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+            return ((loss,) + output) if loss is not None else output
+
+        return CausalLMOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
 
