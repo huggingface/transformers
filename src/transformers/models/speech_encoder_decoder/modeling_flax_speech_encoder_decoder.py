@@ -387,7 +387,12 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
         return self.module.init(
-            rngs, inputs, attention_mask, decoder_input_ids, decoder_attention_mask, decoder_position_ids,
+            rngs,
+            inputs,
+            attention_mask,
+            decoder_input_ids,
+            decoder_attention_mask,
+            decoder_position_ids,
         )["params"]
 
     def init_cache(self, batch_size, max_length, encoder_outputs):
@@ -589,7 +594,11 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
                 encoder_hidden_states = projection_module(encoder_hidden_states)
 
             return decoder_module(
-                decoder_input_ids, decoder_attention_mask, decoder_position_ids, encoder_hidden_states, **kwargs,
+                decoder_input_ids,
+                decoder_attention_mask,
+                decoder_position_ids,
+                encoder_hidden_states,
+                **kwargs,
             )
 
         outputs = self.module.apply(

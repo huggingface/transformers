@@ -21,9 +21,10 @@ import numpy as np
 from transformers import is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow, torch_device
 
-from .test_modeling_flax_wav2vec2 import FlaxWav2Vec2ModelTester
-from .test_modeling_flax_common import ids_tensor, floats_tensor, random_attention_mask
+from .test_modeling_flax_common import floats_tensor, ids_tensor, random_attention_mask
 from .test_modeling_flax_gpt2 import FlaxGPT2ModelTester
+from .test_modeling_flax_wav2vec2 import FlaxWav2Vec2ModelTester
+
 
 if is_flax_available():
     from transformers import (
@@ -56,15 +57,15 @@ class FlaxEncoderDecoderMixin:
         raise NotImplementedError
 
     def check_encoder_decoder_model_from_pretrained_configs(
-            self,
-            config,
-            inputs,
-            attention_mask,
-            encoder_hidden_states,
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            **kwargs
+        self,
+        config,
+        inputs,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        **kwargs
     ):
         encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
@@ -85,15 +86,15 @@ class FlaxEncoderDecoderMixin:
         )
 
     def check_encoder_decoder_model(
-            self,
-            config,
-            inputs,
-            attention_mask,
-            encoder_hidden_states,
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            **kwargs
+        self,
+        config,
+        inputs,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -115,10 +116,7 @@ class FlaxEncoderDecoderMixin:
         encoder_outputs = FlaxBaseModelOutput(last_hidden_state=outputs_encoder_decoder.encoder_hidden_states[-1])
 
         outputs_encoder_decoder = enc_dec_model(
-            attention_mask,
-            decoder_input_ids,
-            decoder_attention_mask,
-            encoder_outputs=encoder_outputs
+            attention_mask, decoder_input_ids, decoder_attention_mask, encoder_outputs=encoder_outputs
         )
 
         self.assertEqual(
@@ -126,16 +124,16 @@ class FlaxEncoderDecoderMixin:
         )
 
     def check_encoder_decoder_model_from_pretrained(
-            self,
-            config,
-            inputs,
-            attention_mask,
-            encoder_hidden_states,
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            return_dict,
-            **kwargs
+        self,
+        config,
+        inputs,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        return_dict,
+        **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
@@ -154,15 +152,15 @@ class FlaxEncoderDecoderMixin:
         )
 
     def check_save_and_load(
-            self,
-            config,
-            inputs,
-            attention_mask,
-            encoder_hidden_states,
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            **kwargs
+        self,
+        config,
+        inputs,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
@@ -193,15 +191,15 @@ class FlaxEncoderDecoderMixin:
             self.assertLessEqual(max_diff, 1e-5)
 
     def check_encoder_decoder_model_output_attentions(
-            self,
-            config,
-            inputs,
-            attention_mask,
-            encoder_hidden_states,
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            **kwargs
+        self,
+        config,
+        inputs,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        **kwargs
     ):
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
@@ -214,7 +212,7 @@ class FlaxEncoderDecoderMixin:
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            output_attentions=True
+            output_attentions=True,
         )
 
         encoder_attentions = outputs_encoder_decoder["encoder_attentions"]
@@ -309,7 +307,7 @@ class FlaxEncoderDecoderMixin:
 
         pt_model_loaded.to(torch_device)
         pt_model_loaded.eval()
-        
+
         with torch.no_grad():
             pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
 
@@ -432,6 +430,7 @@ class FlaxEncoderDecoderMixin:
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
+
 @require_flax
 class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
@@ -485,8 +484,10 @@ class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
 
     @slow
     def test_flaxwav2vec2gpt2_pt_flax_equivalence(self):
-        pt_model = SpeechEncoderDecoderModel.from_pretrained('jsnfly/wav2vec2-large-xlsr-53-german-gpt2')
-        fx_model = FlaxSpeechEncoderDecoderModel.from_pretrained('jsnfly/wav2vec2-large-xlsr-53-german-gpt2', from_pt=True)
+        pt_model = SpeechEncoderDecoderModel.from_pretrained("jsnfly/wav2vec2-large-xlsr-53-german-gpt2")
+        fx_model = FlaxSpeechEncoderDecoderModel.from_pretrained(
+            "jsnfly/wav2vec2-large-xlsr-53-german-gpt2", from_pt=True
+        )
 
         pt_model.to(torch_device)
         pt_model.eval()
@@ -539,5 +540,3 @@ class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
         self.assertEqual(len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch")
         for fx_output, pt_output_loaded in zip(fx_outputs, pt_outputs_loaded):
             self.assert_almost_equals(fx_output, pt_output_loaded.numpy(), 1e-5)
-
-
