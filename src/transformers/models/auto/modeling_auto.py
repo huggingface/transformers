@@ -44,6 +44,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("perceiver", "PerceiverModel"),
         ("gptj", "GPTJModel"),
         ("layoutlmv2", "LayoutLMv2Model"),
+        ("plbart", "PLBartModel"),
         ("beit", "BeitModel"),
         ("rembert", "RemBertModel"),
         ("visual_bert", "VisualBertModel"),
@@ -163,6 +164,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         # Model with LM heads mapping
         ("yoso", "YosoForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
+        ("plbart", "PLBartForConditionalGeneration"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -216,6 +218,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
         ("xglm", "XGLMForCausalLM"),
+        ("plbart", "PLBartForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -361,6 +364,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("plbart", "PLBartForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("m2m_100", "M2M100ForConditionalGeneration"),
         ("led", "LEDForConditionalGeneration"),
@@ -391,6 +395,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Sequence Classification mapping
         ("yoso", "YosoForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
+        ("plbart", "PLBartForSequenceClassification"),
         ("perceiver", "PerceiverForSequenceClassification"),
         ("qdqbert", "QDQBertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),

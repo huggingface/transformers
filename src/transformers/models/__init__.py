@@ -83,6 +83,7 @@ from . import (
     pegasus,
     perceiver,
     phobert,
+    plbart,
     poolformer,
     prophetnet,
     qdqbert,
