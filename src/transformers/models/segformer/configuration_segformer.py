@@ -83,10 +83,8 @@ class SegformerConfig(PretrainedConfig):
             required for the semantic segmentation model.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
-        legacy_output (`bool`, *optional*, defaults to `False`):
-            Whether to return the legacy outputs or not (with logits of shape `height / 4 , width / 4`)
-
-            This argument is only present for backward compatibility reasons and will be removed in v5 of Transformers.
+        resize_logits (`bool`, *optional*, defaults to `False`):
+            Whether to resize the logits to the same size as the `pixel_values` or not.
 
     Example:
 
@@ -128,7 +126,7 @@ class SegformerConfig(PretrainedConfig):
         is_encoder_decoder=False,
         reshape_last_stage=True,
         semantic_loss_ignore_index=255,
-        legacy_output=False,
+        resize_logits=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -154,4 +152,4 @@ class SegformerConfig(PretrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.reshape_last_stage = reshape_last_stage
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
-        self.legacy_output = legacy_output
+        self.resize_logits = resize_logits
