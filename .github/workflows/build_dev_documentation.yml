@@ -17,6 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
+          repository: 'huggingface/doc-builder'
+          path: doc-builder
+          ref: "kit"
+
+      - uses: actions/checkout@v2
+        with:
           repository: 'huggingface/transformers'
           path: transformers
 
@@ -107,7 +113,9 @@ jobs:
 
       - name: Make documentation
         run: |
-          doc-builder build transformers transformers/docs/source --build_dir doc-build-dev --notebook_dir notebooks/transformers_doc --clean --version pr_$PR_NUMBER --html
+          cd doc-builder
+          doc-builder build transformers ../transformers/docs/source --build_dir ../doc-build-dev --notebook_dir notebooks/transformers_doc --clean --version pr_$PR_NUMBER --html
+          cd ..
 
       - name: Push to repositories
         run: |
