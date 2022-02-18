@@ -672,6 +672,7 @@ if is_torch_available():
             "MODEL_FOR_CTC_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
+            "MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
             "MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -694,6 +695,7 @@ if is_torch_available():
             "AutoModelForCTC",
             "AutoModelForImageClassification",
             "AutoModelForImageSegmentation",
+            "AutoModelForMaskedImageModeling",
             "AutoModelForMaskedLM",
             "AutoModelForMultipleChoice",
             "AutoModelForNextSentencePrediction",
@@ -894,6 +896,7 @@ if is_torch_available():
             "DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DeiTForImageClassification",
             "DeiTForImageClassificationWithTeacher",
+            "DeiTForMaskedImageModeling",
             "DeiTModel",
             "DeiTPreTrainedModel",
         ]
@@ -1387,6 +1390,7 @@ if is_torch_available():
         [
             "SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SwinForImageClassification",
+            "SwinForMaskedImageModeling",
             "SwinModel",
             "SwinPreTrainedModel",
         ]
@@ -1468,6 +1472,7 @@ if is_torch_available():
         [
             "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ViTForImageClassification",
+            "ViTForMaskedImageModeling",
             "ViTModel",
             "ViTPreTrainedModel",
         ]
@@ -2836,6 +2841,7 @@ if TYPE_CHECKING:
             MODEL_FOR_CTC_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+            MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
             MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -2858,6 +2864,7 @@ if TYPE_CHECKING:
             AutoModelForCTC,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
+            AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
             AutoModelForNextSentencePrediction,
@@ -3024,6 +3031,7 @@ if TYPE_CHECKING:
             DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DeiTForImageClassification,
             DeiTForImageClassificationWithTeacher,
+            DeiTForMaskedImageModeling,
             DeiTModel,
             DeiTPreTrainedModel,
         )
@@ -3434,6 +3442,7 @@ if TYPE_CHECKING:
         from .models.swin import (
             SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwinForImageClassification,
+            SwinForMaskedImageModeling,
             SwinModel,
             SwinPreTrainedModel,
         )
@@ -3499,6 +3508,7 @@ if TYPE_CHECKING:
         from .models.vit import (
             VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTForImageClassification,
+            ViTForMaskedImageModeling,
             ViTModel,
             ViTPreTrainedModel,
         )

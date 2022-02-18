@@ -105,6 +105,7 @@ _deps = [
     "filelock",
     "flake8>=3.8.3",
     "flax>=0.3.5",
+    "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "huggingface-hub>=0.1.0,<1.0",
@@ -242,6 +243,7 @@ else:
     extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
 
 extras["tokenizers"] = deps_list("tokenizers")
+extras["ftfy"] = deps_list("ftfy")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
