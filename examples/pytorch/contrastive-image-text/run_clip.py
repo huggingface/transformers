@@ -29,7 +29,6 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-import datasets
 import torch
 from datasets import load_dataset
 from PIL import Image
@@ -107,6 +106,7 @@ class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
+
     dataset_name: Optional[str] = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
@@ -182,7 +182,6 @@ dataset_name_mapping = {
 
 
 # We use torchvision for faster image pre-processing.
-# We need to ensure faster processing speed as it can become a bottleneck on TPU
 class Transform(torch.nn.Module):
     def __init__(self, image_size):
         super().__init__()
@@ -200,10 +199,15 @@ class Transform(torch.nn.Module):
 
 
 def collate_fn(examples):
-    pixel_values = torch.stack([torch.tensor(example["pixel_values"]) for example in examples])
+    pixel_values = torch.stack([example["pixel_values"] for example in examples])
     input_ids = torch.tensor([example["input_ids"] for example in examples], dtype=torch.long)
     attention_mask = torch.tensor([example["attention_mask"] for example in examples], dtype=torch.long)
-    return {"pixel_values": pixel_values, "input_ids": input_ids, "attention_mask": attention_mask, "return_loss": True}
+    return {
+        "pixel_values": pixel_values,
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+        "return_loss": True,
+    }
 
 
 def main():
@@ -352,44 +356,21 @@ def main():
                 bools.append(False)
         return bools
 
-    # Initialize torchvision transforms.
-    preprocess_image = Transform(config.vision_config.image_size)
+    # Initialize torchvision transforms and jit it for faster processing.
+    image_transformations = Transform(config.vision_config.image_size)
+    image_transformations = torch.jit.script(image_transformations)
 
-    def preprocess(examples):
-        # select the fist caption
+    def tokenize_captions(examples):
         captions = [caption for caption in examples[caption_column]]
-
-        # encode captions
-        text_inputs = tokenizer(
-            captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True
-        )
+        text_inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True)
         examples["input_ids"] = text_inputs.input_ids
         examples["attention_mask"] = text_inputs.attention_mask
-
-        # encode images
-        def _transform_images(image_file):
-            image = read_image(image_file, mode=ImageReadMode.RGB)
-            image = preprocess_image(image)
-            return image.numpy()
-
-        examples["pixel_values"] = [_transform_images(image_file) for image_file in examples[image_column]]
-
         return examples
 
-    features = datasets.Features(
-        {
-            "pixel_values": datasets.Array3D(
-                shape=(
-                    getattr(model.config.vision_config, "num_channels", 3),
-                    model.config.vision_config.image_size,
-                    model.config.vision_config.image_size,
-                ),
-                dtype="float32",
-            ),
-            "input_ids": datasets.Sequence(feature=datasets.Value(dtype="int32", id=None), length=-1, id=None),
-            "attention_mask": datasets.Sequence(feature=datasets.Value(dtype="int32", id=None), length=-1, id=None),
-        }
-    )
+    def transform_images(examples):
+        images = [read_image(image_file, mode=ImageReadMode.RGB) for image_file in examples[image_column]]
+        examples["pixel_values"] = [image_transformations(image) for image in images]
+        return examples
 
     if training_args.do_train:
         if "train" not in dataset:
@@ -400,14 +381,16 @@ def main():
 
         train_dataset = train_dataset.filter(filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers)
         train_dataset = train_dataset.map(
-            function=preprocess,
+            function=tokenize_captions,
             batched=True,
+            remove_columns=[col for col in column_names if col != image_column],
             num_proc=data_args.preprocessing_num_workers,
-            remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
-            desc=f"Running preprocessing on train dataset",
-            features=features,
+            desc="Running tokenizer on train dataset",
         )
+
+        # Transform images on the fly as doing it on the whole dataset takes too much time.
+        train_dataset.set_transform(transform_images)
 
     if training_args.do_eval:
         if "train" not in dataset:
@@ -418,14 +401,16 @@ def main():
 
         eval_dataset = eval_dataset.filter(filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers)
         eval_dataset = eval_dataset.map(
-            function=preprocess,
+            function=tokenize_captions,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
-            remove_columns=column_names,
+            remove_columns=[col for col in column_names if col != image_column],
             load_from_cache_file=not data_args.overwrite_cache,
-            desc=f"Running preprocessing on validation dataset",
-            features=features,
+            desc="Running tokenizer on validation dataset",
         )
+
+        # Transform images on the fly as doing it on the whole dataset takes too much time.
+        eval_dataset.set_transform(transform_images)
 
     if training_args.do_predict:
         if "test" not in dataset:
@@ -436,14 +421,16 @@ def main():
 
         test_dataset = test_dataset.filter(filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers)
         test_dataset = test_dataset.map(
-            function=preprocess,
+            function=tokenize_captions,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
-            remove_columns=column_names,
+            remove_columns=[col for col in column_names if col != image_column],
             load_from_cache_file=not data_args.overwrite_cache,
-            desc=f"Running preprocessing on test dataset",
-            features=features,
+            desc="Running tokenizer on test dataset",
         )
+
+        # Transform images on the fly as doing it on the whole dataset takes too much time.
+        test_dataset.set_transform(transform_images)
 
     # Initalize our trainer
     trainer = Trainer(
