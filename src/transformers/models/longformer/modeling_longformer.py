@@ -1246,10 +1246,10 @@ class LongformerEncoder(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
+        padding_len=0,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
-        padding_len=0,
     ):
 
         is_index_masked = attention_mask < 0
@@ -1708,10 +1708,10 @@ class LongformerModel(LongformerPreTrainedModel):
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
+            padding_len=padding_len,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            padding_len=padding_len,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None

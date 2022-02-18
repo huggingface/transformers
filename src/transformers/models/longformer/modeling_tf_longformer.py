@@ -1595,6 +1595,8 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
             all_hidden_states = all_hidden_states + (hidden_states_to_add,)
 
         # undo padding
+        # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
+        hidden_states = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
         if output_attentions:
             all_attentions = (
                 tuple([state[:, :, :-padding_len, :] for state in all_attentions])
@@ -1770,11 +1772,6 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        # undo padding
-        if padding_len > 0:
-            # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
-            sequence_output = sequence_output[:, :-padding_len]
 
         if not inputs["return_dict"]:
             return (
