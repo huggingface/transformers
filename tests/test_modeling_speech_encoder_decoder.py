@@ -113,6 +113,20 @@ class EncoderDecoderMixin:
         self.assertEqual(
             outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
         )
+
+        # specify `inputs` to model only, omitting `input_values` and `input_features`
+        inputs = input_values if input_features is None else input_features
+        outputs_encoder_decoder = enc_dec_model(
+            inputs=inputs,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+            output_hidden_states=True,
+        )
+        self.assertEqual(
+            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape - (decoder_config.vocab_size,))
+        )
+
         encoder_outputs = BaseModelOutput(last_hidden_state=outputs_encoder_decoder.encoder_hidden_states[-1])
         outputs_encoder_decoder = enc_dec_model(
             encoder_outputs=encoder_outputs,
