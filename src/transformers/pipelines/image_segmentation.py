@@ -81,16 +81,17 @@ class ImageSegmentationPipeline(Pipeline):
                 Threshold to use when turning the predicted masks into binary values.
 
         Return:
-            A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a list of
-            dictionaries, if the input is a list of several images, will return a list of list of dictionaries corresponding to
-            each image.
+            A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a
+            list of dictionaries, if the input is a list of several images, will return a list of list of dictionaries
+            corresponding to each image.
 
             The dictionaries contain the following keys:
 
             - **label** (`str`) -- The class label identified by the model.
             - **mask** (`PIL.Image`) -- Pil Image with size (heigth, width) of the original image. Pixel values in the
               image are in the range 0-255. 0 means the pixel is *not* part of the *label*, 255 means it definitely is.
-            - **score** (*optional* `float`) -- Optionnally, when the model is capable of estimating a confidence of the "object" described by the label and the mask.
+            - **score** (*optional* `float`) -- Optionnally, when the model is capable of estimating a confidence of
+              the "object" described by the label and the mask.
         """
 
         return super().__call__(*args, **kwargs)
