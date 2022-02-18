@@ -38,6 +38,7 @@ Activation:
 
     ```python
     from torch.cuda.amp import autocast
+
     with autocast(dtype=torch.bfloat16):
         loss, outputs = ...
     ```
