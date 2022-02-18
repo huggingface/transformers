@@ -25,12 +25,11 @@ from transformers import Wav2Vec2Processor, logging
 import fairseq
 from datasets import load_dataset
 
-from transformers import Data2VecConfig, Data2VecForAudioModel
-from transformers.models.data2vec.modeling_data2vec import Data2VecForCTC
-
 # Copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_audio.py
-from transformers.models.data2vec.data2vec_audio import Data2VecAudioModel  # noqa: F401
+from transformers.models.data2vec.data2vec_audio import Data2VecAudioModel as Dummy  # noqa: F401
 
+from transformers.models.data2vec.modeling_data2vec_audio import Data2VecAudioModel, Data2VecAudioForCTC
+from transformers.models.data2vec.configuration_data2vec_audio import Data2VecAudioConfig
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -89,8 +88,8 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
     fairseq_dict = fairseq_model.state_dict()
 
     if not is_headless:
-        feature_extractor = hf_model.data2vec.feature_extractor
-        pos_conv_embedding = hf_model.data2vec.encoder.pos_conv_embed
+        feature_extractor = hf_model.data2vec_audio.feature_extractor
+        pos_conv_embedding = hf_model.data2vec_audio.encoder.pos_conv_embed
 
     else:
         feature_extractor = hf_model.feature_extractor
@@ -117,7 +116,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
         else:
             for key, mapped_key in MAPPING.items():
                 if not is_headless:
-                    mapped_key = "data2vec." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
+                    mapped_key = "data2vec_audio." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
                 if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
                     is_used = True
                     if "*" in mapped_key:
@@ -201,13 +200,13 @@ def convert_wav2vec2_checkpoint(
     Copy/paste/tweak model's weights to transformers design.
     """
     if config_path is not None:
-        config = Data2VecConfig.from_pretrained(config_path)
+        config = Data2VecAudioConfig.from_pretrained(config_path)
     else:
-        config = Data2VecConfig(layer_norm_eps=1e-5, vocab_size=32)
+        config = Data2VecAudioConfig()
 
     if not is_finetuned:
         # Modify final_proj layer name
-        hf_wav2vec = Data2VecForAudioModel(config)
+        hf_wav2vec = Data2VecAudioModel(config)
         data2vec_checkpoint_dir = os.path.dirname(checkpoint_path)
 
         state_dict = torch.load(checkpoint_path)
@@ -216,7 +215,7 @@ def convert_wav2vec2_checkpoint(
         converted_ckpt = os.path.join(data2vec_checkpoint_dir, "converted.pt")
         torch.save(state_dict, converted_ckpt)
     else:
-        hf_wav2vec = Data2VecForCTC(config)
+        hf_wav2vec = Data2VecAudioForCTC(config)
         converted_ckpt = checkpoint_path
 
     def load_data2vec(path):
