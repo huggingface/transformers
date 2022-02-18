@@ -20,7 +20,6 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from functools import partial
 from pathlib import Path
 from typing import Optional
 
@@ -31,11 +30,11 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     DataCollatorWithPadding,
+    DefaultDataCollator,
     HfArgumentParser,
     PretrainedConfig,
     TFAutoModelForSequenceClassification,
     TFTrainingArguments,
-    default_data_collator,
     set_seed,
 )
 from transformers.file_utils import CONFIG_NAME, TF2_WEIGHTS_NAME
@@ -363,7 +362,7 @@ def main():
     datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
 
     if data_args.pad_to_max_length:
-        data_collator = partial(default_data_collator, return_tensors="tf")
+        data_collator = DefaultDataCollator(return_tensors="tf")
     else:
         data_collator = DataCollatorWithPadding(tokenizer, return_tensors="tf")
     # endregion
