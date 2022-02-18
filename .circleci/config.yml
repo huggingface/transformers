@@ -559,6 +559,10 @@ jobs:
                   if [ -f test_list.txt ]; then
                     python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py ./tests/test_tokenization_openai.py | tee tests_output.txt
                   fi
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 1 tests/test_tokenization_clip.py --dist=loadfile -s --make-reports=tests_tokenization_clip --durations=100 | tee tests_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:

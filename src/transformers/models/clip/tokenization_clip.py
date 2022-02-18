@@ -48,7 +48,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "openai/clip-vit-base-patch32": {"do_lower_case": True},
+    "openai/clip-vit-base-patch32": {},
 }
 
 
@@ -101,19 +101,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
     """
     Construct a CLIP tokenizer. Based on byte-level Byte-Pair-Encoding.
 
-    This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
-    be encoded differently whether it is at the beginning of the sentence (without space) or not:
-
-
-    You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
-    call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
-
-    <Tip>
-
-    When used with `is_split_into_words=True`, this tokenizer will add a space before each word (even the first one).
-
-    </Tip>
-
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
 
@@ -132,9 +119,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The end of sequence token.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (CLIP tokenizer detect beginning of words by the preceding space).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -151,8 +135,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
         bos_token="<|startoftext|>",
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",  # hack to enable padding
-        add_prefix_space=False,
-        do_lower_case=True,
         **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
@@ -165,8 +147,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
-            add_prefix_space=add_prefix_space,
-            do_lower_case=do_lower_case,
             **kwargs,
         )
 
@@ -190,20 +170,11 @@ class CLIPTokenizer(PreTrainedTokenizer):
         bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
         self.cache = {"<|startoftext|>": "<|startoftext|>", "<|endoftext|>": "<|endoftext|>"}
-        self.add_prefix_space = add_prefix_space
 
         self.pat = re.compile(
             r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""",
             re.IGNORECASE,
         )
-
-    # Very ugly hack to enable padding
-    @property
-    def pad_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the padding token in the vocabulary. Returns `None` if the token has not been set.
-        """
-        return 0
 
     @property
     def vocab_size(self):
@@ -232,9 +203,12 @@ class CLIPTokenizer(PreTrainedTokenizer):
         Returns:
             `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
+        bos_token = [self.bos_token_id]
+        eos_token = [self.eos_token_id]
+
         if token_ids_1 is None:
-            return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
-        return [self.bos_token_id] + token_ids_0 + token_ids_1 + [self.eos_token_id]
+            return bos_token + token_ids_0 + eos_token
+        return bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -262,7 +236,30 @@ class CLIPTokenizer(PreTrainedTokenizer):
 
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1] + [1] + ([0] * len(token_ids_1)) + [1]
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed. CLIP does not make use of token type ids, therefore a list of
+        zeros is returned.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of zeros.
+        """
+        bos_token = [self.bos_token_id]
+        eos_token = [self.eos_token_id]
+
+        if token_ids_1 is None:
+            return len(bos_token + token_ids_0 + eos_token) * [0]
+        return len(bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token) * [0]
 
     def bpe(self, token):
         if token in self.cache:
@@ -332,7 +329,8 @@ class CLIPTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
-        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors).replace("</w>", " ")
+        byte_array = bytearray([self.byte_decoder[c] for c in text])
+        text = byte_array.decode("utf-8", errors=self.errors).replace("</w>", " ").strip()
         return text
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
@@ -363,9 +361,3 @@ class CLIPTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
-
-    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if is_split_into_words or add_prefix_space:
-            text = " " + text
-        return (text, kwargs)
