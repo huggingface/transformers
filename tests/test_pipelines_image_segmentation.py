@@ -15,6 +15,8 @@
 import hashlib
 import unittest
 
+import datasets
+
 from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
@@ -48,6 +50,11 @@ else:
             pass
 
 
+def hashimage(image: Image) -> str:
+    m = hashlib.md5(image.tobytes())
+    return m.hexdigest()
+
+
 @require_vision
 @require_timm
 @require_torch
@@ -73,27 +80,24 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         self.assertIsInstance(outputs, list)
         n = len(outputs)
         self.assertGreater(n, 1)
-        self.assertEqual(outputs, [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * n)
-
-        outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", raw_image=True, threshold=0)
-        self.assertIsInstance(outputs, list)
-        # We need to inverse because of PIL.Image.Image.__eq__ impl
-        self.assertEqual([{"score": ANY(float), "label": ANY(str), "mask": ANY(Image.Image)}] * n, outputs)
-
-        import datasets
+        # XXX: PIL.Image implements __eq__ which bypasses ANY, so we inverse the comparison
+        # to make it work
+        self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * n, outputs)
 
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
-        batch = [
-            Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
-            # RGBA
-            dataset[0]["file"],
-            # LA
-            dataset[1]["file"],
-            # L
-            dataset[2]["file"],
-        ]
+        # RGBA
+        outputs = image_segmenter(dataset[0]["file"])
+        m = len(outputs)
+        self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
+        # LA
+        outputs = image_segmenter(dataset[1]["file"])
+        m = len(outputs)
+        self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
+        # L
+        outputs = image_segmenter(dataset[2]["file"])
+        m = len(outputs)
+        self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
 
         if isinstance(image_segmenter.model, DetrForSegmentation):
             # We need to test batch_size with images with the same size.
@@ -103,17 +107,29 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             batch_size = 1
         else:
             batch_size = 2
+
+        # 5 times the same image so the output shape is predictable
+        batch = [
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+        ]
         outputs = image_segmenter(batch, threshold=0.0, batch_size=batch_size)
         self.assertEqual(len(batch), len(outputs))
+        self.assertEqual({"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}, outputs[0][0])
+        self.assertEqual(len(outputs[0]), n)
         self.assertEqual(
-            outputs,
             [
-                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * n,
-                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * n,
-                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * n,
-                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * n,
-                [{"score": ANY(float), "label": ANY(str), "mask": ANY(str)}] * n,
+                [{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * n,
+                [{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * n,
+                [{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * n,
+                [{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * n,
+                [{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * n,
             ],
+            outputs,
+            f"Expected [{n}, {n}, {n}, {n}, {n}], got {[len(item) for item in outputs]}",
         )
 
     @require_tf
@@ -132,7 +148,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.0)
         for o in outputs:
             # shortening by hashing
-            o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
+            o["mask"] = hashimage(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
@@ -140,12 +156,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 {
                     "score": 0.004,
                     "label": "LABEL_0",
-                    "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
+                    "mask": "34eecd16bbfb0f476083ef947d81bf66",
                 },
                 {
                     "score": 0.004,
                     "label": "LABEL_0",
-                    "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
+                    "mask": "34eecd16bbfb0f476083ef947d81bf66",
                 },
             ],
         )
@@ -159,7 +175,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         )
         for output in outputs:
             for o in output:
-                o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
+                o["mask"] = hashimage(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
@@ -168,24 +184,24 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                     {
                         "score": 0.004,
                         "label": "LABEL_0",
-                        "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
+                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                     {
                         "score": 0.004,
                         "label": "LABEL_0",
-                        "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
+                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                 ],
                 [
                     {
                         "score": 0.004,
                         "label": "LABEL_0",
-                        "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
+                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                     {
                         "score": 0.004,
                         "label": "LABEL_0",
-                        "mask": "4276f7db4ca2983b2666f7e0c102d8186aed20be",
+                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                 ],
             ],
@@ -198,20 +214,20 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg")
         for o in outputs:
             # shortening by hashing
-            o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
+            o["mask"] = hashimage(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
                 {
-                    "score": 0.5,
+                    "score": None,
                     "label": "LABEL_0",
-                    "mask": "6cd638cf384d39ae34db3e4ac9b33b0dc1f24c3b",
+                    "mask": "01245d8ad25d03f09493ca97965788ae",
                 },
                 {
-                    "score": 0.5001,
+                    "score": None,
                     "label": "LABEL_1",
-                    "mask": "2f7f860be1d9223be15a7e6db5a1fdf2f994d93b",
+                    "mask": "f741516de8d5196a2c830739b9ac1c8c",
                 },
             ],
         )
@@ -225,7 +241,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg")
         for o in outputs:
-            o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
+            o["mask"] = hashimage(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
@@ -283,7 +299,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=threshold)
 
         for o in outputs:
-            o["mask"] = hashlib.sha1(o["mask"].encode("UTF-8")).hexdigest()
+            o["mask"] = hashimage(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),

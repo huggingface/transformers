@@ -1,5 +1,3 @@
-import base64
-import io
 from typing import Any, Dict, List, Union
 
 import numpy as np
@@ -61,8 +59,6 @@ class ImageSegmentationPipeline(Pipeline):
             postprocess_kwargs["threshold"] = kwargs["threshold"]
         if "mask_threshold" in kwargs:
             postprocess_kwargs["mask_threshold"] = kwargs["mask_threshold"]
-        if "raw_image" in kwargs:
-            postprocess_kwargs["raw_image"] = kwargs["raw_image"]
         return {}, {}, postprocess_kwargs
 
     def __call__(self, *args, **kwargs) -> Union[Predictions, List[Prediction]]:
@@ -79,28 +75,22 @@ class ImageSegmentationPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
-            raw_image (`bool`, *optional*, defaults to False):
-                If this is set to True, the `mask` description of the objects will be real `PIL.Image` (grey level). If
-                set to False, then, `mask` will be a base64 encoded of a PNG of this image. Which is easier to
-                send/save.
             threshold (`float`, *optional*, defaults to 0.9):
                 The probability necessary to make a prediction.
             mask_threshold (`float`, *optional*, defaults to 0.5):
                 Threshold to use when turning the predicted masks into binary values.
 
         Return:
-            A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a
-            dictionary, if the input is a list of several images, will return a list of dictionaries corresponding to
+            A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a list of
+            dictionaries, if the input is a list of several images, will return a list of list of dictionaries corresponding to
             each image.
 
             The dictionaries contain the following keys:
 
             - **label** (`str`) -- The class label identified by the model.
-            - **score** (`float`) -- The score attributed by the model for that label.
-            - **mask** (`str` or `PIL.Image`) -- base64 string of a grayscale (single-channel) PNG image that contain
-              masks information. The PNG image has size (heigth, width) of the original image. Pixel values in the
-              image are either 0 or 255 (i.e. mask is absent VS mask is present). if `raw_image` is set to `True`, then
-              the `mask` is the raw boolean `PIL.Image`.
+            - **mask** (`PIL.Image`) -- Pil Image with size (heigth, width) of the original image. Pixel values in the
+              image are in the range 0-255. 0 means the pixel is *not* part of the *label*, 255 means it definitely is.
+            - **score** (*optional* `float`) -- Optionnally, when the model is capable of estimating a confidence of the "object" described by the label and the mask.
         """
 
         return super().__call__(*args, **kwargs)
@@ -129,11 +119,8 @@ class ImageSegmentationPipeline(Pipeline):
             raw_annotation["scores"] = raw_annotation["scores"].tolist()
             raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in raw_annotation["labels"]]
             raw_annotation["masks"] = [
-                Image.fromarray(mask.numpy().astype(np.int8), mode="L") for mask in raw_annotation["masks"]
+                Image.fromarray(mask.numpy().astype(np.uint8), mode="L") for mask in raw_annotation["masks"]
             ]
-            if not raw_image:
-                raw_annotation["masks"] = [self._get_mask_str(mask) for mask in raw_annotation["masks"]]
-
             # {"scores": [...], ...} --> [{"score":x, ...}, ...]
             keys = ["score", "label", "mask"]
             annotation = [
@@ -166,26 +153,11 @@ class ImageSegmentationPipeline(Pipeline):
                 # Remove empty masks.
                 if mask_sum == 0:
                     continue
-                score = ((mask * logits_reshaped[0, label_id]).sum() / mask.sum()).item()
-                mask = Image.fromarray((mask * 255).numpy().astype(np.int8), mode="L")
-                if not raw_image:
-                    mask = self._get_mask_str(mask)
-                annotation.append({"score": score, "label": label, "mask": mask})
-
+                mask = Image.fromarray((mask * 255).numpy().astype(np.uint8), mode="L")
+                # Semantic segmentation does not output a global score for the mask
+                # so we don't attempt to compute one.
+                # XXX: We could send a mask with values between 0 and 255 instead
+                # of a pure mask to enable users to get the probabilities that
+                # are really outputted by the logits.
+                annotation.append({"score": None, "label": label, "mask": mask})
         return annotation
-
-    def _get_mask_str(self, img: "Image") -> str:
-        """
-        Turns mask numpy array into mask base64 str.
-
-        Args:
-            image (`PIL.Image`): PIL.Image (with shape (heigth, width) of the original image) containing masks
-                information. Values in the array are either 0 or 255 (i.e. mask is absent VS mask is present).
-
-        Returns:
-            A base64 string of a single-channel PNG image that contain masks information.
-        """
-        with io.BytesIO() as out:
-            img.save(out, format="PNG")
-            png_string = out.getvalue()
-            return base64.b64encode(png_string).decode("utf-8")
