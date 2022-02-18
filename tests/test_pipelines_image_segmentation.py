@@ -69,7 +69,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         ]
 
     def run_pipeline_test(self, image_segmenter, examples):
-        outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0)
+        outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)
         self.assertIsInstance(outputs, list)
         n = len(outputs)
         self.assertGreater(n, 1)
