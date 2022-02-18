@@ -38,11 +38,12 @@ from torchvision.transforms.functional import InterpolationMode
 
 import transformers
 from transformers import (
+    AutoFeatureExtractor,
+    AutoModel,
     AutoTokenizer,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
-    VisionTextDualEncoderModel,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
@@ -64,21 +65,9 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
 
-    text_model_name_or_path: str = field(
-        metadata={
-            "help": "The text model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
-        },
-    )
-    vision_model_name_or_path: str = field(
-        metadata={
-            "help": "The vision model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
-        },
-    )
-    from_pt: bool = field(
-        default=True,
-        metadata={"help": "whether to load the text and vision model using PyTorch checkpoints."},
+    model_name_or_path: str = field(
+        default="openai/clip-vit-base-patch32",
+        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -86,17 +75,23 @@ class ModelArguments:
     tokenizer_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
+    feature_extractor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+    )
+    model_revision: str = field(
+        default="main",
+        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
     use_fast_tokenizer: bool = field(
         default=True,
         metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
     )
-    dtype: Optional[str] = field(
-        default="float32",
+    use_auth_token: bool = field(
+        default=False,
         metadata={
-            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "with private models)."
         },
     )
 
@@ -183,13 +178,13 @@ dataset_name_mapping = {
 
 # We use torchvision for faster image pre-processing.
 class Transform(torch.nn.Module):
-    def __init__(self, image_size):
+    def __init__(self, image_size, mean, std):
         super().__init__()
         self.transforms = torch.nn.Sequential(
             Resize([image_size], interpolation=InterpolationMode.BICUBIC),
             CenterCrop(image_size),
             ConvertImageDtype(torch.float),
-            Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+            Normalize(mean, std),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -293,9 +288,9 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
-    elif model_args.text_model_name_or_path:
+    elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.text_model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     else:
         raise ValueError(
@@ -303,9 +298,19 @@ def main():
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
-    model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-        model_args.vision_model_name_or_path,
-        model_args.text_model_name_or_path,
+    # Load feature_extractor, in this script we only use this to get the mean and std for normalization.
+    feature_extractor = AutoFeatureExtractor.from_pretrained(
+        model_args.feature_extractor_name or model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
+
+    model = AutoModel.from_pretrained(
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     config = model.config
     # set seed for torch dataloaders
@@ -357,7 +362,9 @@ def main():
         return bools
 
     # Initialize torchvision transforms and jit it for faster processing.
-    image_transformations = Transform(config.vision_config.image_size)
+    image_transformations = Transform(
+        config.vision_config.image_size, feature_extractor.image_mean, feature_extractor.image_std
+    )
     image_transformations = torch.jit.script(image_transformations)
 
     def tokenize_captions(examples):
