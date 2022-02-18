@@ -38,7 +38,6 @@ import transformers
 from transformers import (
     AutoConfig,
     TapexTokenizer,
-    BartTokenizer,
     DataCollatorForSeq2Seq,
     HfArgumentParser,
     Seq2SeqTrainer,
@@ -333,17 +332,7 @@ def main():
     config.early_stopping = False
 
     # load tapex tokenizer
-    encoder_tokenizer = TapexTokenizer.from_pretrained(
-        model_args.tokenizer_name,
-        cache_dir=model_args.cache_dir,
-        use_fast=model_args.use_fast_tokenizer,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-        add_prefix_space=True
-    )
-
-    # load label tokenizer
-    decoder_tokenizer = BartTokenizer.from_pretrained(
+    tokenizer = TapexTokenizer.from_pretrained(
         model_args.tokenizer_name,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
@@ -432,27 +421,30 @@ def main():
         # IMPORTANT: we cannot pass by answers during evaluation, answers passed during training are used to
         # truncate large tables in the train set!
         if is_training:
-            model_inputs = encoder_tokenizer(tables, questions, answers,
-                                             max_length=data_args.max_source_length,
-                                             padding=padding,
-                                             truncation=True)
+            model_inputs = tokenizer(table=tables,
+                                     query=questions,
+                                     answer=answers,
+                                     max_length=data_args.max_source_length,
+                                     padding=padding,
+                                     truncation=True)
         else:
-            model_inputs = encoder_tokenizer(tables, questions,
-                                             max_length=data_args.max_source_length,
-                                             padding=padding,
-                                             truncation=True)
+            model_inputs = tokenizer(table=tables,
+                                     query=questions,
+                                     max_length=data_args.max_source_length,
+                                     padding=padding,
+                                     truncation=True)
 
-        with decoder_tokenizer.as_target_tokenizer():
-            labels = decoder_tokenizer([", ".join(answer).lower() for answer in answers],
-                                       max_length=max_target_length,
-                                       padding=padding,
-                                       truncation=True)
+        with tokenizer.as_target_tokenizer():
+            labels = tokenizer(answer=[", ".join(answer).lower() for answer in answers],
+                               max_length=max_target_length,
+                               padding=padding,
+                               truncation=True)
 
         # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
         # padding in the loss.
         if padding == "max_length" and data_args.ignore_pad_token_for_loss:
             labels["input_ids"] = [
-                [(l if l != decoder_tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
+                [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
             ]
 
         model_inputs["labels"] = labels["input_ids"]
@@ -507,9 +499,9 @@ def main():
         )
 
     # Data collator
-    label_pad_token_id = -100 if data_args.ignore_pad_token_for_loss else decoder_tokenizer.pad_token_id
+    label_pad_token_id = -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
     data_collator = DataCollatorForSeq2Seq(
-        decoder_tokenizer,
+        tokenizer,
         model=model,
         label_pad_token_id=label_pad_token_id,
         pad_to_multiple_of=8 if training_args.fp16 else None,
@@ -525,11 +517,11 @@ def main():
         preds, labels = eval_preds
         if isinstance(preds, tuple):
             preds = preds[0]
-        decoded_preds = decoder_tokenizer.batch_decode(preds, skip_special_tokens=True)
+        decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
         if data_args.ignore_pad_token_for_loss:
             # Replace -100 in the labels as we can't decode them.
-            labels = np.where(labels != -100, labels, decoder_tokenizer.pad_token_id)
-        decoded_labels = decoder_tokenizer.batch_decode(labels, skip_special_tokens=True)
+            labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+        decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
         # Some simple post-processing
         decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
@@ -576,7 +568,7 @@ def main():
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
-        tokenizer=decoder_tokenizer,
+        tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics if training_args.predict_with_generate else None
     )
@@ -634,7 +626,7 @@ def main():
 
         if trainer.is_world_process_zero():
             if training_args.predict_with_generate:
-                predictions = decoder_tokenizer.batch_decode(
+                predictions = tokenizer.batch_decode(
                     predict_results.predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
                 )
                 predictions = [pred.strip() for pred in predictions]

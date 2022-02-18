@@ -83,11 +83,11 @@ python run_wikisql_with_tapex.py \
 
 ![Example](https://table-pretraining.github.io/assets/tableft_task.png)
 
-The task of Table Fact Verification (TablFV) is to empower machines to justify if a statement follows facts in a given table. The result is a binary classification belonging to `1` (entailed) or `0` (refused).
+The task of Table Fact Verification (TableFV) is to empower machines to justify if a statement follows facts in a given table. The result is a binary classification belonging to `1` (entailed) or `0` (refused).
 
-### How to Fine-tune TAPEX on TablFV
+### How to Fine-tune TAPEX on TableFV
 
-We provide a fine-tuning script of tapex for TablFV on the TabFact benchmark: [TabFact](https://github.com/wenhuchen/Table-Fact-Checking).
+We provide a fine-tuning script of tapex for TableFV on the TabFact benchmark: [TabFact](https://github.com/wenhuchen/Table-Fact-Checking).
 
 Here is how to run the script on the TabFact:
 
