@@ -852,9 +852,6 @@ if is_torch_available():
             "ConvNextForImageClassification",
             "ConvNextModel",
             "ConvNextPreTrainedModel",
-            "TFConvNextForImageClassification",
-            "TFConvNextModel",
-            "TFConvNextPreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -1715,6 +1712,13 @@ if is_tf_available():
             "TFConvBertLayer",
             "TFConvBertModel",
             "TFConvBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.convnext"].extend(
+        [
+            "TFConvNextForImageClassification",
+            "TFConvNextModel",
+            "TFConvNextPreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(

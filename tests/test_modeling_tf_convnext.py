@@ -14,8 +14,8 @@
 # limitations under the License.
 """ Testing suite for the TensorFlow ConvNext model. """
 
-import unittest
 import inspect
+import unittest
 
 from transformers import ConvNextConfig
 from transformers.file_utils import cached_property, is_tf_available, is_vision_available
@@ -96,10 +96,10 @@ class TFConvNextModelTester:
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFConvNextModel(config=config)
         result = model(pixel_values, training=False)
-        # expected last hidden states: B, H // 32, W // 32, C
+        # expected last hidden states: B, C, H // 32, W // 32
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.image_size // 32, self.image_size // 32, self.hidden_sizes[-1]),
+            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
