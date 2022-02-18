@@ -830,3 +830,49 @@ class TapexTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         self.assertListEqual(encoding.input_ids, expected_results["input_ids"])
+
+    def test_tokenizer_as_target(self):
+        # by default the tokenizer do_lower_case
+        tokenizer = TapexTokenizer.from_pretrained("microsoft/tapex-base")
+        answer_text = "tapex is a good model!"
+        expected_src_tokens = [0, 90, 5776, 1178, 16, 10, 205, 1421, 328, 2]
+        with tokenizer.as_target_tokenizer():
+            answer_encoding = tokenizer(answer=answer_text)
+            self.assertListEqual(answer_encoding.input_ids, expected_src_tokens)
+
+    @slow
+    def test_tokenizer_lower_case(self):
+        cased_tokenizer = TapexTokenizer.from_pretrained("microsoft/tapex-base", do_lower_case=False)
+        uncased_tokenizer = TapexTokenizer.from_pretrained("microsoft/tapex-base", do_lower_case=True)
+        answer_text = "Beijing, London, Paris"
+        answer_text_lower = "beijing, london, paris"
+
+        with cased_tokenizer.as_target_tokenizer():
+            with uncased_tokenizer.as_target_tokenizer():
+                self.assertNotEqual(cased_tokenizer(answer=answer_text).input_ids,
+                                    uncased_tokenizer(answer=answer_text).input_ids)
+                self.assertEqual(cased_tokenizer(answer=answer_text_lower).input_ids,
+                                 uncased_tokenizer(answer=answer_text).input_ids)
+                # batched encoding assert
+                self.assertNotEqual(cased_tokenizer(answer=[answer_text]).input_ids,
+                                    uncased_tokenizer(answer=[answer_text]).input_ids)
+                self.assertEqual(cased_tokenizer(answer=[answer_text_lower]).input_ids,
+                                 uncased_tokenizer(answer=[answer_text]).input_ids)
+        # test input encoding lowercase
+        question = "Greece held its last Summer Olympics in 2004"
+        table_dict = {
+            "header": ["Year", "City", "Country", "Nations"],
+            "rows": [
+                [1896, "Athens", "Greece", 14],
+                [1900, "Paris", "France", 24],
+                [1904, "St. Louis", "USA", 12],
+                [2004, "Athens", "Greece", 201],
+                [2008, "Beijing", "China", 204],
+                [2012, "London", "UK", 204],
+            ],
+        }
+        table = pd.DataFrame.from_dict(table_dict["rows"])
+        table.columns = table_dict["header"]
+
+        self.assertNotEqual(cased_tokenizer(table=table, query=question).input_ids,
+                            uncased_tokenizer(table=table, query=question).input_ids)

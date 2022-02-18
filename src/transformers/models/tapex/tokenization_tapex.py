@@ -20,6 +20,7 @@ import os
 import random
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
+from contextlib import contextmanager
 
 import regex as re
 
@@ -61,6 +62,12 @@ class TapexTruncationStrategy(ExplicitEnum):
     """
 
     DROP_ROWS_TO_FIT = "drop_rows_to_fit"
+
+
+class TokenizerStrategy(ExplicitEnum):
+
+    TOKENIZE_SOURCE = "tokenize_source"
+    TOKENIZE_TARGET = "tokenize_target"
 
 
 TAPEX_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
@@ -361,6 +368,9 @@ class TapexTokenizer(PreTrainedTokenizer):
         self.max_cell_length = max_cell_length
         self.table_linearize = IndexedRowTableLinearize()
 
+        # property to decide using which call function
+        self.current_tokenizer = TokenizerStrategy.TOKENIZE_SOURCE
+
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -539,6 +549,66 @@ class TapexTokenizer(PreTrainedTokenizer):
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, TAPEX_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
+        self,
+        table: Union["pd.DataFrame", List["pd.DataFrame"]] = None,
+        query: Optional[Union[TextInput, List[TextInput]]] = None,
+        answer: Union[str, List[str]] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = False,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
+    ) -> BatchEncoding:
+        if self.current_tokenizer == TokenizerStrategy.TOKENIZE_SOURCE:
+            assert table is not None, "Please ensure that the table is not empty if you use TAPEX to encode source."
+            return self.source_call_func(table=table,
+                                         query=query,
+                                         answer=answer,
+                                         add_special_tokens=add_special_tokens,
+                                         padding=padding,
+                                         truncation=truncation,
+                                         max_length=max_length,
+                                         stride=stride,
+                                         pad_to_multiple_of=pad_to_multiple_of,
+                                         return_tensors=return_tensors,
+                                         return_token_type_ids=return_token_type_ids,
+                                         return_attention_mask=return_attention_mask,
+                                         return_overflowing_tokens=return_overflowing_tokens,
+                                         return_special_tokens_mask=return_special_tokens_mask,
+                                         return_offsets_mapping=return_offsets_mapping,
+                                         return_length=return_length,
+                                         verbose=verbose,
+                                         **kwargs)
+        else:
+            assert answer is not None, "Please ensure that the answer is not empty if you use TAPEX to encode target."
+            return self.target_call_func(answer=answer,
+                                         add_special_tokens=add_special_tokens,
+                                         padding=padding,
+                                         truncation=truncation,
+                                         max_length=max_length,
+                                         stride=stride,
+                                         pad_to_multiple_of=pad_to_multiple_of,
+                                         return_tensors=return_tensors,
+                                         return_token_type_ids=return_token_type_ids,
+                                         return_attention_mask=return_attention_mask,
+                                         return_overflowing_tokens=return_overflowing_tokens,
+                                         return_special_tokens_mask=return_special_tokens_mask,
+                                         return_offsets_mapping=return_offsets_mapping,
+                                         return_length=return_length,
+                                         verbose=verbose,
+                                         **kwargs)
+
+    def source_call_func(
         self,
         table: Union["pd.DataFrame", List["pd.DataFrame"]],
         query: Optional[Union[TextInput, List[TextInput]]] = None,
@@ -792,6 +862,10 @@ class TapexTokenizer(PreTrainedTokenizer):
             text = self.prepare_table_query(
                 _table, _query, _answer, truncation_strategy=truncation_strategy, max_length=max_length
             )
+
+            if self.do_lower_case:
+                text = text.lower()
+
             tokens = self.tokenize(text)
             outputs = self.prepare_for_model(
                 ids=self.convert_tokens_to_ids(tokens),
@@ -957,6 +1031,11 @@ class TapexTokenizer(PreTrainedTokenizer):
         text = self.prepare_table_query(
             table, query, answer, truncation_strategy=truncation_strategy, max_length=max_length
         )
+
+        # if necessary, perform lower case
+        if self.do_lower_case:
+            text = text.lower()
+
         tokens = self.tokenize(text)
 
         return self.prepare_for_model(
@@ -976,6 +1055,339 @@ class TapexTokenizer(PreTrainedTokenizer):
             return_length=return_length,
             verbose=verbose,
         )
+
+    def target_call_func(
+        self,
+        answer: Union[str, List[str]],
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = False,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
+    ) -> BatchEncoding:
+        """
+        The method to tokenize and prepare for the answer label for the model
+
+        Args:
+            answer (`str` or `List[str]`):
+                Corresponding answer supervision to the queries for training the model
+        """
+        is_batched = isinstance(answer, (list, tuple))
+
+        if is_batched:
+            return self.target_batch_encode_plus(
+                answer=answer,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                **kwargs,
+            )
+        else:
+            return self.target_encode_plus(
+                answer=answer,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                **kwargs,
+            )
+
+    def target_batch_encode_plus(
+        self,
+        answer: List[str],
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str] = False,
+        max_length: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
+    ) -> BatchEncoding:
+        """
+        Prepare answer strings for the model.
+
+        <Tip warning={true}>
+
+        This method is deprecated, `__call__` should be used instead.
+
+        </Tip>
+
+        Args:
+            answer `List[str]`:
+                Corresponding answer supervision to the queries for training the model
+        """
+        # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
+        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            verbose=verbose,
+            **kwargs,
+        )
+
+        return self._target_batch_encode_plus(
+            answer=answer,
+            add_special_tokens=add_special_tokens,
+            padding_strategy=padding_strategy,
+            truncation_strategy=truncation_strategy,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_length=return_length,
+            verbose=verbose,
+            **kwargs,
+        )
+
+    def _target_batch_encode_plus(
+        self,
+        answer: List[str],
+        add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
+    ) -> BatchEncoding:
+
+        batch_outputs = {}
+        for text in answer:
+
+            if self.do_lower_case:
+                text = text.lower()
+
+            tokens = self.tokenize(text)
+            outputs = self.prepare_for_model(
+                ids=self.convert_tokens_to_ids(tokens),
+                add_special_tokens=add_special_tokens,
+                padding=PaddingStrategy.DO_NOT_PAD.value,  # we pad in batch afterwards
+                truncation=truncation_strategy.value,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=None,  # we pad in batch afterwards
+                return_attention_mask=False,  # we pad in batch afterwards
+                return_token_type_ids=return_token_type_ids,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_length=return_length,
+                return_tensors=None,  # We convert the whole batch to tensors at the end
+                prepend_batch_axis=False,
+                verbose=verbose,
+            )
+
+            for key, value in outputs.items():
+                if key not in batch_outputs:
+                    batch_outputs[key] = []
+                batch_outputs[key].append(value)
+
+        batch_outputs = self.pad(
+            batch_outputs,
+            padding=padding_strategy.value,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_attention_mask=return_attention_mask,
+        )
+
+        batch_outputs = BatchEncoding(batch_outputs, tensor_type=return_tensors)
+
+        return BatchEncoding(batch_outputs)
+
+    def target_encode(
+        self,
+        answer: str,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy, TapexTruncationStrategy] = False,
+        max_length: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs
+    ) -> List[int]:
+        """
+        Prepare the answer string for the model. This method does not return token type IDs, attention masks, etc.
+        which are necessary for the model to work correctly. Use this method if you want to build your processing on
+        your own, otherwise refer to `__call__`.
+
+        Args:
+            answer `str`:
+                Corresponding answer supervision to the queries for training the model
+        """
+        encoded_outputs = self.target_encode_plus(
+            answer=answer,
+            add_special_tokens=add_special_tokens,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            return_tensors=return_tensors,
+            **kwargs,
+        )
+
+        return encoded_outputs["input_ids"]
+
+    def target_encode_plus(
+        self,
+        answer: str,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str] = False,
+        max_length: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
+    ) -> BatchEncoding:
+        """
+        Prepare a answer for the model.
+
+        Args:
+            answer `str`:
+                Corresponding answer supervision to the queries for training the model
+        """
+        # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
+        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            verbose=verbose,
+            **kwargs,
+        )
+
+        return self._target_encode_plus(
+            answer=answer,
+            add_special_tokens=add_special_tokens,
+            padding_strategy=padding_strategy,
+            truncation_strategy=truncation_strategy,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_length=return_length,
+            verbose=verbose,
+            **kwargs,
+        )
+
+    def _target_encode_plus(
+        self,
+        answer: str,
+        add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
+    ) -> BatchEncoding:
+        if return_offsets_mapping:
+            raise NotImplementedError(
+                "return_offset_mapping is not available when using Python tokenizers. "
+                "To use this feature, change your tokenizer to one deriving from "
+                "transformers.PreTrainedTokenizerFast. "
+                "More information on available tokenizers at "
+                "https://github.com/huggingface/transformers/pull/2674"
+            )
+
+        text = answer
+
+        # if necessary, perform lower case
+        if self.do_lower_case:
+            text = text.lower()
+
+        tokens = self.tokenize(text)
+
+        return self.prepare_for_model(
+            ids=self.convert_tokens_to_ids(tokens),
+            add_special_tokens=add_special_tokens,
+            padding=padding_strategy.value,
+            truncation=truncation_strategy.value,
+            max_length=max_length,
+            stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors=return_tensors,
+            prepend_batch_axis=True,
+            return_attention_mask=return_attention_mask,
+            return_token_type_ids=return_token_type_ids,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_length=return_length,
+            verbose=verbose,
+        )
+
+    @contextmanager
+    def as_target_tokenizer(self):
+        """
+        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
+        sequence-to-sequence models that need a slightly different processing for the labels.
+        """
+        self.current_tokenizer = TokenizerStrategy.TOKENIZE_TARGET
+        yield
+        # restore the call function
+        self.current_tokenizer = TokenizerStrategy.TOKENIZE_SOURCE
 
     def prepare_table_query(
         self,
@@ -1008,17 +1420,23 @@ class TapexTokenizer(PreTrainedTokenizer):
         else:
             linear_table = ""
 
+        if linear_table == "":
+            logger.warning(
+                f"You provide an empty table, or all cells contain much tokens (e.g., >= 1024 tokens). "
+                + f"Please carefully check the corresponding table with the query : {query}."
+            )
+        if query == "":
+            logger.warning(
+                f"You provide nothing to query with respect to the table."
+            )
         # step 4: concatenate query with linear_table
-        print("Query:", query)
-        print("Linear table:", linear_table)
         separator = " " if query and linear_table else ""
         joint_input = (query + separator + linear_table) if query else linear_table
-        joint_input = joint_input
-        print("Joint input:", joint_input)
 
         return joint_input
 
     def truncate_table_cells(self, table_content: Dict, question: str, answer: List):
+        # TODO (Qian): is it possible to revert the original cell if it is in the final answer?
         cell_mapping = {}
         for row in table_content["rows"]:
             for i, cell in enumerate(row):
