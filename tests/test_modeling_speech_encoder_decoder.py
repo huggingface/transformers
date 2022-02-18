@@ -161,6 +161,7 @@ class EncoderDecoderMixin:
         self.assertEqual(
             outputs_encoder_decoder_kwarg["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
         )
+
     def check_encoder_decoder_model_from_pretrained(
         self,
         config,
