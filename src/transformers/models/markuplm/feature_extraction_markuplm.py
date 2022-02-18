@@ -16,21 +16,15 @@
 Feature extractor class for MarkupLM.
 """
 
-from typing import List, Optional, Union
-
-import numpy as np
-from PIL import Image
-
-from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType, is_pytesseract_available, requires_backends
-from ...image_utils import is_torch_tensor
-from ...utils import logging
-
+import html
 
 # TODO soft dependency
 import bs4
 from bs4 import BeautifulSoup
-import html
+
+from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
+from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -44,7 +38,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
 
     """
 
-    #model_input_names = ["pixel_values"]
+    # model_input_names = ["pixel_values"]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -57,7 +51,8 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
             siblings = parent.find_all(child.name, recursive=False)
             xpath_tags.append(child.name)
             xpath_subscripts.append(
-                0 if 1 == len(siblings) else next(i for i, s in enumerate(siblings, 1) if s is child))
+                0 if 1 == len(siblings) else next(i for i, s in enumerate(siblings, 1) if s is child)
+            )
             child = parent
         xpath_tags.reverse()
         xpath_subscripts.reverse()
@@ -91,29 +86,20 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
         return all_doc_strings, string2xtag_seq, string2xsubs_seq
 
     def construct_xpath(self, xpath_tags, xpath_subscripts):
-        xpath=""
-        for tagname,subs in zip(xpath_tags,xpath_subscripts):
-            xpath+=f"/{tagname}"
-            if subs!=0:
-                xpath+=f"[{subs}]"
+        xpath = ""
+        for tagname, subs in zip(xpath_tags, xpath_subscripts):
+            xpath += f"/{tagname}"
+            if subs != 0:
+                xpath += f"[{subs}]"
         return xpath
-    
-    def __call__(
-        self, html_strings, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
-    ) -> BatchFeature:
+
+    def __call__(self, html_strings) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s).
 
         Args:
-            html_strings (...):
+            html_strings (`str`, `List[str]`):
                 The HTML string or batch of HTML strings from which to extract nodes and corresponding xpaths.
-            return_tensors (`str` or [`~file_utils.TensorType`], *optional*, defaults to `'np'`):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -134,7 +120,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
         ...    single_html_string = f.read()
 
         >>> feature_extractor = MarkupLMFeatureExtractor()
-        
+
         >>> # single example
         >>> encoding = feature_extractor(single_html_string)
         >>> print(encoding.keys())
@@ -170,10 +156,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
                 f"but is of type {type(html_strings)}."
             )
 
-        is_batched = bool(
-            isinstance(html_strings, (list, tuple))
-            and (isinstance(html_strings[0], str))
-        )
+        is_batched = bool(isinstance(html_strings, (list, tuple)) and (isinstance(html_strings[0], str)))
 
         if not is_batched:
             html_strings = [html_strings]
@@ -190,8 +173,8 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
                 xpath_strings.append(xpath_string)
             xpaths.append(xpath_strings)
 
-        # return as BatchFeature
+        # return as Dict
         data = {"nodes": nodes, "xpaths": xpaths}
-        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+        encoded_inputs = BatchFeature(data=data, tensor_type=None)
 
         return encoded_inputs

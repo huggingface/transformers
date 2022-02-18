@@ -1,5 +1,6 @@
 from transformers import MarkupLMFeatureExtractor
 
+
 feature_extractor = MarkupLMFeatureExtractor()
 
 html_string = """<HTML>
@@ -25,5 +26,5 @@ html_string = """<HTML>
       </div>"""
 
 encoding = feature_extractor(html_string)
-for k,v in encoding.items():
-    print(k,v)
+for k, v in encoding.items():
+    print(k, v)
