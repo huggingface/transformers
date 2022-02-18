@@ -124,7 +124,7 @@ class EncoderDecoderMixin:
             output_hidden_states=True,
         )
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape - (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
         )
 
         encoder_outputs = BaseModelOutput(last_hidden_state=outputs_encoder_decoder.encoder_hidden_states[-1])
