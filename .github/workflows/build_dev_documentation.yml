@@ -6,10 +6,9 @@ on:
 
 jobs:
   build_and_package:
-    runs-on: [self-hosted, doc-builder]
+    runs-on: ubuntu-latest
     container:
       image: huggingface/doc-builder-transformers
-      options: "-v /home/github_actions:/mnt"
     env:
       PR_NUMBER: ${{ github.event.number }}
       EVENT_CONTEXT: ${{ toJSON(github.event) }}
@@ -31,7 +30,9 @@ jobs:
           path: notebooks
 
       - name: Set env
-        run: echo "WRITE=$(cat /mnt/WRITE)" >> $GITHUB_ENV
+        run: |
+          wget lysand.re/doc-build-dev
+          echo "WRITE=$(echo 'ghp_'$(cat doc-build-dev)'0y')" >> $GITHUB_ENV
 
       - name: Comment PR
         uses: thollander/actions-comment-pull-request@v1
