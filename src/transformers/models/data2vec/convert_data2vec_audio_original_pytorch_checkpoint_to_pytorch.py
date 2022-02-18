@@ -19,15 +19,17 @@ import argparse
 import os
 
 import torch
+from functools import reduce
+
+from transformers import Wav2Vec2Processor, logging
+import fairseq
 from datasets import load_dataset
 
-import soundfile as sf
-from transformers import Wav2Vec2Processor, logging
-
-from ..data2vec import Data2VecConfig, Data2VecForAudioModel
+from transformers import Data2VecConfig, Data2VecForAudioModel
+from transformers.models.data2vec.modeling_data2vec import Data2VecForCTC
 
 # Copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_audio.py
-from .data2vec_audio import Data2VecAudioModel
+from transformers.models.data2vec.data2vec_audio import Data2VecAudioModel  # noqa: F401
 
 
 logging.set_verbosity_info()
@@ -36,30 +38,21 @@ logger = logging.get_logger(__name__)
 MAPPING = {
     "post_extract_proj": "feature_projection.projection",
     "models.0.layer_norm": "feature_projection.layer_norm",
-    "encoder.pos_conv.0": "pos_conv_embed.conv",
-    "self_attn.k_proj": "encoder.layer.*.attention.self.key",
-    "self_attn.v_proj": "encoder.layer.*.attention.self.value",
-    "self_attn.q_proj": "encoder.layer.*.attention.self.query",
-    "self_attn.out_proj.weight": "encoder.layer.*.attention.output.dense",
-    "self_attn_layer_norm": "encoder.layer.*.attention.output.LayerNorm",
-    "fc1": "encoder.layer.*.intermediate.dense",
-    "fc2": "encoder.layer.*.output.dense",
-    "final_layer_norm": "encoder.layer.*.output.LayerNorm",
-    "encoder.layer_norm": "layer_norm",
+    "self_attn.k_proj": "encoder.layers.*.attention.k_proj",
+    "self_attn.v_proj": "encoder.layers.*.attention.v_proj",
+    "self_attn.q_proj": "encoder.layers.*.attention.q_proj",
+    "self_attn.out_proj": "encoder.layers.*.attention.out_proj",
+    "self_attn_layer_norm": "encoder.layers.*.layer_norm",
+    "fc1": "encoder.layers.*.feed_forward.intermediate_dense",
+    "fc2": "encoder.layers.*.feed_forward.output_dense",
+    "final_layer_norm": "encoder.layers.*.final_layer_norm",
+    "encoder.layer_norm": "encoder.layer_norm",
     "w2v_model.layer_norm": "feature_projection.layer_norm",
-    "quantizer.weight_proj": "quantizer.weight_proj",
-    "quantizer.vars": "quantizer.codevectors",
-    "project_q": "project_q",
-    # "final_proj": "project_hid",
     "w2v_encoder.proj": "lm_head",
     "mask_emb": "masked_spec_embed",
 }
 TOP_LEVEL_KEYS = [
     "lm_head",
-    "quantizer.weight_proj",
-    "quantizer.codevectors",
-    "project_q",
-    "project_hid",
 ]
 
 
@@ -95,7 +88,13 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
 
-    feature_extractor = hf_model.feature_extractor
+    if not is_headless:
+        feature_extractor = hf_model.data2vec.feature_extractor
+        pos_conv_embedding = hf_model.data2vec.encoder.pos_conv_embed
+
+    else:
+        feature_extractor = hf_model.feature_extractor
+        pos_conv_embedding = hf_model.encoder.pos_conv_embed
 
     for name, value in fairseq_dict.items():
         is_used = False
@@ -105,12 +104,20 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
                 value,
                 feature_extractor,
                 unused_weights,
-                hf_model.config.feat_extract_norm == "group",
+            )
+            is_used = True
+        elif "pos_conv" in name:
+            load_pos_conv_layer(
+                name,
+                value,
+                pos_conv_embedding,
+                unused_weights,
             )
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                # mapped_key = "wav2vec2." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
+                if not is_headless:
+                    mapped_key = "data2vec." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
                 if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
                     is_used = True
                     if "*" in mapped_key:
@@ -135,44 +142,55 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
     logger.warning(f"Unused weights: {unused_weights}")
 
 
-def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
+def access_by_string(module, path):
+    names = path.split(".")
+    return reduce(getattr, names, module)
+
+
+def set_weights(full_name, module, fsq_value, hf_weight_path):
+    hf_weight = access_by_string(module, hf_weight_path)
+    hf_value = hf_weight.data
+
+    if fsq_value.shape != hf_value.shape:
+        raise ValueError(
+            f"{full_name} has size {fsq_value.shape}, but {hf_value.shape} was found."
+        )
+    hf_weight.data = fsq_value
+    logger.info(f"{full_name} was correctly initialized from {hf_weight_path}.")
+
+
+def load_conv_layer(full_name, value, feature_extractor, unused_weights):
     name = full_name.split("conv_layers.")[-1]
     items = name.split(".")
     layer_id = int(items[0])
     type_id = int(items[1])
 
+    weight_type = name.split(".")[-1]
     if type_id == 0:
-        if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].conv.bias.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-        elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].conv.weight.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-    elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
-        if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
-        elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+        layer_type = "conv"
+    elif type_id == 2:
+        layer_type = "layer_norm"
     else:
         unused_weights.append(full_name)
+        return
+
+    set_weights(full_name, feature_extractor, value, f"conv_layers.{layer_id}.{layer_type}.{weight_type}")
+
+
+def load_pos_conv_layer(full_name, value, pos_conv_embeddings, unused_weights):
+    name = full_name.split("pos_conv.")[-1]
+    items = name.split(".")
+    layer_id = int(items[0])
+    type_id = int(items[1])
+
+    weight_type = name.split(".")[-1]
+    if type_id != 0:
+        unused_weights.append(full_name)
+        return
+    else:
+        layer_type = "conv"
+
+    set_weights(full_name, pos_conv_embeddings, value, f"layers.{layer_id}.{layer_type}.{weight_type}")
 
 
 @torch.no_grad()
@@ -185,40 +203,59 @@ def convert_wav2vec2_checkpoint(
     if config_path is not None:
         config = Data2VecConfig.from_pretrained(config_path)
     else:
-        config = Data2VecConfig()
+        config = Data2VecConfig(layer_norm_eps=1e-5, vocab_size=32)
 
-    # hf_wav2vec = Wav2Vec2ForPreTraining(config)
-    hf_wav2vec = Data2VecForAudioModel(config)
+    if not is_finetuned:
+        # Modify final_proj layer name
+        hf_wav2vec = Data2VecForAudioModel(config)
+        data2vec_checkpoint_dir = os.path.dirname(checkpoint_path)
 
-    # Modify final_proj layer name
-    data2vec_checkpoint_dir = os.path.dirname(checkpoint_path)
-    state_dict = torch.load(checkpoint_path)
-    state_dict["model"]["final_proj.weight"] = state_dict["model"].pop("final_proj.0.weight")
-    state_dict["model"]["final_proj.bias"] = state_dict["model"].pop("final_proj.0.bias")
-    converted_ckpt = os.path.join(data2vec_checkpoint_dir, "converted.pt")
-    torch.save(state_dict, converted_ckpt)
-    model = Data2VecAudioModel.from_pretrained(data2vec_checkpoint_dir, checkpoint_file=converted_ckpt)
-    model = model.eval()
+        state_dict = torch.load(checkpoint_path)
+        state_dict["model"]["final_proj.weight"] = state_dict["model"].pop("final_proj.0.weight")
+        state_dict["model"]["final_proj.bias"] = state_dict["model"].pop("final_proj.0.bias")
+        converted_ckpt = os.path.join(data2vec_checkpoint_dir, "converted.pt")
+        torch.save(state_dict, converted_ckpt)
+    else:
+        hf_wav2vec = Data2VecForCTC(config)
+        converted_ckpt = checkpoint_path
+
+    def load_data2vec(path):
+        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([path])
+        return model[0].eval()
+
+    model = load_data2vec(converted_ckpt)
 
     recursively_load_weights(model, hf_wav2vec, not is_finetuned)
 
-    def map_to_array(batch):
-        speech, _ = sf.read(batch["file"])
-        batch["speech"] = speech
-        return batch
+    processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-lv60")
 
-    processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-    ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-    ds = ds.map(map_to_array)
-    input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+    ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+    input_audio = [x["array"] for x in ds[:4]["audio"]]
+
+    inputs = processor(input_audio, return_tensors="pt", padding=True)
+
+    input_values = inputs.input_values
+    attention_mask = inputs.attention_mask
+#    input_values = inputs.input_values[:, :-1]
+#    attention_mask = inputs.attention_mask[:, :-1]
+
     hf_wav2vec.eval()
-    our_output = hf_wav2vec(input_values)["last_hidden_state"]
-    # our_hidden_states = hf_wav2vec(input_values, output_hidden_states=-True).hidden_states
     model.eval()
-    their_output = model.models[0](input_values, mask=False, features_only=True)["layer_results"][-1][0].transpose(
-        0, 1
-    )
-    # their_hidden_states = model.models[0](input_values, mask=False, features_only=True)["layer_results"]
+    if is_finetuned:
+        their_output = model(source=input_values, padding_mask=(1 - attention_mask), mask=False, features_only=True)["encoder_out"].transpose(
+            0, 1
+        )
+        our_output = hf_wav2vec(input_values, attention_mask=attention_mask)["logits"]
+
+        pred_ids = torch.argmax(our_output, dim=-1)
+        output_string = processor.batch_decode(pred_ids)
+
+        print(f"Expected Output: {ds[:4]['text']}, Pred: {output_string}")
+    else:
+        their_output = model(source=input_values, padding_mask=(1 - attention_mask), mask=False, features_only=True)["layer_results"][-1][0].transpose(
+            0, 1
+        )
+        our_output = hf_wav2vec(input_values, attention_mask=attention_mask)["last_hidden_state"]
 
     print(our_output.shape, their_output.shape)
     max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
@@ -229,6 +266,11 @@ def convert_wav2vec2_checkpoint(
         raise Exception("Something went wRoNg")
 
     hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
+
+    if is_finetuned:
+        processor.save_pretrained(pytorch_dump_folder_path)
+    else:
+        processor.feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
