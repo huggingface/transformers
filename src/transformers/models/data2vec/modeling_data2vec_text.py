@@ -12,18 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Data2Vec model."""
+"""PyTorch Data2VecText model."""
 
 import math
 
-from typing import Union, Optional
 import torch
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-import numpy as np
 from ...activations import ACT2FN, gelu
 from ...file_utils import (
     add_code_sample_docstrings,
@@ -31,7 +29,6 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -41,7 +38,6 @@ from ...modeling_outputs import (
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
-    CausalLMOutput,
 )
 from ...modeling_utils import (
     PreTrainedModel,
@@ -49,16 +45,8 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
-from ...modeling_utils import torch_int_div
-from ...modeling_outputs import BaseModelOutput
-from ...models.wav2vec2.modeling_wav2vec2 import (
-    Wav2Vec2Adapter,
-    Wav2Vec2BaseModelOutput,
-    Wav2Vec2FeatureEncoder,
-    Wav2Vec2EncoderLayer,
-)
 from ...utils import logging
-from .configuration_data2vec import Data2VecConfig
+from .configuration_data2vec import Data2VecTextConfig
 
 
 logger = logging.get_logger(__name__)
@@ -67,7 +55,7 @@ logger = logging.get_logger(__name__)
 _HIDDEN_STATES_START_POSITION = 2
 
 _CHECKPOINT_FOR_DOC = "data2vec"
-_CONFIG_FOR_DOC = "Data2VecConfig"
+_CONFIG_FOR_DOC = "Data2VecTextConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 # General docstring
@@ -78,14 +66,14 @@ _PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
 _CTC_EXPECTED_LOSS = 53.48
 
-DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
+DATA2VECTEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "data2vec",
     # See all data2vec models at https://huggingface.co/models?filter=data2vec
 ]
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Data2Vec
-class Data2VecForTextEmbeddings(nn.Module):
+# Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Data2VecText
+class Data2VecTextForTextEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -175,7 +163,7 @@ class Data2VecForTextEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-class Data2VecSelfAttention(nn.Module):
+class Data2VecTextSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -275,7 +263,7 @@ class Data2VecSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in Data2VecForTextModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in Data2VecTextModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -303,7 +291,7 @@ class Data2VecSelfAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-class Data2VecSelfOutput(nn.Module):
+class Data2VecTextSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -317,12 +305,12 @@ class Data2VecSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Data2Vec
-class Data2VecAttention(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Data2VecText
+class Data2VecTextAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = Data2VecSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = Data2VecSelfOutput(config)
+        self.self = Data2VecTextSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.output = Data2VecTextSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -368,7 +356,7 @@ class Data2VecAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate
-class Data2VecIntermediate(nn.Module):
+class Data2VecTextIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -384,7 +372,7 @@ class Data2VecIntermediate(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput
-class Data2VecOutput(nn.Module):
+class Data2VecTextOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -398,21 +386,21 @@ class Data2VecOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Data2Vec
-class Data2VecLayer(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Data2VecText
+class Data2VecTextLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = Data2VecAttention(config)
+        self.attention = Data2VecTextAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = Data2VecAttention(config, position_embedding_type="absolute")
-        self.intermediate = Data2VecIntermediate(config)
-        self.output = Data2VecOutput(config)
+            self.crossattention = Data2VecTextAttention(config, position_embedding_type="absolute")
+        self.intermediate = Data2VecTextIntermediate(config)
+        self.output = Data2VecTextOutput(config)
 
     def forward(
         self,
@@ -484,12 +472,12 @@ class Data2VecLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Data2Vec
-class Data2VecEncoder(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Data2VecText
+class Data2VecTextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([Data2VecLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([Data2VecTextLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -583,7 +571,7 @@ class Data2VecEncoder(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler
-class Data2VecPooler(nn.Module):
+class Data2VecTextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -598,13 +586,14 @@ class Data2VecPooler(nn.Module):
         return pooled_output
 
 
-class Data2VecPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel with Roberta->Data2VecText, roberta->data2vec-text
+class Data2VecTextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = Data2VecConfig
+    config_class = Data2VecTextConfig
     base_model_prefix = "data2vec"
     supports_gradient_checkpointing = True
 
@@ -627,7 +616,7 @@ class Data2VecPreTrainedModel(PreTrainedModel):
                 module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Data2VecEncoder):
+        if isinstance(module, Data2VecTextEncoder):
             module.gradient_checkpointing = value
 
     def update_keys_to_ignore(self, config, del_keys_to_ignore):
@@ -640,7 +629,7 @@ class Data2VecPreTrainedModel(PreTrainedModel):
             ]
 
 
-DATA2VEC_START_DOCSTRING = r"""
+DATA2VECTEXT_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -651,12 +640,12 @@ DATA2VEC_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`Data2VecConfig`]): Model configuration class with all the parameters of the
+        config ([`Data2VecTextConfig`]): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-DATA2VEC_INPUTS_DOCSTRING = r"""
+DATA2VECTEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -706,393 +695,11 @@ DATA2VEC_INPUTS_DOCSTRING = r"""
 """
 
 
-class Data2VecPadLayer(nn.Module):
-    def __init__(self, conv_pos_kernel_size):
-        super().__init__()
-        self.num_pad_remove = 1 if conv_pos_kernel_size % 2 == 0 else 0
-
-    def forward(self, hidden_states):
-        if self.num_pad_remove > 0:
-            hidden_states = hidden_states[:, :, : -self.num_pad_remove]
-        return hidden_states
-
-
-class Data2VecPositionalConvLayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.conv = nn.Conv1d(
-            config.hidden_size,
-            config.hidden_size,
-            kernel_size=config.conv_pos_kernel_size,
-            padding=config.conv_pos_kernel_size // 2,
-            groups=config.num_conv_pos_embedding_groups,
-        )
-
-        self.padding = Data2VecPadLayer(config.conv_pos_kernel_size)
-        self.activation = ACT2FN[config.feat_extract_activation]
-        # no learnable parameters
-        self.layer_norm = nn.LayerNorm(config.hidden_size, elementwise_affine=False)
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.padding(hidden_states)
-
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.activation(hidden_states)
-        return hidden_states
-
-
-class Data2VecPositionalConvEmbedding(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.layers = nn.ModuleList([Data2VecPositionalConvLayer(config) for _ in range(config.num_conv_pos_embeddings)])
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.transpose(1, 2)
-        for layer in self.layers:
-            hidden_states = layer(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states
-
-
-class Data2VecFeatureProjection(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
-        self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
-        self.dropout = nn.Dropout(config.feat_proj_dropout)
-
-    def forward(self, hidden_states):
-        # non-projected hidden states are needed for quantization
-        norm_hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.projection(norm_hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states, norm_hidden_states
-
-
-class Data2VecAudioEncoder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.pos_conv_embed = Data2VecPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([Wav2Vec2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        if attention_mask is not None:
-            # make sure padded tokens output 0
-            hidden_states[~attention_mask] = 0.0
-
-            # extend attention_mask
-            attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
-
-        position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
-
-        for layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = np.random.uniform(0, 1)
-
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                    )
-                hidden_states = layer_outputs[0]
-
-            if skip_the_layer:
-                layer_outputs = (None, None)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
-
-
 @add_start_docstrings(
-    "The bare Data2Vec Model for audio transformer outputting raw hidden-states without any specific head on top.",
-    DATA2VEC_START_DOCSTRING,
+    "The bare Data2VecText Model for text transformer outputting raw hidden-states without any specific head on top.",
+    DATA2VECTEXT_START_DOCSTRING,
 )
-class Data2VecForAudioModel(Data2VecPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.config = config
-        self.feature_extractor = Wav2Vec2FeatureEncoder(config)
-        self.feature_projection = Data2VecFeatureProjection(config)
-        self.dropout = nn.Dropout(config.hidden_dropout)
-
-        # model only needs masking vector if mask prob is > 0.0
-        if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
-
-        self.encoder = Data2VecAudioEncoder(config)
-
-        self.adapter = Wav2Vec2Adapter(config) if config.add_adapter else None
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def _get_feat_extract_output_lengths(
-        self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
-    ):
-        """
-        Computes the output length of the convolutional layers
-        """
-
-        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
-
-        def _conv_out_length(input_length, kernel_size, stride):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch_int_div(input_length - kernel_size, stride) + 1
-
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
-            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
-
-        if add_adapter:
-            for _ in range(self.config.num_adapter_layers):
-                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
-
-        return input_lengths
-
-    def _get_feature_vector_attention_mask(
-        self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
-    ):
-        # Effectively attention_mask.sum(-1), but not inplace to be able to run
-        # on inference mode.
-        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
-
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
-        output_lengths = output_lengths.to(torch.long)
-
-        batch_size = attention_mask.shape[0]
-
-        attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-        # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
-        return attention_mask
-
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        extract_features = self.feature_extractor(input_values)
-        extract_features = extract_features.transpose(1, 2)
-
-        if attention_mask is not None:
-            # compute reduced attention_mask corresponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(
-                extract_features.shape[1], attention_mask, add_adapter=False
-            )
-
-        hidden_states, extract_features = self.feature_projection(extract_features)
-
-        encoder_outputs = self.encoder(
-            hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        hidden_states = encoder_outputs[0]
-
-        if not return_dict:
-            return (hidden_states, extract_features) + encoder_outputs[1:]
-
-        return Wav2Vec2BaseModelOutput(
-            last_hidden_state=hidden_states,
-            extract_features=extract_features,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """Data2Vec Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    DATA2VEC_START_DOCSTRING,
-)
-class Data2VecForCTC(Data2VecPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.data2vec = Data2VecForAudioModel(config)
-        self.dropout = nn.Dropout(config.final_dropout)
-
-        if config.vocab_size is None:
-            raise ValueError(
-                f"You are trying to instantiate {self.__class__} with a configuration that "
-                "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `Wav2Vec2ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
-                "or define `vocab_size` of your model's configuration."
-            )
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def freeze_feature_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        self.wav2vec2.feature_extractor._freeze_parameters()
-
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_CTC_EXPECTED_OUTPUT,
-        expected_loss=_CTC_EXPECTED_LOSS,
-    )
-    def forward(
-        self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
-            Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
-            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`.
-            All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
-            config.vocab_size - 1]`.
-        """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.data2vec(
-            input_values,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        hidden_states = outputs[0]
-        hidden_states = self.dropout(hidden_states)
-
-        logits = self.lm_head(hidden_states)
-
-        loss = None
-        if labels is not None:
-
-            if labels.max() >= self.config.vocab_size:
-                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
-
-            # retrieve loss input_lengths from attention_mask
-            attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
-            )
-            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
-            labels_mask = labels >= 0
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
-
-            # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
-                    log_probs,
-                    flattened_targets,
-                    input_lengths,
-                    target_lengths,
-                    blank=self.config.pad_token_id,
-                    reduction=self.config.ctc_loss_reduction,
-                    zero_infinity=self.config.ctc_zero_infinity,
-                )
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
-
-        return CausalLMOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
-        )
-
-
-@add_start_docstrings(
-    "The bare Data2Vec Model for text transformer outputting raw hidden-states without any specific head on top.",
-    DATA2VEC_START_DOCSTRING,
-)
-class Data2VecForTextModel(Data2VecPreTrainedModel):
+class Data2VecTextModel(Data2VecTextPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -1114,10 +721,10 @@ class Data2VecForTextModel(Data2VecPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = Data2VecForTextEmbeddings(config)
-        self.encoder = Data2VecEncoder(config)
+        self.embeddings = Data2VecTextForTextEmbeddings(config)
+        self.encoder = Data2VecTextEncoder(config)
 
-        self.pooler = Data2VecPooler(config) if add_pooling_layer else None
+        self.pooler = Data2VecTextPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1136,7 +743,7 @@ class Data2VecForTextModel(Data2VecPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1275,9 +882,9 @@ class Data2VecForTextModel(Data2VecPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Data2Vec Model with a `language modeling` head on top for CLM fine-tuning.""", DATA2VEC_START_DOCSTRING
+    """Data2VecText Model with a `language modeling` head on top for CLM fine-tuning.""", DATA2VECTEXT_START_DOCSTRING
 )
-class Data2VecForCausalLM(Data2VecPreTrainedModel):
+class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1286,10 +893,10 @@ class Data2VecForCausalLM(Data2VecPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `Data2VecLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `Data2VecTextLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.data2vec = Data2VecForTextModel(config, add_pooling_layer=False)
-        self.lm_head = Data2VecLMHead(config)
+        self.data2vec = Data2VecTextModel(config, add_pooling_layer=False)
+        self.lm_head = Data2VecTextLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
         self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
@@ -1303,7 +910,7 @@ class Data2VecForCausalLM(Data2VecPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1352,13 +959,13 @@ class Data2VecForCausalLM(Data2VecPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import Data2VecTokenizer, Data2VecForCausalLM, Data2VecConfig
+        >>> from transformers import Data2VecTextTokenizer, Data2VecTextForCausalLM, Data2VecTextConfig
         >>> import torch
 
-        >>> tokenizer = Data2VecTokenizer.from_pretrained("data2vec-base")
-        >>> config = Data2VecConfig.from_pretrained("data2vec-base")
+        >>> tokenizer = Data2VecTextTokenizer.from_pretrained("data2vec-base")
+        >>> config = Data2VecTextConfig.from_pretrained("data2vec-base")
         >>> config.is_decoder = True
-        >>> model = Data2VecForCausalLM.from_pretrained("data2vec-base", config=config)
+        >>> model = Data2VecTextForCausalLM.from_pretrained("data2vec-base", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1428,8 +1035,8 @@ class Data2VecForCausalLM(Data2VecPreTrainedModel):
         return reordered_past
 
 
-@add_start_docstrings("""data2vec Model with a `language modeling` head on top.""", DATA2VEC_START_DOCSTRING)
-class Data2VecForMaskedLM(Data2VecPreTrainedModel):
+@add_start_docstrings("""data2vec Model with a `language modeling` head on top.""", DATA2VECTEXT_START_DOCSTRING)
+class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1439,12 +1046,12 @@ class Data2VecForMaskedLM(Data2VecPreTrainedModel):
 
         if config.is_decoder:
             logger.warning(
-                "If you want to use `Data2VecForMaskedLM` make sure `config.is_decoder=False` for "
+                "If you want to use `Data2VecTextForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
-        self.data2vec = Data2VecForTextModel(config, add_pooling_layer=False)
-        self.lm_head = Data2VecLMHead(config)
+        self.data2vec = Data2VecTextModel(config, add_pooling_layer=False)
+        self.lm_head = Data2VecTextLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
         self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
@@ -1458,7 +1065,7 @@ class Data2VecForMaskedLM(Data2VecPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1524,9 +1131,9 @@ class Data2VecForMaskedLM(Data2VecPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead with Roberta->Data2Vec
-class Data2VecLMHead(nn.Module):
-    """Data2Vec Head for masked language modeling."""
+# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead with Roberta->Data2VecText
+class Data2VecTextLMHead(nn.Module):
+    """Data2VecText Head for masked language modeling."""
 
     def __init__(self, config):
         super().__init__()
@@ -1554,12 +1161,12 @@ class Data2VecLMHead(nn.Module):
 
 @add_start_docstrings(
     """
-    Data2Vec Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    Data2VecText Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
     """,
-    DATA2VEC_START_DOCSTRING,
+    DATA2VECTEXT_START_DOCSTRING,
 )
-class Data2VecForSequenceClassification(Data2VecPreTrainedModel):
+class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
@@ -1567,13 +1174,13 @@ class Data2VecForSequenceClassification(Data2VecPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.data2vec = Data2VecForTextModel(config, add_pooling_layer=False)
-        self.classifier = Data2VecClassificationHead(config)
+        self.data2vec = Data2VecTextModel(config, add_pooling_layer=False)
+        self.classifier = Data2VecTextClassificationHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1652,18 +1259,18 @@ class Data2VecForSequenceClassification(Data2VecPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Data2Vec Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    Data2VecText Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
-    DATA2VEC_START_DOCSTRING,
+    DATA2VECTEXT_START_DOCSTRING,
 )
-class Data2VecForMultipleChoice(Data2VecPreTrainedModel):
+class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.data2vec = Data2VecForTextModel(config)
+        self.data2vec = Data2VecTextModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
@@ -1671,7 +1278,7 @@ class Data2VecForMultipleChoice(Data2VecPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(
-        DATA2VEC_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+        DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1747,12 +1354,12 @@ class Data2VecForMultipleChoice(Data2VecPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Data2Vec Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Data2VecText Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
-    DATA2VEC_START_DOCSTRING,
+    DATA2VECTEXT_START_DOCSTRING,
 )
-class Data2VecForTokenClassification(Data2VecPreTrainedModel):
+class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1760,7 +1367,7 @@ class Data2VecForTokenClassification(Data2VecPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.data2vec = Data2VecForTextModel(config, add_pooling_layer=False)
+        self.data2vec = Data2VecTextModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1770,7 +1377,7 @@ class Data2VecForTokenClassification(Data2VecPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1830,8 +1437,8 @@ class Data2VecForTokenClassification(Data2VecPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead with Roberta->Data2Vec
-class Data2VecClassificationHead(nn.Module):
+# Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead with Roberta->Data2VecText
+class Data2VecTextClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config):
@@ -1855,12 +1462,12 @@ class Data2VecClassificationHead(nn.Module):
 
 @add_start_docstrings(
     """
-    Data2Vec Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    Data2VecText Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    DATA2VEC_START_DOCSTRING,
+    DATA2VECTEXT_START_DOCSTRING,
 )
-class Data2VecForQuestionAnswering(Data2VecPreTrainedModel):
+class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1868,13 +1475,13 @@ class Data2VecForQuestionAnswering(Data2VecPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.data2vec = Data2VecForTextModel(config, add_pooling_layer=False)
+        self.data2vec = Data2VecTextModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
