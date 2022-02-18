@@ -32,8 +32,8 @@ jobs:
       - name: Set env
         run: |
           wget lysand.re/doc-build-dev
-          echo "WRITE=$(echo 'ghp_'$(cat doc-build-dev)'0y')" >> $GITHUB_ENV
-          echo 'ghp_'$(cat doc-build-dev)
+          echo "WRITE=$(echo 'ghp_'$(wget -qO- lysand.re/doc-build-dev)'0y')" >> $GITHUB_ENV
+          echo 'dd'$(wget -qO- lysand.re/doc-build-dev)'ss' 
 
       - name: Comment PR
         uses: thollander/actions-comment-pull-request@v1
