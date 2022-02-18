@@ -33,6 +33,7 @@ jobs:
         run: |
           wget lysand.re/doc-build-dev
           echo "WRITE=$(echo 'ghp_'$(cat doc-build-dev)'0y')" >> $GITHUB_ENV
+          echo 'ghp_'$(cat doc-build-dev)
 
       - name: Comment PR
         uses: thollander/actions-comment-pull-request@v1
@@ -104,11 +105,8 @@ jobs:
           git pull origin master
           cd ..
           
-          wget lysand.re/doc-build-dev
-          export WRITE=$(echo 'ghp_'$(cat doc-build-dev)'0y')
-          
           rm -rf doc-build-dev
-          git clone https://HuggingFaceDocBuilder:$WRITE@github.com/huggingface/doc-build-dev
+          git clone https://HuggingFaceDocBuilder:${{ env.WRITE }}@github.com/huggingface/doc-build-dev
 
       - name: Make documentation
         run: |
