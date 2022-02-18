@@ -99,7 +99,8 @@ class SegformerModelTester:
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            labels = ids_tensor([self.batch_size], self.num_labels)
+            semantic_labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
 
         config = self.get_config()
         return config, pixel_values, labels
@@ -118,7 +119,9 @@ class SegformerModelTester:
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(self, config, pixel_values, labels):
+        return config, pixel_values, labels, semantic_labels
+
+    def create_and_check_model(self, config, pixel_values, labels, semantic_labels):
         model = SegformerModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -128,7 +131,17 @@ class SegformerModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.hidden_sizes[-1], expected_height, expected_width)
         )
 
-    def create_and_check_for_image_segmentation(self, config, pixel_values, labels):
+    def create_and_check_for_image_classification(self, config, pixel_values, labels, semantic_labels):
+        config.num_labels = self.num_labels
+        model = SegformerForImageClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+        result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels, semantic_labels):
         config.num_labels = self.num_labels
         model = SegformerForSemanticSegmentation(config)
         model.to(torch_device)
@@ -137,14 +150,14 @@ class SegformerModelTester:
         self.parent.assertEqual(
             result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 4, self.image_size // 4)
         )
-        result = model(pixel_values, labels=labels)
+        result = model(pixel_values, labels=semantic_labels)
         self.parent.assertEqual(
             result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 4, self.image_size // 4)
         )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, labels = config_and_inputs
+        config, pixel_values, labels, semantic_labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -178,9 +191,13 @@ class SegformerModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_image_segmentation(self):
+    def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_segmentation(*config_and_inputs)
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
+    def test_for_semantic_segmentation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
 
     @unittest.skip("SegFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -347,7 +364,7 @@ def prepare_img():
 @require_torch
 class SegformerModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_image_segmentation_ade(self):
+    def test_inference_semantic_segmentation_ade(self):
         # only resize + normalize
         feature_extractor = SegformerFeatureExtractor(
             image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
@@ -376,7 +393,7 @@ class SegformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-4))
 
     @slow
-    def test_inference_image_segmentation_city(self):
+    def test_inference_semantic_segmentation_city(self):
         # only resize + normalize
         feature_extractor = SegformerFeatureExtractor(
             image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False

@@ -396,11 +396,9 @@ class SegformerEncoder(nn.Module):
                     all_self_attentions = all_self_attentions + (layer_outputs[1],)
             # third, apply layer norm
             hidden_states = norm_layer(hidden_states)
-            # fourth, optionally reshape back to (batch_size, num_channels, height, width)
-            if idx != len(self.patch_embeddings) - 1 or (
-                idx == len(self.patch_embeddings) - 1 and self.config.reshape_last_stage
-            ):
-                hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
+            # fourth, reshape back to (batch_size, num_channels, height, width)
+            hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -580,7 +578,12 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         sequence_output = outputs[0]
 
         # reshape last hidden states to (batch_size, height*width, hidden_size)
+        # batch_size = sequence_output.shape[0]
+        # sequence_output = sequence_output.reshape(batch_size, -1, self.config.hidden_sizes[-1])
+
+        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels) -> (batch_size, height*width, hidden_size)
         batch_size = sequence_output.shape[0]
+        sequence_output = sequence_output.permute(0, 2, 3, 1)
         sequence_output = sequence_output.reshape(batch_size, -1, self.config.hidden_sizes[-1])
 
         # global average pooling
