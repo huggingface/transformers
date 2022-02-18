@@ -436,6 +436,7 @@ def main():
                 batch_size=batch_size,
                 collate_fn=data_collator,
                 drop_remainder=drop_remainder,
+                # `label_cols` is needed for user-defined losses, such as in this example
                 label_cols="label" if "label" in dataset.column_names else None,
             )
             tf_data[key] = data
