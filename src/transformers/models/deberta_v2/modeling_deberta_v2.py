@@ -742,7 +742,7 @@ class DisentangledSelfAttention(nn.Module):
         att_span = self.pos_ebd_size
         relative_pos = relative_pos.long().to(query_layer.device)
 
-        rel_embeddings = rel_embeddings[self.pos_ebd_size - att_span : self.pos_ebd_size + att_span, :].unsqueeze(0)
+        rel_embeddings = rel_embeddings[0 : att_span * 2, :].unsqueeze(0)
         if self.share_att_key:
             pos_query_layer = self.transpose_for_scores(
                 self.query_proj(rel_embeddings), self.num_attention_heads
