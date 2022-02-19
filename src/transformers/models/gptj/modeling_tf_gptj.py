@@ -123,16 +123,18 @@ class TFGPTJAttention(tf.keras.layers.Layer):
             name="out_proj",
         )
 
-        max_positions = config.max_position_embeddings
-        self.bias = tf.Variable(
-            tf.reshape(
-                tf.cast(tf.experimental.numpy.tril(tf.ones((max_positions, max_positions))), tf.int8),
-                (1, 1, max_positions, max_positions),
-            ),
-            trainable=False,
-            name="bias",
+        self.max_positions = config.max_position_embeddings
+
+    def get_causal_mask(self, key_length, query_length) -> tf.Tensor:
+        lower_triangle_mask = tf.reshape(
+            tf.cast(tf.experimental.numpy.tril(tf.ones((self.max_positions, self.max_positions))), tf.int8),
+            (1, 1, self.max_positions, self.max_positions),
         )
-        self.masked_bias = tf.Variable(-1e9, trainable=False, name="masked_bias")
+        return tf.cast(lower_triangle_mask[:, :, key_length - query_length : key_length, :key_length], tf.bool)
+
+    @staticmethod
+    def get_masked_bias(dtype) -> tf.Tensor:
+        return tf.cast(tf.constant(-1e9), dtype)
 
     def _split_heads(self, hidden_states: tf.Tensor, rotary: bool) -> tf.Tensor:
         hidden_states = tf.reshape(hidden_states, hidden_states.shape[:2] + (self.num_attention_heads, self.head_dim))
@@ -154,14 +156,14 @@ class TFGPTJAttention(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor, tf.Tensor]:
         # compute causal mask from causal mask buffer
         query_length, key_length = query.shape[-2], key.shape[-2]
-        causal_mask = tf.cast(self.bias[:, :, key_length - query_length : key_length, :key_length], tf.bool)
+        causal_mask = self.get_causal_mask(key_length, query_length)
 
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = tf.cast(query, tf.float32)
         key = tf.cast(key, tf.float32)
 
         attn_weights = tf.matmul(query, key, transpose_b=True)
-        attn_weights = tf.where(causal_mask, attn_weights, tf.cast(self.masked_bias, attn_weights.dtype))
+        attn_weights = tf.where(causal_mask, attn_weights, self.get_masked_bias(attn_weights.dtype))
 
         attn_weights = attn_weights / self.scale_attn
 
