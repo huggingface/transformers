@@ -14,8 +14,9 @@
 # limitations under the License.
 """ TF 2.0 GPT-J model."""
 
-import math
-from typing import Optional, Tuple
+import operator
+from functools import reduce
+from typing import Optional, Sequence, Tuple
 
 import tensorflow as tf
 
@@ -59,6 +60,12 @@ GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+def _product(x: Sequence[int]) -> int:
+    """Return product of elements of a list for python<=3.7."""
+    prod = reduce(operator.mul, x, 1)
+    return prod
+
+
 def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] = None) -> Tuple[tf.Tensor, tf.Tensor]:
     dim = x.shape[-1]
     if seq_len is None:
@@ -71,7 +78,7 @@ def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] =
 
 def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
     rotate_half_tensor = tf.stack((x[:, :, :, 1::2], x[:, :, :, ::2]), axis=-1)
-    new_shape = shape_list(rotate_half_tensor)[:-2] + [math.prod(rotate_half_tensor.shape[-2:])]
+    new_shape = shape_list(rotate_half_tensor)[:-2] + [_product(shape_list(rotate_half_tensor)[-2:])]
     rotate_half_tensor = tf.reshape(rotate_half_tensor, new_shape)
     return rotate_half_tensor
 
