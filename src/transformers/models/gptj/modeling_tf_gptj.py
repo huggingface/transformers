@@ -40,6 +40,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     shape_list,
 )
+from ...tf_utils import shape_list
 from ...utils import logging
 from .configuration_gptj import GPTJConfig
 
@@ -68,9 +69,8 @@ def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] =
 
 def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
     rotate_half_tensor = tf.stack((x[:, :, :, 1::2], x[:, :, :, ::2]), axis=-1)
-    rotate_half_tensor = tf.reshape(
-        rotate_half_tensor, rotate_half_tensor.shape[:-2] + math.prod(rotate_half_tensor.shape[-2:])
-    )
+    new_shape = shape_list(rotate_half_tensor)[:-2] + [math.prod(rotate_half_tensor.shape[-2:])]
+    rotate_half_tensor = tf.reshape(rotate_half_tensor, new_shape)
     return rotate_half_tensor
 
 
@@ -138,14 +138,16 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         return tf.cast(tf.constant(-1e9), dtype)
 
     def _split_heads(self, hidden_states: tf.Tensor, rotary: bool) -> tf.Tensor:
-        hidden_states = tf.reshape(hidden_states, hidden_states.shape[:2] + (self.num_attention_heads, self.head_dim))
+        new_shape = shape_list(hidden_states)[:2] + [self.num_attention_heads, self.head_dim]
+        hidden_states = tf.reshape(hidden_states, new_shape)
         if rotary:
             return hidden_states
         return tf.transpose(hidden_states, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
     def _merge_heads(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = tf.transpose(hidden_states, (0, 2, 1, 3))
-        return tf.reshape(hidden_states, hidden_states.shape[:2] + (self.num_attention_heads * self.head_dim,))
+        new_shape = shape_list(hidden_states)[:2] + [self.num_attention_heads * self.head_dim]
+        return tf.reshape(hidden_states, new_shape)
 
     def _attn(
         self,
