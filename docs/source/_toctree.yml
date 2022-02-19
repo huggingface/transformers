@@ -186,6 +186,8 @@
       title: DeiT
     - local: model_doc/detr
       title: DETR
+    - local: model_doc/maskformer
+      title: MaskFormer
     - local: model_doc/dialogpt
       title: DialoGPT
     - local: model_doc/distilbert
@@ -262,8 +264,6 @@
       title: Pegasus
     - local: model_doc/phobert
       title: PhoBERT
-    - local: model_doc/plbart
-      title: PLBart
     - local: model_doc/poolformer
       title: PoolFormer
     - local: model_doc/prophetnet

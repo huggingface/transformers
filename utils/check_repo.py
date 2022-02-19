@@ -168,6 +168,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "VisualBertForMultipleChoice",
     "TFWav2Vec2ForCTC",
     "TFHubertForCTC",
+    "MaskFormerForInstanceSegmentation",
 ]
 
 # This is to make sure the transformers module imported is the one in the repo.

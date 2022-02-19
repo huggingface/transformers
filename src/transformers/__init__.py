@@ -246,6 +246,7 @@ _import_structure = {
     "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
     "models.marian": ["MarianConfig"],
+    "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
@@ -263,7 +264,6 @@ _import_structure = {
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
-    "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
     "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
@@ -526,6 +526,7 @@ if is_vision_available():
     _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2Processor")
     _import_structure["models.layoutxlm"].append("LayoutXLMProcessor")
+    _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
@@ -1125,6 +1126,14 @@ if is_torch_available():
         ]
     )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
+    _import_structure["models.maskformer"].extend(
+        [
+            "MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MaskFormerForInstanceSegmentation",
+            "MaskFormerModel",
+            "MaskFormerPretrainedModel",
+        ]
+    )
     _import_structure["models.mbart"].extend(
         [
             "MBartForCausalLM",
@@ -1221,16 +1230,6 @@ if is_torch_available():
             "PerceiverLayer",
             "PerceiverModel",
             "PerceiverPreTrainedModel",
-        ]
-    )
-    _import_structure["models.plbart"].extend(
-        [
-            "PLBART_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PLBartForCausalLM",
-            "PLBartForConditionalGeneration",
-            "PLBartForSequenceClassification",
-            "PLBartModel",
-            "PLBartPreTrainedModel",
         ]
     )
     _import_structure["models.poolformer"].extend(
@@ -2508,6 +2507,7 @@ if TYPE_CHECKING:
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
     from .models.marian import MarianConfig
+    from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
     from .models.mbart import MBartConfig
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
@@ -2519,7 +2519,6 @@ if TYPE_CHECKING:
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
-    from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
     from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
@@ -2739,6 +2738,7 @@ if TYPE_CHECKING:
         from .models.imagegpt import ImageGPTFeatureExtractor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
         from .models.layoutxlm import LayoutXLMProcessor
+        from .models.maskformer import MaskFormerFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
@@ -3230,6 +3230,12 @@ if TYPE_CHECKING:
             M2M100PreTrainedModel,
         )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
+        from .models.maskformer import (
+            MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MaskFormerForInstanceSegmentation,
+            MaskFormerModel,
+            MaskFormerPretrainedModel,
+        )
         from .models.mbart import (
             MBartForCausalLM,
             MBartForConditionalGeneration,
@@ -3316,14 +3322,6 @@ if TYPE_CHECKING:
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
-        )
-        from .models.plbart import (
-            PLBART_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PLBartForCausalLM,
-            PLBartForConditionalGeneration,
-            PLBartForSequenceClassification,
-            PLBartModel,
-            PLBartPreTrainedModel,
         )
         from .models.poolformer import (
             POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
