@@ -284,9 +284,9 @@ class TFGPTJBlock(tf.keras.layers.Layer):
     def __init__(self, config: GPTJConfig, **kwargs):
         super().__init__(**kwargs)
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
-        self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon)
-        self.attn = TFGPTJAttention(config)
-        self.mlp = TFGPTJMLP(inner_dim, config)
+        self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
+        self.attn = TFGPTJAttention(config, name="attn")
+        self.mlp = TFGPTJMLP(inner_dim, config, name="mlp")
 
     def call(
         self,
@@ -342,16 +342,6 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFGPTJBlock(config, name=f"h_._{i}") for i in range(config.n_layer)]
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
-
-    def build(self, input_shape):
-        with tf.name_scope("wpe"):
-            self.wpe = self.add_weight(
-                name="embeddings",
-                shape=[self.n_positions, self.n_embd],
-                initializer=get_initializer(self.initializer_range),
-            )
-
-        super().build(input_shape)
 
     def get_input_embeddings(self):
         return self.wte
@@ -457,8 +447,6 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
         if inputs["inputs_embeds"] is None:
             inputs["inputs_embeds"] = self.wte(inputs["input_ids"], mode="embedding")
 
-        position_embeds = tf.gather(self.wpe, inputs["position_ids"])
-
         if inputs["token_type_ids"] is not None:
             inputs["token_type_ids"] = tf.reshape(
                 inputs["token_type_ids"], [-1, shape_list(inputs["token_type_ids"])[-1]]
@@ -467,9 +455,8 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
         else:
             token_type_embeds = tf.constant(0.0)
 
-        position_embeds = tf.cast(position_embeds, dtype=inputs["inputs_embeds"].dtype)
         token_type_embeds = tf.cast(token_type_embeds, dtype=inputs["inputs_embeds"].dtype)
-        hidden_states = inputs["inputs_embeds"] + position_embeds + token_type_embeds
+        hidden_states = inputs["inputs_embeds"] + token_type_embeds
         hidden_states = self.drop(hidden_states, training=inputs["training"])
 
         output_shape = input_shape + [shape_list(hidden_states)[-1]]
