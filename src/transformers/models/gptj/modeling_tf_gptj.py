@@ -14,6 +14,7 @@
 # limitations under the License.
 """ TF 2.0 GPT-J model."""
 
+import math
 from typing import Optional, Tuple
 
 import tensorflow as tf
@@ -68,7 +69,7 @@ def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] =
 def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
     rotate_half_tensor = tf.stack((x[:, :, :, 1::2], x[:, :, :, ::2]), axis=-1)
     rotate_half_tensor = tf.reshape(
-        rotate_half_tensor, rotate_half_tensor.shape[:-2] + tf.math.reduce_prod(rotate_half_tensor.shape[-2:])
+        rotate_half_tensor, rotate_half_tensor.shape[:-2] + math.prod(rotate_half_tensor.shape[-2:])
     )
     return rotate_half_tensor
 
