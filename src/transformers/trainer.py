@@ -63,6 +63,7 @@ from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .deepspeed import deepspeed_init, deepspeed_reinit, is_deepspeed_zero3_enabled
+from .oslo import oslo_init
 from .dependency_versions_check import dep_version_check
 from .file_utils import (
     CONFIG_NAME,
@@ -303,6 +304,7 @@ class Trainer:
         set_seed(self.args.seed)
         self.hp_name = None
         self.deepspeed = None
+        self.oslo = None
         self.is_in_train = False
 
         # memory metrics - must set up as early as possible
@@ -1234,9 +1236,15 @@ class Trainer:
                 debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
+        if args.oslo:
+            _ = oslo_init(self)
         if args.deepspeed:
+            if args.oslo:
+                mpu = self.args.hf_oslo_config.config.mpu
+            else:
+                mpu = None
             deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
-                self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
+                self, num_training_steps=max_steps, mpu=mpu, resume_from_checkpoint=resume_from_checkpoint
             )
             self.model = deepspeed_engine.module
             self.model_wrapped = deepspeed_engine

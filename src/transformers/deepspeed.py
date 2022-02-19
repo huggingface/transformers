@@ -367,7 +367,7 @@ def deepspeed_reinit(trainer):
     return deepspeed_engine, optimizer, lr_scheduler
 
 
-def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inference=False):
+def deepspeed_init(trainer, num_training_steps, mpu=None, resume_from_checkpoint=None, inference=False):
     """
     Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
 
@@ -420,6 +420,9 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
     )
+
+    if mpu is not None:
+        kwargs["mpu"] = mpu
 
     deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
 
