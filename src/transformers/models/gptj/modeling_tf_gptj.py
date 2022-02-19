@@ -33,7 +33,10 @@ from ...modeling_tf_outputs import (
     TFSequenceClassifierOutputWithPast,
 )
 from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
+    TFQuestionAnsweringLoss,
+    TFSequenceClassificationLoss,
     TFSharedEmbeddings,
     get_initializer,
     input_processing,
@@ -746,7 +749,7 @@ class TFGPTJModel(TFGPTJPreTrainedModel):
     """,
     GPTJ_START_DOCSTRING,
 )
-class TFGPTJForCausalLM(TFGPTJPreTrainedModel):
+class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFGPTJMainLayer(config, name="transformer")
@@ -868,7 +871,7 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel):
     """,
     GPTJ_START_DOCSTRING,
 )
-class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel):
+class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassificationLoss):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head\.weight"]
 
     def __init__(self, config, *inputs, **kwargs):
@@ -1008,7 +1011,7 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel):
     """,
     GPTJ_START_DOCSTRING,
 )
-class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel):
+class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head\.weight"]
 
     def __init__(self, config, *inputs, **kwargs):
