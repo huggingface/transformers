@@ -15,7 +15,6 @@
 
 import inspect
 import math
-from abc import ABC
 from typing import Callable, Iterable, List, Optional
 
 import numpy as np
@@ -49,7 +48,7 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 """
 
 
-class LogitsProcessor(ABC):
+class LogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -60,7 +59,7 @@ class LogitsProcessor(ABC):
         )
 
 
-class LogitsWarper(ABC):
+class LogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -380,8 +379,9 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
 
     Args:
         bad_words_ids (`List[List[int]]`):
-            List of list of token ids that are not allowed to be generated. In order to get the tokens of the words
-            that should not appear in the generated text, use `tokenizer(bad_word, add_prefix_space=True).input_ids`.
+            List of list of token ids that are not allowed to be generated. In order to get the token ids of the words
+            that should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
+            add_special_tokens=False).input_ids`.
         eos_token_id (`int`):
             The id of the *end-of-sequence* token.
     """

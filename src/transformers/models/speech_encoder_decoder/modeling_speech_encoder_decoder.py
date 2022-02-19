@@ -490,15 +490,16 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
-        if encoder_outputs is None and inputs is None:
-            if input_values is not None and input_features is not None:
-                raise ValueError("You cannot specify both input_values and input_features at the same time")
-            elif input_values is not None:
-                inputs = input_values
-            elif input_features is not None:
-                inputs = input_features
-            else:
-                raise ValueError("You have to specify either input_values or input_features")
+        if encoder_outputs is None:
+            if inputs is None:
+                if input_values is not None and input_features is not None:
+                    raise ValueError("You cannot specify both input_values and input_features at the same time")
+                elif input_values is not None:
+                    inputs = input_values
+                elif input_features is not None:
+                    inputs = input_features
+                else:
+                    raise ValueError("You have to specify either input_values or input_features")
 
             encoder_outputs = self.encoder(
                 inputs,

@@ -85,35 +85,25 @@ if is_tf_available():
 class TFAutoModelTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
-        import h5py
+        model_name = "bert-base-cased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-        self.assertTrue(h5py.version.hdf5_version.startswith("1.10"))
-
-        # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-        for model_name in ["bert-base-uncased"]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
-
-            model = TFAutoModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, TFBertModel)
+        model = TFAutoModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, TFBertModel)
 
     @slow
     def test_model_for_pretraining_from_pretrained(self):
-        import h5py
+        model_name = "bert-base-cased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-        self.assertTrue(h5py.version.hdf5_version.startswith("1.10"))
-
-        # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-        for model_name in ["bert-base-uncased"]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
-
-            model = TFAutoModelForPreTraining.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, TFBertForPreTraining)
+        model = TFAutoModelForPreTraining.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, TFBertForPreTraining)
 
     @slow
     def test_model_for_causal_lm(self):

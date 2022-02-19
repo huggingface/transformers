@@ -39,8 +39,8 @@ from ...modeling_tf_utils import (
     TFTokenClassificationLoss,
     get_initializer,
     input_processing,
-    shape_list,
 )
+from ...tf_utils import shape_list
 from ...utils import logging
 from .configuration_deberta import DebertaConfig
 

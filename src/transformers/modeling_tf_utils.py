@@ -34,6 +34,7 @@ from tensorflow.python.keras.saving import hdf5_format
 from huggingface_hub import Repository, list_repo_files
 from requests import HTTPError
 
+from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .file_utils import (
@@ -54,6 +55,7 @@ from .file_utils import (
 )
 from .generation_tf_utils import TFGenerationMixin
 from .modeling_tf_outputs import TFSeq2SeqLMOutput
+from .tf_utils import shape_list
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
@@ -1588,23 +1590,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     user_agent=user_agent,
                 )
 
-            except RepositoryNotFoundError as err:
-                logger.error(err)
+            except RepositoryNotFoundError:
                 raise EnvironmentError(
                     f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
                     "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a "
                     "token having permission to this repo with `use_auth_token` or log in with `huggingface-cli "
                     "login` and pass `use_auth_token=True`."
                 )
-            except RevisionNotFoundError as err:
-                logger.error(err)
+            except RevisionNotFoundError:
                 raise EnvironmentError(
                     f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for "
                     "this model name. Check the model page at "
                     f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
                 )
-            except EntryNotFoundError as err:
-                logger.error(err)
+            except EntryNotFoundError:
                 if filename == TF2_WEIGHTS_NAME:
                     has_file_kwargs = {
                         "revision": revision,
@@ -1619,7 +1618,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                             "those weights."
                         )
                     else:
-                        logger.error(err)
                         raise EnvironmentError(
                             f"{pretrained_model_name_or_path} does not appear to have a file named {TF2_WEIGHTS_NAME} "
                             f"or {WEIGHTS_NAME}."
@@ -1628,8 +1626,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     raise EnvironmentError(
                         f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
                     )
-            except HTTPError as err:
-                logger.error(err)
+            except HTTPError:
                 raise EnvironmentError(
                     "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
                     f"{pretrained_model_name_or_path} is not the path to a directory conaining a a file named "
@@ -1637,8 +1634,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     "Checkout your internet connection or see how to run the library in offline mode at "
                     "'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
-            except EnvironmentError as err:
-                logger.error(err)
+            except EnvironmentError:
                 raise EnvironmentError(
                     f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it from "
                     "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
@@ -1957,9 +1953,11 @@ class TFSequenceSummary(tf.keras.layers.Layer):
                 num_classes, kernel_initializer=get_initializer(initializer_range), name="summary"
             )
 
-        self.has_activation = hasattr(config, "summary_activation") and config.summary_activation == "tanh"
-        if self.has_activation:
-            self.activation = tf.keras.activations.tanh
+        self.has_activation = False
+        activation_string = getattr(config, "summary_activation", None)
+        if activation_string is not None:
+            self.has_activation = True
+            self.activation = get_tf_activation(activation_string)
 
         self.has_first_dropout = hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0
         if self.has_first_dropout:
@@ -2045,29 +2043,6 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
-
-
-def shape_list(tensor: Union[tf.Tensor, np.ndarray]) -> List[int]:
-    """
-    Deal with dynamic shape in tensorflow cleanly.
-
-    Args:
-        tensor (`tf.Tensor` or `np.ndarray`): The tensor we want the shape of.
-
-    Returns:
-        `List[int]`: The shape of the tensor as a list.
-    """
-    if isinstance(tensor, np.ndarray):
-        return list(tensor.shape)
-
-    dynamic = tf.shape(tensor)
-
-    if tensor.shape == tf.TensorShape(None):
-        return dynamic
-
-    static = tensor.shape.as_list()
-
-    return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
 def get_initializer(initializer_range: float = 0.02) -> tf.initializers.TruncatedNormal:
