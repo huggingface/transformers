@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ViTForImageClassification, ViTModel
+    from transformers import ViTForImageClassification, ViTForMaskedImageModeling, ViTModel
     from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
@@ -61,6 +61,7 @@ class ViTModelTester:
         initializer_range=0.02,
         num_labels=3,
         scope=None,
+        encoder_stride=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -79,6 +80,7 @@ class ViTModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
+        self.encoder_stride = encoder_stride
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -105,6 +107,7 @@ class ViTModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            encoder_stride=self.encoder_stride,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -148,6 +151,7 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
         (
             ViTModel,
             ViTForImageClassification,
+            ViTForMaskedImageModeling,
         )
         if is_torch_available()
         else ()
