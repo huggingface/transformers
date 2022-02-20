@@ -95,6 +95,7 @@ def get_torch_distributed_launcher():
 @require_torch_multi_gpu
 class TestOsloWithLauncher(TestCasePlus):
     """This class is for testing via an external script - can do multiple gpus"""
+
     def test_do_eval_no_train(self):
         # testing only zero3 since zero2 makes no sense with inference
         self.run_and_check(
@@ -104,6 +105,15 @@ class TestOsloWithLauncher(TestCasePlus):
         )
 
     def test_fp32(self):
+        self.run_and_check(
+            model_name=T5_TINY,
+            do_train=True,
+            do_eval=True,
+            quality_checks=False,
+            fp16=False,
+        )
+
+    def test_deepspeed(self):
         self.run_and_check(
             model_name=T5_TINY,
             do_train=True,
