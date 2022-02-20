@@ -2312,12 +2312,14 @@ class Trainer:
 
         </Tip>
 
+
         Returns: *NamedTuple* A namedtuple with the following keys:
 
-            - predictions (`np.ndarray`): The predictions on `test_dataset`.
+            - predictions (Union[`np.ndarray`,`Tuple`]): The predictions on `test_dataset`. Will be np.ndarray if
+            `output_hidden_states` is `False`, or 2-element tuple if `output_hidden_states` is `True`.
             - label_ids (`np.ndarray`, *optional*): The labels (if the dataset contained some).
             - metrics (`Dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset contained
-              labels).
+            labels).
         """
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
