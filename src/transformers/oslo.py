@@ -75,4 +75,4 @@ def oslo_init(model, hf_oslo_config):
 def oslo_init_trainer(trainer):
     config = trainer.args.hf_oslo_config
     trainer.model = oslo_init(trainer.model, config)
-    return True
+    trainer.oslo_mpu = trainer.model.mpu

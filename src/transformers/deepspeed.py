@@ -367,7 +367,7 @@ def deepspeed_reinit(trainer):
     return deepspeed_engine, optimizer, lr_scheduler
 
 
-def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inference=False):
+def deepspeed_init(trainer, num_training_steps, mpu=None, resume_from_checkpoint=None, inference=False):
     """
     Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
 
@@ -387,8 +387,6 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
 
     model = trainer.model
     args = trainer.args
-    # if oslo was initialized, `model` would have an mpu
-    mpu = getattr(model, "mpu", None)
 
     # resume config update - some bits like `model` and `num_training_steps` only become available during train
     hf_deepspeed_config = args.hf_deepspeed_config

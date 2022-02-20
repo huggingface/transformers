@@ -33,6 +33,7 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_gpu_count,
     mockenv_context,
+    require_oslo,
     require_deepspeed,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -73,16 +74,6 @@ def get_master_port(real_launcher=False) -> str:
     return master_port_base
 
 
-def require_oslo(test_case):
-    # TODO: move to testing_utils.py once done
-    """
-    Decorator marking a test that requires oslo
-    """
-    if not is_oslo_available():
-        return unittest.skip("test requires oslo")(test_case)
-    return test_case
-
-
 def get_torch_distributed_launcher():
     num_gpus = min(2, get_gpu_count())
     master_port = get_master_port(real_launcher=True)
@@ -91,13 +82,10 @@ def get_torch_distributed_launcher():
 
 @slow
 @require_oslo
-@require_torch_gpu
 @require_torch_multi_gpu
-class TestOsloWithLauncher(TestCasePlus):
-    """This class is for testing via an external script - can do multiple gpus"""
+class TestOslo(TestCasePlus):
 
     def test_do_eval_no_train(self):
-        # testing only zero3 since zero2 makes no sense with inference
         self.run_and_check(
             eval_steps=1,
             do_train=False,
@@ -124,8 +112,6 @@ class TestOsloWithLauncher(TestCasePlus):
 
     @parameterized.expand(["fp16", "fp32"])
     def test_inference(self, dtype):
-        # this is just inference, so no optimizer should be loaded
-        # it only works for z3 (makes no sense with z1-z2)
         fp16 = True if dtype == "fp16" else False
         self.run_and_check(
             model_name=T5_TINY,
@@ -134,6 +120,9 @@ class TestOsloWithLauncher(TestCasePlus):
             quality_checks=False,
             fp16=fp16,
         )
+    
+    def test_deepspeed(self):
+        pass
 
     def do_checks(self, output_dir, do_train=True, do_eval=True, quality_checks=True):
 

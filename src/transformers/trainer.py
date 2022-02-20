@@ -303,7 +303,7 @@ class Trainer:
         # Seed must be set before instantiating the model when using model
         set_seed(self.args.seed)
         self.hp_name = None
-        self.oslo = False
+        self.oslo_mpu = False
         self.deepspeed = None
         self.is_in_train = False
 
@@ -1084,9 +1084,8 @@ class Trainer:
             if self.args.ddp_bucket_cap_mb is not None:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
 
-            if self.oslo:
-                mpu = getattr(model, "mpu")
-                kwargs["process_group"] = mpu.get_data_parallel_group()
+            if self.oslo_mpu is not None:
+                kwargs["process_group"] = self.oslo_mpu.get_data_parallel_group()
 
             model = nn.parallel.DistributedDataParallel(
                 model,
@@ -1242,10 +1241,10 @@ class Trainer:
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if args.oslo:
-            self.oslo = oslo_init_trainer(self)
+            oslo_init_trainer(self)
         if args.deepspeed:
             deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
-                self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
+                self, num_training_steps=max_steps, mpu=self.oslo_mpu, resume_from_checkpoint=resume_from_checkpoint
             )
             self.model = deepspeed_engine.module
             self.model_wrapped = deepspeed_engine
@@ -2123,27 +2122,17 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         xm.rendezvous("saving_checkpoint")
         if not isinstance(self.model, PreTrainedModel):
-            unwrapped_model = unwrap_model(self.model)
-            if isinstance(unwrapped_model, PreTrainedModel):
-                if self.oslo:
-                    self.model.save_parallelized(
-                        output_dir, save_config=self.args.should_save, save_function=xm.save, merge_checkpoints=True
-                    )
-                else:
-                    unwrapped_model.save_pretrained(
-                        output_dir,
-                        save_config=self.args.should_save,
-                        state_dict=self.model.state_dict(),
-                        save_function=xm.save,
-                    )
+            if isinstance(unwrap_model(self.model), PreTrainedModel):
+                unwrap_model(self.model).save_pretrained(
+                    output_dir,
+                    save_config=self.args.should_save,
+                    state_dict=self.model.state_dict(),
+                    save_function=xm.save,
+                )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 state_dict = self.model.state_dict()
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
-        elif self.oslo:
-            self.model.save_parallelized(
-                output_dir, save_config=self.args.should_save, save_function=xm.save, merge_checkpoints=True
-            )
         else:
             self.model.save_pretrained(output_dir, save_config=self.args.should_save, save_function=xm.save)
         if self.tokenizer is not None and self.args.should_save:
@@ -2157,16 +2146,18 @@ class Trainer:
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
-
-            if isinstance(unwrap_model(self.model), PreTrainedModel):
+            unwrapped_model = unwrap_model(self.model)
+            if isinstance(unwrapped_model, PreTrainedModel):
                 if state_dict is None:
                     state_dict = self.model.state_dict()
-                unwrap_model(self.model).save_pretrained(output_dir, state_dict=state_dict)
+                unwrapped_model.save_pretrained(output_dir, state_dict=state_dict)
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 if state_dict is None:
                     state_dict = self.model.state_dict()
                 torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+        elif self.oslo_mpu is not None:
+            self.model.save_parallelized(output_dir, state_dict=state_dict, merge_checkpoints=True)
         else:
             self.model.save_pretrained(output_dir, state_dict=state_dict)
         if self.tokenizer is not None:
@@ -2381,8 +2372,8 @@ class Trainer:
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 
         # if eval is called w/o train init oslo here
-        if args.oslo and not self.oslo:
-            self.oslo = oslo_init_trainer(self)
+        if args.oslo and self.oslo_mpu is None:
+            oslo_init_trainer(self)
 
         # if eval is called w/o train init deepspeed here
         if args.deepspeed and not self.deepspeed:
@@ -2390,7 +2381,7 @@ class Trainer:
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
             deepspeed_engine, _, _ = deepspeed_init(
-                self, num_training_steps=0, resume_from_checkpoint=None, inference=True
+                self, num_training_steps=0, mpu=self.oslo_mpu, resume_from_checkpoint=None, inference=True
             )
             self.model = deepspeed_engine.module
             self.model_wrapped = deepspeed_engine
@@ -2907,7 +2898,7 @@ class Trainer:
 
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
-            deepspeed_engine, _, _ = deepspeed_init(self, num_training_steps=0, resume_from_checkpoint=None)
+            deepspeed_engine, _, _ = deepspeed_init(self, num_training_steps=0, mpu=self.oslo_mpu, resume_from_checkpoint=None)
             self.model = deepspeed_engine.module
             self.model_wrapped = deepspeed_engine
             self.deepspeed = deepspeed_engine

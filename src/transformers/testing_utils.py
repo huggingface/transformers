@@ -30,6 +30,7 @@ from unittest import mock
 from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
+from .oslo import is_oslo_available
 from .file_utils import (
     is_detectron2_available,
     is_faiss_available,
@@ -622,6 +623,15 @@ def require_deepspeed(test_case):
     """
     if not is_deepspeed_available():
         return unittest.skip("test requires deepspeed")(test_case)
+    else:
+        return test_case
+
+def require_oslo(test_case):
+    """
+    Decorator marking a test that requires oslo
+    """
+    if not is_oslo_available():
+        return unittest.skip("test requires oslo")(test_case)
     else:
         return test_case
 
