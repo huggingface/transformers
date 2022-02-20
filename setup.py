@@ -122,6 +122,7 @@ _deps = [
     "onnxruntime>=1.4.0",
     "optuna",
     "optax>=0.0.8",
+    "oslo-core>=2.0.0",
     "packaging>=20.0",
     "parameterized",
     "phonemizer",

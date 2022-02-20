@@ -32,6 +32,7 @@ deps = {
     "onnxruntime": "onnxruntime>=1.4.0",
     "optuna": "optuna",
     "optax": "optax>=0.0.8",
+    "oslo-core": "oslo-core>=2.0.0",
     "packaging": "packaging>=20.0",
     "parameterized": "parameterized",
     "phonemizer": "phonemizer",

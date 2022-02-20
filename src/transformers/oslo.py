@@ -33,7 +33,7 @@ def is_oslo_available():
 
 
 # keep the config object global to be able to access it anywhere during TrainingArguments life-cycle
-_hf_deepspeed_config_weak_ref = None
+_hf_oslo_config_weak_ref = None
 
 
 class HfOsloConfig:
@@ -41,7 +41,7 @@ class HfOsloConfig:
         # set global weakref object
         set_hf_oslo_config(self)
 
-        # dep_version_check("oslo")
+        dep_version_check("oslo-core")
 
         if isinstance(config_file_or_dict, dict):
             # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
