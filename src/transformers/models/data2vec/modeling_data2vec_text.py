@@ -586,7 +586,6 @@ class Data2VecTextPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel with Roberta->Data2VecText, roberta->data2vec-text
 class Data2VecTextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1259,8 +1258,8 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Data2VecText Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
-    softmax) e.g. for RocStories/SWAG tasks.
+    Data2VecText Model with a multiple choice classification head on top (a linear layer on top of the pooled output
+    and a softmax) e.g. for RocStories/SWAG tasks.
     """,
     DATA2VECTEXT_START_DOCSTRING,
 )
@@ -1354,8 +1353,8 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Data2VecText Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
+    Data2VecText Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for Named-Entity-Recognition (NER) tasks.
     """,
     DATA2VECTEXT_START_DOCSTRING,
 )
@@ -1462,8 +1461,8 @@ class Data2VecTextClassificationHead(nn.Module):
 
 @add_start_docstrings(
     """
-    Data2VecText Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    Data2VecText Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
+    linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     DATA2VECTEXT_START_DOCSTRING,
 )

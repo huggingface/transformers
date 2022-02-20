@@ -203,7 +203,7 @@ _import_structure = {
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
-    "models.data2vec": ["DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecConfig"],
+    "models.data2vec": ["DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecTextConfig"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
@@ -850,15 +850,21 @@ if is_torch_available():
     _import_structure["models.data2vec"].extend(
         [
             "DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Data2VecForAudioModel",
-            "Data2VecForCausalLM",
-            "Data2VecForMaskedLM",
-            "Data2VecForMultipleChoice",
-            "Data2VecForQuestionAnswering",
-            "Data2VecForSequenceClassification",
-            "Data2VecForTextModel",
-            "Data2VecForTokenClassification",
-            "Data2VecPreTrainedModel",
+            "Data2VecAudioForAudioFrameClassification",
+            "Data2VecAudioForCTC",
+            "Data2VecAudioForPreTraining",
+            "Data2VecAudioForSequenceClassification",
+            "Data2VecAudioForXVector",
+            "Data2VecAudioModel",
+            "Data2VecAudioPreTrainedModel",
+            "Data2VecTextForCausalLM",
+            "Data2VecTextForMaskedLM",
+            "Data2VecTextForMultipleChoice",
+            "Data2VecTextForQuestionAnswering",
+            "Data2VecTextForSequenceClassification",
+            "Data2VecTextForTokenClassification",
+            "Data2VecTextModel",
+            "Data2VecTextPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -2408,7 +2414,7 @@ if TYPE_CHECKING:
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
-    from .models.data2vec import DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecConfig
+    from .models.data2vec import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecTextConfig
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
@@ -2946,15 +2952,21 @@ if TYPE_CHECKING:
         )
         from .models.data2vec import (
             DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Data2VecForAudioModel,
-            Data2VecForCausalLM,
-            Data2VecForMaskedLM,
-            Data2VecForMultipleChoice,
-            Data2VecForQuestionAnswering,
-            Data2VecForSequenceClassification,
-            Data2VecForTextModel,
-            Data2VecForTokenClassification,
-            Data2VecPreTrainedModel,
+            Data2VecAudioForAudioFrameClassification,
+            Data2VecAudioForCTC,
+            Data2VecAudioForPreTraining,
+            Data2VecAudioForSequenceClassification,
+            Data2VecAudioForXVector,
+            Data2VecAudioModel,
+            Data2VecAudioPreTrainedModel,
+            Data2VecTextForCausalLM,
+            Data2VecTextForMaskedLM,
+            Data2VecTextForMultipleChoice,
+            Data2VecTextForQuestionAnswering,
+            Data2VecTextForSequenceClassification,
+            Data2VecTextForTokenClassification,
+            Data2VecTextModel,
+            Data2VecTextPreTrainedModel,
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -85,7 +85,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFRobertaForMultipleChoice",  # TODO: fix
     "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
     "SeparableConv1D",  # Building part of bigger (tested) model.
-    "Data2VecForAudioModel",  # TODO: Add tests
+    "Data2VecAudioModel",  # TODO: Add tests
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -103,6 +103,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_xlm_roberta.py",
     "test_modeling_vision_text_dual_encoder.py",
     "test_modeling_flax_vision_text_dual_encoder.py",
+    "test_modeling_data2vec_audio.py",  # TODO: Add tests
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -165,7 +166,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "VisualBertForMultipleChoice",
     "TFWav2Vec2ForCTC",
     "TFHubertForCTC",
-    "Data2VecForAudioModel",  # TODO: Fix
+    "Data2VecAudioModel",  # TODO: Fix
+    "Data2VecAudioForPreTraining",  # TODO: Fix
 ]
 
 # This is to make sure the transformers module imported is the one in the repo.
