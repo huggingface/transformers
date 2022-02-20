@@ -387,6 +387,8 @@ def deepspeed_init(trainer, num_training_steps, mpu=None, resume_from_checkpoint
 
     model = trainer.model
     args = trainer.args
+    # if oslo was initialized, `model` would have an mpu
+    mpu = getattr(model, "mpu", None)
 
     # resume config update - some bits like `model` and `num_training_steps` only become available during train
     hf_deepspeed_config = args.hf_deepspeed_config
@@ -419,10 +421,8 @@ def deepspeed_init(trainer, num_training_steps, mpu=None, resume_from_checkpoint
         config_params=config,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
+        mpu=mpu,
     )
-
-    if mpu is not None:
-        kwargs["mpu"] = mpu
 
     deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
 

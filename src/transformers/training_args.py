@@ -20,7 +20,7 @@ import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from .debug_utils import DebugOption
 from .file_utils import (
@@ -656,7 +656,13 @@ class TrainingArguments:
             "with the same syntax: zero_dp_2 auto_wrap` or `zero_dp_3 auto_wrap`.",
         },
     )
-    deepspeed: Optional[str] = field(
+    oslo: Optional[Union[str, dict]] = field(
+        default=None,
+        metadata={
+            "help": "Enable oslo and pass the path to oslo json config file (e.g. oslo_config.json) or an already loaded json file as a dict"
+        },
+    )
+    deepspeed: Optional[Union[str, dict]] = field(
         default=None,
         metadata={
             "help": "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json) or an already loaded json file as a dict"
@@ -914,6 +920,11 @@ class TrainingArguments:
             self.tpu_metrics_debug = False
         if isinstance(self.debug, str):
             self.debug = [DebugOption(s) for s in self.debug.split()]
+        
+        if self.oslo:
+            from transformers.oslo import HfOsloConfig
+
+            self.hf_oslo_config = HfOsloConfig(self.oslo)
 
         if self.deepspeed:
             # - must be run very last in arg parsing, since it will use a lot of these settings.

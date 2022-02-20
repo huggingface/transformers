@@ -22,12 +22,8 @@ import weakref
 from copy import deepcopy
 
 from .dependency_versions_check import dep_version_check
-from .file_utils import is_torch_available
 from .utils import logging
 
-
-if is_torch_available():
-    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -55,23 +51,8 @@ class HfOsloConfig:
             with io.open(config_file_or_dict, "r", encoding="utf-8") as f:
                 config = json.load(f)
         else:
-            raise ValueError("expecting either a path to a Oslo config file or a pre-populated dict")
+            raise ValueError("expecting either a path to an Oslo config file or a pre-populated dict")
         self.config = config
-        self.mpu = None
-
-
-class HfTrainerOsloConfig(HfOsloConfig):
-    """
-    The `HfTrainerOsloConfig` object is meant to be created during `TrainingArguments` object creation and has the
-    same lifespan as the latter.
-    """
-
-    def __init__(self, config_file_or_dict):
-        super().__init__(config_file_or_dict)
-        self._dtype = torch.float16
-
-    def dtype(self):
-        return self._dtype
 
 
 def set_hf_oslo_config(hf_oslo_config_obj):
@@ -86,17 +67,9 @@ def oslo_config():
 
 
 def oslo_init(trainer):
-    # NOTE: maybe return mpu and undo stashing altogther?
     import oslo
 
     config = trainer.args.hf_oslo_config.config
-
     trainer.model = oslo.initialize(model=trainer.model, config=config)
 
-    # stash mpu for later use, e.g. deepspeed
-    config.mpu = trainer.model.mpu
-
-    # stash kwargs to enabled a later oslo_reinit
-    trainer.oslo_initialize_kwargs = config
-
-    return trainer.model
+    return True
