@@ -656,13 +656,13 @@ class TrainingArguments:
             "with the same syntax: zero_dp_2 auto_wrap` or `zero_dp_3 auto_wrap`.",
         },
     )
-    oslo: Optional[Union[str, dict]] = field(
+    oslo: Optional[str] = field(
         default=None,
         metadata={
             "help": "Enable oslo and pass the path to oslo json config file (e.g. oslo_config.json) or an already loaded json file as a dict"
         },
     )
-    deepspeed: Optional[Union[str, dict]] = field(
+    deepspeed: Optional[str] = field(
         default=None,
         metadata={
             "help": "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json) or an already loaded json file as a dict"

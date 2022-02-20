@@ -66,10 +66,13 @@ def oslo_config():
     return None
 
 
-def oslo_init(trainer):
+def oslo_init(model, hf_oslo_config):
     import oslo
 
-    config = trainer.args.hf_oslo_config.config
-    trainer.model = oslo.initialize(model=trainer.model, config=config)
+    return oslo.initialize(model, config=hf_oslo_config.config)
 
+
+def oslo_init_trainer(trainer):
+    config = trainer.args.hf_oslo_config
+    trainer.model = oslo_init(trainer.model, config)
     return True

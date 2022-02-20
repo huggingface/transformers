@@ -79,7 +79,7 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .oslo import oslo_init
+from .oslo import oslo_init_trainer
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -1237,7 +1237,7 @@ class Trainer:
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if args.oslo:
-            self.oslo = oslo_init(self)
+            self.oslo = oslo_init_trainer(self)
         if args.deepspeed:
             deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
                 self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
@@ -2377,7 +2377,7 @@ class Trainer:
 
         # if eval is called w/o train init oslo here
         if args.oslo and not self.oslo:
-            self.oslo = oslo_init(self)
+            self.oslo = oslo_init_trainer(self)
 
         # if eval is called w/o train init deepspeed here
         if args.deepspeed and not self.deepspeed:

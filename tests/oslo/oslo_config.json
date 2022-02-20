@@ -1,0 +1,6 @@
+{
+    "model_parallelism": {
+        "enable": true,
+        "tensor_parallel_size": 2
+    }
+}
