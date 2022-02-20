@@ -33,15 +33,10 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
-    BaseModelOutput,
-    CausalLMOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel, torch_int_div
 from ...utils import logging
-from .configuration_data2vec_audio import Data2VecAudioConfig
+from .configuration_data2vec import Data2VecAudioConfig
 
 
 logger = logging.get_logger(__name__)
@@ -76,7 +71,7 @@ _XVECTOR_CHECKPOINT = "anton-l/data2vec-audio-base-superb-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.98
 
 
-DATA_2_VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST = [
+DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/data2vec-audio-base-960h",
     "facebook/data2vec-audio-large-960h",
     "facebook/data2vec-audio-large-960h-lv60",
@@ -411,7 +406,9 @@ class Data2VecAudioPositionalConvLayer(nn.Module):
 class Data2VecAudioPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layers = nn.ModuleList([Data2VecAudioPositionalConvLayer(config) for _ in range(config.num_conv_pos_embeddings)])
+        self.layers = nn.ModuleList(
+            [Data2VecAudioPositionalConvLayer(config) for _ in range(config.num_conv_pos_embeddings)]
+        )
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.transpose(1, 2)
@@ -426,9 +423,9 @@ class Data2VecAudioFeatureEncoder(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.conv_layers = nn.ModuleList([
-            Data2VecAudioConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
-        ])
+        self.conv_layers = nn.ModuleList(
+            [Data2VecAudioConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
+        )
         self.gradient_checkpointing = False
         self._requires_grad = True
 
@@ -930,7 +927,7 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-DATA_2_VEC_AUDIO_START_DOCSTRING = r"""
+DATA2VEC_AUDIO_START_DOCSTRING = r"""
     Data2VecAudio was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
     Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael
     Auli.
@@ -949,7 +946,7 @@ DATA_2_VEC_AUDIO_START_DOCSTRING = r"""
 """
 
 
-DATA_2_VEC_AUDIO_INPUTS_DOCSTRING = r"""
+DATA2VEC_AUDIO_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
@@ -969,10 +966,10 @@ DATA_2_VEC_AUDIO_INPUTS_DOCSTRING = r"""
 
             `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
             True`. For all models whose processor has `config.return_attention_mask == False`, such as
-            [data2vec-audio-base](https://huggingface.co/facebook/data2vec-audio-base-960h), `attention_mask` should **not** be
-            passed to avoid degraded performance when doing batched inference. For such models `input_values` should
-            simply be padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly
-            different results depending on whether `input_values` is padded or not.
+            [data2vec-audio-base](https://huggingface.co/facebook/data2vec-audio-base-960h), `attention_mask` should
+            **not** be passed to avoid degraded performance when doing batched inference. For such models
+            `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware that these
+            models also yield slightly different results depending on whether `input_values` is padded or not.
 
             </Tip>
 
@@ -989,7 +986,7 @@ DATA_2_VEC_AUDIO_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare Data2VecAudio Model transformer outputting raw hidden-states without any specific head on top.",
-    DATA_2_VEC_AUDIO_START_DOCSTRING,
+    DATA2VEC_AUDIO_START_DOCSTRING,
 )
 class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
     def __init__(self, config: Data2VecAudioConfig):
@@ -1062,7 +1059,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
 
         return hidden_states
 
-    @add_start_docstrings_to_model_forward(DATA_2_VEC_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1124,7 +1121,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Data2VecAudio Model with a quantizer and `VQ` head on top.""", DATA_2_VEC_AUDIO_START_DOCSTRING)
+@add_start_docstrings("""Data2VecAudio Model with a quantizer and `VQ` head on top.""", DATA2VEC_AUDIO_START_DOCSTRING)
 class Data2VecAudioForPreTraining(Data2VecAudioPreTrainedModel):
     def __init__(self, config: Data2VecAudioConfig):
         super().__init__(config)
@@ -1172,7 +1169,7 @@ class Data2VecAudioForPreTraining(Data2VecAudioPreTrainedModel):
         logits = logits / temperature
         return logits
 
-    @add_start_docstrings_to_model_forward(DATA_2_VEC_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Data2VecAudioForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1199,7 +1196,7 @@ class Data2VecAudioForPreTraining(Data2VecAudioPreTrainedModel):
         ```python
         >>> import torch
         >>> from transformers import Wav2Vec2FeatureExtractor, Data2VecAudioForPreTraining
-        >>> from transformers.models.data2vec-audio.modeling_data2vec-audio import _compute_mask_indices
+        >>> from transformers.models.data2vec.modeling_data2vec import _compute_mask_indices
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
@@ -1333,7 +1330,7 @@ class Data2VecAudioForPreTraining(Data2VecAudioPreTrainedModel):
 
 @add_start_docstrings(
     """Data2VecAudio Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    DATA_2_VEC_AUDIO_START_DOCSTRING,
+    DATA2VEC_AUDIO_START_DOCSTRING,
 )
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
@@ -1361,7 +1358,7 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
         """
         self.data2vec_audio.feature_extractor._freeze_parameters()
 
-    @add_start_docstrings_to_model_forward(DATA_2_VEC_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1445,10 +1442,10 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Data2VecAudio Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
+    Data2VecAudio Model with a sequence classification head on top (a linear layer over the pooled output) for tasks
+    like SUPERB Keyword Spotting.
     """,
-    DATA_2_VEC_AUDIO_START_DOCSTRING,
+    DATA2VEC_AUDIO_START_DOCSTRING,
 )
 class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
@@ -1479,7 +1476,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
         for param in self.data2vec_audio.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(DATA_2_VEC_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
@@ -1555,7 +1552,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
     """
     Data2VecAudio Model with a frame classification head on top for tasks like Speaker Diarization.
     """,
-    DATA_2_VEC_AUDIO_START_DOCSTRING,
+    DATA2VEC_AUDIO_START_DOCSTRING,
 )
 class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
@@ -1584,7 +1581,7 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
         for param in self.data2vec_audio.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(DATA_2_VEC_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_FRAME_CLASS_CHECKPOINT,
@@ -1694,7 +1691,7 @@ class TDNNLayer(nn.Module):
     """
     Data2VecAudio Model with an XVector feature extraction head on top for tasks like Speaker Verification.
     """,
-    DATA_2_VEC_AUDIO_START_DOCSTRING,
+    DATA2VEC_AUDIO_START_DOCSTRING,
 )
 class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
@@ -1746,7 +1743,7 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
 
         return input_lengths
 
-    @add_start_docstrings_to_model_forward(DATA_2_VEC_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_XVECTOR_CHECKPOINT,

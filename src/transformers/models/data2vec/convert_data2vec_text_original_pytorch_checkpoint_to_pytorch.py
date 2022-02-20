@@ -24,7 +24,7 @@ import torch
 from fairseq.modules import TransformerSentenceEncoderLayer
 from packaging import version
 
-from transformers import Data2VecConfig, Data2VecForMaskedLM, Data2VecForSequenceClassification
+from transformers import Data2VecTextConfig, Data2VecTextForMaskedLM, Data2VecTextForSequenceClassification
 from transformers.models.bert.modeling_bert import (
     BertIntermediate,
     BertLayer,
@@ -61,7 +61,7 @@ def convert_data2vec_checkpoint_to_pytorch(
     data2vec.eval()  # disable dropout
     data2vec_model = data2vec.models[0]
     data2vec_sent_encoder = data2vec_model.encoder.sentence_encoder
-    config = Data2VecConfig(
+    config = Data2VecTextConfig(
         vocab_size=data2vec_sent_encoder.embed_tokens.num_embeddings,
         hidden_size=data2vec_model.args.encoder_embed_dim,
         num_hidden_layers=data2vec_model.args.encoder_layers,
@@ -75,7 +75,7 @@ def convert_data2vec_checkpoint_to_pytorch(
         config.num_labels = data2vec.model.classification_heads["mnli"].out_proj.weight.shape[0]
     print("Our BERT config:", config)
 
-    model = Data2VecForSequenceClassification(config) if classification_head else Data2VecForMaskedLM(config)
+    model = Data2VecTextForSequenceClassification(config) if classification_head else Data2VecTextForMaskedLM(config)
     model.eval()
 
     # Now let's copy all the weights.
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--data2vec_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
+        "--checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
@@ -190,5 +190,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     convert_data2vec_checkpoint_to_pytorch(
-        args.data2vec_checkpoint_path, args.pytorch_dump_folder_path, args.classification_head
+        args.checkpoint_path, args.pytorch_dump_folder_path, args.classification_head
     )
