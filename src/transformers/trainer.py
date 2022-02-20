@@ -2118,19 +2118,24 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         xm.rendezvous("saving_checkpoint")
         if not isinstance(self.model, PreTrainedModel):
-            if isinstance(unwrap_model(self.model), PreTrainedModel):
-                unwrap_model(self.model).save_pretrained(
-                    output_dir,
-                    save_config=self.args.should_save,
-                    state_dict=self.model.state_dict(),
-                    save_function=xm.save,
-                )
+            unwrapped_model = unwrap_model(self.model)
+            if isinstance(unwrapped_model, PreTrainedModel):
+                if self.oslo:
+                    self.model.save_parallelized(
+                        output_dir, save_config=self.args.should_save, save_function=xm.save, merge_checkpoints=True
+                    )
+                else:
+                    unwrapped_model.save_pretrained(
+                        output_dir,
+                        save_config=self.args.should_save,
+                        state_dict=self.model.state_dict(),
+                        save_function=xm.save,
+                    )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 state_dict = self.model.state_dict()
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         elif self.oslo:
-            # invoke oslo save method
             self.model.save_parallelized(
                 output_dir, save_config=self.args.should_save, save_function=xm.save, merge_checkpoints=True
             )
