@@ -92,6 +92,7 @@ def get_torch_distributed_launcher():
 @slow
 @require_oslo
 @require_torch_gpu
+@require_torch_multi_gpu
 class TestOsloWithLauncher(TestCasePlus):
     """This class is for testing via an external script - can do multiple gpus"""
     def test_do_eval_no_train(self):
@@ -102,44 +103,27 @@ class TestOsloWithLauncher(TestCasePlus):
             do_eval=True,
         )
 
-    # def test_fp32_non_distributed(self):
-    #     # real model needs too much GPU memory under stage2+fp32, so using tiny random model here -
-    #     # therefore no quality checks, just basic completion checks are done
-    #     self.run_and_check(
-    #         model_name=T5_TINY,
-    #         do_train=True,
-    #         do_eval=True,
-    #         quality_checks=False,
-    #         fp16=False,
-    #     )
+    def test_fp32(self):
+        self.run_and_check(
+            model_name=T5_TINY,
+            do_train=True,
+            do_eval=True,
+            quality_checks=False,
+            fp16=False,
+        )
 
-    # @require_torch_multi_gpu
-    # def test_fp32_distributed(self):
-    #     # real model needs too much GPU memory under stage2+fp32, so using tiny random model here -
-    #     # therefore no quality checks, just basic completion checks are done
-    #     self.run_and_check(
-    #         model_name=T5_TINY,
-    #         do_train=True,
-    #         do_eval=True,
-    #         quality_checks=False,
-    #         fp16=False,
-    #     )
-
-
-    # @require_torch_multi_gpu
-    # @parameterized.expand(["fp16", "fp32"])
-    # def test_inference(self, dtype):
-    #     # this is just inference, so no optimizer should be loaded
-    #     # it only works for z3 (makes no sense with z1-z2)
-    #     fp16 = True if dtype == "fp16" else False
-    #     self.run_and_check(
-    #         model_name=T5_TINY,
-    #         distributed=True,
-    #         do_train=False,
-    #         do_eval=True,
-    #         quality_checks=False,
-    #         fp16=fp16,
-    #     )
+    @parameterized.expand(["fp16", "fp32"])
+    def test_inference(self, dtype):
+        # this is just inference, so no optimizer should be loaded
+        # it only works for z3 (makes no sense with z1-z2)
+        fp16 = True if dtype == "fp16" else False
+        self.run_and_check(
+            model_name=T5_TINY,
+            do_train=False,
+            do_eval=True,
+            quality_checks=False,
+            fp16=fp16,
+        )
 
     def do_checks(self, output_dir, do_train=True, do_eval=True, quality_checks=True):
 
@@ -266,36 +250,36 @@ class TestOsloWithLauncher(TestCasePlus):
 
         return output_dir
 
-    # def test_clm(self):
-    #     # this test exercises model.resize_token_embeddings() which requires param gathering outside
-    #     # of forward - it's not used by `run_translation.py`, but it is in `run_clm.py`
+    def test_clm(self):
+        # this test exercises model.resize_token_embeddings() which requires param gathering outside
+        # of forward - it's not used by `run_translation.py`, but it is in `run_clm.py`
 
-    #     data_dir = self.tests_dir / "fixtures"
-    #     output_dir = self.get_auto_remove_tmp_dir()
-    #     args = f"""
-    #         --model_name_or_path {GPT2_TINY}
-    #         --train_file {data_dir}/sample_text.txt
-    #         --validation_file {data_dir}/sample_text.txt
-    #         --output_dir {output_dir}
-    #         --overwrite_output_dir
-    #         --do_train
-    #         --do_eval
-    #         --max_train_samples 16
-    #         --max_eval_samples 16
-    #         --per_device_train_batch_size 2
-    #         --per_device_eval_batch_size 2
-    #         --num_train_epochs 1
-    #         --warmup_steps 8
-    #         --block_size 64
-    #         --fp16
-    #         --report_to none
-    #         """.split()
+        data_dir = self.tests_dir / "fixtures"
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"""
+            --model_name_or_path {GPT2_TINY}
+            --train_file {data_dir}/sample_text.txt
+            --validation_file {data_dir}/sample_text.txt
+            --output_dir {output_dir}
+            --overwrite_output_dir
+            --do_train
+            --do_eval
+            --max_train_samples 16
+            --max_eval_samples 16
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 2
+            --num_train_epochs 1
+            --warmup_steps 8
+            --block_size 64
+            --fp16
+            --report_to none
+            """.split()
 
-    #     ds_args = f"--oslo {self.test_file_dir_str}/oslo_config.json".split()
-    #     script = [f"{self.examples_dir_str}/pytorch/language-modeling/run_clm.py"]
-    #     launcher = get_torch_distributed_launcher()
+        oslo_args = f"--oslo {self.test_file_dir_str}/oslo_config.json".split()
+        script = [f"{self.examples_dir_str}/pytorch/language-modeling/run_clm.py"]
+        launcher = get_torch_distributed_launcher()
 
-    #     cmd = launcher + script + args + ds_args
-    #     # keep for quick debug
-    #     # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
-    #     execute_subprocess_async(cmd, env=self.get_env())
+        cmd = launcher + script + args + oslo_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())

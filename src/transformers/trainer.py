@@ -1083,6 +1083,11 @@ class Trainer:
 
             if self.args.ddp_bucket_cap_mb is not None:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
+            
+            if self.oslo:
+                mpu = getattr(model, "mpu")
+                kwargs["process_group"] = mpu.get_data_parallel_group()
+                
             model = nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
