@@ -483,8 +483,6 @@ def main():
                 inputs.append(examples[text_column][i])
                 targets.append(examples[summary_column][i])
 
-        inputs = examples[text_column]
-        targets = examples[summary_column]
         inputs = [prefix + inp for inp in inputs]
         model_inputs = tokenizer(inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
 
