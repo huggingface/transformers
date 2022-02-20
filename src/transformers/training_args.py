@@ -920,7 +920,7 @@ class TrainingArguments:
             self.tpu_metrics_debug = False
         if isinstance(self.debug, str):
             self.debug = [DebugOption(s) for s in self.debug.split()]
-        
+
         if self.oslo:
             from transformers.oslo import HfOsloConfig
 
