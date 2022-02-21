@@ -15,7 +15,6 @@
 
 import inspect
 import math
-from abc import ABC
 from typing import Callable, Iterable, List, Optional, Tuple
 
 import numpy as np
