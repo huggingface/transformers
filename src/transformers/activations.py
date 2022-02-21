@@ -88,7 +88,7 @@ class ClippedGELUActivation(nn.Module):
     """
 
     def __init__(self, min: float, max: float):
-        if min < max:
+        if min > max:
             raise ValueError(f"min should be < max (got min: {min}, max: {max})")
 
         super().__init__()
