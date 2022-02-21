@@ -1145,12 +1145,6 @@ class GenerationMixin:
             # if decoder-only then inputs_tensor has to be `input_ids`
             input_ids = inputs_tensor
 
-        # Prepare exponential_decay_length_penalty, so decay start is applied to newly generated tokens
-        if exponential_decay_length_penalty is not None:
-            decay_start = exponential_decay_length_penalty[0] + input_ids.shape[-1]
-            decay_factor = exponential_decay_length_penalty[1]
-            exponential_decay_length_penalty = (decay_start, decay_factor)
-
         # 5. Prepare `max_length` depending on other stopping criteria
         # if `max_new_tokens` is passed, but not `max_length` -> set `max_length = max_new_tokens`
         if max_length is None and max_new_tokens is not None:
