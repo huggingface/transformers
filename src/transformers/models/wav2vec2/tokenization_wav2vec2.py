@@ -493,7 +493,37 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         Returns:
             `str`: The decoded sentence or [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`] if
             `output_char_offsets == True` or `output_word_offsets == True`.
-        """
+
+        Example:
+
+        ```python
+        >>> # Let's see how to retrieve time steps for a model
+        >>> from transformers import AutoTokenizer, AutoFeatureExtractor, AutoModelForCTC
+        >>> from datasets import load_dataset
+        >>> import datasets
+        >>> import torch
+
+
+        >>> model = AutoModelForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
+
+        >>> ds = load_dataset("common_voice", "en", split="train", streaming=True)
+        >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+
+        >>> ds_iter = iter(ds)
+        >>> sample = next(ds_iter)
+
+        >>> # compare to filename of dataset viewer on https://huggingface.co/datasets/common_voice/viewer/en/train
+        >>> print("Filename", sample["audio"]["path"])
+
+        >>> input_values = feature_extractor(sample["audio"]["array"], return_tensors="pt").input_values
+
+        >>> logits = model(input_values).logits
+        >>> pred_ids = torch.argmax(logits, axis=-1)
+
+        >>> outputs = tokenizer.batch_decode(pred_ids, output_time_stamps=True, stride=320, sampling_rate=feature_extractor.sampling_rate)
+        ```"""
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)
 
@@ -534,7 +564,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         Returns:
             `int`: The number of tokens actually added to the vocabulary.
 
-        Examples:
+        Example:
 
         ```python
         # Let's see how to increase the vocabulary of Bert model and tokenizer

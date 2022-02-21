@@ -1317,10 +1317,6 @@ class SEWDPreTrainedModel(PreTrainedModel):
         if isinstance(module, SEWDTransformerEncoder):
             module.gradient_checkpointing = value
 
-    @property
-    def stride(self):
-        return math.prod(self.config.conv_stride)
-
 
 SEWD_START_DOCSTRING = r"""
     SEW-D was proposed in [Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech

@@ -1022,10 +1022,6 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
         if isinstance(module, (UniSpeechEncoder, UniSpeechEncoderStableLayerNorm, UniSpeechFeatureEncoder)):
             module.gradient_checkpointing = value
 
-    @property
-    def stride(self):
-        return math.prod(self.config.conv_stride)
-
 
 UNISPEECH_START_DOCSTRING = r"""
     UniSpeech was proposed in [UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled
