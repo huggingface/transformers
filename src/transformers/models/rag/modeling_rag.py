@@ -1609,6 +1609,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
             encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
+            input_ids=input_ids,
             encoder_input_ids=context_input_ids,
             bad_words_ids=bad_words_ids,
             min_length=min_length,

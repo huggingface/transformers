@@ -517,8 +517,9 @@ class LogitsProcessorTest(unittest.TestCase):
         input_ids = ids_tensor((batch_size, 2), vocab_size=vocab_size)
 
         length_decay_processor = ExponentialDecayLengthPenalty(
-            exponential_decay_length_penalty=(penalty_start, penalty_factor), eos_token_id=eos_token_id,
-            input_ids=input_ids
+            exponential_decay_length_penalty=(penalty_start, penalty_factor),
+            eos_token_id=eos_token_id,
+            input_ids=input_ids,
         )
 
         # check that penalty is not applied before start
