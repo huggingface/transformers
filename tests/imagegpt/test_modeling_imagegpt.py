@@ -15,7 +15,6 @@
 
 
 import copy
-import inspect
 import os
 import tempfile
 import unittest
@@ -310,18 +309,6 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         for model_name in IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ImageGPTModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["input_ids"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_resize_tokens_embeddings(self):
         (

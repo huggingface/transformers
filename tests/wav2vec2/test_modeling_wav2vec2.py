@@ -466,10 +466,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
-    def test_forward_signature(self):
-        pass
-
     # Wav2Vec2 cannot resize token embeddings
     # since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):

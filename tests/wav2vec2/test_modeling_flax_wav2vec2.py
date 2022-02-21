@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import math
 import unittest
 
@@ -190,19 +189,6 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
         )[0]
 
         self.assertTrue(output.shape == (batch_size, sequence_length, model.config.proj_codevector_dim))
-
-    # overwrite because of `input_values`
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.__call__)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["input_values", "attention_mask"]
-            self.assertListEqual(arg_names[:2], expected_arg_names)
 
     # overwrite because of `input_values`
     def test_jit_compilation(self):

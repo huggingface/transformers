@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch Perceiver model. """
 
 import copy
-import inspect
 import math
 import tempfile
 import unittest
@@ -366,18 +365,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-
-    def test_forward_signature(self):
-        for model_class in self.all_model_classes:
-            config, _ = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["inputs"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_determinism(self):
         for model_class in self.all_model_classes:
