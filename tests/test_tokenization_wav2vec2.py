@@ -532,7 +532,7 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(self.get_from_offsets(outputs["char_offsets"], "start_offset"), [0, 1, 6, 8, 12, 13, 14])
         # 1 is H, 6 is E, 8 is | (" "),  11 is 1st L (note due to <pad>
         # different begin of 2nd L), 13 is 2nd L, 14 is O, 15 is <unk>
-        self.assertListEqual(self.get_from_offsets(outputs["char_offsets"], "end_offset"), [1, 6, 8, 11, 14, 15])
+        self.assertListEqual(self.get_from_offsets(outputs["char_offsets"], "end_offset"), [1, 6, 8, 11, 13, 14, 15])
 
         # check that offsets are actually correct for word
         # H is at 1st position of first word, first L is at 8th position of second word

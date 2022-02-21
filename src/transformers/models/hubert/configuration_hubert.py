@@ -252,5 +252,5 @@ class HubertConfig(PretrainedConfig):
         self.ctc_zero_infinity = ctc_zero_infinity
 
         @property
-        def input_to_logit_ratio(self):
+        def inputs_to_logits_ratio(self):
             return math.prod(conv_stride)

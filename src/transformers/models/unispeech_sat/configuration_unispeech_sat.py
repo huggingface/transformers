@@ -310,5 +310,5 @@ class UniSpeechSatConfig(PretrainedConfig):
         self.xvector_output_dim = xvector_output_dim
 
         @property
-        def input_to_logit_ratio(self):
+        def inputs_to_logits_ratio(self):
             return math.prod(conv_stride)

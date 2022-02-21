@@ -293,5 +293,5 @@ class UniSpeechConfig(PretrainedConfig):
         self.replace_prob = replace_prob
 
         @property
-        def input_to_logit_ratio(self):
+        def inputs_to_logits_ratio(self):
             return math.prod(conv_stride)
