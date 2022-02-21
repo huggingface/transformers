@@ -106,11 +106,11 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
     Args:
         text (list of `str` or `str`):
             Decoded logits in text from. Usually the speech transcription.
-        char_offsets (list of `Dict[str, Union[int, str]]`):
+        char_offsets (`Dict[str, Union[int, str]]` or `Dict[str, Union[int, str]]`):
             Offsets of the decoded characters. In combination with sampling rate and model downsampling rate char
             offsets can be used to compute time stamps for each charater. Total logit score of the beam associated with
             produced text.
-        word_offsets (list of `Dict[str, Union[int, str]]`):
+        word_offsets (`Dict[str, Union[int, str]]` or `Dict[str, Union[int, str]]`):
             Offsets of the decoded words. In combination with sampling rate and model downsampling rate word offsets
             can be used to compute time stamps for each word.
     """
@@ -457,7 +457,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         return batch_decoded
 
-    # overwritten from `tokenization_utils_base.py` because we need docs for `output_char_offsets` here
+    # overwritten from `tokenization_utils_base.py` because we need docs for `output_char_offsets`
+    # and `output_word_offsets` here
     def decode(
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
