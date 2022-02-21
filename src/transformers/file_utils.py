@@ -158,6 +158,13 @@ except importlib_metadata.PackageNotFoundError:
     except importlib_metadata.PackageNotFoundError:
         _faiss_available = False
 
+_ftfy_available = importlib.util.find_spec("ftfy") is not None
+try:
+    _ftfy_version = importlib_metadata.version("ftfy")
+    logger.debug(f"Successfully imported ftfy version {_ftfy_version}")
+except importlib_metadata.PackageNotFoundError:
+    _ftfy_available = False
+
 
 coloredlogs = importlib.util.find_spec("coloredlogs") is not None
 try:
@@ -441,6 +448,10 @@ def is_flax_available():
     return _flax_available
 
 
+def is_ftfy_available():
+    return _ftfy_available
+
+
 def is_torch_tpu_available():
     if not _torch_available:
         return False
@@ -514,10 +525,6 @@ def is_pytesseract_available():
 
 def is_spacy_available():
     return importlib.util.find_spec("spacy") is not None
-
-
-def is_ftfy_available():
-    return importlib.util.find_spec("ftfy") is not None
 
 
 def is_in_notebook():
@@ -722,6 +729,13 @@ FLAX_IMPORT_ERROR = """
 installation page: https://github.com/google/flax and follow the ones that match your environment.
 """
 
+# docstyle-ignore
+FTFY_IMPORT_ERROR = """
+{0} requires the ftfy library but it was not found in your environment. Checkout the instructions on the
+installation section: https://github.com/rspeer/python-ftfy/tree/master#installing and follow the ones
+that match your environment.
+"""
+
 
 # docstyle-ignore
 SCATTER_IMPORT_ERROR = """
@@ -801,6 +815,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
+        ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),

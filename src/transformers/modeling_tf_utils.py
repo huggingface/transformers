@@ -884,7 +884,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def train_step(self, data):
         """
-        A modification of Keras's default train_step that cleans up the printed metrics when we use a dummy loss.
+        A modification of Keras's default `train_step` that cleans up the printed metrics when we use a dummy loss.
         """
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
