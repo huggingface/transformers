@@ -315,11 +315,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         """
         # group same tokens into non-repeating tokens in CTC style decoding
         if group_tokens:
-            tokens = [token_group[0] for token_group in groupby(tokens)]
-            char_repetitions = len(tokens) * [1]
-
-        # group same tokens into non-repeating tokens in CTC style decoding
-        if group_tokens:
             chars, char_repetitions = zip(*((token, len(list(group_iter))) for token, group_iter in groupby(tokens)))
         else:
             chars = tokens
@@ -336,7 +331,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         # retrieve offsets
         char_offsets = word_offsets = None
         if output_char_offsets or output_word_offsets:
-            word_delimiter_token_for_offsets = self.word_delimiter_token if filter_word_delimiter_token else None
+            word_delimiter_token_for_offsets = self.word_delimiter_token if filter_word_delimiter_token is True else None
             char_offsets = self._compute_offsets(
                 char_repetitions, chars, self.pad_token, word_delimiter_token=word_delimiter_token_for_offsets
             )
@@ -356,9 +351,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             # retrieve word offsets from character offsets
             word_offsets = None
             if output_word_offsets:
-                word_offsets = self._get_word_offsets(
-                    char_offsets, word_delimiter_char=self.replace_word_delimiter_char
-                )
+                word_offsets = self._get_word_offsets(char_offsets, word_delimiter_char=" ")
 
         string = " ".join(processed_chars).strip()
 

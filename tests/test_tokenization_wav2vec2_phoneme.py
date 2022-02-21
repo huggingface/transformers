@@ -256,28 +256,29 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         return retrieved_list
 
     def test_offsets(self):
-        tokenizer = self.get_tokenizer()
+        tokenizer = self.get_tokenizer(word_delimiter_token="|")
+        tokenizer.add_tokens("|")
 
         # fmt: off
         # ksssɾɾ|ɾɾ<pad>ɾɾ|<pad>ɾlll|ɭʲ -> k s ɾ ɾ | ɾ l | ɭʲ"
         sample_ids = [11, 5, 5, 5, 15, 15, tokenizer.pad_token_id, 15, 15, tokenizer.word_delimiter_token_id, tokenizer.pad_token_id, 15, 8, 8, 8, tokenizer.word_delimiter_token_id, 98]
         # fmt: on
 
-        outputs_char = tokenizer.decode(sample_ids, output_char_offsets=True)
+        outputs_char = tokenizer.decode(sample_ids, output_char_offsets=True, filter_word_delimiter_token=False)
         # check Wav2Vec2CTCTokenizerOutput keys for char
         self.assertTrue(len(outputs_char.keys()), 2)
         self.assertTrue("text" in outputs_char)
         self.assertTrue("char_offsets" in outputs_char)
         self.assertTrue(isinstance(outputs_char, Wav2Vec2PhonemeCTCTokenizerOutput))
 
-        outputs_word = tokenizer.decode(sample_ids, output_word_offsets=True)
+        outputs_word = tokenizer.decode(sample_ids, output_word_offsets=True, filter_word_delimiter_token=False)
         # check Wav2Vec2CTCTokenizerOutput keys for word
         self.assertTrue(len(outputs_word.keys()), 2)
         self.assertTrue("text" in outputs_word)
         self.assertTrue("word_offsets" in outputs_word)
         self.assertTrue(isinstance(outputs_word, Wav2Vec2PhonemeCTCTokenizerOutput))
 
-        outputs = tokenizer.decode(sample_ids, output_char_offsets=True, output_word_offsets=True)
+        outputs = tokenizer.decode(sample_ids, output_char_offsets=True, output_word_offsets=True, filter_word_delimiter_token=False)
         # check Wav2Vec2CTCTokenizerOutput keys for both
         self.assertTrue(len(outputs.keys()), 3)
         self.assertTrue("text" in outputs)
@@ -286,9 +287,9 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertTrue(isinstance(outputs, Wav2Vec2PhonemeCTCTokenizerOutput))
 
         # check that order of chars is correct and identical for both outputs
-        self.assertEqual("".join(self.get_from_offsets(outputs["char_offsets"], "char")), outputs.text)
-        self.assertEqual(
-            self.get_from_offsets(outputs["char_offsets"], "char"), ["H", "E", " ", "L", "L", "O", "<unk>"]
+        self.assertEqual(" ".join(self.get_from_offsets(outputs["char_offsets"], "char")), outputs.text)
+        self.assertListEqual(
+            self.get_from_offsets(outputs["char_offsets"], "char"), ['k', 's', 'ɾ', 'ɾ', '|', 'ɾ', 'l', '|', 'ɭʲ']
         )
         self.assertListEqual(
             self.get_from_offsets(outputs["char_offsets"], "char"),
@@ -316,7 +317,7 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(self.get_from_offsets(outputs["word_offsets"], "end_offset"), [6, 15])
 
     def test_offsets_batch(self):
-        tokenizer = self.get_tokenizer()
+        tokenizer = self.get_tokenizer(word_delimiter_token="|")
 
         def check_list_tuples_equal(outputs_batch, outputs_list):
             self.assertTrue(isinstance(outputs_batch, Wav2Vec2PhonemeCTCTokenizerOutput))
