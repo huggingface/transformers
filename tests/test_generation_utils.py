@@ -39,7 +39,7 @@ if is_torch_available():
         VisionEncoderDecoderModel,
         top_k_top_p_filtering,
     )
-    from transformers.generation_beam_constraints import PhrasalConstraint
+    from transformers.generation_beam_constraints import PhrasalConstraint, DisjunctiveConstraint
     from transformers.generation_beam_search import BeamSearchScorer, ConstrainedBeamSearchScorer
     from transformers.generation_logits_process import (
         ForcedBOSTokenLogitsProcessor,
@@ -2311,7 +2311,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
 
     @slow
-    def test_constrained_beam_search(self):
+    def test_constrained_beam_search_phrasal(self):
         model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
@@ -2345,6 +2345,52 @@ class GenerationIntegrationTests(unittest.TestCase):
                 "The soldiers were not prepared and didn't know how big the big weapons would be, so they scared them off. They had no idea what to do",
             ],
         )
+
+    
+    def test_constrained_beam_search_mixed(self):
+        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        force_phrase = tokenizer.encode(" scared", return_tensors="pt")[0]
+        flexible_phrases = tokenizer([
+            " big weapons",
+            " large weapons",
+            " monsters",
+            " ghosts"
+        ])["input_ids"]
+        
+        constraints = [
+            PhrasalConstraint(force_phrase),
+            DisjunctiveConstraint(flexible_phrases),
+        ]
+
+        starting_text = [
+            "The soldiers were not prepared and",
+            "The children were having nightmares and"
+        ]
+
+        input_ids = tokenizer(starting_text, return_tensors="pt").input_ids.to(torch_device)
+
+        outputs = model.generate(
+            input_ids,
+            constraints=constraints,
+            num_beams=10,
+            num_return_sequences=1,
+            no_repeat_ngram_size=1,
+            max_length=30,
+            remove_invalid_values=True,
+        )
+
+        generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        print("generated_text", generated_text)
+        assert False
+        self.assertListEqual(
+            generated_text,
+            [
+                "The soldiers were not prepared and didn't know how big the big weapons would be, so they scared them off. They had no idea what to do",
+            ],
+        )
+
 
     @slow
     def test_constrained_beam_search_example_integration(self):

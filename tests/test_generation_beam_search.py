@@ -25,7 +25,7 @@ from .test_modeling_common import floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers.generation_beam_constraints import PhrasalConstraint
+    from transformers.generation_beam_constraints import PhrasalConstraint, DisjunctiveConstraint
     from transformers.generation_beam_search import BeamHypotheses, BeamSearchScorer, ConstrainedBeamSearchScorer
 
 
@@ -261,8 +261,11 @@ class ConstrainedBeamSearchTester:
 
         if constraints is None:
             force_tokens = torch.randint(10, 50, (1, 2)).type(torch.LongTensor)[0]
+            disjunctive_tokens = torch.randint(10, 50, (2, 2)).type(torch.LongTensor)
+
             constraints = [
                 PhrasalConstraint(force_tokens),
+                DisjunctiveConstraint(disjunctive_tokens)
             ]
             self.constraints = constraints
         # cannot be randomely generated
@@ -318,11 +321,8 @@ class ConstrainedBeamSearchTester:
             beam_hyp.add(input_ids[beam_idx], -10.0 + float(beam_idx))
 
         # -10.0 is removed => -9.0 is worst score
-<<<<<<< HEAD
-        self.parent.assertAlmostEqual(beam_hyp.worst_score, -9.0 / (self.sequence_length ** beam_hyp.length_penalty))
-=======
         self.parent.assertAlmostEqual(beam_hyp.worst_score, -9.0 / (self.sequence_length**beam_hyp.length_penalty))
->>>>>>> f65fe3663a6c62975a9c04654703252644c9a652
+
 
         # -5.0 is better than worst score => should not be finished
         self.parent.assertFalse(beam_hyp.is_done(-5.0, self.sequence_length))
@@ -335,7 +335,13 @@ class ConstrainedBeamSearchTester:
     ):
         # check too many eos tokens
         constrained_beam_scorer = self.prepare_constrained_beam_scorer()
-        fulfilling_sequence = torch.stack([constraint.token_ids for constraint in self.constraints]).flatten()
+        stacked_token_ids = []
+        for constraint in self.constraints:
+            token_ids = constraint.token_ids
+            token_ids = token_ids[0] if isinstance(token_ids, list) else token_ids
+            stacked_token_ids.append(token_ids)
+
+        fulfilling_sequence = torch.stack(stacked_token_ids).flatten()
         fulfill_len = fulfilling_sequence.size(0)
         input_ids[:, :fulfill_len] = fulfilling_sequence
 
@@ -402,7 +408,13 @@ class ConstrainedBeamSearchTester:
         max_length = self.sequence_length + 1
 
         # for testing finalize, we do want to have fulfilled constraints
-        fulfilling_sequence = torch.stack([constraint.token_ids for constraint in self.constraints]).flatten()
+        stacked_token_ids = []
+        for constraint in self.constraints:
+            token_ids = constraint.token_ids
+            token_ids = token_ids[0] if isinstance(token_ids, list) else token_ids
+            stacked_token_ids.append(token_ids)
+
+        fulfilling_sequence = torch.stack(stacked_token_ids).flatten()
         fulfill_len = fulfilling_sequence.size(0)
         input_ids[:, :fulfill_len] = fulfilling_sequence
 
@@ -455,9 +467,17 @@ class ConstrainedBeamSearchTester:
         self.parent.assertNotEqual(sequences[2, -1].item(), self.eos_token_id)
 
         # test that the constraint is indeed fulfilled
-        for output in sequences:
-            for constraint in constraints:
-                forced_token_ids = constraint.token_ids
+        for (output, constraint) in [(s,c) for s in sequences for c in constraints]:
+            forced_token_ids = constraint.token_ids
+            if isinstance(forced_token_ids, list): 
+                # disjunctive case
+                flag = False
+                for token_ids in forced_token_ids:
+                    if self._check_sequence_inside_sequence(output, token_ids):
+                        flag = True
+                        break
+                self.parent.assertEqual(flag, True)    
+            else:
                 self.parent.assertEqual(self._check_sequence_inside_sequence(output, forced_token_ids), True)
 
         # now test that if `num_beam_hyps_to_keep` is 3 => all beams are returned
@@ -483,7 +503,9 @@ class ConstrainedBeamSearchTester:
         self.parent.assertListEqual(list(sequence_scores.shape), [self.num_beams * self.batch_size])
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
+        # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
         # set to same device. we don't care what device.
+        
         tensor_1, tensor_2 = tensor_1.cpu(), tensor_2.cpu()
 
         in_order = tensor_1.size(0) <= tensor_2.size(0)
