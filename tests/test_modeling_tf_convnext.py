@@ -91,9 +91,7 @@ class TFConvNextModelTester:
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor(
-                [self.batch_size], self.type_sequence_label_size
-            )
+            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
         config = self.get_config()
 
@@ -124,9 +122,7 @@ class TFConvNextModelTester:
             ),
         )
 
-    def create_and_check_for_image_classification(
-        self, config, pixel_values, labels
-    ):
+    def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = TFConvNextForImageClassification(config)
         result = model(pixel_values, labels=labels, training=False)
@@ -176,9 +172,7 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(
-        reason="ConvNext does not support input and output embeddings"
-    )
+    @unittest.skip(reason="ConvNext does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -207,11 +201,7 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
             model = model_class(config)
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            hidden_states = (
-                outputs.encoder_hidden_states
-                if config.is_encoder_decoder
-                else outputs.hidden_states
-            )
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
@@ -242,9 +232,7 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(
-            *config_and_inputs
-        )
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
@@ -264,11 +252,7 @@ class TFConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            ConvNextFeatureExtractor.from_pretrained(
-                "facebook/convnext-tiny-224"
-            )
-            if is_vision_available()
-            else None
+            ConvNextFeatureExtractor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
         )
 
     @slow
@@ -291,6 +275,4 @@ class TFConvNextModelIntegrationTest(unittest.TestCase):
 
         expected_slice = tf.constant([-0.0260, -0.4739, 0.1911])
 
-        tf.debugging.assert_near(
-            outputs.logits[0, :3], expected_slice, atol=1e-4
-        )
+        tf.debugging.assert_near(outputs.logits[0, :3], expected_slice, atol=1e-4)
