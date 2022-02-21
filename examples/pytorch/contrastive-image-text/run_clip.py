@@ -206,6 +206,7 @@ def collate_fn(examples):
 
 
 def main():
+    # 1. Parse input arguments
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
@@ -218,7 +219,7 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    # Setup logging
+    # 2. Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
@@ -238,7 +239,7 @@ def main():
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
-    # Detecting last checkpoint.
+    # 3. Detecting last checkpoint and eventualy continue from last checkpoint
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
@@ -253,6 +254,7 @@ def main():
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
 
+    # 4. Load dataset
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
     # (the dataset will be downloaded automatically from the datasets Hub).
@@ -284,6 +286,7 @@ def main():
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
+    # 5. Load pretrained model, tokenizer, and feature extractor
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
@@ -328,7 +331,7 @@ def main():
         logger.info("There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`.")
         return
 
-    # Get the column names for input/target.
+    # 6. Get the column names for input/target.
     dataset_columns = dataset_name_mapping.get(data_args.dataset_name, None)
     if data_args.image_column is None:
         image_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
@@ -347,6 +350,7 @@ def main():
                 f"--caption_column' value '{data_args.caption_column}' needs to be one of: {', '.join(column_names)}"
             )
 
+    # 7. Preprocessing the datasets.
     # Initialize torchvision transforms and jit it for faster processing.
     image_transformations = Transform(
         config.vision_config.image_size, feature_extractor.image_mean, feature_extractor.image_std
@@ -444,7 +448,7 @@ def main():
         # Transform images on the fly as doing it on the whole dataset takes too much time.
         test_dataset.set_transform(transform_images)
 
-    # Initalize our trainer
+    # 8. Initalize our trainer
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -453,7 +457,7 @@ def main():
         data_collator=collate_fn,
     )
 
-    # Training
+    # 9. Training
     if training_args.do_train:
         checkpoint = None
         if training_args.resume_from_checkpoint is not None:
@@ -466,12 +470,13 @@ def main():
         trainer.save_metrics("train", train_result.metrics)
         trainer.save_state()
 
-    # Evaluation
+    # 10. Evaluation
     if training_args.do_eval:
         metrics = trainer.evaluate()
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
+    # 11. Write Training Stats and push to hub.
     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "contrastive-image-text-modeling"}
     if data_args.dataset_name is not None:
         kwargs["dataset_tags"] = data_args.dataset_name
