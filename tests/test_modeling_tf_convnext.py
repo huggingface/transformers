@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,19 @@ import inspect
 import unittest
 
 from transformers import ConvNextConfig
-from transformers.file_utils import cached_property, is_tf_available, is_vision_available
+from transformers.file_utils import (
+    cached_property,
+    is_tf_available,
+    is_vision_available,
+)
 from transformers.testing_utils import require_tf, require_vision, slow
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_tf_common import (
+    TFModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+)
 
 
 if is_tf_available():
@@ -72,11 +80,20 @@ class TFConvNextModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [
+                self.batch_size,
+                self.num_channels,
+                self.image_size,
+                self.image_size,
+            ]
+        )
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
 
         config = self.get_config()
 
@@ -99,14 +116,24 @@ class TFConvNextModelTester:
         # expected last hidden states: B, C, H // 32, W // 32
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
+            (
+                self.batch_size,
+                self.hidden_sizes[-1],
+                self.image_size // 32,
+                self.image_size // 32,
+            ),
         )
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+    def create_and_check_for_image_classification(
+        self, config, pixel_values, labels
+    ):
         config.num_labels = self.type_sequence_label_size
         model = TFConvNextForImageClassification(config)
         result = model(pixel_values, labels=labels, training=False)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.type_sequence_label_size),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -138,13 +165,20 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TFConvNextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ConvNextConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=ConvNextConfig,
+            has_text_modality=False,
+            hidden_size=37,
+        )
 
     @unittest.skip(reason="ConvNext does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="ConvNext does not support input and output embeddings")
+    @unittest.skip(
+        reason="ConvNext does not support input and output embeddings"
+    )
     def test_model_common_attributes(self):
         pass
 
@@ -173,7 +207,11 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
             model = model_class(config)
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
@@ -181,10 +219,16 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
             # ConvNext's feature maps are of shape (batch_size, height, width, num_channels) in TF
             self.assertListEqual(
                 list(hidden_states[0].shape[1:-1]),
-                [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
+                [
+                    self.model_tester.image_size // 4,
+                    self.model_tester.image_size // 4,
+                ],
             )
 
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        (
+            config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
@@ -198,7 +242,9 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_image_classification(
+            *config_and_inputs
+        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -218,7 +264,11 @@ class TFConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            ConvNextFeatureExtractor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
+            ConvNextFeatureExtractor.from_pretrained(
+                "facebook/convnext-tiny-224"
+            )
+            if is_vision_available()
+            else None
         )
 
     @slow
@@ -241,4 +291,6 @@ class TFConvNextModelIntegrationTest(unittest.TestCase):
 
         expected_slice = tf.constant([-0.0260, -0.4739, 0.1911])
 
-        tf.debugging.assert_near(outputs.logits[0, :3], expected_slice, atol=1e-4)
+        tf.debugging.assert_near(
+            outputs.logits[0, :3], expected_slice, atol=1e-4
+        )
