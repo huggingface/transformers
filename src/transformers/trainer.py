@@ -303,7 +303,7 @@ class Trainer:
         # Seed must be set before instantiating the model when using model
         set_seed(self.args.seed)
         self.hp_name = None
-        self.oslo_mpu = False
+        self.oslo_mpu = None
         self.deepspeed = None
         self.is_in_train = False
 
@@ -643,10 +643,18 @@ class Trainer:
                     seed=self.args.seed,
                 )
             else:
+                num_replicas = None
+                rank = None
+                if self.oslo_mpu is not None:
+                    num_replicas = self.oslo_mpu.get_data_parallel_world_size()
+                    rank = self.oslo_mpu.get_data_parallel_rank()
+                else:
+                    num_replicas = self.args.world_size
+                    rank = self.args.process_index
                 return DistributedSampler(
                     self.train_dataset,
-                    num_replicas=self.args.world_size,
-                    rank=self.args.process_index,
+                    num_replicas=num_replicas,
+                    rank=rank,
                     seed=self.args.seed,
                 )
 
@@ -2899,7 +2907,9 @@ class Trainer:
 
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
-            deepspeed_engine, _, _ = deepspeed_init(self, num_training_steps=0, mpu=self.oslo_mpu, resume_from_checkpoint=None)
+            deepspeed_engine, _, _ = deepspeed_init(
+                self, num_training_steps=0, mpu=self.oslo_mpu, resume_from_checkpoint=None
+            )
             self.model = deepspeed_engine.module
             self.model_wrapped = deepspeed_engine
             self.deepspeed = deepspeed_engine
