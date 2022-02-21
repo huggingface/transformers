@@ -450,8 +450,8 @@ class FlaxModelTesterMixin:
                 ]
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
-                expected_arg_names = ["input_ids", "attention_mask"]
-                self.assertListEqual(arg_names[:2], expected_arg_names)
+                expected_arg_names = [model.main_input_name]
+                self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_naming_convention(self):
         for model_class in self.all_model_classes:
