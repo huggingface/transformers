@@ -149,9 +149,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
-    parser.add_argument(
-        "--vocab_file", default=None, type=str, required=True, help="Path to the vocabulary file."
-    )
+    parser.add_argument("--vocab_file", default=None, type=str, required=True, help="Path to the vocabulary file.")
     args = parser.parse_args()
     convert_tf_checkpoint_to_pytorch(
         args.task,
@@ -159,5 +157,5 @@ if __name__ == "__main__":
         args.tf_checkpoint_path,
         args.tapas_config_file,
         args.pytorch_dump_path,
-        args.vocab_file
+        args.vocab_file,
     )
