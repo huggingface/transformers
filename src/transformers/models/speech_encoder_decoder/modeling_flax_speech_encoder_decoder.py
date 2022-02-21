@@ -24,7 +24,6 @@ from flax.core.frozen_dict import FrozenDict, unfreeze
 from jax import lax
 from jax.random import PRNGKey
 
-from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutputWithCrossAttentions, FlaxSeq2SeqLMOutput
 from ...modeling_flax_utils import FlaxPreTrainedModel
@@ -253,8 +252,8 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
 
     def freeze_feature_encoder(self):
         """
-        Calling this function will disable the gradient computation for the feature encoder of the speech encoder
-        in order that its parameters are not updated during training.
+        Calling this function will disable the gradient computation for the feature encoder of the speech encoder in
+        order that its parameters are not updated during training.
         """
         self.encoder.freeze_feature_encoder()
 
@@ -325,9 +324,9 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
 @add_start_docstrings(SPEECH_ENCODER_DECODER_START_DOCSTRING)
 class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
     r"""
-    [`FlaxSpeechEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture with
-    the module (flax.nn.Module) of one of the base model classes of the library as encoder module and another one as
-    decoder module when created with the :meth*~transformers.FlaxAutoModel.from_pretrained* class method for the
+    [`FlaxSpeechEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture
+    with the module (flax.nn.Module) of one of the base model classes of the library as encoder module and another one
+    as decoder module when created with the :meth*~transformers.FlaxAutoModel.from_pretrained* class method for the
     encoder and :meth*~transformers.FlaxAutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
 
@@ -461,7 +460,9 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         >>> from transformers import FlaxSpeechEncoderDecoderModel
 
         >>> # initialize a wav2vec2-2-bart from pretrained wav2vec2 and bart models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained("facebook/wav2vec2-large-lv60", "facebook/bart-large")
+        >>> model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "facebook/wav2vec2-large-lv60", "facebook/bart-large"
+        ... )
 
         >>> inputs = jnp.ones((2, 5000), dtype=jnp.float32)
         >>> encoder_outputs = model.encode(inputs)
@@ -532,7 +533,9 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         >>> import jax.numpy as jnp
 
         >>> # initialize a wav2vec2-2-bart from pretrained wav2vec2 and bart models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained("facebook/wav2vec2-large-lv60", "facebook/bart-large")
+        >>> model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "facebook/wav2vec2-large-lv60", "facebook/bart-large"
+        ... )
 
         >>> inputs = jnp.ones((2, 5000), dtype=jnp.float32)
         >>> encoder_outputs = model.encode(inputs)
@@ -793,7 +796,9 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         >>> from transformers import FlaxSpeechEncoderDecoderModel
 
         >>> # initialize a wav2vec2-2-bart from pretrained wav2vec2 and bart models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained("facebook/wav2vec2-large-lv60", "facebook/bart-large")
+        >>> model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "facebook/wav2vec2-large-lv60", "facebook/bart-large"
+        ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./wav2vec2-2-bart-large")
         >>> # load fine-tuned model
