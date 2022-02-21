@@ -76,8 +76,8 @@ class QuickGELUActivation(nn.Module):
 
 class ClippedGELUActivation(nn.Module):
     """
-    Clip the range of possible GeLU outputs between [-10, 10]. This is especially useful for quantization purpose, as
-    it allows mapping 2 negatives values in the GeLU spectrum. For more information on this trick, please refer to
+    Clip the range of possible GeLU outputs between [min, max]. This is especially useful for quantization purpose, as
+    it allows mapping negatives values in the GeLU spectrum. For more information on this trick, please refer to
     https://arxiv.org/abs/2004.09602.
 
     Gaussian Error Linear Unit. Original Implementation of the gelu activation function in Google Bert repo when
@@ -88,13 +88,15 @@ class ClippedGELUActivation(nn.Module):
     """
 
     def __init__(self, min: float, max: float):
-        assert min < max, f"min should be < max (got min: {min}, max: {max})"
+        if min < max:
+            raise ValueError(f"min should be < max (got min: {min}, max: {max})")
+
         super().__init__()
         self.min = min
         self.max = max
 
     def forward(self, x: Tensor) -> Tensor:
-        return torch.clip(gelu(x), -10, 10)
+        return torch.clip(gelu(x), self.min, self.max)
 
 
 class SiLUActivation(nn.Module):
