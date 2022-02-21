@@ -20,35 +20,17 @@ import sys
 import warnings
 from dataclasses import dataclass
 from itertools import groupby
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...file_utils import (
-    ModelOutput,
-    PaddingStrategy,
-    TensorType,
-    add_end_docstrings,
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
-    to_py_obj,
-)
+from ...file_utils import ModelOutput, PaddingStrategy, TensorType, add_end_docstrings, to_py_obj,
 from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
 from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-
-if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
-    if is_tf_available():
-        import tensorflow as tf
-    if is_flax_available():
-        import jax.numpy as jnp  # noqa: F401
 
 
 VOCAB_FILES_NAMES = {
@@ -107,12 +89,14 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
         text (list of `str` or `str`):
             Decoded logits in text from. Usually the speech transcription.
         char_offsets (list of `Dict[str, Union[int, str]]`):
-            Offsets of the decoded characters. In combination with sampling rate and model downsampling rate char
-            offsets can be used to compute time stamps for each charater. Total logit score of the beam associated with
-            produced text.
+            Offsets of the decoded characters. In combination with sampling rate
+            and model downsampling rate char offsets can be used to compute time 
+            stamps for each charater.
+            Total logit score of the beam associated with produced text.
         word_offsets (list of `Dict[str, Union[int, str]]`):
-            Offsets of the decoded words. In combination with sampling rate and model downsampling rate word offsets
-            can be used to compute time stamps for each word.
+            Offsets of the decoded words. In combination with sampling rate
+            and model downsampling rate word offsets can be used to compute time 
+            stamps for each word.
     """
 
     text: Union[List[str], str]
@@ -269,9 +253,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         processed_chars = list(filter(lambda char: char != self.pad_token, chars))
 
         # replace delimiter token
-        processed_chars = [
-            self.replace_word_delimiter_char if char == self.word_delimiter_token else char for char in processed_chars
-        ]
+        processed_chars = [self.replace_word_delimiter_char if char == self.word_delimiter_token else char for char in processed_chars]
 
         # retrieve offsets
         char_offsets = word_offsets = None
@@ -309,24 +291,18 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         }
 
     @staticmethod
-    def _compute_offsets(
-        char_repetitions: List[int], chars: List[str], ctc_token: int
-    ) -> List[Dict[str, Union[str, int]]]:
+    def _compute_offsets(char_repetitions: List[int], chars: List[str], ctc_token: int) -> List[Dict[str, Union[str, int]]]:
         end_indices = np.asarray(char_repetitions).cumsum()
         start_indices = np.concatenate(([0], end_indices[:-1]))
 
-        offsets = [
-            {"char": t, "start_offset": s, "end_offset": e} for t, s, e in zip(chars, start_indices, end_indices)
-        ]
+        offsets = [{"char": t, "start_offset": s, "end_offset": e} for t, s, e in zip(chars, start_indices, end_indices)]
 
         # filter out CTC token
         offsets = list(filter(lambda offsets: offsets["char"] != ctc_token, offsets))
         return offsets
 
     @staticmethod
-    def _get_word_offsets(
-        offsets: Dict[str, Union[str, float]], word_delimiter_char: str = " "
-    ) -> Dict[str, Union[str, float]]:
+    def _get_word_offsets(offsets: Dict[str, Union[str, float]], word_delimiter_char: str = " ") -> Dict[str, Union[str, float]]:
         word_offsets = []
         final_offset_idx = len(offsets) - 1
 
@@ -427,18 +403,16 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the tokenization spaces.
             output_char_offsets (`bool`, *optional*, defaults to `False`):
-                Whether or not to output character offsets. Character offsets can be used in combination with the
-                sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
+                Whether or not to output character offsets. Character offsets
+                can be used in combination with the sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
             output_word_offsets (`bool`, *optional*, defaults to `False`):
-                Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
-                and model downsampling rate to compute the time-stamps of transcribed words.
+                Whether or not to output word offsets. Word offsets
+                can be used in combination with the sampling rate and model downsampling rate to compute the time-stamps of transcribed words.
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
 
         Returns:
-            `List[str]`: The list of decoded sentences or
-            [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`] if `output_char_offsets == True` or
-            `output_word_offsets == True`.
+            `List[str]`: The list of decoded sentences or [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`] if `output_char_offsets == True` or `output_word_offsets == True`.
         """
         batch_decoded = [
             self.decode(
@@ -456,6 +430,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             return Wav2Vec2CTCTokenizerOutput({k: [d[k] for d in batch_decoded] for k in batch_decoded[0]})
 
         return batch_decoded
+
 
     def decode(
         self,
@@ -480,17 +455,16 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the tokenization spaces.
             output_char_offsets (`bool`, *optional*, defaults to `False`):
-                Whether or not to output character offsets. Character offsets can be used in combination with the
-                sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
+                Whether or not to output character offsets. Character offsets
+                can be used in combination with the sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
             output_word_offsets (`bool`, *optional*, defaults to `False`):
-                Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
-                and model downsampling rate to compute the time-stamps of transcribed words.
+                Whether or not to output word offsets. Word offsets
+                can be used in combination with the sampling rate and model downsampling rate to compute the time-stamps of transcribed words.
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
 
         Returns:
-            `str`: The decoded sentence or [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`] if
-            `output_char_offsets == True` or `output_word_offsets == True`.
+            `str`: The decoded sentence or [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`] if `output_char_offsets == True` or `output_word_offsets == True`.
         """
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)
@@ -503,6 +477,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             output_word_offsets=output_word_offsets,
             **kwargs,
         )
+
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
