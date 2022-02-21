@@ -492,7 +492,10 @@ class OpusState:
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
         check_marian_cfg_assumptions(cfg)
         self.hf_config = MarianConfig(
-            vocab_size=cfg["vocab_size"],
+#             vocab_size=cfg["vocab_size"],
+            src_vocab_size=cfg["src_vocab_size"],
+            tgt_vocab_size=cfg["tgt_vocab_size"],
+            share_embeddings=cfg["tied-embeddings-src"],
             decoder_layers=cfg["dec-depth"],
             encoder_layers=cfg["enc-depth"],
             decoder_attention_heads=cfg["transformer-heads"],
@@ -535,7 +538,7 @@ class OpusState:
             if (
                 k.startswith("encoder_l")
                 or k.startswith("decoder_l")
-                or k in [CONFIG_KEY, "Wemb", "Wpos", "decoder_ff_logit_out_b"]
+                or k in [CONFIG_KEY, "Wemb", "encoder_Wemb", "decoder_Wemb", "Wpos", "decoder_ff_logit_out_b"]
             ):
                 continue
             else:
@@ -562,10 +565,18 @@ class OpusState:
         load_layers_(model.model.decoder.layers, state_dict, BART_CONVERTER, is_decoder=True)
 
         # handle tensors not associated with layers
-        wemb_tensor = nn.Parameter(torch.FloatTensor(self.wemb))
-        bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
-        model.model.shared.weight = wemb_tensor
-        model.model.encoder.embed_tokens = model.model.decoder.embed_tokens = model.model.shared
+        if self.cfg["tied-embeddings-src"]:
+            wemb_tensor = nn.Parameter(torch.FloatTensor(self.wemb))
+            bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
+            model.model.shared.weight = wemb_tensor
+            model.model.encoder.embed_tokens = model.model.decoder.embed_tokens = model.model.shared
+        else:
+            wemb_tensor = nn.Parameter(torch.FloatTensor(self.wemb))
+            model.model.encoder.embed_tokens.weight = wemb_tensor
+            
+            decoder_wemb_tensor = nn.Parameter(torch.FloatTensor(self.dec_wemb))
+            bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
+            model.model.decoder.embed_tokens.weight = decoder_wemb_tensor
 
         model.final_logits_bias = bias_tensor
 
