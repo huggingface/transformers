@@ -450,14 +450,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             result,
             group_tokens=group_tokens,
             spaces_between_special_tokens=spaces_between_special_tokens,
-            output_word_offsets=output_word_offsets,
-            output_char_offsets=output_char_offsets,
-        )
-
-        text = self.convert_tokens_to_string(
-            result,
-            group_tokens=group_tokens,
-            spaces_between_special_tokens=spaces_between_special_tokens,
             filter_word_delimiter_token=filter_word_delimiter_token,
             output_word_offsets=output_word_offsets,
             output_char_offsets=output_char_offsets,
