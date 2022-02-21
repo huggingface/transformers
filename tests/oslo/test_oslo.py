@@ -16,8 +16,6 @@ import dataclasses
 import io
 import json
 import os
-import unittest
-from copy import deepcopy
 
 from parameterized import parameterized
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
@@ -80,11 +78,17 @@ def get_torch_distributed_launcher():
     return f"python -m torch.distributed.launch --nproc_per_node {num_gpus} --master_port {master_port}".split()
 
 
+def get_deepspeed_launcher():
+    # adapted from test_deepspeed.py
+    num_gpus = min(2, get_gpu_count())
+    master_port = get_master_port(real_launcher=True)
+    return f"deepspeed --num_nodes 1 --num_gpus {num_gpus} --master_port {master_port}".split()
+
+
 @slow
 @require_oslo
 @require_torch_multi_gpu
 class TestOslo(TestCasePlus):
-
     def test_do_eval_no_train(self):
         self.run_and_check(
             eval_steps=1,
@@ -101,13 +105,16 @@ class TestOslo(TestCasePlus):
             fp16=False,
         )
 
-    def test_deepspeed(self):
+    @require_deepspeed
+    @parameterized.expand(["zero2", "zero3"])
+    def test_deepspeed(self, stage):
+        # NOTE: this does not pass at the moment
         self.run_and_check(
             model_name=T5_TINY,
             do_train=True,
             do_eval=True,
-            quality_checks=False,
-            fp16=False,
+            quality_checks=True,
+            deepspeed_stage=stage,
         )
 
     @parameterized.expand(["fp16", "fp32"])
@@ -120,9 +127,6 @@ class TestOslo(TestCasePlus):
             quality_checks=False,
             fp16=fp16,
         )
-    
-    def test_deepspeed(self):
-        pass
 
     def do_checks(self, output_dir, do_train=True, do_eval=True, quality_checks=True):
 
@@ -147,6 +151,7 @@ class TestOslo(TestCasePlus):
         do_eval: bool = True,
         quality_checks: bool = True,
         fp16: bool = True,
+        deepspeed_stage: str = None,
         extra_args_str: str = None,
         remove_args_str: str = None,
     ):
@@ -159,6 +164,7 @@ class TestOslo(TestCasePlus):
             do_train=do_train,
             do_eval=do_eval,
             fp16=fp16,
+            deepspeed_stage=deepspeed_stage,
             extra_args_str=extra_args_str,
             remove_args_str=remove_args_str,
         )
@@ -175,6 +181,7 @@ class TestOslo(TestCasePlus):
         do_train: bool = False,
         do_eval: bool = True,
         fp16: bool = True,
+        deepspeed_stage: str = None,
         extra_args_str: str = None,
         remove_args_str: str = None,
     ):
@@ -240,9 +247,13 @@ class TestOslo(TestCasePlus):
 
         oslo_args = f"--oslo {self.test_file_dir_str}/oslo_config.json".split()
         script = [f"{self.examples_dir_str}/pytorch/translation/run_translation.py"]
-        launcher = get_torch_distributed_launcher()
+        launcher = get_deepspeed_launcher() if deepspeed_stage is not None else get_torch_distributed_launcher()
 
         cmd = launcher + script + args + oslo_args
+
+        if deepspeed_stage is not None:
+            ds_args = f"--deepspeed {self.test_file_dir_str}/../deepspeed/ds_config_{deepspeed_stage}.json".split()
+            cmd += ds_args
         # keep for quick debug
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())

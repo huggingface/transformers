@@ -2156,8 +2156,9 @@ class Trainer:
                 if state_dict is None:
                     state_dict = self.model.state_dict()
                 torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
-        elif self.oslo_mpu is not None:
-            self.model.save_parallelized(output_dir, state_dict=state_dict, merge_checkpoints=True)
+        # elif self.oslo_mpu is not None:
+        #     # NOTE: this causes tests to hang and fail
+        #     self.model.save_parallelized(output_dir, state_dict=state_dict, merge_checkpoints=True)
         else:
             self.model.save_pretrained(output_dir, state_dict=state_dict)
         if self.tokenizer is not None:
