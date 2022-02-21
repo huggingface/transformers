@@ -95,7 +95,7 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
     """
 
     text: Union[List[str], str]
-    character_offsets: List[Dict[str, Union[float, str]]] = None
+    char_offsets: List[Dict[str, Union[float, str]]] = None
     word_offsets: List[Dict[str, Union[float, str]]] = None
 
 
@@ -231,7 +231,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         tokens: List[str],
         group_tokens: bool = True,
         spaces_between_special_tokens: bool = False,
-        output_character_offsets: bool = False,
+        output_char_offsets: bool = False,
         output_word_offsets: bool = False,
     ) -> Dict[str, Union[str, float]]:
         """
@@ -250,30 +250,29 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         processed_chars = [self.replace_word_delimiter_char if char == self.word_delimiter_token else char for char in processed_chars]
 
         # retrieve offsets
-        character_offsets = word_offsets = None
-        if output_character_offsets or output_word_offsets:
-            offsets = self._compute_offsets(char_repetitions, chars, self.pad_token)
+        char_offsets = word_offsets = None
+        if output_char_offsets or output_word_offsets:
+            char_offsets = self._compute_offsets(char_repetitions, chars, self.pad_token)
 
-            if len(offsets) != len(processed_chars):
+            if len(char_offsets) != len(processed_chars):
                 raise ValueError(
-                    f"`character_offsets`: {offsets} and `processed_tokens`: {processed_chars}"
-                " have to be of the same length, but are: "
-                f"`len(offsets)`: {len(offsets)} and `len(processed_tokens)`:"
-                f" {len(processed_chars)}"
-            )
+                    f"`char_offsets`: {char_offsets} and `processed_tokens`: {processed_chars}"
+                    " have to be of the same length, but are: "
+                    f"`len(offsets)`: {len(char_offsets)} and `len(processed_tokens)`:"
+                    f" {len(processed_chars)}"
+                )
 
             # set tokens to correct processed token
             for i, char in enumerate(processed_chars):
-                offsets[i]["character"] = chars
+                char_offsets[i]["char"] = char
 
             # retrieve word offsets from character offsets
             word_offsets = None
             if output_word_offsets:
-                word_offsets = self._get_word_offsets(offsets, self.replace_word_delimiter_char)
+                word_offsets = self._get_word_offsets(char_offsets, self.replace_word_delimiter_char)
 
         # join to string
         join_char = " " if spaces_between_special_tokens else ""
-        import ipdb; ipdb.set_trace()
         string = join_char.join(processed_chars).strip()
 
         if self.do_lower_case:
@@ -281,32 +280,31 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         return {
             "text": string,
-            "character_offsets": offset,
+            "char_offsets": char_offsets,
             "word_offsets": word_offsets,
         }
-
 
     @staticmethod
     def _compute_offsets(char_repetitions, chars, ctc_token):
         end_indices = np.asarray(char_repetitions).cumsum()
         start_indices = np.concatenate(([0], end_indices[:-1]))
 
-        offsets = [{"character": t, "start_offset": s, "end_offset": e} for t, s, e in zip(chars, start_indices, end_indices)]
+        offsets = [{"char": t, "start_offset": s, "end_offset": e} for t, s, e in zip(chars, start_indices, end_indices)]
 
         # filter out CTC token
-        offsets = list(filter(lambda offsets: offsets["character"] != ctc_token, offsets))
+        offsets = list(filter(lambda offsets: offsets["char"] != ctc_token, offsets))
         return offsets
 
     @staticmethod
-    def _get_word_offsets(offsets: Dict[str, Union[str, float]], word_delimiter_char: str= " ") -> Dict[str, Union[str, float]]:
+    def _get_word_offsets(offsets: Dict[str, Union[str, float]], word_delimiter_char: str = " ") -> Dict[str, Union[str, float]]:
         word_offsets = []
         final_offset_idx = len(offsets) - 1
 
         for i, offset in enumerate(offsets):
             # define previous, next and current char
             char = offset["char"]
-            prev_char = offset[i - 1]["char"] if i > 0 else None
-            next_char = offset[i + 1]["char"] if i < final_offset_idx else None
+            prev_char = offsets[i - 1]["char"] if i > 0 else None
+            next_char = offsets[i + 1]["char"] if i < final_offset_idx else None
 
             # derive whether word begins, ends and whether current char is in word
             word_begin = (i == 0 and char != word_delimiter_char) or (prev_char == word_delimiter_char)
@@ -341,7 +339,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         group_tokens: bool = True,
         spaces_between_special_tokens: bool = False,
         output_word_offsets: Optional[bool] = None,
-        output_character_offsets: Optional[bool] = False,
+        output_char_offsets: Optional[bool] = False,
     ) -> str:
         """
         special _decode function is needed for Wav2Vec2Tokenizer because added tokens should be treated exactly the
@@ -361,7 +359,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             group_tokens=group_tokens,
             spaces_between_special_tokens=spaces_between_special_tokens,
             output_word_offsets=output_word_offsets,
-            output_character_offsets=output_character_offsets,
+            output_char_offsets=output_char_offsets,
         )
 
         text = string_output["text"]
@@ -369,10 +367,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         if clean_up_tokenization_spaces:
             text = self.clean_up_tokenization(text)
 
-        if output_word_offsets or output_character_offsets:
+        if output_word_offsets or output_char_offsets:
             return Wav2Vec2CTCTokenizerOutput(
                 text=text,
-                character_offsets=string_output["character_offsets"],
+                char_offsets=string_output["char_offsets"],
                 word_offsets=string_output["word_offsets"],
             )
         else:

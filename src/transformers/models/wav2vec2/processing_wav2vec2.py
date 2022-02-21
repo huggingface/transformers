@@ -100,11 +100,6 @@ class Wav2Vec2Processor(ProcessorMixin):
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
-        # if processor should output time stamps, make sure that
-        # sampling rate is set if not provided
-        if kwargs.get("output_time_stamps", False) and kwargs.get("sampling_rate", None) is None:
-            kwargs["sampling_rate"] = self.feature_extractor.sampling_rate
-
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
@@ -112,11 +107,6 @@ class Wav2Vec2Processor(ProcessorMixin):
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
         to the docstring of this method for more information.
         """
-        # if processor should output time stamps, make sure that
-        # sampling rate is set if not provided
-        if kwargs.get("output_time_stamps", False) and kwargs.get("sampling_rate", None) is None:
-            kwargs["sampling_rate"] = self.feature_extractor.sampling_rate
-
         return self.tokenizer.decode(*args, **kwargs)
 
     @contextmanager
