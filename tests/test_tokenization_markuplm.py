@@ -1392,7 +1392,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Test we can use the new tokenizer with something not seen during training
         text = [["this", "is", "the"], ["how", "are", "you"]]
-        xpaths = [["html/body"]*3, ["html/body"]*3]
+        xpaths = [["html/body"] * 3, ["html/body"] * 3]
         inputs = new_tokenizer(text, xpaths=xpaths)
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
@@ -1510,7 +1510,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Test we can use the new tokenizer with something not seen during training
         nodes = [["this", "is"], ["hello", "🤗"]]
-        xpaths = [["html/body"]*2, ["html/body"]*2]
+        xpaths = [["html/body"] * 2, ["html/body"] * 2]
         inputs = new_tokenizer(nodes, xpaths=xpaths)
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
@@ -1595,15 +1595,22 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Single example
                 nodes, xpaths = self.get_nodes_and_xpaths()
+                print("Nodes:", nodes)
+                print("Xpaths:", xpaths)
                 tokens = tokenizer.encode_plus(
                     nodes,
                     xpaths=xpaths,
-                    max_length=6,
+                    max_length=1,
                     padding=True,
                     truncation=True,
                     return_tensors=returned_tensor,
                     return_overflowing_tokens=True,
                 )
+
+                for k, v in tokens.items():
+                    print(k, v.shape)
+
+                print(tokenizer.decode(tokens.input_ids.squeeze().tolist()))
 
                 for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
                     self.assertEqual(len(tokens[key].shape), 2)

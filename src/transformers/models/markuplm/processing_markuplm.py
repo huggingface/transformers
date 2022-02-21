@@ -30,17 +30,17 @@ class MarkupLMProcessor(ProcessorMixin):
     [`MarkupLMProcessor`] offers all the functionalities you need to prepare data for the model.
 
     It first uses [`MarkupLMFeatureExtractor`] to get nodes and corresponding xpaths from one or more HTML strings. Next,
-    these are provided to [`MarkupLMTokenizer`], which turns them into token-level `input_ids`, `attention_mask`,
+    these are provided to [`MarkupLMTokenizer`] or [`MarkupLMTokenizerFast`], which turns them into token-level `input_ids`, `attention_mask`,
     `token_type_ids`, `xpath_tags_seq` and `xpath_subs_seq`.
 
     Args:
         feature_extractor (`MarkupLMFeatureExtractor`):
             An instance of [`MarkupLMFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`MarkupLMTokenizer`):
-            An instance of [`MarkupLMTokenizer`]. The tokenizer is a required input.
+        tokenizer (`MarkupLMTokenizer` or `MarkupLMTokenizerFast`):
+            An instance of [`MarkupLMTokenizer`] or [`MarkupLMTokenizerFast`]. The tokenizer is a required input.
     """
     feature_extractor_class = "MarkupLMFeatureExtractor"
-    tokenizer_class = ("MarkupLMTokenizer")
+    tokenizer_class = ("MarkupLMTokenizer", "MarkupLMTokenizerFast")
 
     def __call__(
         self,

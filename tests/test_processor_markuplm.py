@@ -19,14 +19,17 @@ import tempfile
 import unittest
 from typing import List
 
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
+from transformers import (
+    MarkupLMFeatureExtractor,
+    MarkupLMProcessor,
+    MarkupLMTokenizer,
+    PreTrainedTokenizer,
+    PreTrainedTokenizerBase,
+    PreTrainedTokenizerFast,
+)
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME, cached_property
-from transformers import MarkupLMTokenizer
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch, slow
-
-
-from transformers import MarkupLMFeatureExtractor, MarkupLMProcessor
 
 
 @require_tokenizers

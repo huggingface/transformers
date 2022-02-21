@@ -582,7 +582,9 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
 
         if not isinstance(batch_text_or_text_pairs, list):
             raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
-
+        
+        print("Max length:", max_length)
+        
         # Set the truncation and padding strategy and restore the initial configuration
         self.set_truncation_and_padding(
             padding_strategy=padding_strategy,
@@ -595,11 +597,17 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         if is_pair:
             batch_text_or_text_pairs = [(text.split(), text_pair) for text, text_pair in batch_text_or_text_pairs]
 
+        print("Batch text or text pairs:", batch_text_or_text_pairs)
+        
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,
             is_pretokenized=True,  # we set this to True as MarkupLM always expects pretokenized inputs
         )
+
+        print("Encodings:", encodings)
+        print(len(encodings))
+        print(encodings[0].overflowing)
 
         # Convert encoding to dict
         # `Tokens` has type: Tuple[
