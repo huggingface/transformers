@@ -1097,6 +1097,7 @@ class MarianModel(MarianPreTrainedModel):
         return self.shared
 
     def set_input_embeddings(self, value):
+        # TODO:
         self.shared = value
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
@@ -1227,7 +1228,7 @@ class MarianMTModel(MarianPreTrainedModel):
     def __init__(self, config: MarianConfig):
         super().__init__(config)
         self.model = MarianModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
+        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.decoder.embed_tokens.num_embeddings)))
         self.vocab_size = config.vocab_size if config.share_embeddings else config.tgt_vocab_size
         self.lm_head = nn.Linear(config.d_model, self.vocab_size, bias=False)
 
