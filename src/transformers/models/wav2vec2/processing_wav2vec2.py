@@ -17,7 +17,6 @@ Speech processor class for Wav2Vec2
 """
 import warnings
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional, Union
 
 from ...processing_utils import ProcessorMixin
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
@@ -72,19 +71,6 @@ class Wav2Vec2Processor(ProcessorMixin):
         [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
         return self.current_processor(*args, **kwargs)
-
-    def _retrieve_tokens_with_time_stamps(
-        self,
-        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],  # noqa: F821
-        stride: int,
-        sampling_rate: Optional[float] = None,
-    ) -> List[Dict[str, Any]]:
-
-        sampling_rate = sampling_rate if sampling_rate is not None else self.feature_extractor.sampling_rate
-
-        return self.tokenizer._retrieve_tokens_with_time_stamps(
-            token_ids=token_ids, stride=stride, sampling_rate=sampling_rate
-        )
 
     def pad(self, *args, **kwargs):
         """
