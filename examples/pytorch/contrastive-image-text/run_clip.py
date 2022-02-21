@@ -66,7 +66,6 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="openai/clip-vit-base-patch32",
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
     )
     config_name: Optional[str] = field(
@@ -110,11 +109,11 @@ class DataTrainingArguments:
     )
     data_dir: Optional[str] = field(default=None, metadata={"help": "The data directory containing input files."})
     image_column: Optional[str] = field(
-        default=None,
+        default="image_path",
         metadata={"help": "The name of the column in the datasets containing the full image file paths."},
     )
     caption_column: Optional[str] = field(
-        default=None,
+        default="caption",
         metadata={"help": "The name of the column in the datasets containing the image captions."},
     )
     train_file: Optional[str] = field(
@@ -125,7 +124,7 @@ class DataTrainingArguments:
         metadata={"help": "An optional input evaluation data file (a jsonlines file)."},
     )
     max_seq_length: Optional[int] = field(
-        default=72,
+        default=128,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
@@ -176,7 +175,8 @@ dataset_name_mapping = {
 }
 
 
-# We use torchvision for faster image pre-processing.
+# We use torchvision for faster image pre-processing. The transforms are implemented as nn.Module,
+# so we jit it to be faster.
 class Transform(torch.nn.Module):
     def __init__(self, image_size, mean, std):
         super().__init__()
@@ -187,7 +187,7 @@ class Transform(torch.nn.Module):
             Normalize(mean, std),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Image) -> torch.Tensor:
         with torch.no_grad():
             x = self.transforms(x)
         return x
@@ -331,8 +331,7 @@ def main():
     # Get the column names for input/target.
     dataset_columns = dataset_name_mapping.get(data_args.dataset_name, None)
     if data_args.image_column is None:
-        assert dataset_columns is not None
-        image_column = dataset_columns[0]
+        image_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
     else:
         image_column = data_args.image_column
         if image_column not in column_names:
@@ -340,8 +339,7 @@ def main():
                 f"--image_column' value '{data_args.image_column}' needs to be one of: {', '.join(column_names)}"
             )
     if data_args.caption_column is None:
-        assert dataset_columns is not None
-        caption_column = dataset_columns[1]
+        caption_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
     else:
         caption_column = data_args.caption_column
         if caption_column not in column_names:
@@ -349,24 +347,14 @@ def main():
                 f"--caption_column' value '{data_args.caption_column}' needs to be one of: {', '.join(column_names)}"
             )
 
-    def filter_fn(examples):
-        """remove problematic images"""
-        bools = []
-        for image_file in examples[image_column]:
-            try:
-                Image.open(image_file)
-                # feature_extractor(images=image, return_tensors="np")
-                bools.append(True)
-            except Exception:
-                bools.append(False)
-        return bools
-
     # Initialize torchvision transforms and jit it for faster processing.
     image_transformations = Transform(
         config.vision_config.image_size, feature_extractor.image_mean, feature_extractor.image_std
     )
     image_transformations = torch.jit.script(image_transformations)
 
+    # Preprocessing the datasets.
+    # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples):
         captions = [caption for caption in examples[caption_column]]
         text_inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True)
@@ -379,6 +367,17 @@ def main():
         examples["pixel_values"] = [image_transformations(image) for image in images]
         return examples
 
+    def filter_corrupt_images(examples):
+        """remove problematic images"""
+        valid_images = []
+        for image_file in examples[image_column]:
+            try:
+                Image.open(image_file)
+                valid_images.append(True)
+            except Exception:
+                valid_images.append(False)
+        return valid_images
+
     if training_args.do_train:
         if "train" not in dataset:
             raise ValueError("--do_train requires a train dataset")
@@ -386,7 +385,9 @@ def main():
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
-        train_dataset = train_dataset.filter(filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers)
+        train_dataset = train_dataset.filter(
+            filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
+        )
         train_dataset = train_dataset.map(
             function=tokenize_captions,
             batched=True,
@@ -406,7 +407,9 @@ def main():
         if data_args.max_eval_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
 
-        eval_dataset = eval_dataset.filter(filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers)
+        eval_dataset = eval_dataset.filter(
+            filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
+        )
         eval_dataset = eval_dataset.map(
             function=tokenize_captions,
             batched=True,
@@ -426,7 +429,9 @@ def main():
         if data_args.max_eval_samples is not None:
             test_dataset = test_dataset.select(range(data_args.max_eval_samples))
 
-        test_dataset = test_dataset.filter(filter_fn, batched=True, num_proc=data_args.preprocessing_num_workers)
+        test_dataset = test_dataset.filter(
+            filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
+        )
         test_dataset = test_dataset.map(
             function=tokenize_captions,
             batched=True,
@@ -467,8 +472,19 @@ def main():
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
+    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "contrastive-image-text-modeling"}
+    if data_args.dataset_name is not None:
+        kwargs["dataset_tags"] = data_args.dataset_name
+        if data_args.dataset_config_name is not None:
+            kwargs["dataset_args"] = data_args.dataset_config_name
+            kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+        else:
+            kwargs["dataset"] = data_args.dataset_name
+
     if training_args.push_to_hub:
-        trainer.push_to_hub()
+        trainer.push_to_hub(**kwargs)
+    else:
+        trainer.create_model_card(**kwargs)
 
 
 if __name__ == "__main__":
