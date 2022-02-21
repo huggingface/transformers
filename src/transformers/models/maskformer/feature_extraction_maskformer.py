@@ -484,7 +484,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 If not set, defaults to the `is_thing_map` of ADE20K-150 panoptic.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing two keys:
+            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- a tensor of shape `(height, width)` where each pixel represent a `segment_id`.
             - **segments** -- a dictionary with the following keys
                 - **id** -- an integer representing the `segment_id`.
@@ -511,7 +511,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # now, we need to iterate over the batch size to correctly process the segmentation we got from the queries using our thresholds. Even if the original predicted masks have the same shape across the batch, they won't after thresholding so batch-wise operations are impossible
         results: List[Dict[str, Tensor]] = []
         for (mask_probs, pred_scores, pred_labels) in zip(mask_probs, pred_scores, pred_labels):
-
             mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(
                 mask_probs, pred_scores, pred_labels, object_mask_threshold, num_labels
             )
@@ -565,7 +564,5 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                             )
                             if is_stuff:
                                 stuff_memory_list[pred_class] = current_segment_id
-
                     results.append({"segmentation": segmentation, "segments": segments})
-
         return results

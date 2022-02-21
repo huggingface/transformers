@@ -27,10 +27,11 @@ from .test_feature_extraction_common import FeatureExtractionSavingTestMixin, pr
 if is_torch_available():
     import torch
 
+    if is_vision_available():
+        from transformers import MaskFormerFeatureExtractor
+
 if is_vision_available():
     from PIL import Image
-
-    from transformers import MaskFormerFeatureExtractor
 
 
 class MaskFormerFeatureExtractionTester(unittest.TestCase):

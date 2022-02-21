@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # import sys
+# import sys
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,9 +25,12 @@ import torchvision.transforms as T
 from PIL import Image
 from torch import Tensor
 
+# The MaskFormer dir is present in the following directory, I need to add it to the path so python can see it
+# sys.path.append("/home/zuppif/Documents/Work/hugging_face/")
 import requests
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
+from detectron2.data import MetadataCatalog
 from detectron2.projects.deeplab import add_deeplab_config
 from MaskFormer.mask_former import add_mask_former_config
 from MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
@@ -39,10 +43,6 @@ from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerOutput,
 )
 from transformers.utils import logging
-
-
-# # The MaskFormer dir is present in the following directory, I need to add it to the path so python can see it
-# sys.path.append("/home/zuppif/Documents/Work/hugging_face/")
 
 
 StateDict = Dict[str, Tensor]
@@ -116,6 +116,10 @@ class OriginalMaskFormerConfigToOursConverter:
         mask_former = model.MASK_FORMER
         swin = model.SWIN
 
+        dataset_catalog = MetadataCatalog.get(original_config.DATASETS.TEST[0])
+        id2label = {idx: label for idx, label in enumerate(dataset_catalog.stuff_classes)}
+        label2id = {label: idx for idx, label in id2label.items()}
+
         config: MaskFormerConfig = MaskFormerConfig(
             fpn_feature_size=model.SEM_SEG_HEAD.CONVS_DIM,
             mask_feature_size=model.SEM_SEG_HEAD.MASK_DIM,
@@ -126,7 +130,7 @@ class OriginalMaskFormerConfigToOursConverter:
                 pretrain_img_size=swin.PRETRAIN_IMG_SIZE,
                 image_size=swin.PRETRAIN_IMG_SIZE,
                 in_channels=3,
-                patch_size=swin.PATCH_SIZE[0],
+                patch_size=swin.PATCH_SIZE,
                 embed_dim=swin.EMBED_DIM,
                 depths=swin.DEPTHS,
                 num_heads=swin.NUM_HEADS,
@@ -158,6 +162,8 @@ class OriginalMaskFormerConfigToOursConverter:
                 detr_dilation=False,
                 # default pretrained config values
             ),
+            id2label=id2label,
+            label2id=label2id,
         )
 
         return config
@@ -708,15 +714,15 @@ if __name__ == "__main__":
         feature_extractor.save_pretrained(save_directory / model_name)
         mask_former_for_instance_segmentation.save_pretrained(save_directory / model_name)
 
-        # feature_extractor.push_to_hub(
-        #     repo_path_or_name=save_directory / model_name,
-        #     organization="Francesco",
-        #     commit_message="Add model",
-        #     use_temp_dir=True,
-        # )
-        # mask_former_for_instance_segmentation.push_to_hub(
-        #     repo_path_or_name=save_directory / model_name,
-        #     organization="Francesco",
-        #     commit_message="Add model",
-        #     use_temp_dir=True,
-        # )
+        feature_extractor.push_to_hub(
+            repo_path_or_name=save_directory / model_name,
+            organization="Francesco",
+            commit_message="Add model",
+            use_temp_dir=True,
+        )
+        mask_former_for_instance_segmentation.push_to_hub(
+            repo_path_or_name=save_directory / model_name,
+            organization="Francesco",
+            commit_message="Add model",
+            use_temp_dir=True,
+        )
