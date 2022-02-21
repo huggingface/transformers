@@ -429,9 +429,27 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             output_char_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output character offsets. Character offsets can be used in combination with the
                 sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
+
+                <Tip>
+
+                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                understand how to make use of `output_word_offsets`.
+                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works analogous with batched output.
+
+                </Tip>
+
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
+
+                <Tip>
+
+                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                understand how to make use of `output_word_offsets`.
+                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works analogous with batched output.
+
+                </Tip>
+
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
 
@@ -484,9 +502,25 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             output_char_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output character offsets. Character offsets can be used in combination with the
                 sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
+
+                <Tip>
+
+                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                understand how to make use of `output_word_offsets`.
+
+                </Tip>
+
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
+
+                <Tip>
+
+                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                understand how to make use of `output_word_offsets`.
+
+                </Tip>
+
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
 
@@ -503,26 +537,38 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         >>> import datasets
         >>> import torch
 
-
+        >>> # import model, feature extractor, tokenizer
         >>> model = AutoModelForCTC.from_pretrained("facebook/wav2vec2-base-960h")
         >>> tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
 
-        >>> ds = load_dataset("common_voice", "en", split="train", streaming=True)
-        >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+        >>> # load first sample of English common_voice
+        >>> dataset = load_dataset("common_voice", "en", split="train", streaming=True)
+        >>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+        >>> dataset_iter = iter(dataset)
+        >>> sample = next(dataset_iter)
 
-        >>> ds_iter = iter(ds)
-        >>> sample = next(ds_iter)
-
-        >>> # compare to filename of dataset viewer on https://huggingface.co/datasets/common_voice/viewer/en/train
-        >>> print("Filename", sample["audio"]["path"])
-
+        >>> # forward sample through model to get greedily predicted transcription ids
         >>> input_values = feature_extractor(sample["audio"]["array"], return_tensors="pt").input_values
-
         >>> logits = model(input_values).logits
         >>> pred_ids = torch.argmax(logits, axis=-1)
 
-        >>> outputs = tokenizer.batch_decode(pred_ids, output_time_stamps=True, stride=320, sampling_rate=feature_extractor.sampling_rate)
+        >>> # retrieve word stamps (analogous commands for `output_char_offsets`)
+        >>> outputs = tokenizer.batch_decode(pred_ids, output_word_offsets=True)
+        >>> # compute `time_offset` in seconds as product of downsampling ratio and sampling_rate
+        >>> time_offset = model.config.input_to_logit_ratio / feature_extractor.sampling_rate
+
+        >>> word_offsets = [
+        ...     {
+        ...         "word": d["word"],
+        ...         "start_time": d["start_offset"] * time_offset,
+        ...         "end_time": d["end_offset"] * time_offset,
+        ...     }
+        ...     for d in outputs.word_offsets
+        ... ]
+        >>> # compare word offsets with audio `common_voice_en_100038.mp3` online on the dataset viewer:
+        >>> # https://huggingface.co/datasets/common_voice/viewer/en/train
+        >>> word_offset
         ```"""
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)

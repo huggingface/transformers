@@ -14,6 +14,8 @@
 # limitations under the License.
 """ Wav2Vec2 model configuration"""
 
+import math
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -329,3 +331,7 @@ class Wav2Vec2Config(PretrainedConfig):
         self.tdnn_kernel = list(tdnn_kernel)
         self.tdnn_dilation = list(tdnn_dilation)
         self.xvector_output_dim = xvector_output_dim
+
+        @property
+        def input_to_logit_ratio(self):
+            return math.prod(conv_stride)
