@@ -277,11 +277,14 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         # check that offsets are actually correct for char
-        # 0 is H, 1 is E, 6 is | (" "),  8 is 1st L,  12 is 2nd L, 13 is O, 14 is <unk>
-        self.assertListEqual(self.get_from_offsets(outputs["char_offsets"], "start_offset"), [0, 1, 6, 8, 12, 13, 14])
-        # 1 is H, 6 is E, 8 is | (" "),  11 is 1st L (note due to <pad>
-        # different begin of 2nd L), 13 is 2nd L, 14 is O, 15 is <unk>
-        self.assertListEqual(self.get_from_offsets(outputs["char_offsets"], "end_offset"), [1, 6, 8, 11, 14, 15])
+        # 0-1 is 11, 1-4 is 5, 4-6 is first 15, 6-7 is <pad> (thus not shown), 7-9 is second 15, 9-10 is word_delimiter_token,
+        # 10-11 is <pad> (thus not shown), 11-12 is third 15, 12-15 is 8, 15-16 is word_delimiter_token, 16-17 is 98
+        self.assertListEqual(
+            self.get_from_offsets(outputs["char_offsets"], "start_offset"), [0, 1, 4, 7, 9, 11, 12, 15, 16]
+        )
+        self.assertListEqual(
+            self.get_from_offsets(outputs["char_offsets"], "end_offset"), [1, 4, 6, 9, 10, 12, 15, 16, 17]
+        )
 
     def test_offsets_batch(self):
         tokenizer = self.get_tokenizer(word_delimiter_token="|")

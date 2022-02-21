@@ -398,7 +398,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         group_tokens: bool = True,
         filter_word_delimiter_token: bool = True,
         spaces_between_special_tokens: bool = False,
-        output_word_offsets: Optional[bool] = None,
         output_char_offsets: Optional[bool] = False,
     ) -> str:
         """
@@ -419,7 +418,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             group_tokens=group_tokens,
             spaces_between_special_tokens=spaces_between_special_tokens,
             filter_word_delimiter_token=filter_word_delimiter_token,
-            output_word_offsets=output_word_offsets,
             output_char_offsets=output_char_offsets,
         )
 
@@ -428,7 +426,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         if clean_up_tokenization_spaces:
             text = self.clean_up_tokenization(text)
 
-        if output_word_offsets or output_char_offsets:
+        if output_char_offsets:
             return Wav2Vec2PhonemeCTCTokenizerOutput(
                 text=text,
                 char_offsets=string_output["char_offsets"],
