@@ -144,11 +144,12 @@ def get_pairs(word):
 
 class MarkupLMTokenizer(PreTrainedTokenizer):
     r"""
-    Args:
     Construct a MarkupLM tokenizer. Based on byte-level Byte-Pair-Encoding (BPE). [`MarkupLMTokenizer`] can be used to
     turn HTML strings into to token-level `input_ids`, `attention_mask`, `token_type_ids`, `xpath_tags_seq` and
     `xpath_tags_seq`. This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
+
+    Args:
         vocab_file (`str`):
             Path to the vocabulary file.
         merges_file (`str`):

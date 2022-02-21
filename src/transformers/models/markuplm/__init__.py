@@ -25,6 +25,7 @@ _import_structure = {
     "configuration_markuplm": ["MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "MarkupLMConfig"],
     "tokenization_markuplm": ["MarkupLMTokenizer"],
     "feature_extraction_markuplm": ["MarkupLMFeatureExtractor"],
+    "processing_markuplm": ["MarkupLMProcessor"],
 }
 
 if is_tokenizers_available():
@@ -45,6 +46,7 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_markuplm import MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP, MarkupLMConfig
     from .feature_extraction_markuplm import MarkupLMFeatureExtractor
+    from .processing_markuplm import MarkupLMProcessor
     from .tokenization_markuplm import MarkupLMTokenizer
 
     if is_tokenizers_available():

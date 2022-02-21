@@ -1072,6 +1072,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "LongformerTokenizer": RobertaConverter,
     "LEDTokenizer": RobertaConverter,
     "LxmertTokenizer": BertConverter,
+    "MarkupLMTokenizer": RobertaConverter,
     "MBartTokenizer": MBartConverter,
     "MBart50Tokenizer": MBart50Converter,
     "MPNetTokenizer": MPNetConverter,

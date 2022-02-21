@@ -33,7 +33,7 @@ from .test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixi
 class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MarkupLMTokenizer
     rust_tokenizer_class = MarkupLMTokenizerFast
-    test_rust_tokenizer = False
+    test_rust_tokenizer = True
     from_pretrained_kwargs = {"cls_token": "<s>"}
     test_seq2seq = False
 
@@ -1022,7 +1022,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
                 text = ["a", "wonderful", "test"]
-                xpaths = [[1, 8, 12, 20] for _ in range(len(text))]
+                xpaths = ["html/body" for _ in range(len(text))]
 
                 # No pair
                 tokens_with_offsets = tokenizer_r.encode_plus(
@@ -1044,7 +1044,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Pairs
                 text = "what's his name"
                 pair = ["a", "wonderful", "test"]
-                xpaths = [[1, 8, 12, 20] for _ in range(len(pair))]
+                xpaths = ["html/body" for _ in range(len(pair))]
                 tokens_with_offsets = tokenizer_r.encode_plus(
                     text,
                     pair,
@@ -1161,7 +1161,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertSequenceEqual(input_pairs_p[key], input_pairs_r[key])
 
                 nodes = ["hello" for _ in range(1000)]
-                xpaths = [[1000, 1000, 1000, 1000] for _ in range(1000)]
+                xpaths = ["html/body" for _ in range(1000)]
 
                 # Ensure truncation match
                 input_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, max_length=512, truncation=True)
@@ -1328,7 +1328,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 seq_0 = "Test this method."
                 seq_1 = ["With", "these", "inputs."]
-                xpaths = [[1000, 1000, 1000, 1000] for _ in range(len(seq_1))]
+                xpaths = ["html/body" for _ in range(len(seq_1))]
 
                 # We want to have sequence 0 and sequence 1 are tagged
                 # respectively with 0 and 1 token_ids
@@ -1392,7 +1392,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Test we can use the new tokenizer with something not seen during training
         text = [["this", "is", "the"], ["how", "are", "you"]]
-        xpaths = [[[1, 2, 3, 4], [5, 6, 7, 8], [1, 3, 4, 8]], [[5, 6, 7, 8], [4, 5, 6, 7], [3, 9, 2, 7]]]
+        xpaths = [["html/body"]*3, ["html/body"]*3]
         inputs = new_tokenizer(text, xpaths=xpaths)
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
@@ -1510,7 +1510,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Test we can use the new tokenizer with something not seen during training
         nodes = [["this", "is"], ["hello", "🤗"]]
-        xpaths = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[1, 2, 3, 4], [5, 6, 7, 8]]]
+        xpaths = [["html/body"]*2, ["html/body"]*2]
         inputs = new_tokenizer(nodes, xpaths=xpaths)
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
@@ -1674,7 +1674,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 if len(ids) <= 2 + stride:
                     seq_0 = (seq_0 + " ") * (2 + stride)
                     ids = None
-                
+
                 seq0_tokens = tokenizer(seq_0, xpaths=xpaths_0, add_special_tokens=False)
                 self.assertGreater(len(seq0_tokens["input_ids"]), 2 + stride)
                 question_1 = "This is another sentence to be encoded."
@@ -1700,12 +1700,10 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 print("Question_0:", question_0)
                 print("Xpaths_0:", xpaths_0)
                 print("Seq_1:", seq_1)
-                
+
                 # We are not using the special tokens - a bit too hard to test all the tokenizers with this
                 # TODO try this again later
-                sequence = tokenizer(
-                    question_0, seq_1, xpaths=xpaths_1, add_special_tokens=False
-                )
+                sequence = tokenizer(question_0, seq_1, xpaths=xpaths_1, add_special_tokens=False)
 
                 # Test with max model input length
                 model_max_length = tokenizer.model_max_length
@@ -1955,7 +1953,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                             "for instance `only_second` or `only_first`."
                         )
                     )
-                
+
                 information_first_truncated = tokenizer(
                     question_0,
                     seq_1,
@@ -2038,7 +2036,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(overflowing_tokens, seq1_tokens["input_ids"][-(2 + stride) :])
                     self.assertEqual(xpath_tags_seq, xpath_tags_seq_second_sequence)
                     self.assertEqual(overflowing_xpath_tags_seq, overflowing_xpath_tags_seq_second_sequence_slow)
-    
+
     def test_maximum_encoding_length_single_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
         for tokenizer in tokenizers:
@@ -2158,7 +2156,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(overflowing_tokens, sequence["input_ids"][-(2 + stride) :])
                     self.assertEqual(xpath_tags_seq, sequence["xpath_tags_seq"][:-2])
                     self.assertEqual(overflowing_xpath_tags_seq, sequence["xpath_tags_seq"][-(2 + stride) :])
-    
+
     @unittest.skip("MarkupLM tokenizer requires xpaths besides sequences.")
     def test_pretokenized_inputs(self):
         pass
