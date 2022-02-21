@@ -93,6 +93,12 @@ class ModelArguments:
             "with private models)."
         },
     )
+    freeze_vision_model: bool = field(
+        default=False, metadata={"help": "Whether to freeze the vision model parameters or not."}
+    )
+    freeze_text_model: bool = field(
+        default=False, metadata={"help": "Whether to freeze the text model parameters or not."}
+    )
 
 
 @dataclass
@@ -316,6 +322,17 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
     config = model.config
+
+    def _freeze_params(module):
+        for param in module.parameters():
+            param.requires_grad = False
+
+    if model_args.freeze_vision_model:
+        _freeze_params(model.vision_model)
+
+    if model_args.freeze_text_model:
+        _freeze_params(model.text_model)
+
     # set seed for torch dataloaders
     set_seed(training_args.seed)
 
