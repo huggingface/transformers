@@ -2374,7 +2374,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         outputs = model.generate(
             input_ids,
             constraints=constraints,
-            num_beams=10,
+            num_beams=5,
             num_return_sequences=1,
             no_repeat_ngram_size=1,
             max_length=30,

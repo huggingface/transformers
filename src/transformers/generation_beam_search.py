@@ -484,12 +484,14 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 - **next_beam_scores** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Updated scores of
                   all
                 non-finished beams.
+
                 - **next_beam_tokens** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Next tokens to be
                   added
                 to the non-finished beam_hypotheses.
                 - **next_beam_indices** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Beam indices
                 indicating to which beam the next tokens shall be added.
         """
+        print("IN input_ids", input_ids)
 
         cur_len = input_ids.shape[-1]
         batch_size = len(self._beam_hyps)
@@ -644,7 +646,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                     if advance_seq not in track_new["new_seqs"]:
                         # prevent duplicates, which are basically bound to happen in this process.
                         track_new["new_seqs"].append(advance_seq)
-                        track_new["new_indices"].append(seq_idx)
+                        track_new["new_indices"].append(sidx + seq_idx) # idx -> global idx across all the batches
                         track_new["new_tokens"].append(advance_token)
                         track_new["new_scores"].append(this_batch_token_scores[seq_idx].take(advance_token))
                         track_new["new_states"].append(new_state)
