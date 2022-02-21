@@ -95,8 +95,8 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
     """
 
     text: Union[List[str], str]
-    token_time_stamps: List[Dict[str, Union[float, str]]] = None
-    word_time_stamps: List[Dict[str, Union[float, str]]] = None
+    character_offsets: List[Dict[str, Union[float, str]]] = None
+    word_offsets: List[Dict[str, Union[float, str]]] = None
 
 
 class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
@@ -141,6 +141,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         word_delimiter_token="|",
+        replace_word_delimiter_char=" ",
         do_lower_case=False,
         **kwargs
     ):
@@ -151,12 +152,14 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             do_lower_case=do_lower_case,
             word_delimiter_token=word_delimiter_token,
+            replace_word_delimiter_char=replace_word_delimiter_char,
             **kwargs,
         )
 
         self._word_delimiter_token = word_delimiter_token
 
         self.do_lower_case = do_lower_case
+        self.replace_word_delimiter_char = replace_word_delimiter_char
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -228,106 +231,102 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         tokens: List[str],
         group_tokens: bool = True,
         spaces_between_special_tokens: bool = False,
-        output_time_stamps: bool = False,
-        stride: Optional[int] = None,
-        sampling_rate: Optional[float] = None,
+        output_character_offsets: bool = False,
+        output_word_offsets: bool = False,
     ) -> Dict[str, Union[str, float]]:
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
         """
         # group same tokens into non-repeating tokens in CTC style decoding
         if group_tokens:
-            tokens, token_repetitions = zip(*((token, len(list(group_iter))) for token, group_iter in groupby(tokens)))
+            chars, char_repetitions = zip(*((token, len(list(group_iter))) for token, group_iter in groupby(tokens)))
         else:
-            token_repetitions = len(tokens) * [1]
+            char_repetitions = len(tokens) * [1]
 
         # filter self.pad_token which is used as CTC-blank token
-        filtered_tokens = list(filter(lambda token: token != self.pad_token, tokens))
+        processed_chars = list(filter(lambda char: char != self.pad_token, chars))
 
         # replace delimiter token
-        processed_tokens = [" " if token == self.word_delimiter_token else token for token in filtered_tokens]
+        processed_chars = [self.replace_word_delimiter_char if char == self.word_delimiter_token else char for char in processed_chars]
 
-        time_stamps = word_time_stamps = None
-        if output_time_stamps:
-            if stride is None:
+        # retrieve offsets
+        character_offsets = word_offsets = None
+        if output_character_offsets or output_word_offsets:
+            offsets = self._compute_offsets(char_repetitions, chars, self.pad_token)
+
+            if len(offsets) != len(processed_chars):
                 raise ValueError(
-                    "Make sure to provide the `stride` of the audio model "
-                    "in order to retrieve the time stamps for each token."
-                    "The stride is usually defined as `model.stride`."
-                )
+                    f"`character_offsets`: {offsets} and `processed_tokens`: {processed_chars}"
+                " have to be of the same length, but are: "
+                f"`len(offsets)`: {len(offsets)} and `len(processed_tokens)`:"
+                f" {len(processed_chars)}"
+            )
 
-            if sampling_rate is None:
-                raise ValueError(
-                    "Make sure to provide the `sampling_rate` of the feature extractor "
-                    "in order to retrieve the time stamps for each token."
-                    "The sampling rate is usually defined as `feature_extractor.sampling_rate`."
-                )
+            # set tokens to correct processed token
+            for i, char in enumerate(processed_chars):
+                offsets[i]["character"] = chars
 
-            frame_context_in_seconds = stride / sampling_rate
-
-            end_indices = np.asarray(token_repetitions).cumsum()
-            start_indices = np.concatenate(([0], end_indices[:-1]))
-
-            # create time stamps
-            time_stamps = [
-                {"token": t, "start_time": s * frame_context_in_seconds, "end_time": e * frame_context_in_seconds}
-                for t, s, e in zip(tokens, start_indices, end_indices)
-            ]
-
-            # filter out CTC token
-            time_stamps = list(filter(lambda time_stamp: time_stamp["token"] != self.pad_token, time_stamps))
-
-            if len(time_stamps) != len(processed_tokens):
-                raise ValueError(
-                    f"`time_stamps`: {time_stamps} and `processed_tokens`: {processed_tokens}"
-                    " have to be of the same length, but are: "
-                    f"`len(time_stamps)`: {len(time_stamps)} and `len(processed_tokens)`:"
-                    f" {len(processed_tokens)}"
-                )
-
-            # set tokens to correct
-            for i, token in enumerate(processed_tokens):
-                time_stamps[i]["token"] = token
-
-            # retrieve word time stamps from time stamps
-            word_time_stamps = self._get_word_time_stamps(time_stamps)
+            # retrieve word offsets from character offsets
+            word_offsets = None
+            if output_word_offsets:
+                word_offsets = self._get_word_offsets(offsets, self.replace_word_delimiter_char)
 
         # join to string
         join_char = " " if spaces_between_special_tokens else ""
-        string = join_char.join(processed_tokens).strip()
+        import ipdb; ipdb.set_trace()
+        string = join_char.join(processed_chars).strip()
 
         if self.do_lower_case:
             string = string.lower()
 
         return {
             "text": string,
-            "token_time_stamps": time_stamps,
-            "word_time_stamps": word_time_stamps,
+            "character_offsets": offset,
+            "word_offsets": word_offsets,
         }
 
-    @staticmethod
-    def _get_word_time_stamps(time_stamps: Dict[str, Union[str, float]]) -> Dict[str, Union[str, float]]:
-        word_time_stamps = []
-        word_begin = time_stamps[0]["token"] != " "
 
-        for i, time_stamp in enumerate(time_stamps):
-            token = time_stamp["token"]
-            word_end = token == " " and i > 0
+    @staticmethod
+    def _compute_offsets(char_repetitions, chars, ctc_token):
+        end_indices = np.asarray(char_repetitions).cumsum()
+        start_indices = np.concatenate(([0], end_indices[:-1]))
+
+        offsets = [{"character": t, "start_offset": s, "end_offset": e} for t, s, e in zip(chars, start_indices, end_indices)]
+
+        # filter out CTC token
+        offsets = list(filter(lambda offsets: offsets["character"] != ctc_token, offsets))
+        return offsets
+
+    @staticmethod
+    def _get_word_offsets(offsets: Dict[str, Union[str, float]], word_delimiter_char: str= " ") -> Dict[str, Union[str, float]]:
+        word_offsets = []
+        final_offset_idx = len(offsets) - 1
+
+        for i, offset in enumerate(offsets):
+            # define previous, next and current char
+            char = offset["char"]
+            prev_char = offset[i - 1]["char"] if i > 0 else None
+            next_char = offset[i + 1]["char"] if i < final_offset_idx else None
+
+            # derive whether word begins, ends and whether current char is in word
+            word_begin = (i == 0 and char != word_delimiter_char) or (prev_char == word_delimiter_char)
+            word_end = (i == final_offset_idx and char != word_delimiter_char) or (next_char == word_delimiter_char)
+            char_is_in_word = char != word_delimiter_char
+
             if word_begin:
-                word_time_stamp = {
+                word_offset = {
                     "word": "",
-                    "start_time": time_stamp["start_time"],
+                    "start_offset": offset["start_offset"],
                 }
 
             if word_end:
-                word_time_stamp["end_time"] = time_stamp["start_time"]
-                word_time_stamps.append(word_time_stamp)
+                word_offset["end_offset"] = offset["end_offset"]
+                word_offsets.append(word_offset)
 
-            if not word_end:
-                word_time_stamp["word"] += time_stamp["token"]
+            if char_is_in_word:
+                word_offset["word"] += offset["char"]
 
-            word_begin = word_end
-        return word_time_stamps
+        return word_offsets
 
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         if is_split_into_words:
@@ -341,9 +340,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces: bool = True,
         group_tokens: bool = True,
         spaces_between_special_tokens: bool = False,
-        output_time_stamps: Optional[bool] = False,
-        stride: Optional[int] = None,
-        sampling_rate: Optional[int] = None,
+        output_word_offsets: Optional[bool] = None,
+        output_character_offsets: Optional[bool] = False,
     ) -> str:
         """
         special _decode function is needed for Wav2Vec2Tokenizer because added tokens should be treated exactly the
@@ -362,9 +360,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             result,
             group_tokens=group_tokens,
             spaces_between_special_tokens=spaces_between_special_tokens,
-            output_time_stamps=output_time_stamps,
-            stride=stride,
-            sampling_rate=sampling_rate,
+            output_word_offsets=output_word_offsets,
+            output_character_offsets=output_character_offsets,
         )
 
         text = string_output["text"]
@@ -372,11 +369,11 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         if clean_up_tokenization_spaces:
             text = self.clean_up_tokenization(text)
 
-        if output_time_stamps:
+        if output_word_offsets or output_character_offsets:
             return Wav2Vec2CTCTokenizerOutput(
                 text=text,
-                token_time_stamps=string_output["token_time_stamps"],
-                word_time_stamps=string_output["word_time_stamps"],
+                character_offsets=string_output["character_offsets"],
+                word_offsets=string_output["word_offsets"],
             )
         else:
             return text
