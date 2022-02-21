@@ -654,6 +654,7 @@ class GenerationMixin:
         repetition_penalty: float,
         no_repeat_ngram_size: int,
         encoder_no_repeat_ngram_size: int,
+        input_ids: torch.LongTensor,
         encoder_input_ids: torch.LongTensor,
         bad_words_ids: List[List[int]],
         min_length: int,
@@ -737,7 +738,7 @@ class GenerationMixin:
         if remove_invalid_values is True:
             processors.append(InfNanRemoveLogitsProcessor())
         if exponential_decay_length_penalty is not None:
-            processors.append(ExponentialDecayLengthPenalty(exponential_decay_length_penalty, eos_token_id))
+            processors.append(ExponentialDecayLengthPenalty(exponential_decay_length_penalty, eos_token_id, input_ids))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         return processors
 
@@ -1144,12 +1145,6 @@ class GenerationMixin:
             # if decoder-only then inputs_tensor has to be `input_ids`
             input_ids = inputs_tensor
 
-        # Prepare exponential_decay_length_penalty, so decay start is applied to newly generated tokens
-        if exponential_decay_length_penalty is not None:
-            decay_start = exponential_decay_length_penalty[0] + input_ids.shape[-1]
-            decay_factor = exponential_decay_length_penalty[1]
-            exponential_decay_length_penalty = (decay_start, decay_factor)
-
         # 5. Prepare `max_length` depending on other stopping criteria
         # if `max_new_tokens` is passed, but not `max_length` -> set `max_length = max_new_tokens`
         if max_length is None and max_new_tokens is not None:
@@ -1200,6 +1195,7 @@ class GenerationMixin:
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
             encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
+            input_ids=input_ids,
             encoder_input_ids=inputs_tensor,
             bad_words_ids=bad_words_ids,
             min_length=min_length,
