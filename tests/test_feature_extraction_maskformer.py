@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 HuggingFace Inc.
+# Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 import unittest
 
 import numpy as np
+import pytest
 
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision
@@ -109,7 +110,7 @@ class MaskFormerFeatureExtractionTester(unittest.TestCase):
 @require_vision
 class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = MaskFormerFeatureExtractor if is_vision_available() else None
+    feature_extraction_class = MaskFormerFeatureExtractor if (is_vision_available() and is_torch_available()) else None
 
     def setUp(self):
         self.feature_extract_tester = MaskFormerFeatureExtractionTester(self)
@@ -241,8 +242,12 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         encoded_images_with_method = feature_extractor_1.encode_inputs(image_inputs, return_tensors="pt")
         encoded_images = feature_extractor_2(image_inputs, return_tensors="pt")
 
-        assert torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
-        assert torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
+        self.assertTrue(
+            torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
+        )
+        self.assertTrue(
+            torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
+        )
 
     def comm_get_feature_extractor_inputs(self, with_annotations=False):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
@@ -278,6 +283,14 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
                 # check if divisible
                 self.assertTrue((pixel_values.shape[-1] % size_divisibility) == 0)
                 self.assertTrue((pixel_values.shape[-2] % size_divisibility) == 0)
+
+    def test_return_tensors(self):
+        faulty_tensor_types = ["tf", "jax", "np"]
+        for tensor_type in faulty_tensor_types:
+            feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+            with pytest.raises(ValueError) as excinfo:
+                feature_extractor([np.random.rand(3, 100, 100)], return_tensors=tensor_type)
+                self.assertTrue("Only PyTorch is supported for the moment." in excinfo.value)
 
     def test_call_with_numpy_annotations(self):
         num_classes = 8

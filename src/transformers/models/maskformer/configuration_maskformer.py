@@ -23,10 +23,10 @@ from ..detr import DetrConfig
 from ..swin import SwinConfig
 
 
-MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = [
-    "facebook/maskformer-swin-base-ade",
+MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "Francesco/maskformer-swin-base-ade": "https://huggingface.co/Francesco/maskformer-swin-base-ade/blob/main/config.json"
     # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
-]
+}
 
 logger = logging.get_logger(__name__)
 
@@ -44,32 +44,33 @@ class MaskFormerConfig(PretrainedConfig):
     Currently, maskformer supports only Swin backbone.
 
     Args:
-        mask_feature_size (`int`,  defaults to `256`):
+        mask_feature_size (`int`, *optional*, defaults to 256):
             The masks' features size, this value will also be used to specify the Feature Pyramid Network featuresc
             size.
-        no_object_weight (`float`, defaults to `0.1`):
+        no_object_weight (`float`, *optional*, defaults to 0.1):
             Weight to apply to the null class .
-        use_auxilary_loss (`bool`, defaults to `False`):
+        use_auxilary_loss (`bool`, *optional*, defaults to `False`):
             If `true` [`MaskFormerOutput`] will contain.
-        backbone_config (`Dict`, *optional*, defaults to `None`):
-            The configuration passed to the backbone, if `None`, `swin-base` will be used. Defaults to None.
-        detr_config (`Dict`, *optional*, defaults to `None`):
-            The configuration passed to `detr`, if `None` the base config for `detr` will be used.
+        backbone_config (`Dict`, *optional*):
+            The configuration passed to the backbone, if unset, the configuration corresponding to `swin-base` will be
+            used.
+        detr_config (`Dict`, *optional*):
+            The configuration passed to the Detr model, if unset the base config for `detr` will be used.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         init_xavier_std (`float`, *optional*, defaults to 1):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        dice_weight (`float`, *optional*, defaults to `1.0`):
+        dice_weight (`float`, *optional*, defaults to 1.0):
             The weight for the dice loss.
-        cross_entropy_weight (`float`, *optional*, defaults to `1.0`):
+        cross_entropy_weight (`float`, *optional*, defaults to 1.0):
             The weight for the cross entropy loss.
-        mask_weight (`float`, *optional*, defaults to `20.0`):
+        mask_weight (`float`, *optional*, defaults to 20.0):
             The weight for the mask loss.
-        num_labels (`int`, *optional*, defaults to `150`):
+        num_labels (`int`, *optional*, defaults to 150):
             The number of labels.
 
     Raises:
-        `ValueError`: Raised if the backbone model type selected is not in `MaskFormerConfig.backbones_supported`
+        `ValueError`: Raised if the backbone model type selected is not in `["swin"]`
 
     Examples:
 
@@ -163,10 +164,6 @@ class MaskFormerConfig(PretrainedConfig):
                 [`MaskFormerConfig`]: An instance of a configuration object
         """
         return cls(backbone_config=backbone_config.to_dict(), detr_config=detr_config.to_dict(), **kwargs)
-
-    @property
-    def hidden_size(self) -> int:
-        return self.mask_feature_size
 
     def to_dict(self) -> Dict[str, any]:
         """

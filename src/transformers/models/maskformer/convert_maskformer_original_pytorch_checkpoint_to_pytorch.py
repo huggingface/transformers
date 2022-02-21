@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# import sys
-# import sys
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,8 +23,9 @@ import torchvision.transforms as T
 from PIL import Image
 from torch import Tensor
 
-# The MaskFormer dir is present in the following directory, I need to add it to the path so python can see it
-# sys.path.append("/home/zuppif/Documents/Work/hugging_face/")
+# The MaskFormer should be present in the following directory, or adapt this path to your needs.
+# import sys
+# sys.path.append("../")
 import requests
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
@@ -556,10 +555,6 @@ class OriginalMaskFormerCheckpoinToOursConverter:
             yield config, checkpoint
 
 
-checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
-config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs")
-
-
 def test(original_model, our_model: MaskFormerForInstanceSegmentation):
     with torch.no_grad():
 
@@ -668,10 +663,6 @@ if __name__ == "__main__":
     checkpoints_dir: Path = args.checkpoints_dir
     config_dir: Path = args.configs_dir
     save_directory: Path = args.pytorch_dump_folder_path
-
-    checkpoints_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/weights")
-
-    config_dir = Path("/home/zuppif/Documents/Work/hugging_face/maskformer/MaskFormer/configs")
 
     if not save_directory.exists():
         save_directory.mkdir(parents=True)

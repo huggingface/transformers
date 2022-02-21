@@ -14,7 +14,7 @@
 # limitations under the License.
 """Feature extractor class for MaskFormer."""
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -30,7 +30,8 @@ if is_torch_available():
     from torch import Tensor, nn
     from torch.nn.functional import interpolate
 
-    from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
+    if TYPE_CHECKING:
+        from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
 
 logger = logging.get_logger(__name__)
 
@@ -42,7 +43,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
 
-
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input to a certain `size`.
@@ -51,10 +51,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller edge of
             the image will be matched to this number. i.e, if `height > width`, then image will be rescaled to `(size *
             height / width, size)`.
-        max_size (`int`, *optional*, defaults to `1333`):
+        max_size (`int`, *optional*, defaults to 1333):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
             set to `True`.
-        size_divisibility (`int`, *optional*, defaults to `32`):
+        size_divisibility (`int`, *optional*, defaults to 32):
             Some backbones need images divisible by a certain number, if not passes it detauls to the value used in
             swin.
         do_normalize (`bool`, *optional*, defaults to `True`):
@@ -111,13 +111,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 return (height, width)
 
             if width < height:
-                ow = size
-                oh = int(size * height / width)
+                output_width = size
+                output_height = int(size * height / width)
             else:
-                oh = size
-                ow = int(size * width / height)
+                output_height = size
+                output_width = int(size * width / height)
 
-            return (oh, ow)
+            return (output_height, output_width)
 
         def get_size(image_size, size, max_size=None):
             if isinstance(size, (list, tuple)):
@@ -191,8 +191,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 number of channels, H and W are image height and width.
 
             annotations (`Dict`, `List[Dict]`, *optional*):
-                The corresponding annotations as numpy arrays in the following format: { "masks" : the target mask,
-                with shape [C,H,W], "labels" : the target labels, with shape [C]}
+                The corresponding annotations as dictionary of numpy arrays with the following keys:
+                - **masks** (`np.ndarray`) The target mask of shape `(num_classes, height, width)`.
+                - **labels** (`np.ndarray`) The target labels of shape `(num_classes)`.
 
             pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
@@ -247,11 +248,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             valid_annotations = type(annotations) is list and "masks" in annotations[0] and "labels" in annotations[0]
             if not valid_annotations:
                 raise ValueError(
-                    """
-                    Annotations must of type `Dict` (single image) or `List[Dict]` (batch of images). The annotations
-                    must be numpy arrays in the following format: { "masks" : the target mask, with shape [C,H,W],
-                    "labels" : the target labels, with shape [C]}
-                    """
+                    "Annotations must of type `Dict` (single image) or `List[Dict]` (batch of images)."
+                    "The annotations must be numpy arrays in the following format:"
+                    "{ 'masks' : the target mask, with shape [C,H,W], 'labels' : the target labels, with shape [C]}"
                 )
 
         # transformations (resizing + normalization)
@@ -282,17 +281,16 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             images, annotations, pad_and_return_pixel_mask, return_tensors=return_tensors
         )
 
-        if annotations is not None:
-            # Convert to TensorType
-            tensor_type = return_tensors
-            if not isinstance(tensor_type, TensorType):
-                tensor_type = TensorType(tensor_type)
+        # Convert to TensorType
+        tensor_type = return_tensors
+        if not isinstance(tensor_type, TensorType):
+            tensor_type = TensorType(tensor_type)
 
-            if not tensor_type == TensorType.PYTORCH:
-                raise ValueError("Only PyTorch is supported for the moment.")
-            else:
-                if not is_torch_available():
-                    raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
+        if not tensor_type == TensorType.PYTORCH:
+            raise ValueError("Only PyTorch is supported for the moment.")
+        else:
+            if not is_torch_available():
+                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
 
         return encoded_inputs
 
@@ -315,7 +313,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         Args:
             pixel_values_list (`List[torch.Tensor]`):
-                List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
+                List of images (pixel values) to be padded. Each image should be a tensor of shape `(channels, height,
+                width)`.
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
                 objects.
@@ -327,9 +326,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               *"pixel_mask"* is in `self.model_input_names`).
             - **mask_labels** -- Optional mask labels of shape `(batch_size, num_classes, height, width) to be fed to a
-              model (when `annotations` are provided)
+              model (when `annotations` are provided).
             - **class_labels** -- Optional class labels of shape `(batch_size, num_classes) to be fed to a model (when
-              `annotations` are provided)
+              `annotations` are provided).
         """
 
         max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
@@ -374,99 +373,97 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         return encoded_inputs
 
     def post_process_segmentation(
-        self, outputs: MaskFormerForInstanceSegmentationOutput, target_size: Tuple[int, int] = None
-    ) -> Tensor:
+        self, outputs: "MaskFormerForInstanceSegmentationOutput", target_size: Tuple[int, int] = None
+    ) -> "torch.Tensor":
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image segmentation predictions. Only
         supports PyTorch.
 
         Args:
             outputs ([`MaskFormerForInstanceSegmentationOutput`]):
-                The outputs from [`MaskFormerForInstanceSegmentation`]
+                The outputs from [`MaskFormerForInstanceSegmentation`].
 
         Returns:
             `torch.Tensor`:
-                A tensor of shape `batch_size, num_labels, height, width`
+                A tensor of shape (`batch_size, num_labels, height, width`).
         """
         # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits = outputs.class_queries_logits
         # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
         masks_queries_logits = outputs.masks_queries_logits
         if target_size is not None:
-            masks_queries_logits: Tensor = interpolate(
+            masks_queries_logits = interpolate(
                 masks_queries_logits,
                 size=target_size,
                 mode="bilinear",
                 align_corners=False,
             )
         # remove the null class `[..., :-1]`
-        masks_classes: Tensor = class_queries_logits.softmax(dim=-1)[..., :-1]
+        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
         # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_probs: Tensor = masks_queries_logits.sigmoid()
+        masks_probs = masks_queries_logits.sigmoid()
         # now we want to sum over the queries,
         # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
         # where $ softmax(p) \in R^{q, c} $ is the mask classes
         # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
-        segmentation: Tensor = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
         return segmentation
 
-    def remove_low_and_no_objects(
-        self, masks: Tensor, scores: Tensor, labels: Tensor, object_mask_threshold: float, num_labels: int
-    ) -> Tuple[Tensor, Tensor, Tensor]:
+    def remove_low_and_no_objects(self, masks, scores, labels, object_mask_threshold, num_labels):
         """
         Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores`
         and `labels`
 
         Args:
             masks (`torch.Tensor`):
-                A tensor of shape `(num_queries, height, width)`
+                A tensor of shape `(num_queries, height, width)`.
             scores (`torch.Tensor`):
-                A tensor of shape `(num_queries)`
+                A tensor of shape `(num_queries)`.
             labels (`torch.Tensor`):
-                A tensor of shape `(num_queries)`
+                A tensor of shape `(num_queries)`.
             object_mask_threshold (`float`):
-                A number between 0 and 1 used to binarize the masks
+                A number between 0 and 1 used to binarize the masks.
 
         Raises:
-            `ValueError`: Raised when the first dimension doesn't match in all input tensors
+            `ValueError`: Raised when the first dimension doesn't match in all input tensors.
 
         Returns:
             `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the
-            region < `object_mask_threshold`
+            region < `object_mask_threshold`.
         """
         if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
             raise ValueError("mask, scores and labels must have the same shape!")
 
-        to_keep: Tensor = labels.ne(num_labels) & (scores > object_mask_threshold)
+        to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
 
         return masks[to_keep], scores[to_keep], labels[to_keep]
 
     def post_process_semantic_segmentation(
-        self, outputs: MaskFormerForInstanceSegmentationOutput, target_size: Tuple[int, int] = None
-    ) -> Tensor:
+        self, outputs: "MaskFormerForInstanceSegmentationOutput", target_size: Tuple[int, int] = None
+    ) -> "torch.Tensor":
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into semantic segmentation predictions. Only
         supports PyTorch.
 
         Args:
             outputs ([`MaskFormerForInstanceSegmentationOutput`]):
-                The outputs from [`MaskFormerForInstanceSegmentation`]
+                The outputs from [`MaskFormerForInstanceSegmentation`].
 
         Returns:
-            `torch.Tensor`: A tensor of shape `batch_size, height, width`
+            `torch.Tensor`: A tensor of shape `batch_size, height, width`.
         """
-        segmentation: Tensor = self.post_process_segmentation(outputs, target_size)
-        semantic_segmentation: Tensor = segmentation.argmax(dim=1)
+        segmentation = self.post_process_segmentation(outputs, target_size)
+        semantic_segmentation = segmentation.argmax(dim=1)
         return semantic_segmentation
 
     def post_process_panoptic_segmentation(
         self,
-        outputs: MaskFormerForInstanceSegmentationOutput,
-        object_mask_threshold: Optional[float] = 0.8,
-        overlap_mask_area_threshold: Optional[float] = 0.8,
-        is_thing_map: Dict[int, bool] = None,
+        outputs: "MaskFormerForInstanceSegmentationOutput",
+        object_mask_threshold: float = 0.8,
+        overlap_mask_area_threshold: float = 0.8,
+        is_thing_map: Optional[Dict[int, bool]] = None,
     ) -> List[Dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
@@ -474,14 +471,14 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         Args:
             outputs ([`MaskFormerForInstanceSegmentationOutput`]):
-                The outputs from [`MaskFormerForInstanceSegmentation`]
-            object_mask_threshold (`float`, *optional*, defaults to `0.8`):
+                The outputs from [`MaskFormerForInstanceSegmentation`].
+            object_mask_threshold (`float`, *optional*, defaults to 0.8):
                 The object mask threshold.
-            overlap_mask_area_threshold (`float`, *optional*, defaults to `0.8`):
+            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold.
-            is_thing_map (`Dict[int, bool]`, *optional*, defaults to `None`):
-                Dictionary mapping class indices to either True or False, depending on whether or not they are a thing.
-                If not set, defaults to the `is_thing_map` of ADE20K-150 panoptic.
+            is_thing_map (`Dict[int, bool]`, *optional*):
+                Dictionary mapping class indices to either `True` or `False`, depending on whether or not they are a
+                thing. If not set, defaults to the `is_thing_map` of ADE20K-150 panoptic.
 
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
@@ -496,11 +493,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             # default to is_thing_map of COCO panoptic
             is_thing_map = {i: i <= 90 for i in range(201)}
         # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
-        class_queries_logits: Tensor = outputs.class_queries_logits
+        class_queries_logits = outputs.class_queries_logits
         # keep track of the number of labels, subtract -1 for null class
-        num_labels: int = class_queries_logits.shape[-1] - 1
+        num_labels = class_queries_logits.shape[-1] - 1
         # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_queries_logits: Tensor = outputs.masks_queries_logits
+        masks_queries_logits = outputs.masks_queries_logits
         # since all images are padded, they all have the same spatial dimensions
         _, _, height, width = masks_queries_logits.shape
         # for each query, the best scores and their indeces
@@ -514,38 +511,38 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(
                 mask_probs, pred_scores, pred_labels, object_mask_threshold, num_labels
             )
-            we_detect_something: bool = mask_probs.shape[0] > 0
+            we_detect_something = mask_probs.shape[0] > 0
 
-            segmentation: Tensor = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
+            segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
             segments: List[Dict] = []
 
             if we_detect_something:
-                current_segment_id: int = 0
+                current_segment_id = 0
                 # weight each mask by its score
                 mask_probs *= pred_scores.view(-1, 1, 1)
                 # find out for each pixel what is the most likely class to be there
-                mask_labels: Tensor = mask_probs.argmax(0)
+                mask_labels = mask_probs.argmax(0)
                 # mask_labels shape = [H,W] where each pixel has a class label
                 stuff_memory_list: Dict[str, int] = {}
                 # this is a map between stuff and segments id, the used it to keep track of the instances of one class
                 for k in range(pred_labels.shape[0]):
-                    pred_class: int = pred_labels[k].item()
+                    pred_class = pred_labels[k].item()
                     # check if pred_class is not a "thing", so it can be merged with other instance. For example, class "sky" cannot have more then one instance
                     is_stuff = not is_thing_map[pred_class]
                     # get the mask associated with the k class
-                    mask_k: Tensor = mask_labels == k
+                    mask_k = mask_labels == k
                     # create the area, since bool we just need to sum :)
-                    mask_k_area: Tensor = mask_k.sum()
+                    mask_k_area = mask_k.sum()
                     # this is the area of all the stuff in query k
                     # TODO not 100%, why are the taking the k query here????
-                    original_area: Tensor = (mask_probs[k] >= 0.5).sum()
+                    original_area = (mask_probs[k] >= 0.5).sum()
 
-                    mask_does_exist: bool = mask_k_area > 0 and original_area > 0
+                    mask_does_exist = mask_k_area > 0 and original_area > 0
 
                     if mask_does_exist:
                         # find out how much of the all area mask_k is using
-                        area_ratio: float = mask_k_area / original_area
-                        mask_k_is_overlapping_enough: bool = area_ratio.item() > overlap_mask_area_threshold
+                        area_ratio = mask_k_area / original_area
+                        mask_k_is_overlapping_enough = area_ratio.item() > overlap_mask_area_threshold
 
                         if mask_k_is_overlapping_enough:
                             # merge stuff regions

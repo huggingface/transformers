@@ -33,7 +33,7 @@ if is_torch_available():
         "MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MaskFormerForInstanceSegmentation",
         "MaskFormerModel",
-        "MaskFormerPretrainedModel",
+        "MaskFormerPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -46,7 +46,7 @@ if TYPE_CHECKING:
             MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             MaskFormerForInstanceSegmentation,
             MaskFormerModel,
-            MaskFormerPretrainedModel,
+            MaskFormerPreTrainedModel,
         )
 
 

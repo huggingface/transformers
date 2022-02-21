@@ -23,13 +23,13 @@ The abstract from the paper is the following:
 Tips:
 - During training, the authors of DETR did find it helpful to use auxiliary losses in the decoder, especially to help
   the model output the correct number of objects of each class. If you set the parameter `use_auxilary_loss` of
-  [`~transformers.MaskFormerConfig`] to `True`, then prediction feedforward neural networks and Hungarian losses
+  [`MaskFormerConfig`] to `True`, then prediction feedforward neural networks and Hungarian losses
   are added after each decoder layer (with the FFNs sharing parameters).
 - If you want to train the model in a distributed environment across multiple nodes, then one should update the
-  _get_num_masks_ function inside in the _MaskFormerLoss_ class of _modeling_maskformer.py_. When training on multiple nodes, this should be
+  `get_num_masks` function inside in the `MaskFormerLoss` class of `modeling_maskformer.py`. When training on multiple nodes, this should be
   set to the average number of target masks across all nodes, as can be seen in the original implementation [here](https://github.com/facebookresearch/MaskFormer/blob/da3e60d85fdeedcb31476b5edd7d328826ce56cc/mask_former/modeling/criterion.py#L169).
 - One can use [`MaskFormerFeatureExtractor`] to prepare images for the model.
-- To get the final segmentation, depending on the task, you can call [`~transformers.MaskFormerFeatureExtractor.post_process_semantic_segmentation`] or [`~transformers.MaskFormerFeatureExtractor.post_process_panoptic_segmentation`].
+- To get the final segmentation, depending on the task, you can call [`~MaskFormerFeatureExtractor.post_process_semantic_segmentation`] or [`~MaskFormerFeatureExtractor.post_process_panoptic_segmentation`].
 
 This model was contributed by [francesco](https://huggingface.co/francesco). The original code can be found [here](https://github.com/facebookresearch/MaskFormer).
 
@@ -52,9 +52,9 @@ This model was contributed by [francesco](https://huggingface.co/francesco). The
     - post_process_semantic_segmentation
     - post_process_panoptic_segmentation
 
-## MaskFormerPretrainedModel
+## MaskFormerPreTrainedModel
 
-[[autodoc]] MaskFormerPretrainedModel
+[[autodoc]] MaskFormerPreTrainedModel
 
 ## MaskFormerModel
 

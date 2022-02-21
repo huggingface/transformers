@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,20 +32,12 @@ if is_torch_available():
     import torch
 
     from transformers import MaskFormerForInstanceSegmentation, MaskFormerModel
-    from transformers.models.maskformer.modeling_maskformer import (
-        MaskFormerForInstanceSegmentationOutput,
-        MaskFormerOutput,
-    )
 
     if is_vision_available():
         from transformers import MaskFormerFeatureExtractor
 
 if is_vision_available():
     from PIL import Image
-
-# TODO change it once pushed to Facebook
-MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = ["/home/zuppif/Desktop/hf/models/maskformer-swin-small-coco"]
-MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = ["/home/zuppif/Desktop/hf/models/maskformer-swin-small-coco"]
 
 
 class MaskFormerModelTester:
@@ -114,8 +106,8 @@ class MaskFormerModelTester:
             model.to(torch_device)
             model.eval()
 
-            output: MaskFormerOutput = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-            output: MaskFormerOutput = model(pixel_values, output_hidden_states=True)
+            output = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+            output = model(pixel_values, output_hidden_states=True)
         # the correct shape of output.transformer_decoder_hidden_states ensure the correcteness of the
         # encoder and pixel decoder
         self.parent.assertEqual(
@@ -153,7 +145,7 @@ class MaskFormerModelTester:
             )
 
         with torch.no_grad():
-            result: MaskFormerForInstanceSegmentationOutput = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+            result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
             result = model(pixel_values)
 
             comm_check_on_output(result)
@@ -171,14 +163,8 @@ class MaskFormerModelTester:
 @require_torch
 class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            MaskFormerModel,
-            MaskFormerForInstanceSegmentation,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (MaskFormerModel, MaskFormerForInstanceSegmentation) if is_torch_available() else ()
+
     is_encoder_decoder = False
     test_torchscript = False
     test_pruning = False
@@ -230,7 +216,7 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in ["Francesco/maskformer-swin-small-coco"]:
             model = MaskFormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -243,7 +229,7 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
         }
 
         model = MaskFormerForInstanceSegmentation(MaskFormerConfig())
-        outputs: MaskFormerForInstanceSegmentationOutput = model(**inputs)
+        outputs = model(**inputs)
         self.assertTrue(outputs.loss is not None)
 
     def test_hidden_states_output(self):
@@ -283,9 +269,7 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
         model.to(torch_device)
         model.train()
 
-        outputs: MaskFormerForInstanceSegmentationOutput = model(
-            pixel_values, mask_labels=mask_labels, class_labels=class_labels
-        )
+        outputs = model(pixel_values, mask_labels=mask_labels, class_labels=class_labels)
 
         encoder_hidden_states = outputs.encoder_hidden_states[0]
         encoder_hidden_states.retain_grad()
@@ -321,7 +305,7 @@ def prepare_img():
 class MaskFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def model_checkpoints(self):
-        return MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[0]
+        return "Francesco/maskformer-swin-small-coco"
 
     @cached_property
     def default_feature_extractor(self):
@@ -339,7 +323,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(inputs_shape, (1, 3, 800, 1088))
 
         with torch.no_grad():
-            outputs: MaskFormerOutput = model(**inputs)
+            outputs = model(**inputs)
 
         expected_slice_hidden_state = torch.tensor(
             [[-0.0482, 0.9228, 0.4951], [-0.2547, 0.8017, 0.8527], [-0.0069, 0.3385, -0.0089]]
@@ -380,7 +364,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(inputs_shape, (1, 3, 800, 1088))
 
         with torch.no_grad():
-            outputs: MaskFormerForInstanceSegmentationOutput = model(**inputs)
+            outputs = model(**inputs)
         # masks_queries_logits
         masks_queries_logits = outputs.masks_queries_logits
         self.assertEqual(
@@ -416,6 +400,6 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         )
 
         with torch.no_grad():
-            outputs: MaskFormerForInstanceSegmentationOutput = model(**inputs)
+            outputs = model(**inputs)
 
         self.assertTrue(outputs.loss is not None)
