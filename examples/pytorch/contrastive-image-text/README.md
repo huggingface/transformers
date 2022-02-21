@@ -16,11 +16,11 @@ limitations under the License.
 
 # VisionTextDualEncoder and CLIP model training examples
 
-The following example showcases how to train a CLIP like vision-text dual encoder model
+The following example showcases how to train a CLIP-like vision-text dual encoder model
 using a pre-trained vision and text encoder.
 
 Such a model can be used for natural language image search and potentially zero-shot image classification.
-The model is inspired by the [CLIP](https://openai.com/blog/clip/) approach, introduced by Alec Radford et al.
+The model is inspired by [CLIP](https://openai.com/blog/clip/), introduced by Alec Radford et al.
 The idea is to train a vision encoder and a text encoder jointly to project the representation of images and their
 captions into the same embedding space, such that the caption embeddings are located near the embeddings
 of the images they describe.
@@ -39,7 +39,13 @@ wget http://images.cocodataset.org/annotations/annotations_trainval2017.zip
 wget http://images.cocodataset.org/annotations/image_info_test2017.zip
 cd ..
 ```
+```suggestion
 
+Having downloaded COCO dataset manually you should be able to load with the `ydshieh/coc_dataset_script` dataset loading script:
+
+```py
+COCO_DIR = "data"
+ds = datasets.load_dataset("ydshieh/coco_dataset_script", "2017", data_dir=COCO_DIR)
 ### Create a model from a vision encoder model and a text decoder model
 Next, we create a [VisionTextDualEncoderModel](https://huggingface.co/docs/transformers/model_doc/vision-text-dual-encoder#visiontextdualencoder).
 The `VisionTextDualEncoderModel` class let's you load any vision and text encoder model to create a dual encoder. 
@@ -77,7 +83,7 @@ Finally, we can run the example script to train the model:
 python examples/pytorch/contrastive-image-text/run_clip.py \
     --output_dir ./clip-roberta-finetuned \
     --model_name_or_path ./clip-roberta \
-    --data_dir $PWD/data \
+    --data_dir ./data \
     --dataset_name ydshieh/coco_dataset_script \
     --dataset_config_name=2017 \
     --image_column image_path \

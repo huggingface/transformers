@@ -16,8 +16,8 @@
 """
 Training a CLIP like dual encoder models using text and vision encoders in the library.
 
-The script can be used to train CLIP like models for languages other than english by using
-a text encoder pre-trained in the desired language. Currently this script support the following vision
+The script can be used to train CLIP like models for languages other than English by using
+a text encoder pre-trained in the desired language. Currently this script supports the following vision
 and text models:
 Vision models: ViT(https://huggingface.co/models?filter=vit), CLIP (https://huggingface.co/models?filter=clip)
 Text models: BERT, ROBERTa (https://huggingface.co/models?filter=fill-mask)
@@ -401,8 +401,8 @@ def main():
         train_dataset.set_transform(transform_images)
 
     if training_args.do_eval:
-        if "train" not in dataset:
-            raise ValueError("--do_train requires a train dataset")
+        if "validation" not in dataset:
+            raise ValueError("--do_eval requires a train validation")
         eval_dataset = dataset["validation"]
         if data_args.max_eval_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
@@ -424,7 +424,7 @@ def main():
 
     if training_args.do_predict:
         if "test" not in dataset:
-            raise ValueError("--do_train requires a train dataset")
+            raise ValueError("--do_predict requires a test dataset")
         test_dataset = dataset["test"]
         if data_args.max_eval_samples is not None:
             test_dataset = test_dataset.select(range(data_args.max_eval_samples))
