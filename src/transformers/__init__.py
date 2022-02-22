@@ -200,6 +200,7 @@ _import_structure = {
     ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
+    "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.data2vec": ["DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig", "Data2VecTextConfig"],
@@ -843,6 +844,14 @@ if is_torch_available():
             "ConvNextForImageClassification",
             "ConvNextModel",
             "ConvNextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.resnet"].extend(
+        [
+            "RESNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ResNetForImageClassification",
+            "ResNetModel",
+            "ResNetPreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -2509,6 +2518,7 @@ if TYPE_CHECKING:
     )
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
+    from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.data2vec import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig, Data2VecTextConfig
@@ -3049,6 +3059,12 @@ if TYPE_CHECKING:
             ConvNextForImageClassification,
             ConvNextModel,
             ConvNextPreTrainedModel,
+        )
+        from .models.resnet import (
+            RESNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ResNetForImageClassification,
+            ResNetModel,
+            ResNetPreTrainedModel,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
