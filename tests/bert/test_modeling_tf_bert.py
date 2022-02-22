@@ -168,7 +168,9 @@ class TFBertModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_model(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
         model = TFBertModel(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         sequence_output, pooled_output = model(inputs)
@@ -181,7 +183,9 @@ class TFBertModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_causal_lm_base_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_causal_lm_base_model(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
         config.is_decoder = True
         # config.add_cross_attention = False
         # config.use_cache = False
@@ -208,7 +212,7 @@ class TFBertModelTester:
         token_labels,
         choice_labels,
         encoder_hidden_states,
-        encoder_attention_mask,        
+        encoder_attention_mask,
     ):
         # config.is_decoder = True
         # config.add_cross_attention = True
@@ -272,7 +276,7 @@ class TFBertModelTester:
         token_labels,
         choice_labels,
         encoder_hidden_states,
-        encoder_attention_mask,         
+        encoder_attention_mask,
     ):
         # config.is_decoder = True
         # config.add_cross_attention = True
@@ -304,14 +308,14 @@ class TFBertModelTester:
         input_mask,
         sequence_labels,
         token_labels,
-        choice_labels,        
+        choice_labels,
     ):
         config.is_decoder = True
         # config.add_cross_attention = False
         config.use_cache = True
-        
+
         model = TFBertLMHeadModel(config=config)
-        
+
         # first forward pass
         outputs = model(input_ids, use_cache=True)
         outputs_use_cache_conf = model(input_ids)
@@ -343,8 +347,9 @@ class TFBertModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask).last_hidden_state
-        output_from_past = model(next_tokens, past_key_values=outputs.past_key_values, attention_mask=attn_mask).last_hidden_state
-
+        output_from_past = model(
+            next_tokens, past_key_values=outputs.past_key_values, attention_mask=attn_mask
+        ).last_hidden_state
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
@@ -367,9 +372,9 @@ class TFBertModelTester:
         config.is_decoder = True
         # config.add_cross_attention = False
         config.use_cache = True
-        
+
         model = TFBertLMHeadModel(config=config)
-        
+
         # create attention mask
         half_seq_length = self.seq_length // 2
         attn_mask_begin = tf.ones((self.batch_size, half_seq_length), dtype=tf.int32)
@@ -409,7 +414,7 @@ class TFBertModelTester:
         input_mask,
         sequence_labels,
         token_labels,
-        choice_labels,       
+        choice_labels,
     ):
         config.is_decoder = True
         config.add_cross_attention = False
@@ -434,7 +439,9 @@ class TFBertModelTester:
         next_attention_mask = tf.concat([input_mask, next_attn_mask], axis=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask).last_hidden_state
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values).last_hidden_state
+        output_from_past = model(
+            next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values
+        ).last_hidden_state
 
         self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
 
@@ -456,7 +463,7 @@ class TFBertModelTester:
         token_labels,
         choice_labels,
         encoder_hidden_states,
-        encoder_attention_mask,       
+        encoder_attention_mask,
     ):
         config.is_decoder = True
         config.add_cross_attention = True
@@ -659,26 +666,26 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
     def test_model(self):
         """Test the base model"""
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)        
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_causal_lm_base_model(self):
         """Test the base model of the causal LM model
 
-            is_decoder: True
-            add_cross_attention: False
-            encoder outputs: None        
+        is_decoder: True
+        add_cross_attention: False
+        encoder outputs: None
         """
         # (new added)
         # (already included in `test_for_causal_lm` though)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_causal_lm_base_model(*config_and_inputs)        
+        self.model_tester.create_and_check_causal_lm_base_model(*config_and_inputs)
 
     def test_model_as_decoder(self):
         """Test the base model as a decoder
-        
-            is_decoder: True
-            add_cross_attention: True
-            encoder outputs: passed
+
+        is_decoder: True
+        add_cross_attention: True
+        encoder outputs: passed
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
@@ -689,20 +696,20 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 
     def test_for_causal_lm(self):
         """Test the causal LM model
-        
-            is_decoder: True
-            add_cross_attention: False
-            encoder outputs: None
+
+        is_decoder: True
+        add_cross_attention: False
+        encoder outputs: None
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_lm_head(*config_and_inputs)
 
     def test_causal_lm_model_as_decoder(self):
         """Test the causal LM model as a decoder
-        
-            is_decoder: True
-            add_cross_attention: True
-            encoder outputs: passed
+
+        is_decoder: True
+        add_cross_attention: True
+        encoder outputs: passed
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_causal_lm_model_as_decoder(*config_and_inputs)
@@ -713,26 +720,23 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         inputs:
             input_ids
             attention_mask
-            lm_labels                
+            lm_labels
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_causal_lm_model_past(*config_and_inputs)
 
     def test_causal_lm_model_past_with_attn_mask(self):
-        """Test the causal LM model with `past_key_values` + `attention_mask`
-        """
+        """Test the causal LM model with `past_key_values` + `attention_mask`"""
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_causal_lm_model_past_with_attn_mask(*config_and_inputs)
 
     def test_causal_lm_model_past_with_large_inputs(self):
-        """`test_causal_lm_model_past_with_attn_mask` with a longer input sequence
-        """
+        """`test_causal_lm_model_past_with_attn_mask` with a longer input sequence"""
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_causal_lm_model_past_large_inputs(*config_and_inputs)
 
     def test_decoder_model_past_with_large_inputs(self):
-        """`test_causal_lm_based_model_past_with_attn_mask` with a longer input sequence
-        """
+        """`test_causal_lm_based_model_past_with_attn_mask` with a longer input sequence"""
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
