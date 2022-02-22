@@ -88,7 +88,6 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFRobertaForMultipleChoice",  # TODO: fix
     "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
     "SeparableConv1D",  # Building part of bigger (tested) model.
-    "Data2VecAudioModel",  # TODO: Add tests
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -170,7 +169,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFWav2Vec2ForCTC",
     "TFHubertForCTC",
     "Data2VecAudioModel",  # TODO: Fix
-    "Data2VecAudioForPreTraining",  # TODO: Fix
 ]
 
 # This is to make sure the transformers module imported is the one in the repo.

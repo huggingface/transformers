@@ -46,7 +46,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from .configuration_data2vec import Data2VecTextConfig
+from .configuration_data2vec_text import Data2VecTextConfig
 
 
 logger = logging.get_logger(__name__)
