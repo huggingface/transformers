@@ -368,10 +368,17 @@ class TokenizerTesterMixin:
         # check if converting back to original text works
         reverse_text = tokenizer.convert_tokens_to_string(tokens)
 
-        if self.test_sentencepiece_ignore_case:
-            reverse_text = reverse_text.lower()
+        # All tokenizers pass this test without the below commented out code.
+        # if self.test_sentencepiece_ignore_case:
+        #     reverse_text = reverse_text.lower()
 
         self.assertEqual(reverse_text, text)
+
+        input_ids = tokenizer(text).input_ids
+        tokens_including_special = tokenizer.convert_ids_to_tokens(input_ids)
+        reverse_text = tokenizer.convert_tokens_to_string(tokens_including_special)
+
+        self.assertEqual(len(tokenizer.tokenize(reverse_text)), len(input_ids))
 
     def test_subword_regularization_tokenizer(self) -> None:
         if not self.test_sentencepiece:
