@@ -292,6 +292,6 @@ class UniSpeechConfig(PretrainedConfig):
         # pretraining loss
         self.replace_prob = replace_prob
 
-        @property
-        def inputs_to_logits_ratio(self):
-            return math.prod(conv_stride)
+    @property
+    def inputs_to_logits_ratio(self):
+        return math.prod(self.conv_stride)

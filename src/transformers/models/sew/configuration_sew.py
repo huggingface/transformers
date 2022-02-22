@@ -246,6 +246,6 @@ class SEWConfig(PretrainedConfig):
         self.use_weighted_layer_sum = use_weighted_layer_sum
         self.classifier_proj_size = classifier_proj_size
 
-        @property
-        def inputs_to_logits_ratio(self):
-            return math.prod(conv_stride)
+    @property
+    def inputs_to_logits_ratio(self):
+        return math.prod(self.conv_stride)

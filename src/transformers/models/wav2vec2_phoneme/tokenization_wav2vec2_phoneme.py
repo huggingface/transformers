@@ -334,7 +334,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             char_repetitions = len(tokens) * [1]
 
         # filter self.pad_token which is used as CTC-blank token
-        #        filtered_tokens = list(filter(lambda token: token != self.pad_token, tokens))
         processed_chars = list(filter(lambda char: char != self.pad_token, chars))
 
         # also filter self.word_delimiter_token if not not
@@ -459,6 +458,15 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             output_char_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output character offsets. Character offsets can be used in combination with the
                 sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
+
+                <Tip>
+
+                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                understand how to make use of `output_word_offsets`.
+                [`~model.wav2vec2_phoneme.tokenization_wav2vec2_phoneme.batch_decode`] works analogous with phonemes.
+
+                </Tip>
+
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
 
@@ -500,6 +508,16 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             output_char_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output character offsets. Character offsets can be used in combination with the
                 sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
+
+                <Tip>
+
+                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                understand how to make use of `output_word_offsets`.
+                [`~model.wav2vec2_phoneme.tokenization_wav2vec2_phoneme.batch_decode`] works analogous with phonemes
+                and batched output.
+
+                </Tip>
+
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
 

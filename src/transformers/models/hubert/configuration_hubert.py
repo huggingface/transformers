@@ -251,6 +251,6 @@ class HubertConfig(PretrainedConfig):
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
 
-        @property
-        def inputs_to_logits_ratio(self):
-            return math.prod(conv_stride)
+    @property
+    def inputs_to_logits_ratio(self):
+        return math.prod(self.conv_stride)

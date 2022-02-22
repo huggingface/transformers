@@ -368,7 +368,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces: bool = True,
         group_tokens: bool = True,
         spaces_between_special_tokens: bool = False,
-        output_word_offsets: Optional[bool] = None,
+        output_word_offsets: Optional[bool] = False,
         output_char_offsets: Optional[bool] = False,
     ) -> str:
         """
@@ -550,11 +550,11 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         >>> # forward sample through model to get greedily predicted transcription ids
         >>> input_values = feature_extractor(sample["audio"]["array"], return_tensors="pt").input_values
-        >>> logits = model(input_values).logits
+        >>> logits = model(input_values).logits[0]
         >>> pred_ids = torch.argmax(logits, axis=-1)
 
         >>> # retrieve word stamps (analogous commands for `output_char_offsets`)
-        >>> outputs = tokenizer.batch_decode(pred_ids, output_word_offsets=True)
+        >>> outputs = tokenizer.decode(pred_ids, output_word_offsets=True)
         >>> # compute `time_offset` in seconds as product of downsampling ratio and sampling_rate
         >>> time_offset = model.config.inputs_to_logits_ratio / feature_extractor.sampling_rate
 
@@ -569,6 +569,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         >>> # compare word offsets with audio `common_voice_en_100038.mp3` online on the dataset viewer:
         >>> # https://huggingface.co/datasets/common_voice/viewer/en/train
         >>> word_offset
+        >>> # [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES',
+        >>> # 'start_time': 1.64, 'end_time': 1.90}, {'word': 'MILISANDRA',
+        >>> # 'start_time': 2.26, 'end_time': 2.9}, {'word': 'LOOK', 'start_time': 3.0, 'end_time': 3.16}, ...
         ```"""
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)
