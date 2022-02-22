@@ -3,11 +3,12 @@ from typing import List, Optional, Union
 
 import torch
 
+
 def is_single_int_tensor(seq):
     return (
-        isinstance(seq, torch.Tensor) 
-        and seq.dtype in [torch.int16, torch.int32, torch.int64] and len(seq.size()) == 1
+        isinstance(seq, torch.Tensor) and seq.dtype in [torch.int16, torch.int32, torch.int64] and len(seq.size()) == 1
     )
+
 
 class Constraint(ABC):
     r"""Abstract base class for all constraints that can be applied during generation.
@@ -172,7 +173,7 @@ class PhrasalConstraint(Constraint):
         # move to cpu to guarantee no device issues.
         if isinstance(token_id, torch.Tensor):
             token_id = token_id.cpu()
-            
+
         return token_id.cpu() == self.token_ids[self.fulfilled_idx + 1].cpu()
 
     def update(self, token_id: int):
@@ -215,13 +216,12 @@ class DisjunctiveTrie:
         r"""
         A helper class that builds a trie with the words represented in `nested_token_ids`.
 
-        For example, if `nested_token_ids==[[1,2,3], [1,2,4], [1,5,6]]`, then the trie is:
-        1 -> 2 -> 3
-         \     -> 4
+        For example, if `nested_token_ids==[[1,2,3], [1,2,4], [1,5,6]]`, then the trie is: 1 -> 2 -> 3
+         \ -> 4
           -> 5 -> 6
         """
         self.max_height = max([len(one) for one in nested_token_ids])
-    
+
         root = dict()
         for token_ids in nested_token_ids:
             level = root
@@ -234,30 +234,28 @@ class DisjunctiveTrie:
             level[-1] = dict()
 
         self.trie = root
-    
-        
+
     def next_tokens(self, current_seq):
-        '''
-        The next possible tokens that will progress the trie,
-        given the current sequence of tokens in `current_seq`.
+        """
+        The next possible tokens that will progress the trie, given the current sequence of tokens in `current_seq`.
 
         -1 in next_tokens refers to end of some constraint
-        '''
+        """
         start = self.trie
 
         for current_token in current_seq:
             current_token = current_token if isinstance(current_token, int) else current_token.tolist()
             start = start[current_token]
-        
+
         next_tokens = list(start.keys())
-        
+
         return next_tokens
-    
+
     def reached_leaf(self, current_seq):
         next_tokens = self.next_tokens(current_seq)
-    
+
         return -1 in next_tokens
-        
+
 
 class DisjunctiveConstraint(Constraint):
     r"""
@@ -265,12 +263,13 @@ class DisjunctiveConstraint(Constraint):
 
     Args:
         constraints (`List[Constraint]`):
-            The list of [`Constraint`] objects, fulfillment of just one of which fulfills this [`DisjunctiveConstraint`].
+            The list of [`Constraint`] objects, fulfillment of just one of which fulfills this
+            [`DisjunctiveConstraint`].
     """
 
     def __init__(self, nested_token_ids: List[Constraint]):
         super(Constraint, self).__init__()
-        
+
         self.token_ids = nested_token_ids
         self._check_valid(self.token_ids)
 
@@ -279,16 +278,16 @@ class DisjunctiveConstraint(Constraint):
         self.seqlen = self.trie.max_height
         self.current_seq = []
         self.completed = False
-    
+
     def _check_valid(self, nested_token_ids):
         """
         Checks whether nested_token_ids is valid.
         1. Checks Type
         2. Checks for illegal subsets
-            We're checking if there is a `seq_k` in `nested_token_ids` such that
-            `seq_k` is 100% a subset found in some seq in `nested_token_ids`.
-            We can't allow this because it leads to a perverse interpretation of "completeness".
-            Luckily, we only need to check the beginning of the sequence since it's a trie representation.
+            We're checking if there is a `seq_k` in `nested_token_ids` such that `seq_k` is 100% a subset found in some
+            seq in `nested_token_ids`. We can't allow this because it leads to a perverse interpretation of
+            "completeness". Luckily, we only need to check the beginning of the sequence since it's a trie
+            representation.
         """
         if not isinstance(nested_token_ids, list):
             nested_token_ids = nested_token_ids.tolist()
@@ -298,16 +297,18 @@ class DisjunctiveConstraint(Constraint):
             is_tensor = isinstance(seq_k, torch.Tensor)
             is_int_list = isinstance(seq_k, List) and isinstance(seq_k[0], int)
             is_int_tensor = is_single_int_tensor(seq_k)
-            
+
             not_positive = torch.any(seq_k < 0) if is_tensor else len([t for t in seq_k if t < 0]) > 0
             if isinstance(seq_k, int) or not (is_int_list or is_int_tensor) or not_positive:
-                raise ValueError(f"Sequences within `nested_token_ids` has to be a single list or tensor of positive integers but is {seq_k}")
+                raise ValueError(
+                    f"Sequences within `nested_token_ids` has to be a single list or tensor of positive integers but is {seq_k}"
+                )
 
             seq_k = seq_k.tolist() if is_int_tensor else seq_k
-            for i, seq_i in enumerate(nested_token_ids[k+1:]):
+            for i, seq_i in enumerate(nested_token_ids[k + 1 :]):
                 seq_i = seq_i.tolist() if is_single_int_tensor(seq_i) else seq_i
-                
-                if seq_k == seq_i[:len(seq_k)] or seq_k[:len(seq_i)] == seq_i:
+
+                if seq_k == seq_i[: len(seq_k)] or seq_k[: len(seq_i)] == seq_i:
                     raise ValueError(
                         "No sequence in `nested_token_ids` can be a complete subset of another, but found"
                         f" sequences {seq_k} and {seq_i}."
@@ -331,24 +332,24 @@ class DisjunctiveConstraint(Constraint):
 
         if isinstance(token_id, torch.Tensor):
             token_id = token_id.cpu()
-        
+
         # move to cpu to guarantee no device issues.
         return token_id in next_tokens
-        
+
     def update(self, token_id: int):
         stepped = False
         completed = False
         reset = False
-        
+
         if self.does_advance(token_id):
             self.current_seq.append(token_id)
             stepped = True
         else:
             reset = True
             self.reset()
-    
+
         completed = self.trie.reached_leaf(self.current_seq)
-        self.completed = completed    
+        self.completed = completed
 
         return stepped, completed, reset
 
@@ -387,7 +388,7 @@ class ConstraintListState:
         self.constraints = constraints
 
         # max # of steps required to fulfill a given constraint
-        self.max_seqlen = max([c.seqlen for c in constraints if isinstance(c, PhrasalConstraint)])
+        self.max_seqlen = max([c.seqlen for c in constraints])
         self.n_constraints = len(constraints)
         self.completed = False
 
@@ -435,7 +436,7 @@ class ConstraintListState:
                 token_list = token_list + [a for a in advance]
             else:
                 token_list.append(advance)
-                
+
         if len(token_list) == 0:
             return None
         else:
@@ -544,8 +545,3 @@ class ConstraintListState:
             new_state.pending_constraints = [constraint.copy() for constraint in self.pending_constraints]
 
         return new_state
-    
-    def check_complete(self):
-        pending = len(self.pending_constraints)
-        
-    

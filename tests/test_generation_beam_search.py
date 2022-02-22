@@ -25,7 +25,7 @@ from .test_modeling_common import floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers.generation_beam_constraints import PhrasalConstraint, DisjunctiveConstraint
+    from transformers.generation_beam_constraints import DisjunctiveConstraint, PhrasalConstraint
     from transformers.generation_beam_search import BeamHypotheses, BeamSearchScorer, ConstrainedBeamSearchScorer
 
 
@@ -263,10 +263,7 @@ class ConstrainedBeamSearchTester:
             force_tokens = torch.randint(10, 50, (1, 2)).type(torch.LongTensor)[0]
             disjunctive_tokens = torch.randint(10, 50, (2, 2)).type(torch.LongTensor)
 
-            constraints = [
-                PhrasalConstraint(force_tokens),
-                DisjunctiveConstraint(disjunctive_tokens)
-            ]
+            constraints = [PhrasalConstraint(force_tokens), DisjunctiveConstraint(disjunctive_tokens)]
             self.constraints = constraints
         # cannot be randomely generated
         self.eos_token_id = vocab_size + 1
@@ -322,7 +319,6 @@ class ConstrainedBeamSearchTester:
 
         # -10.0 is removed => -9.0 is worst score
         self.parent.assertAlmostEqual(beam_hyp.worst_score, -9.0 / (self.sequence_length**beam_hyp.length_penalty))
-
 
         # -5.0 is better than worst score => should not be finished
         self.parent.assertFalse(beam_hyp.is_done(-5.0, self.sequence_length))
@@ -467,16 +463,16 @@ class ConstrainedBeamSearchTester:
         self.parent.assertNotEqual(sequences[2, -1].item(), self.eos_token_id)
 
         # test that the constraint is indeed fulfilled
-        for (output, constraint) in [(s,c) for s in sequences for c in constraints]:
+        for (output, constraint) in [(s, c) for s in sequences for c in constraints]:
             forced_token_ids = constraint.token_ids
-            if isinstance(forced_token_ids, list): 
+            if isinstance(forced_token_ids, list):
                 # disjunctive case
                 flag = False
                 for token_ids in forced_token_ids:
                     if self._check_sequence_inside_sequence(output, token_ids):
                         flag = True
                         break
-                self.parent.assertEqual(flag, True)    
+                self.parent.assertEqual(flag, True)
             else:
                 self.parent.assertEqual(self._check_sequence_inside_sequence(output, forced_token_ids), True)
 
@@ -505,7 +501,7 @@ class ConstrainedBeamSearchTester:
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
         # set to same device. we don't care what device.
-        
+
         tensor_1, tensor_2 = tensor_1.cpu(), tensor_2.cpu()
 
         in_order = tensor_1.size(0) <= tensor_2.size(0)

@@ -1,0 +1,15 @@
+artifact_uri: file:///workspace/chanwookim/transformers/mlruns/0/6a7b95a85a3b4a0ab87004394b4ead49/artifacts
+end_time: 1645501076305
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+name: ''
+run_id: 6a7b95a85a3b4a0ab87004394b4ead49
+run_uuid: 6a7b95a85a3b4a0ab87004394b4ead49
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1645500796385
+status: 3
+tags: []
+user_id: root

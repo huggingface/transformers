@@ -17,18 +17,13 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch
 
 
 if is_torch_available():
     import torch
-    from torch import nn
 
-    from transformers.generation_beam_constraints import (
-        PhrasalConstraint,
-        DisjunctiveConstraint,
-        ConstraintListState
-    )
+    from transformers.generation_beam_constraints import DisjunctiveConstraint
 
 
 @require_torch
@@ -38,33 +33,18 @@ class ConstraintTest(unittest.TestCase):
         # dc.token_ids is a list of tensors, where each of those tensors is the same thing as
         # PhrasalConstraint.token_ids. We ensure this while keeping the initialization completely flexible.
 
-        cset = [
-            [1,2,4],
-            [1,2,3,4]
-        ]
+        cset = [[1, 2, 4], [1, 2, 3, 4]]
         dc = DisjunctiveConstraint(cset)
         self.assertTrue(isinstance(dc.token_ids, list))
-        self.assertTrue(False not in 
-            [isinstance(dc_i, torch.Tensor) for dc_i in dc.token_ids]
-        )
+        self.assertTrue(False not in [isinstance(dc_i, torch.Tensor) for dc_i in dc.token_ids])
 
-        dc = DisjunctiveConstraint(torch.LongTensor([
-            [1,2,4],
-            [1,2,3]
-        ]))
+        dc = DisjunctiveConstraint(torch.LongTensor([[1, 2, 4], [1, 2, 3]]))
         self.assertTrue(isinstance(dc.token_ids, list))
-        self.assertTrue(False not in 
-            [isinstance(dc_i, torch.Tensor) for dc_i in dc.token_ids]
-        )
+        self.assertTrue(False not in [isinstance(dc_i, torch.Tensor) for dc_i in dc.token_ids])
 
-        dc = DisjunctiveConstraint([
-            torch.LongTensor([1,2,4]),
-            torch.LongTensor([1,2,3,4,5])
-        ])
+        dc = DisjunctiveConstraint([torch.LongTensor([1, 2, 4]), torch.LongTensor([1, 2, 3, 4, 5])])
         self.assertTrue(isinstance(dc.token_ids, list))
-        self.assertTrue(False not in 
-            [isinstance(dc_i, torch.Tensor) for dc_i in dc.token_ids]
-        )
+        self.assertTrue(False not in [isinstance(dc_i, torch.Tensor) for dc_i in dc.token_ids])
 
     def test_check_illegal_input(self):
         # We can't have constraints that are complete subsets of another. This leads to a preverse
@@ -72,64 +52,55 @@ class ConstraintTest(unittest.TestCase):
         # It would mean that it generated [1,2] which fulfills it, but it's in the middle of potentially
         # fulfilling [1,2,3,4]. If we believe that [1,2,3] does fulfill the constraint, then the algorithm
         # will necessarily never reach [1,2,3,4], giving users a false sense of control (better to just not allow it).
-        cset = [
-            [1,2],
-            [1,2,3,4]
-        ]
-        
+        cset = [[1, 2], [1, 2, 3, 4]]
+
         with self.assertRaises(ValueError):
-            dc = DisjunctiveConstraint(cset)
-        
+            dc = DisjunctiveConstraint(cset)  # fails here
+            self.assertTrue(dc is None)  # flake8 complains otherwise for not using it
+
     def test_example_progression(self):
-        cset = [
-            [1,2,3],
-            [1,2,4]
-        ]
-        
+        cset = [[1, 2, 3], [1, 2, 4]]
+
         dc = DisjunctiveConstraint(cset)
-        
+
         stepped, completed, reset = dc.update(1)
-        desired = stepped == True and completed == False and reset == False
+        desired = stepped is True and completed is False and reset is False
         self.assertTrue(desired)
         self.assertTrue(not dc.completed)
         self.assertTrue(dc.current_seq == [1])
 
         stepped, completed, reset = dc.update(2)
-        desired = stepped == True and completed == False and reset == False
+        desired = stepped is True and completed is False and reset is False
         self.assertTrue(desired)
         self.assertTrue(not dc.completed)
         self.assertTrue(dc.current_seq == [1, 2])
 
         stepped, completed, reset = dc.update(3)
-        desired = stepped == True and completed == True and reset == False
+        desired = stepped is True and completed is True and reset is False
         self.assertTrue(desired)
-        self.assertTrue(dc.completed) # Completed!
+        self.assertTrue(dc.completed)  # Completed!
         self.assertTrue(dc.current_seq == [1, 2, 3])
 
     def test_example_progression_unequal_three_mid_and_reset(self):
-        cset = [
-            [1,2,3],
-            [1,2,4,5],
-            [1,2,5]
-        ]
-        
+        cset = [[1, 2, 3], [1, 2, 4, 5], [1, 2, 5]]
+
         dc = DisjunctiveConstraint(cset)
-        
+
         stepped, completed, reset = dc.update(1)
         self.assertTrue(not dc.completed)
         self.assertTrue(dc.current_seq == [1])
 
         stepped, completed, reset = dc.update(2)
         self.assertTrue(not dc.completed)
-        self.assertTrue(dc.current_seq == [1,2])
+        self.assertTrue(dc.current_seq == [1, 2])
 
         stepped, completed, reset = dc.update(4)
         self.assertTrue(not dc.completed)
-        self.assertTrue(dc.current_seq == [1,2,4])
+        self.assertTrue(dc.current_seq == [1, 2, 4])
 
         stepped, completed, reset = dc.update(5)
-        self.assertTrue(dc.completed) # Completed!
-        self.assertTrue(dc.current_seq == [1,2,4,5])
+        self.assertTrue(dc.completed)  # Completed!
+        self.assertTrue(dc.current_seq == [1, 2, 4, 5])
 
         dc.reset()
 
@@ -141,9 +112,9 @@ class ConstraintTest(unittest.TestCase):
         stepped, completed, reset = dc.update(2)
         self.assertTrue(not dc.completed)
         self.assertTrue(dc.remaining() == 2)
-        self.assertTrue(dc.current_seq == [1,2])
+        self.assertTrue(dc.current_seq == [1, 2])
 
         stepped, completed, reset = dc.update(5)
-        self.assertTrue(dc.completed) # Completed!
+        self.assertTrue(dc.completed)  # Completed!
         self.assertTrue(dc.remaining() == 0)
-        self.assertTrue(dc.current_seq == [1,2,5])
+        self.assertTrue(dc.current_seq == [1, 2, 5])

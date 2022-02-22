@@ -39,7 +39,7 @@ if is_torch_available():
         VisionEncoderDecoderModel,
         top_k_top_p_filtering,
     )
-    from transformers.generation_beam_constraints import PhrasalConstraint, DisjunctiveConstraint
+    from transformers.generation_beam_constraints import DisjunctiveConstraint, PhrasalConstraint
     from transformers.generation_beam_search import BeamSearchScorer, ConstrainedBeamSearchScorer
     from transformers.generation_logits_process import (
         ForcedBOSTokenLogitsProcessor,
@@ -2352,22 +2352,14 @@ class GenerationIntegrationTests(unittest.TestCase):
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
         force_phrase = tokenizer.encode(" scared", return_tensors="pt")[0]
-        flexible_phrases = tokenizer([
-            " scream",
-            " screams",
-            " screaming",
-            " screamed"
-        ])["input_ids"]
-        
+        flexible_phrases = tokenizer([" scream", " screams", " screaming", " screamed"])["input_ids"]
+
         constraints = [
             PhrasalConstraint(force_phrase),
             DisjunctiveConstraint(flexible_phrases),
         ]
 
-        starting_text = [
-            "The soldiers",
-            "The child"
-        ]
+        starting_text = ["The soldiers", "The child"]
 
         input_ids = tokenizer(starting_text, return_tensors="pt").input_ids.to(torch_device)
 
@@ -2382,15 +2374,74 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
 
         generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        
+
         self.assertListEqual(
             generated_text,
             [
                 "The soldiers, who were all scared and screaming at each other as they tried to get out of the",
-                "The child was taken to a local hospital where she screamed and scared for her life, police said."
+                "The child was taken to a local hospital where she screamed and scared for her life, police said.",
             ],
         )
 
+    @slow
+    def test_constrained_beam_search_mixed_mixin(self):
+        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        force_word = "scared"
+        force_flexible = ["scream", "screams", "screaming", "screamed"]
+
+        force_words_ids = [
+            tokenizer([force_word], add_prefix_space=True, add_special_tokens=False).input_ids,
+            tokenizer(force_flexible, add_prefix_space=True, add_special_tokens=False).input_ids,
+        ]
+
+        starting_text = ["The soldiers", "The child"]
+
+        input_ids = tokenizer(starting_text, return_tensors="pt").input_ids.to(torch_device)
+
+        outputs = model.generate(
+            input_ids,
+            force_words_ids=force_words_ids,
+            num_beams=10,
+            num_return_sequences=1,
+            no_repeat_ngram_size=1,
+            remove_invalid_values=True,
+        )
+
+        generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "The soldiers, who were all scared and screaming at each other as they tried to get out of the",
+                "The child was taken to a local hospital where she screamed and scared for her life, police said.",
+            ],
+        )
+
+    @slow
+    def test_constrained_beam_search_example_translation_mixin(self):
+        tokenizer = AutoTokenizer.from_pretrained("t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+
+        encoder_input_str = "translate English to German: How old are you?"
+        force_words = ["sind"]
+
+        input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
+        force_words_ids = tokenizer(force_words, add_special_tokens=False, return_tensors="pt").input_ids
+
+        outputs = model.generate(
+            input_ids,
+            force_words_ids=force_words_ids,
+            num_beams=10,
+            num_return_sequences=1,
+            no_repeat_ngram_size=1,
+            remove_invalid_values=True,
+        )
+
+        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(outputs, ["Wie alter sind Sie?"])
 
     @slow
     def test_constrained_beam_search_example_integration(self):
