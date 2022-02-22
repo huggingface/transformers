@@ -29,6 +29,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
+    from torch import nn
 
     from transformers import ResNetForImageClassification, ResNetModel
     from transformers.models.resnet.modeling_resnet import RESNET_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -44,35 +45,31 @@ class ResNetModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=3,
         image_size=32,
         num_channels=3,
-        num_stages=4,
-        hidden_sizes=[10, 20, 30, 40],
-        depths=[2, 2, 3, 2],
+        hidden_sizes=[10, 10, 20, 30, 40],
+        depths=[1, 1, 2, 1],
         is_training=True,
         use_labels=True,
-        intermediate_size=37,
-        hidden_act="gelu",
-        type_sequence_label_size=10,
-        initializer_range=0.02,
+        hidden_act="relu",
         num_labels=3,
         scope=None,
+        type_sequence_label_size=10,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
-        self.num_stages = num_stages
         self.hidden_sizes = hidden_sizes
         self.depths = depths
         self.is_training = is_training
         self.use_labels = use_labels
-        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
+        self.num_labels = num_labels
         self.scope = scope
+        self.type_sequence_label_size = type_sequence_label_size
+        self.num_stages = len(hidden_sizes) - 1  # -1 sinze hidden states is also use in the embeddings
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -90,10 +87,7 @@ class ResNetModelTester:
             num_channels=self.num_channels,
             hidden_sizes=self.hidden_sizes,
             depths=self.depths,
-            num_stages=self.num_stages,
             hidden_act=self.hidden_act,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -102,6 +96,9 @@ class ResNetModelTester:
         model.eval()
         result = model(pixel_values)
         # expected last hidden states: B, C, H // 32, W // 32
+        print(
+            result.last_hidden_state.shape,
+        )
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
@@ -186,6 +183,29 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Model doesn't have attention layers")
     def test_attention_outputs(self):
         pass
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            for name, module in model.named_modules():
+                # if isinstance(module, nn.Conv2d):
+                #     print(module.weight)
+                #     self.assertTrue(torch.all(module.weight >= 0))
+
+                if isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
+                    self.assertTrue(
+                        torch.all(module.weight == 1),
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+                    # )
+                    self.assertTrue(
+                        torch.all(module.bias == 0),
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+
+        self.assertTrue(True)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -316,11 +336,15 @@ def prepare_img():
 class ResNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("") if is_vision_available() else None
+        return (
+            AutoFeatureExtractor.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ResNetForImageClassification.from_pretrained("").to(torch_device)
+        model = ResNetForImageClassification.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -334,6 +358,6 @@ class ResNetModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.0260, -0.4739, 0.1911]).to(torch_device)
+        expected_slice = torch.tensor([-9.9593, -7.9535, -6.8911]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

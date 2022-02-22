@@ -12,232 +12,192 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert ResNet checkpoints from the original repository.
-
-URL: https://github.com/facebookresearch/ConvNeXt"""
+"""Convert ResNet checkpoints from the original repository."""
 
 
 import argparse
 import json
+from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
+from typing import List
 
 import torch
-from PIL import Image
+import torch.nn as nn
+from torch import Tensor
 
-import requests
+import timm
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import ResNetConfig, ConvNextFeatureExtractor, ResNetForImageClassification
+from transformers import AutoFeatureExtractor, ResNetConfig, ResNetForImageClassification
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
-logger = logging.get_logger(__name__)
+logger = logging.get_logger()
 
 
-def get_resnet_config(checkpoint_url):
-    config = ResNetConfig()
+@dataclass
+class Tracker:
+    module: nn.Module
+    traced: List[nn.Module] = field(default_factory=list)
+    handles: list = field(default_factory=list)
 
-    if "tiny" in checkpoint_url:
-        depths = [3, 3, 9, 3]
-        hidden_sizes = [96, 192, 384, 768]
-    if "small" in checkpoint_url:
-        depths = [3, 3, 27, 3]
-        hidden_sizes = [96, 192, 384, 768]
-    if "base" in checkpoint_url:
-        depths = [3, 3, 27, 3]
-        hidden_sizes = [128, 256, 512, 1024]
-    if "large" in checkpoint_url:
-        depths = [3, 3, 27, 3]
-        hidden_sizes = [192, 384, 768, 1536]
-    if "xlarge" in checkpoint_url:
-        depths = [3, 3, 27, 3]
-        hidden_sizes = [256, 512, 1024, 2048]
+    def _forward_hook(self, m, inputs: Tensor, outputs: Tensor):
+        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d)
+        if has_not_submodules:
+            self.traced.append(m)
 
-    if "1k" in checkpoint_url:
-        num_labels = 1000
-        filename = "imagenet-1k-id2label.json"
-        expected_shape = (1, 1000)
-    else:
-        num_labels = 21841
-        filename = "imagenet-22k-id2label.json"
-        expected_shape = (1, 21841)
+    def __call__(self, x: Tensor):
+        for m in self.module.modules():
+            self.handles.append(m.register_forward_hook(self._forward_hook))
+        self.module(x)
+        list(map(lambda x: x.remove(), self.handles))
+        return self
+
+    @property
+    def parametrized(self):
+        # check the len of the state_dict keys to see if we have learnable params
+        return list(filter(lambda x: len(list(x.state_dict().keys())) > 0, self.traced))
+
+
+@dataclass
+class ModuleTransfer:
+    src: nn.Module
+    dest: nn.Module
+    verbose: int = 0
+    src_skip: List = field(default_factory=list)
+    dest_skip: List = field(default_factory=list)
+
+    def __call__(self, x: Tensor):
+        """Transfer the weights of `self.src` to `self.dest` by performing a forward pass using `x` as input.
+        Under the hood we tracked all the operations in booth modules. :param x: [The input to the modules] :type x:
+        torch.tensor
+        """
+        dest_traced = Tracker(self.dest)(x).parametrized
+        src_traced = Tracker(self.src)(x).parametrized
+
+        src_traced = list(filter(lambda x: type(x) not in self.src_skip, src_traced))
+        dest_traced = list(filter(lambda x: type(x) not in self.dest_skip, dest_traced))
+
+        if len(dest_traced) != len(src_traced):
+            raise Exception(
+                f"Numbers of operations are different. Source module has {len(src_traced)} operations while destination module has {len(dest_traced)}."
+            )
+
+        for dest_m, src_m in zip(dest_traced, src_traced):
+            dest_m.load_state_dict(src_m.state_dict())
+            if self.verbose == 1:
+                print(f"Transfered from={src_m} to={dest_m}")
+
+
+def convert_weight_and_push(name: str, config: ResNetConfig, save_directory: Path):
+    print(f"Converting {name}...")
+    from_model = timm.create_model(name, pretrained=True)
+    our_model = ResNetForImageClassification(config)
+    module_transfer = ModuleTransfer(src=from_model, dest=our_model)
+    x = torch.randn((1, 3, 224, 224))
+    module_transfer(x)
+
+    assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
+
+    checkpoint_name = f"{name}-224-1k"
+
+    our_model.push_to_hub(
+        repo_path_or_name=save_directory / checkpoint_name,
+        organization="Francesco",
+        commit_message="Add model",
+        use_temp_dir=True,
+    )
+
+    print("Done!")
+
+
+def convert_weights_and_push(save_directory: Path, model_name: str = None):
+    filename = "imagenet-1k-id2label.json"
+    num_labels = 1000
+    expected_shape = (1, num_labels)
 
     repo_id = "datasets/huggingface/label-files"
-    config.num_labels = num_labels
+    num_labels = num_labels
     id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
-    if "1k" not in checkpoint_url:
-        # this dataset contains 21843 labels but the model only has 21841
-        # we delete the classes as mentioned in https://github.com/google-research/big_transfer/issues/18
-        del id2label[9205]
-        del id2label[15027]
-    config.id2label = id2label
-    config.label2id = {v: k for k, v in id2label.items()}
-    config.hidden_sizes = hidden_sizes
-    config.depths = depths
+
+    id2label = id2label
+    label2id = {v: k for k, v in id2label.items()}
+
+    ImageNetPreTrainedConfig = partial(ResNetConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)
+
+    names_to_config = {
+        "resnet18": ImageNetPreTrainedConfig(
+            depths=[2, 2, 2, 2], hidden_sizes=[64, 64, 128, 256, 512], layer_type="basic"
+        ),
+        "resnet26": ImageNetPreTrainedConfig(
+            depths=[2, 2, 2, 2], hidden_sizes=[64, 256, 512, 1024, 2048], layer_type="bottleneck"
+        ),
+        "resnet34": ImageNetPreTrainedConfig(
+            depths=[3, 4, 6, 3], hidden_sizes=[64, 64, 128, 256, 512], layer_type="basic"
+        ),
+        "resnet50": ImageNetPreTrainedConfig(
+            depths=[3, 4, 6, 3], hidden_sizes=[64, 256, 512, 1024, 2048], layer_type="bottleneck"
+        ),
+        "resnet101": ImageNetPreTrainedConfig(
+            depths=[3, 4, 23, 3], hidden_sizes=[64, 256, 512, 1024, 2048], layer_type="bottleneck"
+        ),
+        "resnet152": ImageNetPreTrainedConfig(
+            depths=[3, 8, 36, 3], hidden_sizes=[64, 256, 512, 1024, 2048], layer_type="bottleneck"
+        ),
+    }
+
+    if model_name:
+        convert_weight_and_push(model_name, names_to_config[model_name], save_directory)
+    else:
+        for name, config in names_to_config.items():
+            # from_model = timm.create_model(name, pretrained=True)
+            # our_model = ResNetForImageClassification(config)
+            # module_transfer = ModuleTransfer(src=from_model, dest=our_model)
+            # x = torch.randn((1, 3, 224, 224))
+            # module_transfer(x)
+
+            # assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
+
+            checkpoint_name = f"{name}-224-1k"
+
+            # our_model.push_to_hub(
+            #     repo_path_or_name=save_directory / checkpoint_name,
+            #     organization="Francesco",
+            #     commit_message="Add model",
+            #     use_temp_dir=True,
+            # )
+
+            feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
+            feature_extractor.push_to_hub(
+                repo_path_or_name=save_directory / checkpoint_name,
+                organization="Francesco",
+                commit_message="Add feature extractor",
+                use_temp_dir=True,
+            )
 
     return config, expected_shape
-
-
-def rename_key(name):
-    if "downsample_layers.0.0" in name:
-        name = name.replace("downsample_layers.0.0", "embeddings.patch_embeddings")
-    if "downsample_layers.0.1" in name:
-        name = name.replace("downsample_layers.0.1", "embeddings.norm")  # we rename to layernorm later on
-    if "downsample_layers.1.0" in name:
-        name = name.replace("downsample_layers.1.0", "stages.1.downsampling_layer.0")
-    if "downsample_layers.1.1" in name:
-        name = name.replace("downsample_layers.1.1", "stages.1.downsampling_layer.1")
-    if "downsample_layers.2.0" in name:
-        name = name.replace("downsample_layers.2.0", "stages.2.downsampling_layer.0")
-    if "downsample_layers.2.1" in name:
-        name = name.replace("downsample_layers.2.1", "stages.2.downsampling_layer.1")
-    if "downsample_layers.3.0" in name:
-        name = name.replace("downsample_layers.3.0", "stages.3.downsampling_layer.0")
-    if "downsample_layers.3.1" in name:
-        name = name.replace("downsample_layers.3.1", "stages.3.downsampling_layer.1")
-    if "stages" in name and "downsampling_layer" not in name:
-        # stages.0.0. for instance should be renamed to stages.0.layers.0.
-        name = name[: len("stages.0")] + ".layers" + name[len("stages.0") :]
-    if "stages" in name:
-        name = name.replace("stages", "encoder.stages")
-    if "norm" in name:
-        name = name.replace("norm", "layernorm")
-    if "gamma" in name:
-        name = name.replace("gamma", "layer_scale_parameter")
-    if "head" in name:
-        name = name.replace("head", "classifier")
-
-    return name
-
-
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
-
-
-@torch.no_grad()
-def convert_resnet_checkpoint(checkpoint_url, pytorch_dump_folder_path):
-    """
-    Copy/paste/tweak model's weights to our ResNet structure.
-    """
-
-    # define ResNet configuration based on URL
-    config, expected_shape = get_resnet_config(checkpoint_url)
-    # load original state_dict from URL
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
-    # rename keys
-    for key in state_dict.copy().keys():
-        val = state_dict.pop(key)
-        state_dict[rename_key(key)] = val
-    # add prefix to all keys expect classifier head
-    for key in state_dict.copy().keys():
-        val = state_dict.pop(key)
-        if not key.startswith("classifier"):
-            key = "resnet." + key
-        state_dict[key] = val
-
-    # load HuggingFace model
-    model = ResNetForImageClassification(config)
-    model.load_state_dict(state_dict)
-    model.eval()
-
-    # Check outputs on an image, prepared by ConvNextFeatureExtractor
-    size = 224 if "224" in checkpoint_url else 384
-    feature_extractor = ConvNextFeatureExtractor(size=size)
-    pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
-
-    logits = model(pixel_values).logits
-
-    # note: the logits below were obtained without center cropping
-    if checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_tiny_1k_224_ema.pth":
-        expected_logits = torch.tensor([-0.1210, -0.6605, 0.1918])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_small_1k_224_ema.pth":
-        expected_logits = torch.tensor([-0.4473, -0.1847, -0.6365])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_base_1k_224_ema.pth":
-        expected_logits = torch.tensor([0.4525, 0.7539, 0.0308])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_base_1k_384.pth":
-        expected_logits = torch.tensor([0.3561, 0.6350, -0.0384])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_large_1k_224_ema.pth":
-        expected_logits = torch.tensor([0.4174, -0.0989, 0.1489])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_large_1k_384.pth":
-        expected_logits = torch.tensor([0.2513, -0.1349, -0.1613])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_base_22k_224.pth":
-        expected_logits = torch.tensor([1.2980, 0.3631, -0.1198])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_large_22k_224.pth":
-        expected_logits = torch.tensor([1.2963, 0.1227, 0.1723])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_xlarge_22k_224.pth":
-        expected_logits = torch.tensor([1.7956, 0.8390, 0.2820])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_base_22k_1k_224.pth":
-        expected_logits = torch.tensor([-0.2822, -0.0502, -0.0878])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_base_22k_1k_384.pth":
-        expected_logits = torch.tensor([-0.5672, -0.0730, -0.4348])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_large_22k_1k_224.pth":
-        expected_logits = torch.tensor([0.2681, 0.2365, 0.6246])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_large_22k_1k_384.pth":
-        expected_logits = torch.tensor([-0.2642, 0.3931, 0.5116])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_xlarge_22k_1k_224_ema.pth":
-        expected_logits = torch.tensor([-0.6677, -0.1873, -0.8379])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/resnet/resnet_xlarge_22k_1k_384_ema.pth":
-        expected_logits = torch.tensor([-0.7749, -0.2967, -0.6444])
-    else:
-        raise ValueError(f"Unknown URL: {checkpoint_url}")
-
-    assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
-    assert logits.shape == expected_shape
-
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
-
-    print("Pushing model to the hub...")
-    model_name = "resnet"
-    if "tiny" in checkpoint_url:
-        model_name += "-tiny"
-    elif "small" in checkpoint_url:
-        model_name += "-small"
-    elif "base" in checkpoint_url:
-        model_name += "-base"
-    elif "xlarge" in checkpoint_url:
-        model_name += "-xlarge"
-    elif "large" in checkpoint_url:
-        model_name += "-large"
-    if "224" in checkpoint_url:
-        model_name += "-224"
-    elif "384" in checkpoint_url:
-        model_name += "-384"
-    if "22k" in checkpoint_url and "1k" not in checkpoint_url:
-        model_name += "-22k"
-    if "22k" in checkpoint_url and "1k" in checkpoint_url:
-        model_name += "-22k-1k"
-
-    model.push_to_hub(
-        repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-        organization="nielsr",
-        commit_message="Add model",
-    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--checkpoint_url",
-        default="https://dl.fbaipublicfiles.com/resnet/resnet_tiny_1k_224_ema.pth",
+        "--model_name",
+        default=None,
         type=str,
-        help="URL of the original ConvNeXT checkpoint you'd like to convert.",
+        help="The name of the model you wish to convert, it must be one of the supported resnet* architecture, (e.g. resnet18). If `None`, all of them will the converted",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
         default=None,
-        type=str,
+        type=Path,
         required=True,
         help="Path to the output PyTorch model directory.",
     )
 
     args = parser.parse_args()
-    convert_resnet_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path)
+    pytorch_dump_folder_path: Path = args.pytorch_dump_folder_path
+    pytorch_dump_folder_path.mkdir(exist_ok=True, parents=True)
+    convert_weights_and_push(pytorch_dump_folder_path, args.model_name)
