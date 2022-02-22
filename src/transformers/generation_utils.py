@@ -617,11 +617,11 @@ class GenerationMixin:
 
     def _get_logits_warper(
         self,
-        top_k: int = None,
-        top_p: float = None,
-        typical_p: float = None,
-        temperature: float = None,
-        num_beams: int = None,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        typical_p: Optional[float] = None,
+        temperature: Optional[float] = None,
+        num_beams: Optional[int] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsWarper`] instances

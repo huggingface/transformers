@@ -28,6 +28,7 @@ from .generation_tf_logits_process import (
     TFNoBadWordsLogitsProcessor,
     TFNoRepeatNGramLogitsProcessor,
     TFRepetitionPenaltyLogitsProcessor,
+    TFTemperatureLogitsWarper,
 )
 from .tf_utils import set_tensor_by_indices_to_value, shape_list
 from .utils import logging
@@ -558,9 +559,7 @@ class TFGenerationMixin:
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         do_sample = do_sample if do_sample is not None else self.config.do_sample
 
-        is_greedy_gen_mode = num_beams == 1 and do_sample is False
-
-        if is_greedy_gen_mode:
+        if num_beams == 1:
             return self._generate(
                 input_ids=input_ids,
                 max_length=max_length,
@@ -790,304 +789,34 @@ class TFGenerationMixin:
             cur_len < max_length
         ), f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
 
-        if num_beams == 1:
-            return self._generate_no_beam_search(
-                input_ids,
-                cur_len=cur_len,
-                max_length=max_length,
-                min_length=min_length,
-                do_sample=do_sample,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty,
-                no_repeat_ngram_size=no_repeat_ngram_size,
-                bad_words_ids=bad_words_ids,
-                pad_token_id=pad_token_id,
-                eos_token_id=eos_token_id,
-                batch_size=effective_batch_size,
-                vocab_size=vocab_size,
-                encoder_outputs=encoder_outputs,
-                attention_mask=attention_mask,
-                use_cache=use_cache,
-                return_dict_in_generate=return_dict_in_generate,
-                **model_kwargs,
-            )
-        else:
-            return self._generate_beam_search(
-                input_ids,
-                cur_len=cur_len,
-                max_length=max_length,
-                min_length=min_length,
-                do_sample=do_sample,
-                early_stopping=early_stopping,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty,
-                no_repeat_ngram_size=no_repeat_ngram_size,
-                bad_words_ids=bad_words_ids,
-                pad_token_id=pad_token_id,
-                eos_token_id=eos_token_id,
-                batch_size=effective_batch_size,
-                num_return_sequences=num_return_sequences,
-                length_penalty=length_penalty,
-                num_beams=num_beams,
-                vocab_size=vocab_size,
-                encoder_outputs=encoder_outputs,
-                attention_mask=attention_mask,
-                use_cache=use_cache,
-                forced_bos_token_id=forced_bos_token_id,
-                forced_eos_token_id=forced_eos_token_id,
-                return_dict_in_generate=return_dict_in_generate,
-                **model_kwargs,
-            )
-
-    def _generate_no_beam_search(
-        self,
-        input_ids,
-        cur_len,
-        max_length,
-        min_length,
-        do_sample,
-        temperature,
-        top_k,
-        top_p,
-        repetition_penalty,
-        no_repeat_ngram_size,
-        bad_words_ids,
-        pad_token_id,
-        eos_token_id,
-        batch_size,
-        vocab_size,
-        encoder_outputs,
-        attention_mask,
-        use_cache,
-        return_dict_in_generate,
-        **kwargs
-    ) -> Union[TFGreedySearchOutput, TFSampleOutput, tf.Tensor]:
-        """
-        Generate sequences for each example without beam search (num_beams == 1). All returned sequences are generated
-        independently.
-        """
-
-        # length of generated sentences / unfinished sentences
-        unfinished_sents = tf.ones_like(input_ids[:, 0])
-        sent_lengths = tf.ones_like(input_ids[:, 0]) * max_length
-
-        # defined for encoder-decoder models, None for decoder-only models
-        past = encoder_outputs
-
-        # init attention / hidden states / scores tuples
-        scores = () if (return_dict_in_generate and kwargs["output_scores"]) else None
-        decoder_attentions = () if (return_dict_in_generate and kwargs["output_attentions"]) else None
-        cross_attentions = () if (return_dict_in_generate and kwargs["output_attentions"]) else None
-        decoder_hidden_states = () if (return_dict_in_generate and kwargs["output_hidden_states"]) else None
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if self.config.is_encoder_decoder:
-            encoder_attentions = (
-                kwargs["encoder_attentions"] if (return_dict_in_generate and kwargs["encoder_attentions"]) else None
-            )
-            encoder_hidden_states = (
-                kwargs["encoder_hidden_states"]
-                if (return_dict_in_generate and kwargs["encoder_hidden_states"])
-                else None
-            )
-
-        while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(
-                input_ids,
-                past=past,
-                attention_mask=attention_mask,
-                use_cache=use_cache,
-                **kwargs,
-            )
-            outputs = self(
-                **model_inputs,
-                return_dict=True,
-                output_attentions=kwargs["output_attentions"],
-                output_hidden_states=kwargs["output_hidden_states"],
-            )
-            next_token_logits = outputs.logits[:, -1, :]  # (batch_size * num_beams, vocab_size)
-
-            # Store scores, attentions and hidden_states when required
-            if return_dict_in_generate:
-                if kwargs["output_scores"]:
-                    scores += (next_token_logits,)
-                if kwargs["output_attentions"]:
-                    decoder_attentions += (
-                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
-                    )
-                    if self.config.is_encoder_decoder:
-                        cross_attentions += (outputs.cross_attentions,)
-
-                if kwargs["output_hidden_states"]:
-                    decoder_hidden_states += (
-                        (outputs.decoder_hidden_states,)
-                        if self.config.is_encoder_decoder
-                        else (outputs.hidden_states,)
-                    )
-
-            # if model has past, then set the past variable to speed up decoding
-            if self._use_cache(outputs, use_cache):
-                past = outputs[1]
-
-            # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
-            if repetition_penalty != 1.0:
-                next_token_logits_penalties = _create_next_token_logits_penalties(
-                    input_ids, next_token_logits, repetition_penalty
-                )
-                next_token_logits = tf.math.multiply(next_token_logits, next_token_logits_penalties)
-
-            if no_repeat_ngram_size > 0:
-                # calculate a list of banned tokens to prevent repetitively generating the same ngrams
-                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
-                banned_tokens = calc_banned_ngram_tokens(input_ids, batch_size, no_repeat_ngram_size, cur_len)
-                # create banned_tokens boolean mask
-                banned_tokens_indices_mask = []
-                for banned_tokens_slice in banned_tokens:
-                    banned_tokens_indices_mask.append(
-                        [True if token in banned_tokens_slice else False for token in range(vocab_size)]
-                    )
-
-                next_token_logits = set_tensor_by_indices_to_value(
-                    next_token_logits, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
-                )
-
-            if bad_words_ids is not None:
-                # calculate a list of banned tokens according to bad words
-                banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
-
-                banned_tokens_indices_mask = []
-                for banned_tokens_slice in banned_tokens:
-                    banned_tokens_indices_mask.append(
-                        [True if token in banned_tokens_slice else False for token in range(vocab_size)]
-                    )
-
-                next_token_logits = set_tensor_by_indices_to_value(
-                    next_token_logits, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
-                )
-
-            # set eos token prob to zero if min_length is not reached
-            if eos_token_id is not None and cur_len < min_length:
-                # create eos_token_id boolean mask
-                is_token_logit_eos_token = tf.convert_to_tensor(
-                    [True if token == eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
-                )
-                eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [batch_size, vocab_size])
-
-                next_token_logits = set_tensor_by_indices_to_value(
-                    next_token_logits, eos_token_indices_mask, -float("inf")
-                )
-
-            if do_sample:
-                # Temperature (higher temperature => more likely to sample low probability tokens)
-                if temperature != 1.0:
-                    next_token_logits = next_token_logits / temperature
-                # Top-p/top-k filtering
-                next_token_logits = tf_top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
-                # Sample
-                next_token = tf.squeeze(
-                    tf.random.categorical(next_token_logits, dtype=tf.int32, num_samples=1), axis=1
-                )
-            else:
-                # Greedy decoding
-                next_token = tf.math.argmax(next_token_logits, axis=-1, output_type=tf.int32)
-
-            # update generations and finished sentences
-            if eos_token_id is not None:
-                # pad finished sentences if eos_token_id exist
-                tokens_to_add = next_token * unfinished_sents + (pad_token_id) * (1 - unfinished_sents)
-            else:
-                tokens_to_add = next_token
-
-            # add token and increase length by one
-            input_ids = tf.concat([input_ids, tf.expand_dims(tokens_to_add, -1)], 1)
-            cur_len = cur_len + 1
-
-            if eos_token_id is not None:
-                eos_in_sents = tokens_to_add == eos_token_id
-                # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
-                is_sents_unfinished_and_token_to_add_is_eos = tf.math.multiply(
-                    unfinished_sents, tf.cast(eos_in_sents, tf.int32)
-                )
-                sent_lengths = (
-                    sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
-                    + cur_len * is_sents_unfinished_and_token_to_add_is_eos
-                )
-
-                # unfinished_sents is set to zero if eos in sentence
-                unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
-
-            # stop when there is a </s> in each sentence, or if we exceed the maximum length
-            if tf.math.reduce_max(unfinished_sents) == 0:
-                break
-
-            # extend attention_mask for new generated input if only decoder
-            if self.config.is_encoder_decoder is False:
-                attention_mask = tf.concat(
-                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
-                )
-
-        # if there are different sentences lengths in the batch, some batches have to be padded
-        min_sent_length = tf.math.reduce_min(sent_lengths)
-        max_sent_length = tf.math.reduce_max(sent_lengths)
-        if min_sent_length != max_sent_length:
-            assert pad_token_id is not None, "`Pad_token_id` has to be defined if batches have different lengths"
-            # finished sents are filled with pad_token
-            padding = tf.ones([batch_size, max_sent_length.numpy()], dtype=tf.int32) * pad_token_id
-
-            # create length masks for tf.where operation
-            broad_casted_sent_lengths = tf.broadcast_to(
-                tf.expand_dims(sent_lengths, -1), [batch_size, max_sent_length]
-            )
-            broad_casted_range = tf.transpose(
-                tf.broadcast_to(tf.expand_dims(tf.range(max_sent_length), -1), [max_sent_length, batch_size])
-            )
-
-            decoded = tf.where(broad_casted_range < broad_casted_sent_lengths, input_ids, padding)
-        else:
-            decoded = input_ids
-
-        if return_dict_in_generate:
-            if do_sample:
-                if self.config.is_encoder_decoder:
-                    return TFSampleEncoderDecoderOutput(
-                        sequences=decoded,
-                        scores=scores,
-                        encoder_attentions=encoder_attentions,
-                        encoder_hidden_states=encoder_hidden_states,
-                        decoder_attentions=decoder_attentions,
-                        cross_attentions=cross_attentions,
-                        decoder_hidden_states=decoder_hidden_states,
-                    )
-                else:
-                    return TFSampleDecoderOnlyOutput(
-                        sequences=decoded,
-                        scores=scores,
-                        attentions=decoder_attentions,
-                        hidden_states=decoder_hidden_states,
-                    )
-            else:
-                if self.config.is_encoder_decoder:
-                    return TFGreedySearchEncoderDecoderOutput(
-                        sequences=decoded,
-                        scores=scores,
-                        encoder_attentions=encoder_attentions,
-                        encoder_hidden_states=encoder_hidden_states,
-                        decoder_attentions=decoder_attentions,
-                        cross_attentions=cross_attentions,
-                        decoder_hidden_states=decoder_hidden_states,
-                    )
-                else:
-                    return TFGreedySearchDecoderOnlyOutput(
-                        sequences=decoded,
-                        scores=scores,
-                        attentions=decoder_attentions,
-                        hidden_states=decoder_hidden_states,
-                    )
-        else:
-            return decoded
+        return self._generate_beam_search(
+            input_ids,
+            cur_len=cur_len,
+            max_length=max_length,
+            min_length=min_length,
+            do_sample=do_sample,
+            early_stopping=early_stopping,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            bad_words_ids=bad_words_ids,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            batch_size=effective_batch_size,
+            num_return_sequences=num_return_sequences,
+            length_penalty=length_penalty,
+            num_beams=num_beams,
+            vocab_size=vocab_size,
+            encoder_outputs=encoder_outputs,
+            attention_mask=attention_mask,
+            use_cache=use_cache,
+            forced_bos_token_id=forced_bos_token_id,
+            forced_eos_token_id=forced_eos_token_id,
+            return_dict_in_generate=return_dict_in_generate,
+            **model_kwargs,
+        )
 
     def _generate_beam_search(
         self,
@@ -1787,6 +1516,7 @@ class TFGenerationMixin:
         # 5. determine generation mode
         # TODO(Matt, Joao, Patrick) - add more use cases here
         is_greedy_gen_mode = (num_beams == 1) and do_sample is False
+        is_sample_gen_mode = (num_beams == 1) and do_sample is True
 
         # 6. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
@@ -1816,6 +1546,11 @@ class TFGenerationMixin:
                 **model_kwargs,
             )
 
+        elif is_sample_gen_mode:
+            # 8. prepare logits warper
+            logits_warper = self._get_logits_warper(
+                top_k=top_k, top_p=top_p, typical_p=typical_p, temperature=temperature, num_beams=num_beams
+            )
         # TODO(Matt, Joao, Patrick) - add more sub-generation methods here
 
     def _prepare_attention_mask_for_generation(
@@ -1955,6 +1690,31 @@ class TFGenerationMixin:
                 )
 
         return model_kwargs
+
+    def _get_logits_warper(
+        self, top_k: Optional[int] = None, top_p: Optional[float] = None, temperature: Optional[float] = None,
+    ) -> TFLogitsProcessorList:
+        """
+        This class returns a [`TFLogitsProcessorList`] list object that contains all relevant [`TFLogitsWarper`]
+        instances used for multinomial sampling.
+        """
+
+        # init warp parameters
+        top_k = top_k if top_k is not None else self.config.top_k
+        top_p = top_p if top_p is not None else self.config.top_p
+        temperature = temperature if temperature is not None else self.config.temperature
+        # instantiate warpers list
+        warpers = TFLogitsProcessorList()
+
+        # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
+        # all samplers can be found in `generation_utils_samplers.py`
+        if temperature is not None and temperature != 1.0:
+            warpers.append(TFTemperatureLogitsWarper(temperature))
+        if top_k is not None and top_k != 0:
+            warpers.append(TFTopKLogitsWarper(top_k=top_k, min_tokens_to_keep=1))
+        if top_p is not None and top_p < 1.0:
+            warpers.append(TFTopPLogitsWarper(top_p=top_p, min_tokens_to_keep=1))
+        return warpers
 
     def _get_logits_processor(
         self,
