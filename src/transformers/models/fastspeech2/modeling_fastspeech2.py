@@ -154,8 +154,7 @@ class FastSpeech2PositionalEmbedding(nn.Module):
         return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.bart.modeling_bart.
-# BartAttention with Bart->FastSpeech2
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->FastSpeech2
 class FastSpeech2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -490,7 +489,7 @@ class Postnet(nn.Module):
             x = conv(x)
         return x.transpose(1, 2)
 
-# # Copied from transformers.models.bart.modeling_bart.
+# Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
