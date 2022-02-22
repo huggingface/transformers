@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import collections
 import dataclasses
 import json
 import re
@@ -67,10 +66,7 @@ class HfArgumentParser(ArgumentParser):
         super().__init__(**kwargs)
         if dataclasses.is_dataclass(dataclass_types):
             dataclass_types = [dataclass_types]
-        if isinstance(dataclass_types, collections.Sequence):
-            self.dataclass_types = dataclass_types
-        else:
-            self.dataclass_types = list(dataclass_types)
+        self.dataclass_types = list(dataclass_types)
         for dtype in self.dataclass_types:
             self._add_dataclass_arguments(dtype)
 
