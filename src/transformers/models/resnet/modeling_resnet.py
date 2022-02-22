@@ -15,11 +15,11 @@
 """ PyTorch ResNet model."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -42,17 +42,16 @@ _FEAT_EXTRACTOR_FOR_DOC = "ConvNextFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = ""
-_EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
+_EXPECTED_OUTPUT_SHAPE = [1, 2048, 14, 14]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = ""
 _IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "",
+    "Francesco/resnet50-224-1k",
     # See all resnet models at https://huggingface.co/models?filter=resnet
 ]
-
 
 
 @dataclass
@@ -115,180 +114,216 @@ class ResNetClassifierOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Stochastic depth implementation
-# Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
-    DropConnect impl I created for EfficientNet, etc networks, however, the original name is misleading as 'Drop
-    Connect' is a different form of dropout in a separate paper... See discussion:
-    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
-    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
-    """
-    if drop_prob == 0.0 or not training:
-        return x
-    keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
-    random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
-    return output
-
-
-class ResNetDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob=None):
+class ResNetConvBnActLayer(nn.Sequential):
+    def __init__(
+        self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
+    ):
         super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, x):
-        return drop_path(x, self.drop_prob, self.training)
-
-
-class ResNetLayerNorm(nn.Module):
-    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
-    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
-    """
-
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
-        self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
-
-    def forward(self, x):
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
-
-
-class ResNetEmbeddings(nn.Module):
-    """This class is comparable to (and inspired by) the SwinEmbeddings class
-    found in src/transformers/models/swin/modeling_swin.py.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.patch_embeddings = nn.Conv2d(
-            config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size
+        self.conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=kernel_size // 2, bias=False
         )
-        self.layernorm = ResNetLayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.act = ACT2FN[activation] if activation is not None else nn.Identity()
+
+
+class ResNetEmbeddings(nn.Sequential):
+    """
+    ResNet Embedddings (stem) composed of a single aggressive convolution.
+    """
+
+    def __init__(self, num_channels: int, out_channels: int, activation: str = "relu"):
+        super().__init__()
+        self.embedder = ResNetConvBnActLayer(
+            num_channels, out_channels, kernel_size=7, stride=2, activation=activation
+        )
+        self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+
+class ResNetEmbeddings3x3(nn.Sequential):
+    """
+    Modified ResNet Embedddings (stem) proposed in [Bag of Tricks for Image Classification with Convolutional Neural
+    Networks](https://arxiv.org/pdf/1812.01187.pdf) The observation is that the computational cost of a convolution is
+    quadratic to the kernel width or height. A `7x7` convolution is `5.4` times more expensive than a `3x3`
+    convolution. So this tweak replacing the `7x7` convolution in the input stem with three conservative `3x3`
+    convolution.
+    """
+
+    def __init__(
+        self, num_channels: int, out_channels: int, hidden_channels: List[int] = None, activation: str = "relu"
+    ):
+        super().__init__()
+        if hidden_channels is None:
+            # default to stemD in the paper
+            hidden_channels = [32, 32]
+
+        hidden_channels = hidden_channels + [out_channels]
+
+        self.embedder = nn.Sequential(
+            ResNetConvBnActLayer(num_channels, hidden_channels[0], kernel_size=3, stride=2, activation=activation),
+            *[
+                ResNetConvBnActLayer(in_channels, out_channels, kernel_size=3, activation=activation)
+                for in_channels, out_channels in zip(hidden_channels, hidden_channels[1:])
+            ],
+        )
+        self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+
+class ResNetShortCut(nn.Sequential):
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
+        self.bn = nn.BatchNorm2d(out_channels)
+
+
+class ResNetBasicLayer(nn.Module):
+    """
+    A classic ResNet's residual layer composed by a two `3x3` convolutions.
+
+    Args:
+        in_channels (`int`):
+            The number of input channels.
+        out_channels (`int`):
+            The number of outputs channels.
+        stride (`int`, *optional`, defaults to 1):
+            The stride used in the first convolution.
+        activation (`int`, *optional*, defaults to `"relu"`):
+            The activation used by the layer.
+    """
+
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu"):
+        super().__init__()
+        should_apply_shortcut = in_channels != out_channels or stride != 1
+        self.shortcut = (
+            ResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+        )
+        self.layer = nn.Sequential(
+            ResNetConvBnActLayer(in_channels, out_channels, stride=stride),
+            ResNetConvBnActLayer(out_channels, out_channels, activation=None),
+        )
+        self.activation = ACT2FN[activation]
 
     def forward(self, pixel_values):
-        embeddings = self.patch_embeddings(pixel_values)
-        embeddings = self.layernorm(embeddings)
-        return embeddings
+        residual = pixel_values
+        pixel_values = self.layer(pixel_values)
+        residual = self.shortcut(residual)
+        pixel_values += residual
+        pixel_values = self.activation(pixel_values)
+        return pixel_values
 
 
-class ResNetLayer(nn.Module):
-    """This corresponds to the `Block` class in the original implementation.
-
-    There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
-    H, W) (2) [DwConv, Permute to (N, H, W, C), LayerNorm (channels_last), Linear, GELU, Linear]; Permute back
-
-    The authors used (2) as they find it slightly faster in PyTorch.
-
-    Args:
-        config ([`ResNetConfig`]): Model configuration class.
-        dim (`int`): Number of input channels.
-        drop_path (`float`): Stochastic depth rate. Default: 0.0.
+class ResNetBottleNeckLayer(nn.Module):
     """
 
-    def __init__(self, config, dim, drop_path=0):
+    A classic ResNet's bottleneck layer composed by a three `3x3` convolutions.
+
+    The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
+    convolution faster. The last `1x1` convolution remap the reduced features to `out_channels`.
+
+
+    Args:
+        in_channels (`int`):
+            The number of input channels.
+        out_channels (`int`):
+            The number of outputs channels.
+        stride (`int`, *optional`, defaults to 1):
+            The stride used in the first convolution.
+        activation (`int`, *optional*, defaults to `"relu"`):
+            The activation used by the layer.
+        reduction (`int`, *optional*, defaults to 4):
+            The reduction factor the block applies in the first `1x1` convolution.
+    """
+
+    def __init__(
+        self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu", reduction: int = 4
+    ):
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
-        self.layernorm = ResNetLayerNorm(dim, eps=1e-6)
-        self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
-        self.act = ACT2FN[config.hidden_act]
-        self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.layer_scale_parameter = (
-            nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
-            if config.layer_scale_init_value > 0
-            else None
+        should_apply_shortcut = in_channels != out_channels or stride != 1
+        reduces_channels = out_channels // reduction
+        self.shortcut = (
+            ResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
         )
-        self.drop_path = ResNetDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.layer = nn.Sequential(
+            ResNetConvBnActLayer(in_channels, reduces_channels, kernel_size=1),
+            ResNetConvBnActLayer(reduces_channels, reduces_channels, stride=stride),
+            ResNetConvBnActLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
+        )
+        self.activation = ACT2FN[activation]
 
-    def forward(self, hidden_states):
-        input = hidden_states
-        x = self.dwconv(hidden_states)
-        x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
-        x = self.layernorm(x)
-        x = self.pwconv1(x)
-        x = self.act(x)
-        x = self.pwconv2(x)
-        if self.layer_scale_parameter is not None:
-            x = self.layer_scale_parameter * x
-        x = x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
-
-        x = input + self.drop_path(x)
-        return x
+    def forward(self, pixel_values):
+        residual = pixel_values
+        pixel_values = self.layer(pixel_values)
+        residual = self.shortcut(residual)
+        pixel_values += residual
+        pixel_values = self.activation(pixel_values)
+        return pixel_values
 
 
-class ResNetStage(nn.Module):
-    """ConvNeXT stage, consisting of an optional downsampling layer + multiple residual blocks.
+class ResNetStage(nn.Sequential):
+    """
+    A ResNet stage composed by stacked layers.
 
     Args:
-        config ([`ResNetConfig`]): Model configuration class.
-        in_channels (`int`): Number of input channels.
-        out_channels (`int`): Number of output channels.
-        depth (`int`): Number of residual blocks.
-        drop_path_rates(`List[float]`): Stochastic depth rates for each layer.
+        in_channels (`int`):
+            Number of input channels.
+        out_channels (`int`):
+            Number of output channels.
+        stride (`int`, *optional*, defaults to 1):
+            The first layer stride, used to downsample the input.
+        depth (`int`,*optional*, defaults to 2):
+            The number of layers.
+        layer_type (`str`, *optional*, defaults to `"basic"`):
+            The type of layer, either `"basic"` or `"bottleneck"`.
+        activation (`int`, *optional*, defaults to `"relu"`):
+            The activation used by all layers.
     """
 
-    def __init__(self, config, in_channels, out_channels, kernel_size=2, stride=2, depth=2, drop_path_rates=None):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        stride: int = 2,
+        depth: int = 2,
+        layer_type: str = "basic",
+        activation: str = "relu",
+    ):
         super().__init__()
 
-        if in_channels != out_channels or stride > 1:
-            self.downsampling_layer = nn.Sequential(
-                ResNetLayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
-                nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
-            )
-        else:
-            self.downsampling_layer = nn.Identity()
-        drop_path_rates = drop_path_rates or [0.0] * depth
+        layer = ResNetBottleNeckLayer if layer_type == "bottleneck" else ResNetBasicLayer
+
         self.layers = nn.Sequential(
-            *[ResNetLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
+            # downsampling is done in the first layer with stride of 2
+            layer(in_channels, out_channels, stride=stride, activation=activation),
+            *[layer(out_channels, out_channels, activation=activation) for _ in range(depth - 1)],
         )
-
-    def forward(self, hidden_states):
-        hidden_states = self.downsampling_layer(hidden_states)
-        hidden_states = self.layers(hidden_states)
-        return hidden_states
 
 
 class ResNetEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ResNetConfig):
         super().__init__()
-        self.stages = nn.ModuleList()
-        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        cur = 0
-        prev_chs = config.hidden_sizes[0]
-        for i in range(config.num_stages):
-            out_chs = config.hidden_sizes[i]
-            stage = ResNetStage(
-                config,
-                in_channels=prev_chs,
-                out_channels=out_chs,
-                stride=2 if i > 0 else 1,
-                depth=config.depths[i],
-                drop_path_rates=drop_path_rates[cur],
+        self.stages = nn.ModuleList([])
+        # the first block doesn't downsample
+        self.stages.append(
+            ResNetStage(
+                config.hidden_sizes[0],
+                config.hidden_sizes[1],
+                stride=2 if config.downsample_in_first_stage else 1,
+                depth=config.depths[0],
+                layer_type=config.layer_type,
+                activation=config.hidden_act,
             )
-            self.stages.append(stage)
-            cur += config.depths[i]
-            prev_chs = out_chs
+        )
+        remaining_hidden_sizes = config.hidden_sizes[1:]
+        in_out_channels = zip(remaining_hidden_sizes, remaining_hidden_sizes[1:])
+        for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
+            self.stages.append(
+                ResNetStage(
+                    in_channels, out_channels, depth=depth, layer_type=config.layer_type, activation=config.hidden_act
+                )
+            )
 
-    def forward(self, hidden_states, output_hidden_states=False, return_dict=True):
+    def forward(
+        self, hidden_states: Tensor, output_hidden_states: bool = False, return_dict: bool = True
+    ) -> ResNetEncoderOutput:
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.stages):
@@ -321,16 +356,11 @@ class ResNetPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Conv2d):
+            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+        elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
+            nn.init.constant_(module.weight, 1)
+            nn.init.constant_(module.bias, 0)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ResNetModel):
@@ -370,13 +400,10 @@ class ResNetModel(ResNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-
-        self.embeddings = ResNetEmbeddings(config)
+        embeddings = ResNetEmbeddings3x3 if config.embeddings_type == "3x3d" else ResNetEmbeddings
+        self.embedder = embeddings(config.num_channels, config.hidden_sizes[0], config.hidden_act)
         self.encoder = ResNetEncoder(config)
-
-        # final layernorm layer
-        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
-
+        self.pooler = nn.AdaptiveAvgPool2d((1, 1))
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -389,16 +416,15 @@ class ResNetModel(ResNetPreTrainedModel):
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
-    def forward(self, pixel_values=None, output_hidden_states=None, return_dict=None):
+    def forward(
+        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+    ):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embedder(pixel_values)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -408,8 +434,7 @@ class ResNetModel(ResNetPreTrainedModel):
 
         last_hidden_state = encoder_outputs[0]
 
-        # global average pooling, (N, C, H, W) -> (N, C)
-        pooled_output = self.layernorm(last_hidden_state.mean([-2, -1]))
+        pooled_output = self.pooler(last_hidden_state)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -431,16 +456,14 @@ class ResNetModel(ResNetPreTrainedModel):
 class ResNetForImageClassification(ResNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
         self.num_labels = config.num_labels
-        self.resnet = ResNetModel(config)
-
-        # Classifier head
-        self.classifier = (
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.model = ResNetModel(config)
+        # classification head
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity(),
         )
-
-        # Initialize weights and apply final processing
+        # initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
@@ -460,14 +483,19 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.resnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs: ResNetModelOutput = self.model(
+            pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict
+        )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
         logits = self.classifier(pooled_output)
 
         loss = None
-        if labels is not None:
+
+        we_have_labels = labels is not None
+
+        if we_have_labels:
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -475,19 +503,18 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
-
             if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
+                criterion = MSELoss()
                 if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                    loss = criterion(logits.squeeze(), labels.squeeze())
                 else:
-                    loss = loss_fct(logits, labels)
+                    loss = criterion(logits, labels)
             elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                criterion = CrossEntropyLoss()
+                loss = criterion(logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+                criterion = BCEWithLogitsLoss()
+                loss = criterion(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output

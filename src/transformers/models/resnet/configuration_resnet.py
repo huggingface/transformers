@@ -21,17 +21,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "": "https://huggingface.co//resolve/main/config.json",
+    "resnet50-224-1k": "https://huggingface.co/Francesco/resnet50-224-1k/blob/main/config.json",
 }
-
 
 
 class ResNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ResNetModel`]. It is used to instantiate an
-    ConvNeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the ConvNeXT
-    [](https://huggingface.co/) architecture.
+    ResNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the resnet50 architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -41,31 +39,29 @@ class ResNetConfig(PretrainedConfig):
             The number of input channels.
         patch_size (`int`, optional, defaults to 4):
             Patch size to use in the patch embedding layer.
-        num_stages (`int`, optional, defaults to 4):
-            The number of stages in the model.
-        hidden_sizes (`List[int]`, *optional*, defaults to [96, 192, 384, 768]):
-            Dimensionality (hidden size) at each stage.
-        depths (`List[int]`, *optional*, defaults to [3, 3, 9, 3]):
+        hidden_sizes (`List[int]`, *optional*, defaults to [64, 256, 512, 1024, 2048]):
+            Dimensionality (hidden size) embeddings + at each stage .
+        depths (`List[int]`, *optional*, defaults to [3, 4, 6, 3]):
             Depth (number of blocks) for each stage.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+        embeddings_type (`str`, *optional*, defaults to `"classic"`):
+            The embedding layer to use, either `"classic"` or `"3x3"`. If `"classic"`, the original resnet embedding, a
+            single agressive convolution, is applied. If `"3x3"`, three `3x3` are applied instead.
+        layer_type="basic" (`str`, *optional*, defaults to `"bottleneck"`):
+            The layer to use, it can be either `"basic"` (`ResNetBasicLayer`) or `"bottleneck"`
+            (`ResNetBottleNeckLayer`).
+        hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        layer_scale_init_value (`float`, *optional*, defaults to 1e-6):
-            The initial value for the layer scale.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            The drop rate for stochastic depth.
+        downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
+            If `True`, the first stage will downsample the inputs using a `stride` of 2.
 
     Example:
     ```python
     >>> from transformers import ResNetModel, ResNetConfig
 
-    >>> # Initializing a ResNet resnet-tiny-224 style configuration
+    >>> # Initializing a ResNet resnet50-224 style configuration
     >>> configuration = ResNetConfig()
-    >>> # Initializing a model from the resnet-tiny-224 style configuration
+    >>> # Initializing a model from the resnet50-224 style configuration
     >>> model = ResNetModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -75,27 +71,20 @@ class ResNetConfig(PretrainedConfig):
     def __init__(
         self,
         num_channels=3,
-        patch_size=4,
-        num_stages=4,
         hidden_sizes=None,
         depths=None,
-        hidden_act="gelu",
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
-        layer_scale_init_value=1e-6,
-        drop_path_rate=0.0,
+        embeddings_type="classic",
+        layer_type="bottleneck",
+        hidden_act="relu",
+        downsample_in_first_stage=False,
         **kwargs
     ):
         super().__init__(**kwargs)
 
         self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.num_stages = num_stages
-        self.hidden_sizes = [96, 192, 384, 768] if hidden_sizes is None else hidden_sizes
-        self.depths = [3, 3, 9, 3] if depths is None else depths
+        self.hidden_sizes = [64, 256, 512, 1024, 2048] if hidden_sizes is None else hidden_sizes
+        self.depths = [3, 4, 6, 3] if depths is None else depths
+        self.layer_type = layer_type
+        self.embeddings_type = embeddings_type
         self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.layer_scale_init_value = layer_scale_init_value
-        self.drop_path_rate = drop_path_rate
+        self.downsample_in_first_stage = downsample_in_first_stage
