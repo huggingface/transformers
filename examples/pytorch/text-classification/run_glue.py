@@ -457,7 +457,8 @@ def main():
         else:
             return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
 
-    # Data collator will default to DataCollatorWithPadding, so we change it if we already did the padding.
+    # Data collator will default to DataCollatorWithPadding when the tokenizer is passed to Trainer, so we change it if
+    # we already did the padding.
     if data_args.pad_to_max_length:
         data_collator = default_data_collator
     elif training_args.fp16:
