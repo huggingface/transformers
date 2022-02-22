@@ -517,7 +517,7 @@ class FlaxCLIPTextTransformer(nn.Module):
 
         # text_embeds.shape = [batch_size, sequence_length, transformer.width]
         # take features from the EOS embedding (eos_token_id is the highest number in each sequence)
-        pooled_output = last_hidden_state[jnp.arange(last_hidden_state.shape[0]), input_ids.argmax(axis=-1)]
+        pooled_output = last_hidden_state[:, input_ids.argmax(axis=-1)]
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
