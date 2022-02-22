@@ -2346,17 +2346,17 @@ class GenerationIntegrationTests(unittest.TestCase):
             ],
         )
 
-    
+    @slow
     def test_constrained_beam_search_mixed(self):
         model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
         force_phrase = tokenizer.encode(" scared", return_tensors="pt")[0]
         flexible_phrases = tokenizer([
-            " big weapons",
-            " large weapons",
-            " monsters",
-            " ghosts"
+            " scream",
+            " screams",
+            " screaming",
+            " screamed"
         ])["input_ids"]
         
         constraints = [
@@ -2365,8 +2365,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         ]
 
         starting_text = [
-            "The soldiers were not prepared and",
-            "The children were having nightmares and"
+            "The soldiers",
+            "The child"
         ]
 
         input_ids = tokenizer(starting_text, return_tensors="pt").input_ids.to(torch_device)
@@ -2374,20 +2374,20 @@ class GenerationIntegrationTests(unittest.TestCase):
         outputs = model.generate(
             input_ids,
             constraints=constraints,
-            num_beams=5,
+            num_beams=10,
             num_return_sequences=1,
             no_repeat_ngram_size=1,
-            max_length=30,
+            # max_length=20,
             remove_invalid_values=True,
         )
 
         generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        print("generated_text", generated_text)
-        assert False
+        
         self.assertListEqual(
             generated_text,
             [
-                "The soldiers were not prepared and didn't know how big the big weapons would be, so they scared them off. They had no idea what to do",
+                "The soldiers, who were all scared and screaming at each other as they tried to get out of the",
+                "The child was taken to a local hospital where she screamed and scared for her life, police said."
             ],
         )
 
