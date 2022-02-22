@@ -20,9 +20,9 @@ from typing import Optional, Union
 import numpy as np
 
 from huggingface_hub import hf_hub_download
+from transformers import AutoTokenizer
 
 from ...utils import logging
-from .tokenization_realm_fast import RealmTokenizerFast
 
 
 _REALM_BLOCK_RECORDS_FILENAME = "block_records.npy"
@@ -117,7 +117,7 @@ class RealmRetriever:
             )
         block_records = np.load(block_records_path, allow_pickle=True)
 
-        tokenizer = RealmTokenizerFast.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
 
         return cls(block_records, tokenizer)
 
