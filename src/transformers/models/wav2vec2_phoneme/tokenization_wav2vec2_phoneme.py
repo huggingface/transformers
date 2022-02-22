@@ -353,9 +353,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             if len(char_offsets) != len(processed_chars):
                 raise ValueError(
                     f"`char_offsets`: {char_offsets} and `processed_tokens`: {processed_chars}"
-                    " have to be of the same length, but are: "
-                    f"`len(offsets)`: {len(char_offsets)} and `len(processed_tokens)`:"
-                    f" {len(processed_chars)}"
+                    f" have to be of the same length, but are: `len(offsets)`: "
+                    f"{len(char_offsets)} and `len(processed_tokens)`: {len(processed_chars)}"
                 )
 
             # set tokens to correct processed token
@@ -457,7 +456,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
                 Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
                 understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2_phoneme.tokenization_wav2vec2_phoneme.batch_decode`] works the same way with phonemes.
+                [`~model.wav2vec2_phoneme.tokenization_wav2vec2_phoneme.batch_decode`] works the same way with
+                phonemes.
 
                 </Tip>
 
@@ -465,10 +465,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
                 Will be passed to the underlying model specific decode method.
 
         Returns:
-            `str` or [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`]:
-            The decoded sentence. Will be a 
-            [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`] when
-            `output_char_offsets == True`.
+            `str` or [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`]: The decoded
+            sentence. Will be a [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`]
+            when `output_char_offsets == True`.
         """
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)
@@ -481,7 +480,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-    # overwritten from `tokenization_utils_base.py` because tokenizer can output `ModelOutput` which should not be a list for batched output and because we need docs for `output_char_offsets` here
+    # overwritten from `tokenization_utils_base.py` because tokenizer can output
+    # `ModelOutput` which should not be a list for batched output and because
+    # we need docs for `output_char_offsets` here
     def batch_decode(
         self,
         sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
@@ -517,8 +518,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
                 Will be passed to the underlying model specific decode method.
 
         Returns:
-            `List[str]`: The list of decoded sentences or
-            [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`] if
+            `List[str]` or [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`]: The
+            decoded sentence. Will be a
+            [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`] when
             `output_char_offsets == True`.
         """
         batch_decoded = [
