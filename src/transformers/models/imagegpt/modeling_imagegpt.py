@@ -423,7 +423,7 @@ class ImageGPTBlock(nn.Module):
         self.ln_2 = ImageGPTLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
-            self.crossattention = ImageGPTAttention(config, is_cross_attention=True)
+            self.crossattention = ImageGPTAttention(config, is_cross_attention=True, layer_idx=layer_idx)
             self.ln_cross_attn = ImageGPTLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = ImageGPTMLP(inner_dim, config)
