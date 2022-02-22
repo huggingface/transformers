@@ -52,7 +52,7 @@ class DetrFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class GLPNFeatureExtractor(metaclass=DummyObject):
+class DPTFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
