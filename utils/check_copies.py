@@ -19,6 +19,7 @@ import os
 import re
 
 import black
+from style_doc import style_docstrings_in_code
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -87,7 +88,7 @@ def find_code_in_transformers(object_name):
     line_index = 0
     for name in parts[i + 1 :]:
         while (
-            line_index < len(lines) and re.search(fr"^{indent}(class|def)\s+{name}(\(|\:)", lines[line_index]) is None
+            line_index < len(lines) and re.search(rf"^{indent}(class|def)\s+{name}(\(|\:)", lines[line_index]) is None
         ):
             line_index += 1
         indent += "    "
@@ -129,7 +130,9 @@ def blackify(code):
     has_indent = len(get_indent(code)) > 0
     if has_indent:
         code = f"class Bla:\n{code}"
-    result = black.format_str(code, mode=black.FileMode([black.TargetVersion.PY35], line_length=119))
+    mode = black.Mode(target_versions={black.TargetVersion.PY35}, line_length=119)
+    result = black.format_str(code, mode=mode)
+    result, _ = style_docstrings_in_code(result)
     return result[len("class Bla:\n") :] if has_indent else result
 
 

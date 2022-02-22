@@ -380,7 +380,10 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 )
 
             if "config" not in kwargs_encoder:
-                encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
+                encoder_config, kwargs_encoder = AutoConfig.from_pretrained(
+                    encoder_pretrained_model_name_or_path, **kwargs_encoder, return_unused_kwargs=True
+                )
+
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
@@ -402,7 +405,10 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
                 )
 
             if "config" not in kwargs_decoder:
-                decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
+                decoder_config, kwargs_decoder = AutoConfig.from_pretrained(
+                    decoder_pretrained_model_name_or_path, **kwargs_decoder, return_unused_kwargs=True
+                )
+
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
                         f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
@@ -484,15 +490,16 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
-        if encoder_outputs is None and inputs is None:
-            if input_values is not None and input_features is not None:
-                raise ValueError("You cannot specify both input_values and input_features at the same time")
-            elif input_values is not None:
-                inputs = input_values
-            elif input_features is not None:
-                inputs = input_features
-            else:
-                raise ValueError("You have to specify either input_values or input_features")
+        if encoder_outputs is None:
+            if inputs is None:
+                if input_values is not None and input_features is not None:
+                    raise ValueError("You cannot specify both input_values and input_features at the same time")
+                elif input_values is not None:
+                    inputs = input_values
+                elif input_features is not None:
+                    inputs = input_features
+                else:
+                    raise ValueError("You have to specify either input_values or input_features")
 
             encoder_outputs = self.encoder(
                 inputs,
@@ -543,7 +550,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         # Compute loss independent from decoder (as some shift the logits inside them)
         loss = None
         if labels is not None:
-            logits = decoder_outputs.logits if return_dict else decoder_outputs[1]
+            logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
 

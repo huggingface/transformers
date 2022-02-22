@@ -38,8 +38,8 @@ from ...modeling_tf_utils import (
     get_initializer,
     input_processing,
     keras_serializable,
-    shape_list,
 )
+from ...tf_utils import shape_list
 from ...utils import logging
 from .configuration_longformer import LongformerConfig
 
@@ -49,6 +49,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
 _TOKENIZER_FOR_DOC = "LongformerTokenizer"
+
+LARGE_NEGATIVE = -1e8
 
 TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "allenai/longformer-base-4096",
@@ -403,13 +405,10 @@ def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_se
     else:
         # last token is separation token and should not be counted and in the middle are two separation tokens
         question_end_index = tf.tile(question_end_index + 1, (1, input_ids_shape[1]))
-        attention_mask = (
-            tf.cast(
-                attention_mask > question_end_index,
-                dtype=question_end_index.dtype,
-            )
-            * tf.cast(attention_mask < input_ids_shape[-1], dtype=question_end_index.dtype)
-        )
+        attention_mask = tf.cast(
+            attention_mask > question_end_index,
+            dtype=question_end_index.dtype,
+        ) * tf.cast(attention_mask < input_ids_shape[-1], dtype=question_end_index.dtype)
 
     return attention_mask
 
@@ -755,10 +754,15 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             query_vectors, key_vectors, self.one_sided_attn_window_size
         )
 
+        # values to pad for attention probs
+        remove_from_windowed_attention_mask = attention_mask != 0
+        # cast to fp32/fp16 then replace 1's with -inf
+        float_mask = tf.cast(remove_from_windowed_attention_mask, dtype=query_vectors.dtype) * LARGE_NEGATIVE
+
         # diagonal mask with zeros everywhere and -inf inplace of padding
         diagonal_mask = self._sliding_chunks_query_key_matmul(
             tf.ones(shape_list(attention_mask)),
-            attention_mask,
+            float_mask,
             self.one_sided_attn_window_size,
         )
 
@@ -1583,12 +1587,22 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
                 all_attentions = all_attentions + (tf.transpose(layer_outputs[1], (0, 2, 1, 3)),)
 
                 # bzs x num_attn_heads x num_global_attn x seq_len => bzs x num_attn_heads x seq_len x num_global_attn
-                all_global_attentions = all_global_attentions + (tf.transpose(layer_outputs[2], (0, 1, 3, 2)))
+                all_global_attentions = all_global_attentions + (tf.transpose(layer_outputs[2], (0, 1, 3, 2)),)
 
         # Add last layer
         if output_hidden_states:
             hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
             all_hidden_states = all_hidden_states + (hidden_states_to_add,)
+
+        # undo padding
+        # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
+        hidden_states = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
+        if output_attentions:
+            all_attentions = (
+                tuple([state[:, :, :-padding_len, :] for state in all_attentions])
+                if padding_len > 0
+                else all_attentions
+            )
 
         if not return_dict:
             return tuple(
@@ -1758,11 +1772,6 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        # undo padding
-        if padding_len > 0:
-            # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
-            sequence_output = sequence_output[:, :-padding_len]
 
         if not inputs["return_dict"]:
             return (
@@ -2161,7 +2170,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output, training=inputs["training"])
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], prediction_scores)
 
         if not inputs["return_dict"]:
             output = (prediction_scores,) + outputs[2:]
@@ -2303,7 +2312,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
             labels = {"start_position": inputs["start_positions"]}
             labels["end_position"] = inputs["end_positions"]
-            loss = self.compute_loss(labels, (start_logits, end_logits))
+            loss = self.hf_compute_loss(labels, (start_logits, end_logits))
 
         if not inputs["return_dict"]:
             output = (start_logits, end_logits) + outputs[2:]
@@ -2450,7 +2459,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
 
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
@@ -2596,7 +2605,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
 
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], reshaped_logits)
 
         if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[2:]
@@ -2715,7 +2724,7 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         sequence_output = outputs[0]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
+        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
 
         if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]

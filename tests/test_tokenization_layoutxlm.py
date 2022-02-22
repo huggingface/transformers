@@ -99,6 +99,44 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_text = "unwanted, running"
         return input_text, output_text
 
+    # override test in `test_tokenization_common.py` because of the required input format of the `__call__`` method of
+    # this tokenizer
+    def test_save_sentencepiece_tokenizer(self) -> None:
+        if not self.test_sentencepiece or not self.test_slow_tokenizer:
+            return
+        # We want to verify that we will be able to save the tokenizer even if the original files that were used to
+        # build the tokenizer have been deleted in the meantime.
+        words, boxes = self.get_words_and_boxes()
+
+        tokenizer_slow_1 = self.get_tokenizer()
+        encoding_tokenizer_slow_1 = tokenizer_slow_1(
+            words,
+            boxes=boxes,
+        )
+
+        tmpdirname_1 = tempfile.mkdtemp()
+        tmpdirname_2 = tempfile.mkdtemp()
+
+        tokenizer_slow_1.save_pretrained(tmpdirname_1)
+        tokenizer_slow_2 = self.tokenizer_class.from_pretrained(tmpdirname_1)
+        encoding_tokenizer_slow_2 = tokenizer_slow_2(
+            words,
+            boxes=boxes,
+        )
+
+        shutil.rmtree(tmpdirname_1)
+        tokenizer_slow_2.save_pretrained(tmpdirname_2)
+
+        tokenizer_slow_3 = self.tokenizer_class.from_pretrained(tmpdirname_2)
+        encoding_tokenizer_slow_3 = tokenizer_slow_3(
+            words,
+            boxes=boxes,
+        )
+        shutil.rmtree(tmpdirname_2)
+
+        self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_2)
+        self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_3)
+
     @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutxlm-base")

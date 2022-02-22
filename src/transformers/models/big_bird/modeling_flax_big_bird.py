@@ -220,7 +220,7 @@ class FlaxBigBirdEmbeddings(nn.Module):
         token_type_embeddings = self.token_type_embeddings(token_type_ids.astype("i4"))
 
         if self.config.rescale_embeddings:
-            inputs_embeds *= self.config.hidden_size ** 0.5
+            inputs_embeds *= self.config.hidden_size**0.5
 
         # Sum all embeddings
         hidden_states = inputs_embeds + token_type_embeddings + position_embeds

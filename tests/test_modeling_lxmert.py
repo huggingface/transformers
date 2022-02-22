@@ -776,16 +776,16 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
                     else:
                         if isinstance(value, (list, tuple)):
                             return_dict[key] = (
-                                tf.convert_to_tensor(iter_value.numpy(), dtype=tf.int32) for iter_value in value
+                                tf.convert_to_tensor(iter_value.cpu().numpy(), dtype=tf.int32) for iter_value in value
                             )
                         else:
-                            return_dict[key] = tf.convert_to_tensor(value.numpy(), dtype=tf.int32)
+                            return_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.int32)
                 return return_dict
 
             tf_inputs_dict = recursive_numpy_convert(pt_inputs)
 
             tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
-            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
+            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model).to(torch_device)
 
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
             pt_model.eval()
@@ -795,12 +795,6 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
             if "obj_labels" in inputs_dict:
                 del inputs_dict["obj_labels"]
 
-            def torch_type(key):
-                if key in ("visual_feats", "visual_pos"):
-                    return torch.float32
-                else:
-                    return torch.long
-
             pt_inputs = self._prepare_for_class(inputs_dict, model_class)
             tf_inputs_dict = recursive_numpy_convert(pt_inputs)
 
@@ -808,7 +802,7 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
                 pto = pt_model(**pt_inputs)
             tfo = tf_model(tf_inputs_dict, training=False)
             tf_hidden_states = tfo[0].numpy()
-            pt_hidden_states = pto[0].numpy()
+            pt_hidden_states = pto[0].cpu().numpy()
 
             tf_nans = np.copy(np.isnan(tf_hidden_states))
             pt_nans = np.copy(np.isnan(pt_hidden_states))
@@ -852,7 +846,7 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
 
             tfo = tf_model(tf_inputs_dict)
             tfo = tfo[0].numpy()
-            pto = pto[0].numpy()
+            pto = pto[0].cpu().numpy()
             tf_nans = np.copy(np.isnan(tfo))
             pt_nans = np.copy(np.isnan(pto))
 

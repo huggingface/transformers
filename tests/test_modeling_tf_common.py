@@ -36,8 +36,8 @@ from transformers.testing_utils import (
     _tf_gpu_memory_limit,
     is_pt_tf_cross_test,
     is_staging_test,
-    require_keras2onnx,
     require_tf,
+    require_tf2onnx,
     slow,
 )
 from transformers.utils import logging
@@ -57,6 +57,7 @@ if is_tf_available():
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
         TFAutoModel,
@@ -140,6 +141,7 @@ class TFModelTesterMixin:
                 *get_values(TF_MODEL_FOR_MASKED_LM_MAPPING),
                 *get_values(TF_MODEL_FOR_PRETRAINING_MAPPING),
                 *get_values(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
+                *get_values(TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING),
             ]:
                 inputs_dict["labels"] = tf.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
@@ -254,14 +256,14 @@ class TFModelTesterMixin:
 
             self.assertEqual(len(incompatible_ops), 0, incompatible_ops)
 
-    @require_keras2onnx
+    @require_tf2onnx
     @slow
     def test_onnx_runtime_optimize(self):
         if not self.test_onnx:
             return
 
-        import keras2onnx
         import onnxruntime
+        import tf2onnx
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -269,9 +271,9 @@ class TFModelTesterMixin:
             model = model_class(config)
             model(model.dummy_inputs)
 
-            onnx_model = keras2onnx.convert_keras(model, model.name, target_opset=self.onnx_min_opset)
+            onnx_model_proto, _ = tf2onnx.convert.from_keras(model, opset=self.onnx_min_opset)
 
-            onnxruntime.InferenceSession(onnx_model.SerializeToString())
+            onnxruntime.InferenceSession(onnx_model_proto.SerializeToString())
 
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -358,7 +360,6 @@ class TFModelTesterMixin:
             pt_model = pt_model_class(config)
 
             # Check we can load pt model in tf and vice-versa with model => model functions
-
             tf_model = transformers.load_pytorch_model_in_tf2_model(
                 tf_model, pt_model, tf_inputs=self._prepare_for_class(inputs_dict, model_class)
             )
@@ -374,12 +375,10 @@ class TFModelTesterMixin:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 elif name == "pixel_values":
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+                elif name == "input_features":
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
-
-            # need to rename encoder-decoder "inputs" for PyTorch
-            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
-                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
 
             with torch.no_grad():
                 pto = pt_model(**pt_inputs_dict)
@@ -420,11 +419,10 @@ class TFModelTesterMixin:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 elif name == "pixel_values":
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
+                elif name == "input_features":
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
-            # need to rename encoder-decoder "inputs" for PyTorch
-            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
-                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
 
             with torch.no_grad():
                 pto = pt_model(**pt_inputs_dict)
@@ -450,7 +448,24 @@ class TFModelTesterMixin:
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
 
         for model_class in self.all_model_classes:
-            if self.is_encoder_decoder:
+            if model_class.__name__ in ["TFSpeech2TextModel", "TFSpeech2TextForConditionalGeneration"]:
+                inputs = {
+                    "decoder_input_ids": tf.keras.Input(
+                        batch_shape=(2, max_input),
+                        name="decoder_input_ids",
+                        dtype="int32",
+                    ),
+                    "input_features": tf.keras.Input(
+                        batch_shape=(
+                            2,
+                            max_input,
+                            self.model_tester.input_feat_per_channel * self.model_tester.input_channels,
+                        ),
+                        name="input_features",
+                        dtype="float32",
+                    ),
+                }
+            elif self.is_encoder_decoder:
                 inputs = {
                     "decoder_input_ids": tf.keras.Input(
                         batch_shape=(2, max_input),
@@ -518,10 +533,7 @@ class TFModelTesterMixin:
             outputs_dict = model(inputs)
 
             inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            input_ids = inputs_keywords.pop("input_ids", None)
-            if input_ids is None:
-                input_ids = inputs_keywords.pop("pixel_values", None)
-            outputs_keywords = model(input_ids, **inputs_keywords)
+            outputs_keywords = model(**inputs_keywords)
             output_dict = outputs_dict[0].numpy()
             output_keywords = outputs_keywords[0].numpy()
 
@@ -706,23 +718,28 @@ class TFModelTesterMixin:
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        list_lm_models = (
+        text_in_text_out_models = (
             get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING)
             + get_values(TF_MODEL_FOR_MASKED_LM_MAPPING)
             + get_values(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING)
         )
+        speech_in_text_out_models = get_values(TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING)
 
         for model_class in self.all_model_classes:
             model = model_class(config)
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in list_lm_models:
+            if model_class in text_in_text_out_models:
                 x = model.get_output_embeddings()
                 assert isinstance(x, tf.keras.layers.Layer)
                 name = model.get_bias()
                 assert isinstance(name, dict)
                 for k, v in name.items():
                     assert isinstance(v, tf.Variable)
+            elif model_class in speech_in_text_out_models:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert name is None
             else:
                 x = model.get_output_embeddings()
                 assert x is None
@@ -846,7 +863,9 @@ class TFModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class)
             inputs_np = prepare_numpy_arrays(inputs)
 
-            model(inputs_np)
+            output_for_dict_input = model(inputs_np)
+            output_for_kw_input = model(**inputs_np)
+            self.assert_outputs_same(output_for_dict_input, output_for_kw_input)
 
     def test_resize_token_embeddings(self):
         if not self.test_resize_embeddings:
@@ -927,16 +946,16 @@ class TFModelTesterMixin:
             model = model_class(config)
 
             if config.bos_token_id is None:
-                # if bos token id is not defined mobel needs input_ids
+                # if bos token id is not defined model needs input_ids
                 with self.assertRaises(AssertionError):
                     model.generate(do_sample=True, max_length=5)
                 # num_return_sequences = 1
                 self._check_generated_ids(model.generate(input_ids, do_sample=True))
-            else:
-                # num_return_sequences = 1
+            elif model_class.__name__ not in ["TFSpeech2TextForConditionalGeneration"]:
+                # Models with non-text inputs won't work here; num_return_sequences = 1
                 self._check_generated_ids(model.generate(do_sample=True, max_length=5))
 
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ValueError):
                 # generating multiple sequences when no beam search generation
                 # is not allowed as it would always generate the same sequences
                 model.generate(input_ids, do_sample=False, num_return_sequences=2)
@@ -957,6 +976,8 @@ class TFModelTesterMixin:
     def test_lm_head_model_no_beam_search_generate_dict_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict.get("input_ids", None)
+        if input_ids is None:
+            input_ids = inputs_dict.get("input_features", None)
 
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:
@@ -993,7 +1014,7 @@ class TFModelTesterMixin:
             model = model_class(config)
 
             if config.bos_token_id is None:
-                # if bos token id is not defined mobel needs input_ids, num_return_sequences = 1
+                # if bos token id is not defined model needs input_ids, num_return_sequences = 1
                 self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=2))
             else:
                 # num_return_sequences = 1
@@ -1028,6 +1049,8 @@ class TFModelTesterMixin:
     def test_lm_head_model_beam_search_generate_dict_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict.get("input_ids", None)
+        if input_ids is None:
+            input_ids = inputs_dict.get("input_features", None)
 
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:
@@ -1062,7 +1085,7 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
-            if getattr(model, "compute_loss", None):
+            if getattr(model, "hf_compute_loss", None):
                 # The number of elements in the loss should be the same as the number of elements in the label
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 added_label = prepared_for_class[
@@ -1077,10 +1100,11 @@ class TFModelTesterMixin:
 
                 # Test that model correctly compute the loss with kwargs
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-                input_name = "input_ids" if "input_ids" in prepared_for_class else "pixel_values"
-                input_ids = prepared_for_class.pop(input_name)
+                possible_input_names = {"input_ids", "pixel_values", "input_features"}
+                input_name = possible_input_names.intersection(set(prepared_for_class)).pop()
+                model_input = prepared_for_class.pop(input_name)
 
-                loss = model(input_ids, **prepared_for_class)[0]
+                loss = model(model_input, **prepared_for_class)[0]
                 self.assertEqual(loss.shape, [loss_size])
 
                 # Test that model correctly compute the loss with a dict

@@ -157,6 +157,7 @@ def make_task_cmds():
         --train_file {data_dir_xsum}/sample.json
         --max_source_length 12
         --max_target_length 12
+        --lang en
         """,
         clm=f"""
         {scripts_dir}/language-modeling/run_clm.py

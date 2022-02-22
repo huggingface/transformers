@@ -49,6 +49,9 @@ if is_torch_available():
     from torch.utils.data import DataLoader, Dataset
 
     from ..models.auto.modeling_auto import AutoModel
+
+    # Re-export for backward compatibility
+    from .pt_utils import KeyDataset
 else:
     Dataset = None
     KeyDataset = None

@@ -1060,6 +1060,7 @@ class FlaxBlenderbotSmallPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
         >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
@@ -1329,6 +1330,7 @@ class FlaxBlenderbotSmallForConditionalGeneration(FlaxBlenderbotSmallPreTrainedM
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
         >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
@@ -1482,7 +1484,7 @@ class FlaxBlenderbotSmallForConditionalGeneration(FlaxBlenderbotSmallPreTrainedM
 FLAX_BLENDERBOT_SMALL_CONDITIONAL_GENERATION_DOCSTRING = """
     Returns:
 
-    Summarization example::
+    Summarization example:
 
         >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
@@ -1495,7 +1497,7 @@ FLAX_BLENDERBOT_SMALL_CONDITIONAL_GENERATION_DOCSTRING = """
         >>> # Generate Summary >>> summary_ids = model.generate(inputs['input_ids']).sequences >>>
         print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
 
-    Mask filling example::
+    Mask filling example:
 
         >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration >>>
         tokenizer = BlenderbotSmallTokenizer.from_pretrained('facebook/blenderbot_small-90M') >>> TXT = "My friends are

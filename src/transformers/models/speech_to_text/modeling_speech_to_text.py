@@ -230,7 +230,7 @@ class Speech2TextAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1323,7 +1323,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         >>> input_features = processor(
         ...     ds["speech"][0], sampling_rate=16000, return_tensors="pt"
         >>> ).input_features  # Batch size 1
-        >>> generated_ids = model.generate(input_ids=input_features)
+        >>> generated_ids = model.generate(inputs=input_features)
 
         >>> transcription = processor.batch_decode(generated_ids)
         ```"""

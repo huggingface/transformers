@@ -34,7 +34,7 @@ from .file_utils import (
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
-    is_keras2onnx_available,
+    is_ftfy_available,
     is_librosa_available,
     is_onnx_available,
     is_pandas_available,
@@ -46,7 +46,9 @@ from .file_utils import (
     is_scatter_available,
     is_sentencepiece_available,
     is_soundfile_availble,
+    is_spacy_available,
     is_tensorflow_probability_available,
+    is_tf2onnx_available,
     is_tf_available,
     is_timm_available,
     is_tokenizers_available,
@@ -57,7 +59,7 @@ from .file_utils import (
     is_torchaudio_available,
     is_vision_available,
 )
-from .integrations import is_optuna_available, is_ray_available, is_sigopt_available
+from .integrations import is_optuna_available, is_ray_available, is_sigopt_available, is_wandb_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
@@ -244,9 +246,9 @@ def require_rjieba(test_case):
         return test_case
 
 
-def require_keras2onnx(test_case):
-    if not is_keras2onnx_available():
-        return unittest.skip("test requires keras2onnx")(test_case)
+def require_tf2onnx(test_case):
+    if not is_tf2onnx_available():
+        return unittest.skip("test requires tf2onnx")(test_case)
     else:
         return test_case
 
@@ -412,6 +414,26 @@ def require_vision(test_case):
         return test_case
 
 
+def require_ftfy(test_case):
+    """
+    Decorator marking a test that requires ftfy. These tests are skipped when ftfy isn't installed.
+    """
+    if not is_ftfy_available():
+        return unittest.skip("test requires ftfy")(test_case)
+    else:
+        return test_case
+
+
+def require_spacy(test_case):
+    """
+    Decorator marking a test that requires SpaCy. These tests are skipped when SpaCy isn't installed.
+    """
+    if not is_spacy_available():
+        return unittest.skip("test requires spacy")(test_case)
+    else:
+        return test_case
+
+
 def require_torch_multi_gpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup (in PyTorch). These tests are skipped on a machine without
@@ -564,6 +586,19 @@ def require_sigopt(test_case):
     """
     if not is_sigopt_available():
         return unittest.skip("test requires SigOpt")(test_case)
+    else:
+        return test_case
+
+
+def require_wandb(test_case):
+    """
+    Decorator marking a test that requires wandb.
+
+    These tests are skipped when wandb isn't installed.
+
+    """
+    if not is_wandb_available():
+        return unittest.skip("test requires wandb")(test_case)
     else:
         return test_case
 

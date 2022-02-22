@@ -2365,7 +2365,7 @@ def _calculate_expected_result(
 # PyTorch does not currently support Huber loss with custom delta so we define it ourself
 def huber_loss(input, target, delta: float = 1.0):
     errors = torch.abs(input - target)  # shape (batch_size,)
-    return torch.where(errors < delta, 0.5 * errors ** 2, errors * delta - (0.5 * delta ** 2))
+    return torch.where(errors < delta, 0.5 * errors**2, errors * delta - (0.5 * delta**2))
 
 
 def _calculate_regression_loss(

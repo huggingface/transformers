@@ -4,6 +4,7 @@
 
 import io
 import json
+import os
 
 # coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
@@ -443,7 +444,7 @@ def pipeline(
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
             provided.
-        revision(`str`, *optional*, defaults to `"main"`):
+        revision (`str`, *optional*, defaults to `"main"`):
             When passing a task name or a string model identifier: The specific model version to use. It can be a
             branch name, a tag name, or a commit id, since we use a git-based system for storing models and other
             artifacts on huggingface.co, so `revision` can be any identifier allowed by git.
@@ -451,8 +452,7 @@ def pipeline(
             Whether or not to use a Fast tokenizer if possible (a [`PreTrainedTokenizerFast`]).
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`). revision(`str`, *optional*, defaults to
-            `"main"`):
+            when running `transformers-cli login` (stored in `~/.huggingface`).
         model_kwargs:
             Additional dictionary of keyword arguments passed along to the model's `from_pretrained(...,
             **model_kwargs)` function.
@@ -610,6 +610,31 @@ def pipeline(
             feature_extractor = AutoFeatureExtractor.from_pretrained(
                 feature_extractor, revision=revision, _from_pipeline=task, **model_kwargs
             )
+
+            if (
+                feature_extractor._processor_class
+                and feature_extractor._processor_class.endswith("WithLM")
+                and isinstance(model_name, str)
+            ):
+                try:
+                    import kenlm  # to trigger `ImportError` if not installed
+                    from pyctcdecode import BeamSearchDecoderCTC
+
+                    if os.path.isdir(model_name) or os.path.isfile(model_name):
+                        decoder = BeamSearchDecoderCTC.load_from_dir(model_name)
+                    else:
+                        language_model_glob = os.path.join(
+                            BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*"
+                        )
+                        alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
+                        allow_regex = [language_model_glob, alphabet_filename]
+                        decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name, allow_regex=allow_regex)
+
+                    kwargs["decoder"] = decoder
+                except ImportError as e:
+                    logger.warning(
+                        f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Try to install `pyctcdecode` and `kenlm`: (`pip install pyctcdecode`, `pip install https://github.com/kpu/kenlm/archive/master.zip`): Error: {e}"
+                    )
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:

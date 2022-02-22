@@ -1,2 +1,7 @@
-docs/source/quicktour.rst
-docs/source/task_summary.rst
+src/transformers/models/wav2vec2/modeling_wav2vec2.py
+src/transformers/models/hubert/modeling_hubert.py
+src/transformers/models/wavlm/modeling_wavlm.py
+src/transformers/models/unispeech/modeling_unispeech.py
+src/transformers/models/unispeech_sat/modeling_unispeech_sat.py
+src/transformers/models/sew/modeling_sew.py
+src/transformers/models/sew_d/modeling_sew_d.py

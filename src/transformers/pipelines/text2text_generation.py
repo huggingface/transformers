@@ -136,7 +136,11 @@ class Text2TextGenerationPipeline(Pipeline):
         """
 
         result = super().__call__(*args, **kwargs)
-        if isinstance(args[0], list) and all(isinstance(el, str) for el in args[0]):
+        if (
+            isinstance(args[0], list)
+            and all(isinstance(el, str) for el in args[0])
+            and all(len(res) == 1 for res in result)
+        ):
             return [res[0] for res in result]
         return result
 
@@ -146,19 +150,24 @@ class Text2TextGenerationPipeline(Pipeline):
 
     def _forward(self, model_inputs, **generate_kwargs):
         if self.framework == "pt":
-            input_length = model_inputs["input_ids"].shape[-1]
+            in_b, input_length = model_inputs["input_ids"].shape
         elif self.framework == "tf":
-            input_length = tf.shape(model_inputs["input_ids"])[-1].numpy()
+            in_b, input_length = tf.shape(model_inputs["input_ids"]).numpy()
 
         generate_kwargs["min_length"] = generate_kwargs.get("min_length", self.model.config.min_length)
         generate_kwargs["max_length"] = generate_kwargs.get("max_length", self.model.config.max_length)
         self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
+        out_b = output_ids.shape[0]
+        if self.framework == "pt":
+            output_ids = output_ids.reshape(in_b, out_b // in_b, *output_ids.shape[1:])
+        elif self.framework == "tf":
+            output_ids = tf.reshape(output_ids, (in_b, out_b // in_b, *output_ids.shape[1:]))
         return {"output_ids": output_ids}
 
     def postprocess(self, model_outputs, return_type=ReturnType.TEXT, clean_up_tokenization_spaces=False):
         records = []
-        for output_ids in model_outputs["output_ids"]:
+        for output_ids in model_outputs["output_ids"][0]:
             if return_type == ReturnType.TENSORS:
                 record = {f"{self.return_name}_token_ids": model_outputs}
             elif return_type == ReturnType.TEXT:
