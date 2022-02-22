@@ -18,8 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available
-from ...file_utils import is_torch_available, is_vision_available
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -38,22 +37,14 @@ if is_torch_available():
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
 
     if is_vision_available():
         from .feature_extraction_dpt import DPTFeatureExtractor
-    
-    if is_torch_available():
-        from .modeling_dpt import (
-            DPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DPTLayer,
-            DPTModel,
-            DPTPreTrainedModel,
-        )
 
+    if is_torch_available():
+        from .modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST, DPTLayer, DPTModel, DPTPreTrainedModel
 
 
 else:

@@ -78,6 +78,8 @@ class DPTConfig(PretrainedConfig):
             representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
         out_channels (`List[str]`, *optional*, defaults to [96, 192, 384, 768]):
             The number of output channels for each of the four feature maps of the backbone.
+        expand_channels (`bool`, *optional*, defaults to `False``):
+            Whether to expand the number of channels of the backbone feature maps.
 
     Example:
 
@@ -111,9 +113,10 @@ class DPTConfig(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
-        out_indices = [2, 5, 8, 11],
+        out_indices=[2, 5, 8, 11],
         readout_type="ignore",
         out_channels=[96, 192, 384, 768],
+        expand_channels=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -136,3 +139,4 @@ class DPTConfig(PretrainedConfig):
             raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
         self.readout_type = readout_type
         self.out_channels = out_channels
+        self.expand_channels = expand_channels

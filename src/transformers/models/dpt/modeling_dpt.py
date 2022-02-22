@@ -24,13 +24,8 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_dpt import DPTConfig
@@ -377,7 +372,7 @@ class DPTViTEncoder(nn.Module):
 
 class DPTReassembleBlocks(nn.Module):
     """
-    
+
     ViTPostProcessBlock, process cls_token in ViT backbone output and rearranges the feature vector to feature map.
 
     Args:
@@ -393,43 +388,36 @@ class DPTReassembleBlocks(nn.Module):
         self.config = config
         out_channels = config.out_channels
 
-        self.projects = nn.ModuleList([
-            nn.Conv2d(
-                in_channels=config.hidden_size,
-                out_channels=out_channel,
-                kernel_size=1,
-            ) for out_channel in out_channels
-        ])
+        self.projects = nn.ModuleList(
+            [
+                nn.Conv2d(
+                    in_channels=config.hidden_size,
+                    out_channels=out_channel,
+                    kernel_size=1,
+                )
+                for out_channel in out_channels
+            ]
+        )
 
-        self.resize_layers = nn.ModuleList([
-            nn.ConvTranspose2d(
-                in_channels=out_channels[0],
-                out_channels=out_channels[0],
-                kernel_size=4,
-                stride=4,
-                padding=0),
-            nn.ConvTranspose2d(
-                in_channels=out_channels[1],
-                out_channels=out_channels[1],
-                kernel_size=2,
-                stride=2,
-                padding=0),
-            nn.Identity(),
-            nn.Conv2d(
-                in_channels=out_channels[3],
-                out_channels=out_channels[3],
-                kernel_size=3,
-                stride=2,
-                padding=1)
-        ])
-        if config.readout_type == 'project':
+        self.resize_layers = nn.ModuleList(
+            [
+                nn.ConvTranspose2d(
+                    in_channels=out_channels[0], out_channels=out_channels[0], kernel_size=4, stride=4, padding=0
+                ),
+                nn.ConvTranspose2d(
+                    in_channels=out_channels[1], out_channels=out_channels[1], kernel_size=2, stride=2, padding=0
+                ),
+                nn.Identity(),
+                nn.Conv2d(
+                    in_channels=out_channels[3], out_channels=out_channels[3], kernel_size=3, stride=2, padding=1
+                ),
+            ]
+        )
+        if config.readout_type == "project":
             self.readout_projects = nn.ModuleList()
             for _ in range(len(self.projects)):
                 self.readout_projects.append(
-                    nn.Sequential(
-                        Linear(2 * config.hidden_size, config.hidden_size),
-                        ACT2FN[config.hidden_act]
-                    )
+                    nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
                 )
 
     def forward(self, inputs):
@@ -438,23 +426,23 @@ class DPTReassembleBlocks(nn.Module):
         """
         assert isinstance(inputs, list)
         out = []
-        
+
         out_size = self.config.image_size // self.config.patch_size
-        
+
         for i, x in enumerate(inputs):
             # reshape to (B, C, H, W)
-            x, cls_token = x[:, 1:], x[:,0]
+            x, cls_token = x[:, 1:], x[:, 0]
             B, _, C = x.shape
             x = x.reshape(B, out_size, out_size, C)
             x = x.permute(0, 3, 1, 2).contiguous()
 
             feature_shape = x.shape
-            if self.config.readout_type == 'project':
+            if self.config.readout_type == "project":
                 x = x.flatten(2).permute((0, 2, 1))
                 readout = cls_token.unsqueeze(1).expand_as(x)
                 x = self.readout_projects[i](torch.cat((x, readout), -1))
                 x = x.permute(0, 2, 1).reshape(feature_shape)
-            elif self.config.readout_type == 'add':
+            elif self.config.readout_type == "add":
                 x = x.flatten(2) + cls_token.unsqueeze(-1)
                 x = x.reshape(feature_shape)
             else:
@@ -462,145 +450,112 @@ class DPTReassembleBlocks(nn.Module):
             x = self.projects[i](x)
             x = self.resize_layers[i](x)
             out.append(x)
-        
+
         return out
 
 
-# class DPTScratch(nn.Module):
-#     def __init__(self, config, out_shape, groups=1):
-#         super().__init__()
-#         self.config = config
+class DPTPreActResidualConvUnit(nn.Module):
+    """
+    ResidualConvUnit, pre-activate residual unit.
 
-#         # TODO add to config
-#         in_shape = [256, 512, 1024, 1024]
-#         out_shape = 256
-#         groups = 1
+    Args:
+        in_channels (int): number of channels in the input feature map.
+        act_cfg (dict): dictionary to construct and config activation layer.
+        norm_cfg (dict): dictionary to construct and config norm layer.
+        stride (int): stride of the first block. Default: 1
+        dilation (int): dilation rate for convs layers. Default: 1.
+        init_cfg (dict, optional): Initialization config dict. Default: None.
+    """
 
-#         out_shape1 = out_shape
-#         out_shape2 = out_shape
-#         out_shape3 = out_shape
-#         out_shape4 = out_shape
-        
-#         self.layer1_rn = nn.Conv2d(
-#             in_shape[0],
-#             out_shape1,
-#             kernel_size=3,
-#             stride=1,
-#             padding=1,
-#             bias=False,
-#             groups=groups,
-#         )
-    
-#         self.layer2_rn = nn.Conv2d(
-#             in_shape[1],
-#             out_shape2,
-#             kernel_size=3,
-#             stride=1,
-#             padding=1,
-#             bias=False,
-#             groups=groups,
-#         )
-    
-#         self.layer3_rn = nn.Conv2d(
-#             in_shape[2],
-#             out_shape3,
-#             kernel_size=3,
-#             stride=1,
-#             padding=1,
-#             bias=False,
-#             groups=groups,
-#         )
-    
-#         self.layer4_rn = nn.Conv2d(
-#             in_shape[3],
-#             out_shape4,
-#             kernel_size=3,
-#             stride=1,
-#             padding=1,
-#             bias=False,
-#             groups=groups,
-#         )
+    def __init__(self, config):
+        super().__init__()
+        #          in_channels,
+        #  act_cfg,
+        #  norm_cfg,
+        #  stride=1,
+        #  dilation=1,
+        #  init_cfg=None):
 
-#         # refine nets
-#         self.refinenet1 = DPTFeatureFusionBlock(features=out_shape)
-#         self.refinenet2 = DPTFeatureFusionBlock(features=out_shape)
-#         self.refinenet3 = DPTFeatureFusionBlock(features=out_shape)
-#         self.refinenet4 = DPTFeatureFusionBlock(features=out_shape)
-    
-#     def forward(self, x):
-#         layer_1, layer_2, layer_3, layer_4 = x
+        in_channels = config.in_channels
+        dilation = config.dilation
+        stride = config.stride
 
-#         layer_1_rn = self.layer1_rn(layer_1)
-#         layer_2_rn = self.layer2_rn(layer_2)
-#         layer_3_rn = self.layer3_rn(layer_3)
-#         layer_4_rn = self.layer4_rn(layer_4)
+        self.act1 = nn.ReLu()
+        self.conv1 = nn.Conv2d(
+            in_channels,
+            in_channels,
+            3,
+            stride=stride,
+            padding=dilation,
+            dilation=dilation,
+            bias=False,
+        )
+        self.batch_norm = nn.BatchNorm2d(in_channels) if config.use_bn else nn.Identity()
 
-#         path_4 = self.scratch.refinenet4(layer_4_rn)
-#         path_3 = self.scratch.refinenet3(path_4, layer_3_rn)
-#         path_2 = self.scratch.refinenet2(path_3, layer_2_rn)
-#         path_1 = self.scratch.refinenet1(path_2, layer_1_rn)
+        self.act2 = nn.ReLu()
+        self.conv2 = nn.Conv2d(
+            in_channels,
+            in_channels,
+            3,
+            padding=1,
+            bias=False,
+        )
+        self.batch_norm = nn.BatchNorm2d(in_channels) if config.use_bn else nn.Identity()
 
-#         return path_1
+    def forward(self, inputs):
+        inputs_ = inputs.clone()
+        x = self.act1(inputs)
+        x = self.conv1(x)
+        x = self.act2(x)
+        x = self.conv2(x)
+        return x + inputs_
 
 
-# class DPTFeatureFusionBlock(nn.Module):
-#     """DPT's custom feature fusion block."""
-#     def __init__(
-#         self,
-#         features,
-#         activation,
-#         deconv=False,
-#         bn=False,
-#         expand=False,
-#         align_corners=True,
-#     ):
-#         """
-# Args: # features (int): number of features #"""
-#         super(FeatureFusionBlock_custom, self).__init__()
+class DPTFeatureFusionBlock(nn.Module):
+    """FeatureFusionBlock, merge feature maps from different stages.
 
-#         self.deconv = deconv
-#         self.align_corners = align_corners
+    Args:
+        in_channels (int): Input channels.
+        act_cfg (dict): The activation config for ResidualConvUnit.
+        norm_cfg (dict): Config dict for normalization layer.
+        expand (bool): Whether expand the channels in post process block.
+            Default: False.
+        align_corners (bool): align_corner setting for bilinear upsample.
+            Default: True.
+    """
 
-#         self.groups = 1
+    def __init__(self, config):
+        # in_channels, act_cfg, norm_cfg, expand=False, align_corners=True, init_cfg=None):
+        super().__init__()
 
-#         self.expand = expand
-#         out_features = features
-#         if self.expand == True:
-#             out_features = features // 2
+        self.in_channels = config.in_channels
+        self.expand = config.expand
+        self.align_corners = config.align_corners
 
-#         self.out_conv = nn.Conv2d(
-#             features,
-#             out_features,
-#             kernel_size=1,
-#             stride=1,
-#             padding=0,
-#             bias=True,
-#             groups=1,
-#         )
+        self.out_channels = config.in_channels
+        if self.expand:
+            self.out_channels = config.in_channels // 2
 
-#         self.resConfUnit1 = ResidualConvUnit_custom(features, activation, bn)
-#         self.resConfUnit2 = ResidualConvUnit_custom(features, activation, bn)
+        self.project = nn.Conv2d(self.in_channels, self.out_channels, kernel_size=1, bias=True)
 
-#         self.skip_add = nn.quantized.FloatFunctional()
+        self.res_conv_unit1 = DPTPreActResidualConvUnit(config)
 
-#     def forward(self, *xs):
-#         """Forward pass. # Returns: # tensor: output #"""
-#         output = xs[0]
+        self.res_conv_unit2 = DPTPreActResidualConvUnit(config)
 
-#         if len(xs) == 2:
-#             res = self.resConfUnit1(xs[1])
-#             output = self.skip_add.add(output, res)
-#             # output += res
-
-#         output = self.resConfUnit2(output)
-
-#         output = nn.functional.interpolate(
-#             output, scale_factor=2, mode="bilinear", align_corners=self.align_corners
-#         )
-
-#         output = self.out_conv(output)
-
-#         return output
+    def forward(self, *inputs):
+        x = inputs[0]
+        if len(inputs) == 2:
+            if x.shape != inputs[1].shape:
+                res = nn.functional.interpolate(
+                    inputs[1], size=(x.shape[2], x.shape[3]), mode="bilinear", align_corners=False
+                )
+            else:
+                res = inputs[1]
+            x = x + self.res_conv_unit1(res)
+        x = self.res_conv_unit2(x)
+        x = nn.functional.interpolate(x, scale_factor=2, mode="bilinear", align_corners=self.align_corners)
+        x = self.project(x)
+        return x
 
 
 class DPTPreTrainedModel(PreTrainedModel):
@@ -692,9 +647,16 @@ class DPTModel(DPTPreTrainedModel):
 
         # postprocessing
         self.reassemble_blocks = DPTReassembleBlocks(config)
-         
+
         # TODO: fusion + head
-        
+        self.post_process_channels = [
+            channel * math.pow(2, i) if config.expand_channels else channel
+            for i, channel in enumerate(post_process_channels)
+        ]
+        self.convs = nn.ModuleList()
+        for channel in self.post_process_channels:
+            self.convs.append(nn.Conv2d(channel, self.channels, kernel_size=3, padding=1, bias=False))
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -748,7 +710,7 @@ class DPTModel(DPTPreTrainedModel):
             embedding_output,
             head_mask=head_mask,
             output_attentions=output_attentions,
-            output_hidden_states=True, # we need the intermediate hidden states
+            output_hidden_states=True,  # we need the intermediate hidden states
             return_dict=return_dict,
         )
 
