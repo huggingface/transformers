@@ -249,10 +249,7 @@ class TFConvNextModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFConvNextForImageClassification.from_pretrained(
-            "facebook/convnext-tiny-224",
-            from_pt=True,
-        )
+        model = TFConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
