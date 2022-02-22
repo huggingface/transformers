@@ -142,7 +142,9 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             )
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
-        self._tokenizer = SPMTokenizer(vocab_file, self.all_special_tokens, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs)
+        self._tokenizer = SPMTokenizer(
+            vocab_file, self.all_special_tokens, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs
+        )
 
     @property
     def vocab_size(self):
@@ -287,7 +289,9 @@ class SPMTokenizer:
               BPE-dropout.
     """
 
-    def __init__(self, vocab_file, special_tokens, split_by_punct=False, sp_model_kwargs: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, vocab_file, special_tokens, split_by_punct=False, sp_model_kwargs: Optional[Dict[str, Any]] = None
+    ):
         self.split_by_punct = split_by_punct
         self.vocab_file = vocab_file
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs

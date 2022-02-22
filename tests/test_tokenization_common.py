@@ -37,6 +37,7 @@ from transformers import (
     AutoTokenizer,
     BertTokenizer,
     BertTokenizerFast,
+    LayoutXLMTokenizer,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
@@ -45,7 +46,7 @@ from transformers import (
     TrainingArguments,
     is_tf_available,
     is_tokenizers_available,
-    is_torch_available, LayoutXLMTokenizer,
+    is_torch_available,
 )
 from transformers.testing_utils import (
     PASS,
