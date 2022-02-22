@@ -17,13 +17,13 @@ import unittest
 
 import numpy as np
 
-from tests.utils.test_modeling_tf_core import TFCoreModelTesterMixin
 from transformers import BartConfig, BartTokenizer, is_tf_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_tf, slow
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ..utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
 
 if is_tf_available():

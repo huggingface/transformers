@@ -16,10 +16,10 @@
 
 import unittest
 
-from tests.generation.test_generation_utils import GenerationTesterMixin
 from transformers import Speech2Text2Config
 from transformers.testing_utils import is_torch_available, require_torch, torch_device
 
+from ..generation.test_generation_utils import GenerationTesterMixin
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_common import ModelTesterMixin, ids_tensor
 

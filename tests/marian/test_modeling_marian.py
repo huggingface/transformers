@@ -18,11 +18,11 @@ import tempfile
 import unittest
 
 from huggingface_hub.hf_api import list_models
-from tests.generation.test_generation_utils import GenerationTesterMixin
 from transformers import MarianConfig, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
+from ..generation.test_generation_utils import GenerationTesterMixin
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_common import ModelTesterMixin, ids_tensor
 

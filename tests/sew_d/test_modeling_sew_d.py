@@ -20,12 +20,17 @@ import unittest
 
 import pytest
 
-from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from transformers import SEWDConfig, is_torch_available
 from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import ModelTesterMixin, _config_zero_init
+from ..test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 
 
 if is_torch_available():

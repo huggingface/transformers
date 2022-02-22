@@ -17,10 +17,10 @@ import unittest
 import numpy as np
 import timeout_decorator  # noqa
 
-from tests.generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from transformers import BlenderbotConfig, is_flax_available
 from transformers.testing_utils import jax_device, require_flax, slow
 
+from ..generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 

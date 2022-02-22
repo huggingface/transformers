@@ -19,10 +19,10 @@ import unittest
 import numpy as np
 
 import transformers
-from tests.generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from transformers import GPT2Tokenizer, GPTNeoConfig, is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
+from ..generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
 

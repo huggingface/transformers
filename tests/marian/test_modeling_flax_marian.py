@@ -17,11 +17,11 @@ import unittest
 import numpy as np
 import timeout_decorator  # noqa
 
-from tests.generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from transformers import MarianConfig, is_flax_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
 
+from ..generation.test_generation_flax_utils import FlaxGenerationTesterMixin
 from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
