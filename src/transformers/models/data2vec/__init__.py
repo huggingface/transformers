@@ -22,11 +22,12 @@ from ...file_utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
-    "configuration_data2vec": [
+    "configuration_data2vec_audio": [
         "DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Data2VecAudioConfig",
-        "Data2VecAudioOnnxConfig",
+    ],
+    "configuration_data2vec_text": [
+        "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Data2VecTextConfig",
         "Data2VecTextOnnxConfig",
     ],
@@ -37,7 +38,6 @@ if is_torch_available():
         "DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Data2VecAudioForAudioFrameClassification",
         "Data2VecAudioForCTC",
-        "Data2VecAudioForPreTraining",
         "Data2VecAudioForSequenceClassification",
         "Data2VecAudioForXVector",
         "Data2VecAudioModel",
@@ -56,11 +56,9 @@ if is_torch_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_data2vec import (
-        DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    from .configuration_data2vec_audio import DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig
+    from .configuration_data2vec_text import (
         DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Data2VecAudioConfig,
-        Data2VecAudioOnnxConfig,
         Data2VecTextConfig,
         Data2VecTextOnnxConfig,
     )
@@ -70,7 +68,6 @@ if TYPE_CHECKING:
             DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,
             Data2VecAudioForAudioFrameClassification,
             Data2VecAudioForCTC,
-            Data2VecAudioForPreTraining,
             Data2VecAudioForSequenceClassification,
             Data2VecAudioForXVector,
             Data2VecAudioModel,

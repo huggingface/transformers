@@ -1156,13 +1156,6 @@ class Data2VecAudioForCTC(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Data2VecAudioForPreTraining(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class Data2VecAudioForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
