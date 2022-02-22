@@ -39,6 +39,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "fastspeech2": 1024,
 }
 
+
 class FastSpeech2TokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" FastSpeech2 tokenizer (backed by HuggingFace's *tokenizers* library).
@@ -54,15 +55,15 @@ class FastSpeech2TokenizerFast(PreTrainedTokenizerFast):
     slow_tokenizer_class = FastSpeech2Tokenizer
 
     def __init__(
-            self,
-            vocab_file,
-            merges_file,
-            unk_token="<|endoftext|>",
-            bos_token="<|endoftext|>",
-            eos_token="<|endoftext|>",
-            add_prefix_space=False,
-            trim_offsets=True,
-            **kwargs
+        self,
+        vocab_file,
+        merges_file,
+        unk_token="<|endoftext|>",
+        bos_token="<|endoftext|>",
+        eos_token="<|endoftext|>",
+        add_prefix_space=False,
+        trim_offsets=True,
+        **kwargs
     ):
         super().__init__(
             ByteLevelBPETokenizer(
@@ -85,13 +86,12 @@ class FastSpeech2TokenizerFast(PreTrainedTokenizerFast):
 
         return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
-
     def create_token_type_ids_from_sequences(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        FastSpeech2 does not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. FastSpeech2 does
+        not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):
@@ -100,7 +100,7 @@ class FastSpeech2TokenizerFast(PreTrainedTokenizerFast):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`:  List of zeros.
+            `List[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -108,6 +108,3 @@ class FastSpeech2TokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-
-
-

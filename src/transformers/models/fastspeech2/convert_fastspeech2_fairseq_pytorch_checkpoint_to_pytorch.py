@@ -21,16 +21,16 @@ import os
 
 import fairseq
 import torch
-from fairseq.data import Dictionary
 from fairseq.checkpoint_utils import load_model_ensemble_and_task_from_hf_hub
+from fairseq.data import Dictionary
 
 from transformers import (
+    FastSpeech2Config,
+    FastSpeech2Model,
     Wav2Vec2CTCTokenizer,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
     logging,
-    FastSpeech2Config,
-    FastSpeech2Model,
 )
 
 
@@ -221,12 +221,10 @@ def convert_sew_checkpoint(
     """
 
     models, _, _ = load_model_ensemble_and_task_from_hf_hub(
-        "facebook/fastspeech2-en-ljspeech",
-        arg_overrides={"vocoder": "hifigan", "fp16": False}
+        "facebook/fastspeech2-en-ljspeech", arg_overrides={"vocoder": "hifigan", "fp16": False}
     )
     model = models[0].eval()
 
-    
     # if is_finetuned:
     #     if dict_path:
     #         target_dict = Dictionary.load(dict_path)
@@ -264,7 +262,7 @@ def convert_sew_checkpoint(
     #     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     hf_model = FastSpeech2Model(FastSpeech2Config())
-    
+
     recursively_load_weights(model, hf_model, is_finetuned)
 
     hf_model.save_pretrained(pytorch_dump_folder_path)
