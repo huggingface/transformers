@@ -599,13 +599,9 @@ class TFModelTesterMixin:
             # Prepare head_mask
             def prepare_layer_head_mask(i, attention_heads, num_hidden_layers):
                 if i == 0:
-                    return tf.concat(
-                        (tf.zeros(1, dtype=tf.float32), tf.ones(attention_heads - 1, dtype=tf.float32)), 0
-                    )
+                    return tf.concat((tf.zeros(1, dtype=tf.float32), tf.ones(attention_heads - 1, dtype=tf.float32)), 0)
                 elif i == num_hidden_layers - 1:
-                    return tf.concat(
-                        (tf.zeros(attention_heads - 1, dtype=tf.float32), tf.ones(1, dtype=tf.float32)), 0
-                    )
+                    return tf.concat((tf.zeros(attention_heads - 1, dtype=tf.float32), tf.ones(1, dtype=tf.float32)), 0)
                 else:
                     return tf.ones(attention_heads, dtype=tf.float32)
 
