@@ -364,10 +364,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
         string = " ".join(processed_chars).strip()
 
-        return {
-            "text": string,
-            "char_offsets": char_offsets,
-        }
+        return {"text": string, "char_offsets": char_offsets}
 
     @staticmethod
     def _compute_offsets(
@@ -397,7 +394,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         group_tokens: bool = True,
         filter_word_delimiter_token: bool = True,
         spaces_between_special_tokens: bool = False,
-        output_char_offsets: Optional[bool] = False,
+        output_char_offsets: bool = False,
     ) -> str:
         """
         special _decode function is needed for Wav2Vec2PhonemeTokenizer because added tokens should be treated exactly
@@ -426,10 +423,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             text = self.clean_up_tokenization(text)
 
         if output_char_offsets:
-            return Wav2Vec2PhonemeCTCTokenizerOutput(
-                text=text,
-                char_offsets=string_output["char_offsets"],
-            )
+            return Wav2Vec2PhonemeCTCTokenizerOutput(text=text, char_offsets=string_output["char_offsets"])
         else:
             return text
 
@@ -463,7 +457,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
                 Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
                 understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2_phoneme.tokenization_wav2vec2_phoneme.batch_decode`] works analogous with phonemes.
+                [`~model.wav2vec2_phoneme.tokenization_wav2vec2_phoneme.batch_decode`] works the same way with phonemes.
 
                 </Tip>
 
@@ -471,8 +465,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
                 Will be passed to the underlying model specific decode method.
 
         Returns:
-            `str`: The decoded sentence or
-            [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`] if
+            `str` or [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`]:
+            The decoded sentence. Will be a 
+            [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`] when
             `output_char_offsets == True`.
         """
         # Convert inputs to python lists

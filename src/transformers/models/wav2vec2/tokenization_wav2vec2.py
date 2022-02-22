@@ -302,11 +302,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         if self.do_lower_case:
             string = string.lower()
 
-        return {
-            "text": string,
-            "char_offsets": char_offsets,
-            "word_offsets": word_offsets,
-        }
+        return {"text": string, "char_offsets": char_offsets, "word_offsets": word_offsets}
 
     @staticmethod
     def _compute_offsets(
@@ -342,10 +338,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             char_is_in_word = char != word_delimiter_char
 
             if word_begin:
-                word_offset = {
-                    "word": "",
-                    "start_offset": offset["start_offset"],
-                }
+                word_offset = {"word": "", "start_offset": offset["start_offset"]}
 
             if word_end:
                 word_offset["end_offset"] = offset["end_offset"]
@@ -434,7 +427,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
                 Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
                 understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works analogous with batched output.
+                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works the same way with batched output.
 
                 </Tip>
 
@@ -446,7 +439,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
                 Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
                 understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works analogous with batched output.
+                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works the same way with batched output.
 
                 </Tip>
 
@@ -454,8 +447,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 Will be passed to the underlying model specific decode method.
 
         Returns:
-            `List[str]`: The list of decoded sentences or
-            [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`] if `output_char_offsets == True` or
+            `List[str]` or [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`]:
+            The list of decoded sentences. Will be a [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`] when `output_char_offsets == True` or
             `output_word_offsets == True`.
         """
         batch_decoded = [
@@ -505,7 +498,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
                 <Tip>
 
-                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                Please take a look at the example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
                 understand how to make use of `output_word_offsets`.
 
                 </Tip>
@@ -516,7 +509,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
                 <Tip>
 
-                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                Please take a look at the example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
                 understand how to make use of `output_word_offsets`.
 
                 </Tip>
