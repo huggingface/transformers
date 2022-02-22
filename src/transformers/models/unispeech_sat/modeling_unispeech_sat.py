@@ -1061,10 +1061,6 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
         if isinstance(module, (UniSpeechSatEncoder, UniSpeechSatEncoderStableLayerNorm, UniSpeechSatFeatureEncoder)):
             module.gradient_checkpointing = value
 
-    @property
-    def stride(self):
-        return math.prod(self.config.conv_stride)
-
 
 UNISPEECH_SAT_START_DOCSTRING = r"""
     UniSpeechSat was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech

@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch Hubert model."""
 
-import math
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -877,10 +876,6 @@ class HubertPreTrainedModel(PreTrainedModel):
         attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
-
-    @property
-    def stride(self):
-        return math.prod(self.config.conv_stride)
 
 
 HUBERT_START_DOCSTRING = r"""

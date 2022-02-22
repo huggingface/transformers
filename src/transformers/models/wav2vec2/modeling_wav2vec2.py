@@ -1172,10 +1172,6 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         if isinstance(module, (Wav2Vec2Encoder, Wav2Vec2EncoderStableLayerNorm, Wav2Vec2FeatureEncoder)):
             module.gradient_checkpointing = value
 
-    @property
-    def stride(self):
-        return math.prod(self.config.conv_stride)
-
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
     Wav2Vec2 was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech

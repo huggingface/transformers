@@ -19,17 +19,33 @@ import os
 import sys
 from dataclasses import dataclass
 from itertools import groupby
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...file_utils import ModelOutput, requires_backends
+from ...file_utils import (
+    ModelOutput,
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
+    requires_backends,
+    to_py_obj,
+)
 from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
 from ...tokenization_utils_base import AddedToken
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+if TYPE_CHECKING:
+    if is_torch_available():
+        import torch
+    if is_tf_available():
+        import tensorflow as tf
+    if is_flax_available():
+        import jax.numpy as jnp  # noqa: F401
 
 
 VOCAB_FILES_NAMES = {
@@ -51,23 +67,21 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/wav2vec2-lv-60-espeak-cv-ft"
 
 
 @dataclass
-# Copied from transformers.models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput with Wav2Vec2->Wav2Vec2Phoneme
 class Wav2Vec2PhonemeCTCTokenizerOutput(ModelOutput):
     """
-    Output type of [` Wav2Vec2CTCTokenizer`], with transcription.
+    Output type of [` Wav2Vec2PhonemeCTCTokenizer`], with transcription.
 
     Args:
-        text (list of `str`):
+        text (list of `str` or `str`):
             Decoded logits in text from. Usually the speech transcription.
-        logit_score (list of `float`):
-            Total logit score of the beam associated with produced text.
-        lm_score (list of `float`):
-            Fused lm_score of the beam associated with produced text.
+        char_offsets (`Dict[str, Union[int, str]]` or `Dict[str, Union[int, str]]`):
+            Offsets of the decoded characters. In combination with sampling rate and model downsampling rate char
+            offsets can be used to compute time stamps for each charater. Total logit score of the beam associated with
+            produced text.
     """
 
     text: Union[List[str], str]
     char_offsets: List[Dict[str, Union[float, str]]] = None
-    word_offsets: List[Dict[str, Union[float, str]]] = None
 
 
 class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
@@ -308,7 +322,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         spaces_between_special_tokens: bool = False,
         filter_word_delimiter_token: bool = True,
         output_char_offsets: bool = False,
-        output_word_offsets: bool = False,
     ) -> str:
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
@@ -321,7 +334,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             char_repetitions = len(tokens) * [1]
 
         # filter self.pad_token which is used as CTC-blank token
-        #        filtered_tokens = list(filter(lambda token: token != self.pad_token, tokens))
         processed_chars = list(filter(lambda char: char != self.pad_token, chars))
 
         # also filter self.word_delimiter_token if not not
@@ -329,9 +341,11 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             processed_chars = list(filter(lambda token: token != self.word_delimiter_token, processed_chars))
 
         # retrieve offsets
-        char_offsets = word_offsets = None
-        if output_char_offsets or output_word_offsets:
-            word_delimiter_token_for_offsets = self.word_delimiter_token if filter_word_delimiter_token is True else None
+        char_offsets = None
+        if output_char_offsets:
+            word_delimiter_token_for_offsets = (
+                self.word_delimiter_token if filter_word_delimiter_token is True else None
+            )
             char_offsets = self._compute_offsets(
                 char_repetitions, chars, self.pad_token, word_delimiter_token=word_delimiter_token_for_offsets
             )
@@ -348,18 +362,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             for i, char in enumerate(processed_chars):
                 char_offsets[i]["char"] = char
 
-            # retrieve word offsets from character offsets
-            word_offsets = None
-            if output_word_offsets:
-                word_offsets = self._get_word_offsets(char_offsets, word_delimiter_char=" ")
-
         string = " ".join(processed_chars).strip()
 
-        return {
-            "text": string,
-            "char_offsets": char_offsets,
-            "word_offsets": word_offsets,
-        }
+        return {"text": string, "char_offsets": char_offsets}
 
     @staticmethod
     def _compute_offsets(
@@ -381,40 +386,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
         return offsets
 
-    @staticmethod
-    # Copied from transformers.models.wav2vec2.tokenization_wav2vec2._get_word_offsets
-    def _get_word_offsets(
-        offsets: Dict[str, Union[str, float]], word_delimiter_char: str = " "
-    ) -> Dict[str, Union[str, float]]:
-        word_offsets = []
-        final_offset_idx = len(offsets) - 1
-
-        for i, offset in enumerate(offsets):
-            # define previous, next and current char
-            char = offset["char"]
-            prev_char = offsets[i - 1]["char"] if i > 0 else None
-            next_char = offsets[i + 1]["char"] if i < final_offset_idx else None
-
-            # derive whether word begins, ends and whether current char is in word
-            word_begin = (i == 0 and char != word_delimiter_char) or (prev_char == word_delimiter_char)
-            word_end = (i == final_offset_idx and char != word_delimiter_char) or (next_char == word_delimiter_char)
-            char_is_in_word = char != word_delimiter_char
-
-            if word_begin:
-                word_offset = {
-                    "word": "",
-                    "start_offset": offset["start_offset"],
-                }
-
-            if word_end:
-                word_offset["end_offset"] = offset["end_offset"]
-                word_offsets.append(word_offset)
-
-            if char_is_in_word:
-                word_offset["word"] += offset["char"]
-
-        return word_offsets
-
     def _decode(
         self,
         token_ids: List[int],
@@ -423,8 +394,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         group_tokens: bool = True,
         filter_word_delimiter_token: bool = True,
         spaces_between_special_tokens: bool = False,
-        output_word_offsets: Optional[bool] = None,
-        output_char_offsets: Optional[bool] = False,
+        output_char_offsets: bool = False,
     ) -> str:
         """
         special _decode function is needed for Wav2Vec2PhonemeTokenizer because added tokens should be treated exactly
@@ -444,7 +414,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             group_tokens=group_tokens,
             spaces_between_special_tokens=spaces_between_special_tokens,
             filter_word_delimiter_token=filter_word_delimiter_token,
-            output_word_offsets=output_word_offsets,
             output_char_offsets=output_char_offsets,
         )
 
@@ -453,14 +422,120 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         if clean_up_tokenization_spaces:
             text = self.clean_up_tokenization(text)
 
-        if output_word_offsets or output_char_offsets:
-            return Wav2Vec2PhonemeCTCTokenizerOutput(
-                text=text,
-                char_offsets=string_output["char_offsets"],
-                word_offsets=string_output["word_offsets"],
-            )
+        if output_char_offsets:
+            return Wav2Vec2PhonemeCTCTokenizerOutput(text=text, char_offsets=string_output["char_offsets"])
         else:
             return text
+
+    # overwritten from `tokenization_utils_base.py` because we need docs for `output_char_offsets` here
+    def decode(
+        self,
+        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        output_char_offsets: bool = False,
+        **kwargs
+    ) -> str:
+        """
+        Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
+        tokens and clean up tokenization spaces.
+
+        Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
+
+        Args:
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+                Whether or not to clean up the tokenization spaces.
+            output_char_offsets (`bool`, *optional*, defaults to `False`):
+                Whether or not to output character offsets. Character offsets can be used in combination with the
+                sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
+
+                <Tip>
+
+                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                understand how to make use of `output_word_offsets`.
+                [`~model.wav2vec2_phoneme.tokenization_wav2vec2_phoneme.batch_decode`] works the same way with phonemes.
+
+                </Tip>
+
+            kwargs (additional keyword arguments, *optional*):
+                Will be passed to the underlying model specific decode method.
+
+        Returns:
+            `str` or [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`]:
+            The decoded sentence. Will be a 
+            [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`] when
+            `output_char_offsets == True`.
+        """
+        # Convert inputs to python lists
+        token_ids = to_py_obj(token_ids)
+
+        return self._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            output_char_offsets=output_char_offsets,
+            **kwargs,
+        )
+
+    # overwritten from `tokenization_utils_base.py` because tokenizer can output `ModelOutput` which should not be a list for batched output and because we need docs for `output_char_offsets` here
+    def batch_decode(
+        self,
+        sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        output_char_offsets: bool = False,
+        **kwargs
+    ) -> List[str]:
+        """
+        Convert a list of lists of token ids into a list of strings by calling decode.
+
+        Args:
+            sequences (`Union[List[int], List[List[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+                Whether or not to clean up the tokenization spaces.
+            output_char_offsets (`bool`, *optional*, defaults to `False`):
+                Whether or not to output character offsets. Character offsets can be used in combination with the
+                sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
+
+                <Tip>
+
+                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                understand how to make use of `output_word_offsets`.
+                [`~model.wav2vec2_phoneme.tokenization_wav2vec2_phoneme.batch_decode`] works analogous with phonemes
+                and batched output.
+
+                </Tip>
+
+            kwargs (additional keyword arguments, *optional*):
+                Will be passed to the underlying model specific decode method.
+
+        Returns:
+            `List[str]`: The list of decoded sentences or
+            [`~models.wav2vec2.tokenization_wav2vec2_phoneme.Wav2Vec2PhonemeCTCTokenizerOutput`] if
+            `output_char_offsets == True`.
+        """
+        batch_decoded = [
+            self.decode(
+                seq,
+                skip_special_tokens=skip_special_tokens,
+                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                output_char_offsets=output_char_offsets,
+                **kwargs,
+            )
+            for seq in sequences
+        ]
+        if output_char_offsets:
+            # transform list of dicts to dict of lists
+            return Wav2Vec2PhonemeCTCTokenizerOutput({k: [d[k] for d in batch_decoded] for k in batch_decoded[0]})
+
+        return batch_decoded
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
