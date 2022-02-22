@@ -150,6 +150,7 @@ class FastSpeech2Config(PretrainedConfig):
         self.pitch_max = pitch_max
         self.energy_min = energy_min
         self.energy_max = energy_max
+        self.initializer_range = self.encoder_embed_dim ** -0.5
         super().__init__(
             pad_token_id=pad_token_id,
             # bos_token_id=bos_token_id,

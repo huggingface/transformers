@@ -16,16 +16,12 @@
 
 
 import math
-import os
 from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -34,12 +30,6 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
 )
 from ...modeling_utils import (
     PreTrainedModel,
@@ -64,25 +54,26 @@ FASTSPEECH2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def model_init(m):
-    if isinstance(m, nn.Conv1d):
-        nn.init.xavier_uniform_(m.weight, torch.nn.init.calculate_gain("relu"))
-
-
-def Embedding(num_embeddings, embedding_dim, padding_idx=None):
-    m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
-    nn.init.normal_(m.weight, mean=0, std=embedding_dim**-0.5)
-    return m
-
-
-def lengths_to_padding_mask(lens):
-    # lens: torch.LongTensor
-    # returns: torch.BoolTensor
+def lengths_to_padding_mask(lens: torch.LongTensor) -> torch.BoolTensor:
+    # from https://github.com/pytorch/fairseq/blob/main/fairseq/data/data_utils.py
     bsz, max_lens = lens.size(0), torch.max(lens).item()
     mask = torch.arange(max_lens).to(lens.device).view(1, max_lens)
     mask = mask.expand(bsz, -1) >= lens.view(bsz, 1).expand(-1, max_lens)
     return mask
 
+# Copied from transformers.models.bart.modeling_bart._expand_mask
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+    """
+    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    """
+    bsz, src_len = mask.size()
+    tgt_len = tgt_len if tgt_len is not None else src_len
+
+    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+    inverted_mask = 1.0 - expanded_mask
+
+    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 # Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding with Speech2Text->FastSpeech2
 class FastSpeech2PositionalEmbedding(nn.Module):
@@ -408,9 +399,9 @@ class VarianceAdaptor(nn.Module):
 
         n_bins, steps = self.args.var_pred_n_bins, self.args.var_pred_n_bins - 1
         self.pitch_bins = torch.linspace(args.pitch_min, args.pitch_max, steps)
-        self.embed_pitch = Embedding(n_bins, args.encoder_embed_dim)
+        self.embed_pitch = nn.Embedding(n_bins, args.encoder_embed_dim)
         self.energy_bins = torch.linspace(args.energy_min, args.energy_max, steps)
-        self.embed_energy = Embedding(n_bins, args.encoder_embed_dim)
+        self.embed_energy = nn.Embedding(n_bins, args.encoder_embed_dim)
 
     def get_pitch_emb(self, x, tgt=None, factor=1.0):
         out = self.pitch_predictor(x)
@@ -489,31 +480,15 @@ class Postnet(nn.Module):
             x = conv(x)
         return x.transpose(1, 2)
 
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
-
 
 class FastSpeech2Encoder(nn.Module):
     def __init__(self, args):
-        # super().__init__(src_dict)
         super().__init__()
         self.args = args
         self.padding_idx = args.pad_token_id
         self.n_frames_per_step = args.n_frames_per_step
         self.out_dim = args.output_frame_dim * args.n_frames_per_step
 
-        # NOTE: modified from original fairseq code
         self.spk_emb_proj = None
         self.embed_speaker = None
         if args.num_speakers > 1:
@@ -521,9 +496,7 @@ class FastSpeech2Encoder(nn.Module):
             self.spk_emb_proj = nn.Linear(args.encoder_embed_dim + args.speaker_embed_dim, args.encoder_embed_dim)
 
         self.dropout_module = nn.Dropout(args.dropout)
-        # len(src_dict) = 75
-        # self.embed_tokens = Embedding(len(src_dict), args.encoder_embed_dim, padding_idx=self.padding_idx)
-        self.embed_tokens = Embedding(args.vocab_size, args.encoder_embed_dim, padding_idx=self.padding_idx)
+        self.embed_tokens = nn.Embedding(args.vocab_size, args.encoder_embed_dim, padding_idx=self.padding_idx)
 
         self.embed_positions = FastSpeech2PositionalEmbedding(
             args.max_source_positions, args.encoder_embed_dim, self.padding_idx
@@ -569,8 +542,6 @@ class FastSpeech2Encoder(nn.Module):
                 args.postnet_dropout,
             )
 
-        self.apply(model_init)
-
     def forward(
         self,
         src_tokens,
@@ -578,7 +549,6 @@ class FastSpeech2Encoder(nn.Module):
         durations=None,
         pitches=None,
         energies=None,
-        **kwargs,
     ):
         x = self.embed_tokens(src_tokens)
 
@@ -622,7 +592,6 @@ class FastSpeech2PreTrainedModel(PreTrainedModel):
     """
 
     config_class = FastSpeech2Config
-    # load_tf_weights = load_tf_weights_in_fastspeech2
     base_model_prefix = "fastspeech2"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -642,6 +611,8 @@ class FastSpeech2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Conv1d):
+            nn.init.xavier_uniform_(module.weight, nn.init.calculate_gain("relu"))
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, FastSpeech2Encoder):
@@ -664,18 +635,16 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-
-        # self.embeddings = FastSpeech2Embeddings(config)
         self.encoder = FastSpeech2Encoder(config)
 
         # Initialize weights and apply final processing
-        # self.post_init()
+        self.post_init()
 
-    # def get_input_embeddings(self):
-    #     return self.embeddings.word_embeddings
+    def get_input_embeddings(self):
+        return self.encoder.embed_tokens
 
-    # def set_input_embeddings(self, value):
-    #     self.embeddings.word_embeddings = value
+    def set_input_embeddings(self, value):
+        self.encoder.embed_tokens = value
 
     def _prune_heads(self, heads_to_prune):
         """Prunes heads of the model.
@@ -687,6 +656,7 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
+        # NOTE: should change model output type
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
