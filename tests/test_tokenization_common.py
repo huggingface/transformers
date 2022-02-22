@@ -356,7 +356,7 @@ class TokenizerTesterMixin:
             return
 
         tokenizer = self.get_tokenizer()
-        text = "This is text to test the tokenizer."
+        text = "This is a test"
 
         if self.test_sentencepiece_ignore_case:
             text = text.lower()
