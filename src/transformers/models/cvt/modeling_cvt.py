@@ -118,7 +118,7 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         return tensor
 
 def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
-    # type: (Tensor, float, float, float, float) -> Tensor
+    ## type: (Tensor, float, float, float, float) -> Tensor
     r"""Fills the input Tensor with values drawn from a truncated
     normal distribution. The values are effectively drawn from the
     normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`
@@ -136,6 +136,11 @@ def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
         >>> nn.init.trunc_normal_(w)
     """
     return _no_grad_trunc_normal_(tensor, mean, std, a, b)
+
+
+class QuickGELU(nn.Module):
+    def forward(self, x: torch.Tensor):
+        return x * torch.sigmoid(1.702 * x)
 
 class BaseModelOutputWithCLSToken(ModelOutput):
     """
@@ -492,7 +497,9 @@ class CvtEncoder(nn.Module):
             )
         
         self.patch_embeddings = nn.ModuleList(embeddings)
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, self.config.embed_dim[-1]))
         
+
         blocks = []
         for i in range(config.num_stages):
             dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate[i], config.depth[i])]  # stochastic depth decay rule
@@ -519,9 +526,7 @@ class CvtEncoder(nn.Module):
             blocks.append(nn.ModuleList(layers))
         
         self.block = nn.ModuleList(blocks)
-
-        
-
+       
     def forward(
         self,
         pixel_values,
@@ -538,20 +543,22 @@ class CvtEncoder(nn.Module):
         cls_token = None
         for i, x in enumerate(zip(self.patch_embeddings, self.block)):
             if self.config.cls_token[i]:
-                cls_token = nn.Parameter(torch.zeros(1, 1, self.config.embed_dim[i]))
-                trunc_normal_(cls_token, std=0.02)
+                cls_token = self.cls_token
             else:
                 cls_token = None
 
             embedding_layer, block_layer = x
             layer_head_mask = head_mask[i] if head_mask is not None else None
             hidden_states = embedding_layer(hidden_states)
+            #print(hidden_states)
             B, C, H, W = hidden_states.shape
             hidden_states = rearrange(hidden_states, 'b c h w -> b (h w) c') 
 
             if cls_token is not None:
+                print('CLS1', hidden_states, cls_token)
                 cls_token = cls_token.expand(B, -1, -1)
                 hidden_states = torch.cat((cls_token, hidden_states), dim=1)
+                print('CLS1', hidden_states, cls_token)
             
             for j, blk in enumerate(block_layer):
                 layer_outputs = blk(hidden_states, H, W, layer_head_mask, output_attentions)
@@ -560,10 +567,12 @@ class CvtEncoder(nn.Module):
                     all_self_attentions = all_self_attentions + (layer_outputs[1],)
             
             if cls_token is not None:
+                print('CLS2', hidden_states, cls_token)
                 cls_token, hidden_states = torch.split(hidden_states, [1, H*W], 1)
+                print('CLS2', hidden_states, cls_token)
             
             hidden_states = rearrange(hidden_states, 'b (h w) c -> b c h w', h=H, w=W)
-                
+              
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 

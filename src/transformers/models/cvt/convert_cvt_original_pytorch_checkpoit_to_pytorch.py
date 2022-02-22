@@ -2,7 +2,7 @@ from __future__ import annotations
 from pprint import pprint
 
 from transformers import CvtConfig, CvtForImageClassification
-from lib.models.cls_cvt import ConvolutionalVisionTransformer as CVT
+from CvT.lib.models.cls_cvt import ConvolutionalVisionTransformer as CVT
 import torch
 import yaml
 
