@@ -406,7 +406,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         else:
             return text
 
-    # overwritten from `tokenization_utils_base.py` because tokenizer can output `ModelOutput` which should not be a list for batched output and because we need docs for `output_char_offsets` here
+    # overwritten from `tokenization_utils_base.py` because tokenizer can output
+    # `ModelOutput` which should not be a list for batched output and
+    # because we need docs for `output_char_offsets` here
     def batch_decode(
         self,
         sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
