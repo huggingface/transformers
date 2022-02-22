@@ -326,6 +326,10 @@ model = AutoModelForImageClassification.from_pretrained(
 Note that when browsing the commit history of the model repo on the Hub, there is a button to easily copy the commit
 hash of any commit.
 
+Also note that the Hugging Face team is in the process of running more and more security scanning of uploaded files
+and code. You can refer to [the hub's security documentation](https://huggingface.co/docs/hub/security#malware-scanning)
+to learn more.
+
 ## Registering a model with custom code to the auto classes
 
 If you are writing a library that extends 🤗 Transformers, you may want to extend the auto classes to include your own
