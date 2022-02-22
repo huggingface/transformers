@@ -32,6 +32,19 @@ class TestActivations(unittest.TestCase):
         self.assertTrue(torch.allclose(gelu_python(x), torch_builtin(x)))
         self.assertFalse(torch.allclose(gelu_python(x), gelu_new(x)))
 
+    def test_gelu_10(self):
+        x = torch.tensor([-100, -1, -0.1, 0, 0.1, 1.0, 100])
+        torch_builtin = get_activation("gelu")
+        gelu10 = get_activation("gelu_10")
+
+        y_gelu = torch_builtin(x)
+        y_gelu_10 = gelu10(x)
+
+        clipped_mask = torch.where(y_gelu_10 < 10.0, 1, 0)
+
+        self.assertTrue(torch.max(y_gelu_10).item() == 10.0)
+        self.assertTrue(torch.allclose(y_gelu * clipped_mask, y_gelu_10 * clipped_mask))
+
     def test_get_activation(self):
         get_activation("swish")
         get_activation("silu")
@@ -40,6 +53,7 @@ class TestActivations(unittest.TestCase):
         get_activation("gelu_new")
         get_activation("gelu_fast")
         get_activation("gelu_python")
+        get_activation("gelu_10")
         get_activation("quick_gelu")
         get_activation("mish")
         get_activation("linear")
