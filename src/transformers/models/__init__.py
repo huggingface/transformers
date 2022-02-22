@@ -38,6 +38,7 @@ from . import (
     clip,
     convbert,
     convnext,
+    resnet,
     cpm,
     ctrl,
     deberta,
