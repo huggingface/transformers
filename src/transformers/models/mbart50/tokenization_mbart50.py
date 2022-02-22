@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...tokenization_utils import AddedToken, BatchEncoding, PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, BatchEncoding, PreTrainedTokenizer, SentencePieceStringConversionMixin
 from ...utils import logging
 
 
@@ -45,7 +45,7 @@ FAIRSEQ_LANGUAGE_CODES = ["ar_AR", "cs_CZ", "de_DE", "en_XX", "es_XX", "et_EE", 
 # fmt: on
 
 
-class MBart50Tokenizer(PreTrainedTokenizer):
+class MBart50Tokenizer(SentencePieceStringConversionMixin, PreTrainedTokenizer):
     """
     Construct a MBart50 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
@@ -233,9 +233,9 @@ class MBart50Tokenizer(PreTrainedTokenizer):
             return self.fairseq_ids_to_tokens[index]
         return self.sp_model.IdToPiece(index - self.fairseq_offset)
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        return self.sp_model.decode(tokens)
+    # def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    #     """Converts a sequence of tokens (strings for sub-words) in a single string."""
+    #     return self.sp_model.decode(tokens)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):

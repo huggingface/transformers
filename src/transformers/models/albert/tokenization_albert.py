@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer, SentencePieceStringConversionMixin
 from ...utils import logging
 
 
@@ -56,7 +56,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 SPIECE_UNDERLINE = "▁"
 
 
-class AlbertTokenizer(PreTrainedTokenizer):
+class AlbertTokenizer(SentencePieceStringConversionMixin, PreTrainedTokenizer):
     """
     Construct an ALBERT tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
@@ -248,9 +248,6 @@ class AlbertTokenizer(PreTrainedTokenizer):
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.sp_model.IdToPiece(index)
-
-    def convert_tokens_to_string(self, tokens):
-        return self.sp_model.decode(tokens)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
