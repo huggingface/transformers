@@ -947,16 +947,8 @@ if is_torch_available():
     _import_structure["models.fastspeech2"].extend(
         [
             "FASTSPEECH2_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "FastSpeech2ForCausalLM",
-            "FastSpeech2ForMaskedLM",
-            "FastSpeech2ForMultipleChoice",
-            "FastSpeech2ForQuestionAnswering",
-            "FastSpeech2ForSequenceClassification",
-            "FastSpeech2ForTokenClassification",
-            "FastSpeech2Layer",
             "FastSpeech2Model",
             "FastSpeech2PreTrainedModel",
-            "load_tf_weights_in_fastspeech2",
         ]
     )
     _import_structure["models.flaubert"].extend(
@@ -3080,16 +3072,8 @@ if TYPE_CHECKING:
         from .models.encoder_decoder import EncoderDecoderModel
         from .models.fastspeech2 import (
             FASTSPEECH2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FastSpeech2ForCausalLM,
-            FastSpeech2ForMaskedLM,
-            FastSpeech2ForMultipleChoice,
-            FastSpeech2ForQuestionAnswering,
-            FastSpeech2ForSequenceClassification,
-            FastSpeech2ForTokenClassification,
-            FastSpeech2Layer,
             FastSpeech2Model,
             FastSpeech2PreTrainedModel,
-            load_tf_weights_in_fastspeech2,
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
