@@ -34,4 +34,6 @@ with strategy.scope():
     )
 
 print("==================================== Evaluating Model =================================")
-model.fit(train_tf_dataset, validation_data=eval_tf_dataset, epochs=3)
+model.fit(train_tf_dataset, validation_data=eval_tf_dataset, epochs=1)
+info = model.evaluate(eval_tf_dataset, verbose=2)
+
