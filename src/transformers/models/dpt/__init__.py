@@ -31,6 +31,7 @@ if is_vision_available():
 if is_torch_available():
     _import_structure["modeling_dpt"] = [
         "DPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "DPTForDepthEstimation",
         "DPTLayer",
         "DPTModel",
         "DPTPreTrainedModel",
@@ -44,7 +45,13 @@ if TYPE_CHECKING:
         from .feature_extraction_dpt import DPTFeatureExtractor
 
     if is_torch_available():
-        from .modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST, DPTLayer, DPTModel, DPTPreTrainedModel
+        from .modeling_dpt import (
+            DPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DPTForDepthEstimation,
+            DPTLayer,
+            DPTModel,
+            DPTPreTrainedModel,
+        )
 
 
 else:

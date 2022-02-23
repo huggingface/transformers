@@ -1607,6 +1607,13 @@ class DPRReader(metaclass=DummyObject):
 DPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class DPTForDepthEstimation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class DPTLayer(metaclass=DummyObject):
     _backends = ["torch"]
 

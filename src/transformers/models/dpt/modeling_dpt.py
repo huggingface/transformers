@@ -26,10 +26,14 @@ import math
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
@@ -432,13 +436,13 @@ class DPTReassembleBlocks(nn.Module):
         assert isinstance(inputs, list)
         out = []
 
-        out_size = self.config.image_size // self.config.patch_size
+        patch_resolution = self.config.image_size // self.config.patch_size
 
         for i, x in enumerate(inputs):
             # reshape to (B, C, H, W)
             x, cls_token = x[:, 1:], x[:, 0]
             B, _, C = x.shape
-            x = x.reshape(B, out_size, out_size, C)
+            x = x.reshape(B, patch_resolution, patch_resolution, C)
             x = x.permute(0, 3, 1, 2).contiguous()
 
             feature_shape = x.shape
@@ -472,7 +476,7 @@ class DPTPreActResidualConvUnit(nn.Module):
         init_cfg (dict, optional): Initialization config dict. Default: None.
     """
 
-    def __init__(self, config, stride=1, dilation=1):
+    def __init__(self, config):
         super().__init__()
         #          in_channels,
         #  act_cfg,
@@ -482,18 +486,15 @@ class DPTPreActResidualConvUnit(nn.Module):
         #  init_cfg=None):
 
         in_channels = config.channels
-        dilation = dilation
-        stride = stride
 
         self.act1 = nn.ReLU()
         self.conv1 = nn.Conv2d(
             in_channels,
             in_channels,
-            3,
-            stride=stride,
-            padding=dilation,
-            dilation=dilation,
-            bias=False,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=not config.use_bn,
         )
         self.batch_norm = nn.BatchNorm2d(in_channels) if config.use_bn else nn.Identity()
 
@@ -501,9 +502,10 @@ class DPTPreActResidualConvUnit(nn.Module):
         self.conv2 = nn.Conv2d(
             in_channels,
             in_channels,
-            3,
+            kernel_size=3,
+            stride=1,
             padding=1,
-            bias=False,
+            bias=not config.use_bn,
         )
         self.batch_norm = nn.BatchNorm2d(in_channels) if config.use_bn else nn.Identity()
 
@@ -623,15 +625,6 @@ DPT_INPUTS_DOCSTRING = r"""
 """
 
 
-class Slice(nn.Module):
-    def __init__(self, start_index=1):
-        super(Slice, self).__init__()
-        self.start_index = start_index
-
-    def forward(self, x):
-        return x[:, self.start_index :]
-
-
 @add_start_docstrings(
     "The bare DPT Model transformer outputting raw hidden-states without any specific head on top.",
     DPT_START_DOCSTRING,
@@ -645,7 +638,7 @@ class DPTModel(DPTPreTrainedModel):
         self.embeddings = DPTViTEmbeddings(config)
         self.encoder = DPTViTEncoder(config)
 
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        #self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = DPTViTPooler(config) if add_pooling_layer else None
 
         # postprocessing
@@ -662,7 +655,7 @@ class DPTModel(DPTPreTrainedModel):
         self.fusion_blocks = nn.ModuleList()
         for _ in range(len(self.convs)):
             self.fusion_blocks.append(DPTFeatureFusionBlock(config))
-        self.fusion_blocks[0].res_conv_unit1 = None
+        # self.fusion_blocks[0].res_conv_unit1 = None # not sure why this is done in mmseg
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -721,11 +714,11 @@ class DPTModel(DPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        encoder_hidden_states = encoder_outputs.hidden_states if return_dict else outputs[2]
+        encoder_hidden_states = encoder_outputs.hidden_states if return_dict else encoder_outputs[2]
 
         # only keep certain features based on config.out_indices
-        # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
-        features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
+        # note that the encoder_hidden_states also include the initial embeddings
+        features = [feature for idx, feature in enumerate(encoder_hidden_states[1:]) if idx in self.config.out_indices]
 
         # postprocess features
         features = self.reassemble_blocks(features)
@@ -745,7 +738,7 @@ class DPTModel(DPTPreTrainedModel):
             out = self.fusion_blocks[i](out, features[-(i + 1)])
 
         if not return_dict:
-            return (out, pooled_output) + encoder_outputs[1:]
+            return (out,) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=out,
@@ -768,3 +761,128 @@ class DPTViTPooler(nn.Module):
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
+
+
+class DPTInterpolate(nn.Module):
+    """Interpolation module."""
+
+    def __init__(self, scale_factor, mode, align_corners=False):
+        """Init.
+        Args:
+            scale_factor (float): scaling
+            mode (str): interpolation mode
+        """
+        super(DPTInterpolate, self).__init__()
+
+        self.interpolate = nn.functional.interpolate
+        self.scale_factor = scale_factor
+        self.mode = mode
+        self.align_corners = align_corners
+
+    def forward(self, x):
+        """Forward pass.
+        Args:
+            x (tensor): input
+        Returns:
+            tensor: interpolated data
+        """
+
+        x = self.interpolate(
+            x,
+            scale_factor=self.scale_factor,
+            mode=self.mode,
+            align_corners=self.align_corners,
+        )
+
+        return x
+
+
+@add_start_docstrings(
+    """
+    DPT Model transformer with a depth estimation head on top e.g. for KITTI, NYUv2.
+    """,
+    DPT_START_DOCSTRING,
+)
+class DPTForDepthEstimation(DPTPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.dpt = DPTModel(config, add_pooling_layer=False)
+
+        # Depth estimation head
+        features = config.channels
+        self.head = nn.Sequential(
+            nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
+            DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
+            nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(True),
+            nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
+            nn.ReLU(True),
+            nn.Identity(),
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(DPT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values=None,
+        head_mask=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples:
+        ```python
+        >>> from transformers import AutoFeatureExtractor, DPTForDepthEstimation
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        >>> model = DPTForDepthEstimation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> # logits are of shape (batch_size, num_labels, height, width)
+        >>> logits = outputs.logits
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        outputs = self.dpt(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=True,  # we need the intermediate hidden states
+            return_dict=return_dict,
+        )
+
+        logits = self.head(outputs.last_hidden_state)
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not implemented yet")
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )

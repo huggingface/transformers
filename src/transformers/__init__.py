@@ -953,6 +953,7 @@ if is_torch_available():
     _import_structure["models.dpt"].extend(
         [
             "DPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DPTForDepthEstimation",
             "DPTLayer",
             "DPTModel",
             "DPTPreTrainedModel",
@@ -3201,7 +3202,13 @@ if TYPE_CHECKING:
             DPRQuestionEncoder,
             DPRReader,
         )
-        from .models.dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST, DPTLayer, DPTModel, DPTPreTrainedModel
+        from .models.dpt import (
+            DPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DPTForDepthEstimation,
+            DPTLayer,
+            DPTModel,
+            DPTPreTrainedModel,
+        )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
             ElectraForCausalLM,

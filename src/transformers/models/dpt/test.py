@@ -1,12 +1,21 @@
 import torch
 
-from transformers import DPTConfig, DPTModel
+from transformers import DPTConfig, DPTForDepthEstimation
 
+config = DPTConfig()
+config.image_size = 384
+config.hidden_size = 1024
+config.intermediate_size = 4096
+config.num_hidden_layers = 24
+config.num_attention_heads = 16
 
-model = DPTModel(DPTConfig())
+model = DPTForDepthEstimation(config)
 
-pixel_values = torch.randn((1, 3, 224, 224))
+for name, param in model.named_parameters():
+    print(name, param.shape)
+
+pixel_values = torch.randn((1, 3, 384, 384))
 
 outputs = model(pixel_values)
 
-print("Last hidden states:", outputs.last_hidden_state.shape)
+print("Shape of logits:", outputs.logits.shape)

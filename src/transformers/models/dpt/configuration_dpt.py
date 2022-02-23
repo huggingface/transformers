@@ -67,7 +67,7 @@ class DPTConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         out_indices (`List[int]`, *optional*, defaults to [2, 5, 8, 11]):
             Indices of the intermediate hidden states to use from backbone.
-        readout_type (`str`, *optional*, defaults to `ignore`):
+        readout_type (`str`, *optional*, defaults to `project`):
             The readout type to use when processing the readout token (CLS token) of the intermediate hidden states of
             the ViT backbone. Can be one of ['ignore', 'add', 'project'].
 
@@ -76,14 +76,14 @@ class DPTConfig(PretrainedConfig):
             - "project" passes information to the other tokens by concatenating the readout to all other tokens before
               projecting the
             representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
-        post_process_channels (`List[str]`, *optional*, defaults to [96, 192, 384, 768]):
+        post_process_channels (`List[str]`, *optional*, defaults to [256, 512, 1024, 1024]):
             The number of output channels for each of the four feature maps of the backbone.
         channels (`int`, *optional*, defaults to 256):
             The number of channels before fusion.
         expand_channels (`bool`, *optional*, defaults to `False``):
             Whether to expand the number of channels of the backbone feature maps.
-        use_bn (`bool`, *optional*, defaults to `True`):
-            Whether to use batch normalization.
+        use_bn (`bool`, *optional*, defaults to `False`):
+            Whether to use batch normalization in the pre-activate residual units of the fusion blocks.
 
     Example:
 
@@ -118,11 +118,11 @@ class DPTConfig(PretrainedConfig):
         num_channels=3,
         qkv_bias=True,
         out_indices=[2, 5, 8, 11],
-        readout_type="ignore",
-        post_process_channels=[96, 192, 384, 768],
+        readout_type="project",
+        post_process_channels=[256, 512, 1024, 1024],
         channels=256,
         expand_channels=False,
-        use_bn=True,
+        use_bn=False,
         **kwargs
     ):
         super().__init__(**kwargs)
