@@ -2184,7 +2184,9 @@ class TFGenerationMixin:
                     )
 
             # sample
-            next_tokens = tf.squeeze(tf.random.categorical(logits=next_token_scores, num_samples=1, dtype=tf.int32))
+            next_tokens = tf.squeeze(
+                tf.random.categorical(logits=next_token_scores, num_samples=1, dtype=tf.int32), axis=1
+            )
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
