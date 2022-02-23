@@ -42,16 +42,16 @@ _CONFIG_FOR_DOC = "CvtConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "CvtFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "google/cvt-base-patch16-224-in21k"
+_CHECKPOINT_FOR_DOC = "microsoft/cvt-base-patch13-224-in1k"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/cvt-base-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'Egyptian cat'"
+_IMAGE_CLASS_CHECKPOINT = "microsoft/cvt-base-patch13-224"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby cat'"
 
 
 CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/cvt-base-patch16-224",
+    "microsoft/cvt-base-patch13-224",
     # See all Cvt models at https://huggingface.co/models?filter=cvt
 ]
 
