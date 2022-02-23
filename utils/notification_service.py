@@ -138,7 +138,7 @@ class Message:
     @property
     def time(self) -> str:
         all_results = [*self.model_results.values(), *self.additional_results.values()]
-        time_spent = [r["time_spent"].split(", ")[0] for r in all_results]
+        time_spent = [r["time_spent"].split(", ")[0] for r in all_results if len(r["time_spent"])]
         total_secs = 0
 
         for time in time_spent:
@@ -276,7 +276,7 @@ class Message:
     @property
     def additional_failures(self) -> Dict:
         failures = {k: v["failed"] for k, v in self.additional_results.items()}
-        errors = {k: "error" in v for k, v in self.additional_results.items()}
+        errors = {k: v["error"] for k, v in self.additional_results.items()}
 
         individual_reports = []
         for key, value in failures.items():
@@ -341,7 +341,7 @@ class Message:
         print(json.dumps({"blocks": json.loads(payload)}))
 
         client.chat_postMessage(
-            channel=os.environ["CI_SLACK_CHANNEL_DUMMY_TESTS"],
+            channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
             text="There was an issue running the tests.",
             blocks=payload,
         )
@@ -353,7 +353,7 @@ class Message:
         text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
 
         self.thread_ts = client.chat_postMessage(
-            channel=os.environ["CI_SLACK_CHANNEL_DUMMY_TESTS"],
+            channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
             blocks=self.payload,
             text=text,
         )
@@ -399,7 +399,7 @@ class Message:
                     print(json.dumps({"blocks": blocks}))
 
                     client.chat_postMessage(
-                        channel=os.environ["CI_SLACK_CHANNEL_DUMMY_TESTS"],
+                        channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
                         text=f"Results for {job}",
                         blocks=blocks,
                         thread_ts=self.thread_ts["ts"],
@@ -422,7 +422,7 @@ class Message:
                     print(json.dumps({"blocks": blocks}))
 
                     client.chat_postMessage(
-                        channel=os.environ["CI_SLACK_CHANNEL_DUMMY_TESTS"],
+                        channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
                         text=f"Results for {job}",
                         blocks=blocks,
                         thread_ts=self.thread_ts["ts"],
@@ -627,9 +627,10 @@ if __name__ == "__main__":
 
     additional_results = {
         key: {
-            "failed": {"unclassified": 0, "single": 0, "multi": 0, "error": False},
+            "failed": {"unclassified": 0, "single": 0, "multi": 0},
             "success": 0,
             "time_spent": "",
+            "error": False,
             "failures": {},
             "job_link": github_actions_job_links.get(key),
         }
