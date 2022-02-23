@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Data2VecAudio model configuration"""
+""" Data2VecText configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -21,7 +21,7 @@ import math
 
 logger = logging.get_logger(__name__)
 
-DATA_2_VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/data2vec-base-960h": "https://huggingface.co/facebook/data2vec-audio-base-960h/resolve/main/config.json",
     # See all Data2VecAudio models at https://huggingface.co/models?filter=data2vec-audio
 }
@@ -29,9 +29,9 @@ DATA_2_VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Data2VecAudioConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Data2VecAudioModel`]. It is used to instantiate an
-    Data2VecAudio model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Data2VecAudio
+    This is the configuration class to store the configuration of a [`Data2VecAudioModel`]. It is used to instantiate
+    an Data2VecAudio model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Data2VecAudio
     [facebook/wav2vec2-base-960h](https://huggingface.co/facebook/wav2vec2-base-960h) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -40,10 +40,10 @@ class Data2VecAudioConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32):
-            Vocabulary size of the Data2VecAudio model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`Data2VecAudioModel`] or [`TFData2VecAudioModel`]. Vocabulary size of the
-            model. Defines the different tokens that can be represented by the *inputs_ids* passed to the forward
-            method of [`Data2VecAudioModel`].
+            Vocabulary size of the Data2VecAudio model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`Data2VecAudioModel`] or [`TFData2VecAudioModel`]. Vocabulary size
+            of the model. Defines the different tokens that can be represented by the *inputs_ids* passed to the
+            forward method of [`Data2VecAudioModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -157,8 +157,8 @@ class Data2VecAudioConfig(PretrainedConfig):
         xvector_output_dim (`int`, *optional*, defaults to 512):
             Dimensionality of the *XVector* embedding vectors.
         add_adapter (`bool`, *optional*, defaults to `False`):
-            Whether a convolutional network should be stacked on top of the Data2VecAudio Encoder. Can be very useful for
-            warm-starting Data2VecAudio for SpeechEncoderDecoder models.
+            Whether a convolutional network should be stacked on top of the Data2VecAudio Encoder. Can be very useful
+            for warm-starting Data2VecAudio for SpeechEncoderDecoder models.
         adapter_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
         adapter_stride (`int`, *optional*, defaults to 2):

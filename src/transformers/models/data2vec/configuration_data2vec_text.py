@@ -23,17 +23,17 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "edugp/data2vec-nlp-base": "https://huggingface.co/data2vec/resolve/main/config.json",
 }
 
 
 class Data2VecTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Data2VecTextForTextModel`] and
-    [`Data2VecTextForAudioModel`]. It is used to instantiate a Data2VecText model according to the specified arguments,
-    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
-    to that of the Data2VecText [edugp/data2vec-nlp-base](https://huggingface.co/edugp/data2vec-nlp-base) architecture.
+    This is the configuration class to store the configuration of a [`Data2VecTextModel`] and [`Data2VecTextModel`]. It
+    is used to instantiate a Data2VecText model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Data2VecText
+    [edugp/data2vec-nlp-base](https://huggingface.co/edugp/data2vec-nlp-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

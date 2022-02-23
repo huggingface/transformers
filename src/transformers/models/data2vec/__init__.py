@@ -22,52 +22,67 @@ from ...file_utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
-    "configuration_data2vec_text": ["DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecTextConfig", "Data2VecTextOnnxConfig"],
-    "configuration_data2vec_audio": ["DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig", "Data2VecAudioOnnxConfig"],
+    "configuration_data2vec_audio": [
+        "DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Data2VecAudioConfig",
+    ],
+    "configuration_data2vec_text": [
+        "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Data2VecTextConfig",
+        "Data2VecTextOnnxConfig",
+    ],
 }
 
 if is_torch_available():
+    _import_structure["modeling_data2vec_audio"] = [
+        "DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "Data2VecAudioForAudioFrameClassification",
+        "Data2VecAudioForCTC",
+        "Data2VecAudioForSequenceClassification",
+        "Data2VecAudioForXVector",
+        "Data2VecAudioModel",
+        "Data2VecAudioPreTrainedModel",
+    ]
     _import_structure["modeling_data2vec_text"] = [
         "DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Data2VecTextModel",
         "Data2VecTextForCausalLM",
         "Data2VecTextForMaskedLM",
         "Data2VecTextForMultipleChoice",
         "Data2VecTextForQuestionAnswering",
         "Data2VecTextForSequenceClassification",
-        "Data2VecTextForTextModel",
         "Data2VecTextForTokenClassification",
+        "Data2VecTextModel",
         "Data2VecTextPreTrainedModel",
-    ]
-    _import_structure["modeling_data2vec_audio"] = [
-        "DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Data2VecAudioModel",
-        "Data2VecAudioPreTrainedModel",
-        "Data2VecAudioForCTC",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_data2vec_text import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecTextConfig, Data2VecTextOnnxConfig
-    from .configuration_data2vec_audio import DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig, Data2VecAudioOnnxConfig
+    from .configuration_data2vec_audio import DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig
+    from .configuration_data2vec_text import (
+        DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Data2VecTextConfig,
+        Data2VecTextOnnxConfig,
+    )
 
     if is_torch_available():
+        from .modeling_data2vec_audio import (
+            DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Data2VecAudioForAudioFrameClassification,
+            Data2VecAudioForCTC,
+            Data2VecAudioForSequenceClassification,
+            Data2VecAudioForXVector,
+            Data2VecAudioModel,
+            Data2VecAudioPreTrainedModel,
+        )
         from .modeling_data2vec_text import (
             DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Data2VecTextForAudioModel,
             Data2VecTextForCausalLM,
             Data2VecTextForMaskedLM,
             Data2VecTextForMultipleChoice,
             Data2VecTextForQuestionAnswering,
             Data2VecTextForSequenceClassification,
-            Data2VecTextForTextModel,
             Data2VecTextForTokenClassification,
+            Data2VecTextModel,
             Data2VecTextPreTrainedModel,
-        )
-        from .modeling_data2vec_audio import (
-            DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Data2VecAudioModel,
-            Data2VecAudioPreTrainedModel,
-            Data2VecAudioForCTC,
         )
 
 else:

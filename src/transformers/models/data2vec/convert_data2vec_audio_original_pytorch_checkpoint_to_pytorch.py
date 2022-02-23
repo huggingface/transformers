@@ -17,19 +17,19 @@
 
 import argparse
 import os
-
-import torch
 from functools import reduce
 
-from transformers import Wav2Vec2Processor, logging
 import fairseq
+import torch
 from datasets import load_dataset
+
+from transformers import Wav2Vec2Processor, logging
+from transformers.models.data2vec.configuration_data2vec_audio import Data2VecAudioConfig
 
 # Copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_audio.py
 from transformers.models.data2vec.data2vec_audio import Data2VecAudioModel as Dummy  # noqa: F401
+from transformers.models.data2vec.modeling_data2vec_audio import Data2VecAudioForCTC, Data2VecAudioModel
 
-from transformers.models.data2vec.modeling_data2vec_audio import Data2VecAudioModel, Data2VecAudioForCTC
-from transformers.models.data2vec.configuration_data2vec_audio import Data2VecAudioConfig
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -151,9 +151,7 @@ def set_weights(full_name, module, fsq_value, hf_weight_path):
     hf_value = hf_weight.data
 
     if fsq_value.shape != hf_value.shape:
-        raise ValueError(
-            f"{full_name} has size {fsq_value.shape}, but {hf_value.shape} was found."
-        )
+        raise ValueError(f"{full_name} has size {fsq_value.shape}, but {hf_value.shape} was found.")
     hf_weight.data = fsq_value
     logger.info(f"{full_name} was correctly initialized from {hf_weight_path}.")
 
@@ -235,15 +233,15 @@ def convert_wav2vec2_checkpoint(
 
     input_values = inputs.input_values
     attention_mask = inputs.attention_mask
-#    input_values = inputs.input_values[:, :-1]
-#    attention_mask = inputs.attention_mask[:, :-1]
+    #    input_values = inputs.input_values[:, :-1]
+    #    attention_mask = inputs.attention_mask[:, :-1]
 
     hf_wav2vec.eval()
     model.eval()
     if is_finetuned:
-        their_output = model(source=input_values, padding_mask=(1 - attention_mask), mask=False, features_only=True)["encoder_out"].transpose(
-            0, 1
-        )
+        their_output = model(source=input_values, padding_mask=(1 - attention_mask), mask=False, features_only=True)[
+            "encoder_out"
+        ].transpose(0, 1)
         our_output = hf_wav2vec(input_values, attention_mask=attention_mask)["logits"]
 
         pred_ids = torch.argmax(our_output, dim=-1)
@@ -251,9 +249,9 @@ def convert_wav2vec2_checkpoint(
 
         print(f"Expected Output: {ds[:4]['text']}, Pred: {output_string}")
     else:
-        their_output = model(source=input_values, padding_mask=(1 - attention_mask), mask=False, features_only=True)["layer_results"][-1][0].transpose(
-            0, 1
-        )
+        their_output = model(source=input_values, padding_mask=(1 - attention_mask), mask=False, features_only=True)[
+            "layer_results"
+        ][-1][0].transpose(0, 1)
         our_output = hf_wav2vec(input_values, attention_mask=attention_mask)["last_hidden_state"]
 
     print(our_output.shape, their_output.shape)
