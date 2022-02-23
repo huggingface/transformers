@@ -36,14 +36,7 @@ if is_tf_available():
         TFLongformerModel,
         TFLongformerSelfAttention,
     )
-
-    def shape_list(x):
-        """
-        copied from transformers.modeling_tf_utils
-        """
-        static = x.shape.as_list()
-        dynamic = tf.shape(x)
-        return [dynamic[i] if s is None else s for i, s in enumerate(static)]
+    from transformers.tf_utils import shape_list
 
 
 class TFLongformerModelTester:
@@ -80,12 +73,6 @@ class TFLongformerModelTester:
         # returns attention of shape [num_attention_heads, encoder_seq_length, self.attention_window + 1]
         # because its local attention only attends to `self.attention_window` and one before and one after
         self.key_length = self.attention_window + 2
-
-        # because of padding `encoder_seq_length`, is different from `seq_length`. Relevant for
-        # the `test_attention_outputs` and `test_hidden_states_output` tests
-        self.encoder_seq_length = (
-            self.seq_length + (self.attention_window - self.seq_length % self.attention_window) % self.attention_window
-        )
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)

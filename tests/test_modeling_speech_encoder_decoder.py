@@ -125,6 +125,43 @@ class EncoderDecoderMixin:
             outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
         )
 
+    def check_encoder_decoder_model_with_inputs(
+        self,
+        config,
+        attention_mask,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        input_values=None,
+        input_features=None,
+        **kwargs
+    ):
+        inputs = input_values if input_features is None else input_features
+        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
+
+        outputs_encoder_decoder = enc_dec_model(
+            inputs,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+            output_hidden_states=True,
+        )
+        self.assertEqual(
+            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+        )
+        outputs_encoder_decoder_kwarg = enc_dec_model(
+            inputs=inputs,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+            output_hidden_states=True,
+        )
+        self.assertEqual(
+            outputs_encoder_decoder_kwarg["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+        )
+
     def check_encoder_decoder_model_from_pretrained(
         self,
         config,
@@ -308,6 +345,11 @@ class EncoderDecoderMixin:
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
 
+        # make sure EOS token is set to None to prevent early stopping of generation
+        enc_dec_model.config.eos_token_id = None
+        if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
+            enc_dec_model.config.decoder.eos_token_id = None
+
         inputs = input_values if input_features is None else input_features
 
         # Bert does not have a bos token id, so use pad_token_id instead
@@ -319,6 +361,10 @@ class EncoderDecoderMixin:
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model(**input_ids_dict)
+
+    def test_encoder_decoder_model_with_inputs(self):
+        input_ids_dict = self.prepare_config_and_inputs()
+        self.check_encoder_decoder_model_with_inputs(**input_ids_dict)
 
     def test_encoder_decoder_model_from_pretrained_configs(self):
         input_ids_dict = self.prepare_config_and_inputs()

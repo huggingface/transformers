@@ -22,6 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
+from transformers import AutoProcessor
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME, is_pyctcdecode_available
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
@@ -31,6 +32,7 @@ from .test_feature_extraction_wav2vec2 import floats_list
 
 
 if is_pyctcdecode_available():
+    from huggingface_hub import snapshot_download
     from pyctcdecode import BeamSearchDecoderCTC
     from transformers.models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
 
@@ -177,12 +179,14 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         logits = self._get_dummy_logits(shape=(10, 16), seed=13)
 
-        decoded_processor = processor.decode(logits).text
+        decoded_processor = processor.decode(logits)
 
-        decoded_decoder = decoder.decode_beams(logits)[0][0]
+        decoded_decoder = decoder.decode_beams(logits)[0]
 
-        self.assertEqual(decoded_decoder, decoded_processor)
-        self.assertEqual("</s> <s> </s>", decoded_processor)
+        self.assertEqual(decoded_decoder[0], decoded_processor.text)
+        self.assertEqual("</s> <s> </s>", decoded_processor.text)
+        self.assertEqual(decoded_decoder[-2], decoded_processor.logit_score)
+        self.assertEqual(decoded_decoder[-1], decoded_processor.lm_score)
 
     def test_decoder_batch(self):
         feature_extractor = self.get_feature_extractor()
@@ -193,15 +197,22 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         logits = self._get_dummy_logits()
 
-        decoded_processor = processor.batch_decode(logits).text
+        decoded_processor = processor.batch_decode(logits)
 
         logits_list = [array for array in logits]
         pool = get_context("fork").Pool()
-        decoded_decoder = [d[0][0] for d in decoder.decode_beams_batch(pool, logits_list)]
+        decoded_beams = decoder.decode_beams_batch(pool, logits_list)
+        texts_decoder, logit_scores_decoder, lm_scores_decoder = [], [], []
+        for beams in decoded_beams:
+            texts_decoder.append(beams[0][0])
+            logit_scores_decoder.append(beams[0][-2])
+            lm_scores_decoder.append(beams[0][-1])
         pool.close()
 
-        self.assertListEqual(decoded_decoder, decoded_processor)
-        self.assertListEqual(["<s> <s> </s>", "<s> <s> <s>"], decoded_processor)
+        self.assertListEqual(texts_decoder, decoded_processor.text)
+        self.assertListEqual(["<s> <s> </s>", "<s> <s> <s>"], decoded_processor.text)
+        self.assertListEqual(logit_scores_decoder, decoded_processor.logit_score)
+        self.assertListEqual(lm_scores_decoder, decoded_processor.lm_score)
 
     def test_decoder_with_params(self):
         feature_extractor = self.get_feature_extractor()
@@ -303,3 +314,39 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         # https://huggingface.co/hf-internal-testing/processor_with_lm/tree/main
         # are downloaded and none of the rest (e.g. README.md, ...)
         self.assertListEqual(downloaded_decoder_files, expected_decoder_files)
+
+    def test_decoder_local_files(self):
+        local_dir = snapshot_download("hf-internal-testing/processor_with_lm")
+
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained(local_dir)
+
+        language_model = processor.decoder.model_container[processor.decoder._model_key]
+        path_to_cached_dir = Path(language_model._kenlm_model.path.decode("utf-8")).parent.parent.absolute()
+
+        local_decoder_files = os.listdir(local_dir)
+        expected_decoder_files = os.listdir(path_to_cached_dir)
+
+        local_decoder_files.sort()
+        expected_decoder_files.sort()
+
+        # test that both decoder form hub and local files in cache are the same
+        self.assertListEqual(local_decoder_files, expected_decoder_files)
+
+    def test_processor_from_auto_processor(self):
+        processor_wav2vec2 = Wav2Vec2ProcessorWithLM.from_pretrained("hf-internal-testing/processor_with_lm")
+        processor_auto = AutoProcessor.from_pretrained("hf-internal-testing/processor_with_lm")
+
+        raw_speech = floats_list((3, 1000))
+
+        input_wav2vec2 = processor_wav2vec2(raw_speech, return_tensors="np")
+        input_auto = processor_auto(raw_speech, return_tensors="np")
+
+        for key in input_wav2vec2.keys():
+            self.assertAlmostEqual(input_wav2vec2[key].sum(), input_auto[key].sum(), delta=1e-2)
+
+        logits = self._get_dummy_logits()
+
+        decoded_wav2vec2 = processor_wav2vec2.batch_decode(logits)
+        decoded_auto = processor_auto.batch_decode(logits)
+
+        self.assertListEqual(decoded_wav2vec2.text, decoded_auto.text)

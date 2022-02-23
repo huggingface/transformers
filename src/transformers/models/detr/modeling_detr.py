@@ -36,6 +36,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_int_div
 from ...utils import logging
 from .configuration_detr import DetrConfig
 
@@ -419,7 +420,7 @@ class DetrSinePositionEmbedding(nn.Module):
             x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
 
         dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.embedding_dim)
+        dim_t = self.temperature ** (2 * torch_int_div(dim_t, 2) / self.embedding_dim)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -488,7 +489,7 @@ class DetrAttention(nn.Module):
         assert (
             self.head_dim * num_heads == self.embed_dim
         ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)

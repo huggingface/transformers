@@ -544,7 +544,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
             self.assertTrue(torch.allclose(q_int, q_int.round(), atol=1e-4))
 
             # Output of the quantize Softmax should not exceed the output_bit
-            self.assertTrue(q.abs().max() < 2 ** output_bit)
+            self.assertTrue(q.abs().max() < 2**output_bit)
 
         array = [[i + j for j in range(10)] for i in range(-10, 10)]
         _test(array)

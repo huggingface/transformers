@@ -13,10 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Longformer configuration"""
-from collections import OrderedDict
-from typing import List, Mapping, Union
+from typing import List, Union
 
-from ...onnx import OnnxConfig
 from ...utils import logging
 from ..roberta.configuration_roberta import RobertaConfig
 
@@ -69,18 +67,3 @@ class LongformerConfig(RobertaConfig):
     def __init__(self, attention_window: Union[List[int], int] = 512, sep_token_id: int = 2, **kwargs):
         super().__init__(sep_token_id=sep_token_id, **kwargs)
         self.attention_window = attention_window
-
-
-class LongformerOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"}), ("pooler_output", {0: "batch"})])

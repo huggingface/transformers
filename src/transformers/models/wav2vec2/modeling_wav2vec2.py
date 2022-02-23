@@ -41,7 +41,8 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, torch_int_div
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_int_div
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
 
@@ -565,7 +566,7 @@ class Wav2Vec2Attention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1701,7 +1702,10 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
                 "instantiate the model as follows: `Wav2Vec2ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
+        output_hidden_size = (
+            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
+        )
+        self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1818,6 +1822,10 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        if hasattr(config, "add_adapter") and config.add_adapter:
+            raise ValueError(
+                "Sequence classification does not support the use of Wav2Vec2 adapters (config.add_adapter=True)"
+            )
         self.wav2vec2 = Wav2Vec2Model(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
@@ -1937,6 +1945,10 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        if hasattr(config, "add_adapter") and config.add_adapter:
+            raise ValueError(
+                "Audio frame classification does not support the use of Wav2Vec2 adapters (config.add_adapter=True)"
+            )
         self.wav2vec2 = Wav2Vec2Model(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
