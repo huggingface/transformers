@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 _HIDDEN_STATES_START_POSITION = 2
 
-_CHECKPOINT_FOR_DOC = "data2vec"
+_CHECKPOINT_FOR_DOC = "facebook/data2vec-text-base"
 _CONFIG_FOR_DOC = "Data2VecTextConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
@@ -67,8 +67,8 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 53.48
 
 DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "data2vec",
-    # See all data2vec models at https://huggingface.co/models?filter=data2vec
+    "facebook/data2vec-text-base",
+    # See all data2vec models at https://huggingface.co/models?filter=data2vec-text
 ]
 
 
