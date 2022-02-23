@@ -42,7 +42,7 @@ _FEAT_EXTRACTOR_FOR_DOC = "ConvNextFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = ""
-_EXPECTED_OUTPUT_SHAPE = [1, 2048, 14, 14]
+_EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = ""
@@ -272,7 +272,8 @@ class ResNetStage(nn.Sequential):
         depth (`int`,*optional*, defaults to 2):
             The number of layers.
         layer_type (`str`, *optional*, defaults to `"basic"`):
-            The type of layer, either `"basic"` or `"bottleneck"`.
+            The layer to use, it can be either `"basic"` (`ResNetBasicLayer`) or `"bottleneck"`
+            (`ResNetBottleNeckLayer`).
         activation (`int`, *optional*, defaults to `"relu"`):
             The activation used by all layers.
     """
