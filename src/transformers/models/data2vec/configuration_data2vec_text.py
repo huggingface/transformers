@@ -93,7 +93,7 @@ class Data2VecTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "data2vec_text"
+    model_type = "data2vec-text"
 
     def __init__(
         self,
