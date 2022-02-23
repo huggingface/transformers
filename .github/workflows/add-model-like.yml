@@ -51,11 +51,11 @@ jobs:
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/failures_short.txt
+        run: cat reports/tests_new_models/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: run_all_tests_new_models_test_reports
-          path: reports
+          path: reports/tests_new_models
