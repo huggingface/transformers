@@ -15,12 +15,10 @@
 """Tokenization classes for OpenAI GPT."""
 
 
-import json
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from tokenizers import pre_tokenizers
 
-from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_clip import CLIPTokenizer
@@ -52,27 +50,6 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
     Construct a "fast" CLIP tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
     Byte-Pair-Encoding.
 
-    This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
-    be encoded differently whether it is at the beginning of the sentence (without space) or not:
-
-    ```
-    >>> from transformers import CLIPTokenizerFast
-    >>> tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32")
-    >>> tokenizer("Hello world")['input_ids']
-    [15496, 995]
-    >>> tokenizer(" Hello world")['input_ids']
-    [18435, 995]
-    ```
-
-    You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
-    call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
-
-    <Tip>
-
-    When used with `is_split_into_words=True`, this tokenizer needs to be instantiated with `add_prefix_space=True`.
-
-    </Tip>
-
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
@@ -81,9 +58,6 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
             Path to the vocabulary file.
         merges_file (`str`):
             Path to the merges file.
-        errors (`str`, *optional*, defaults to `"replace"`):
-            Paradigm to follow when decoding bytes to UTF-8. See
-            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
         unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -91,11 +65,6 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The end of sequence token.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (CLIP tokenizer detect beginning of words by the preceding space).
-        trim_offsets (`bool`, *optional*, defaults to `True`):
-            Whether or not the post-processing step should trim offsets to avoid including whitespaces.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -113,7 +82,6 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
         bos_token="<|startoftext|>",
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",  # hack to enable padding
-        add_prefix_space=False,
         **kwargs
     ):
         super().__init__(
@@ -124,44 +92,81 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
-            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
+        if not isinstance(self.backend_tokenizer.pre_tokenizer, pre_tokenizers.Sequence):
+            raise ValueError(
+                "The `backend_tokenizer` provided does not match the expected format. The CLIP tokenizer has been "
+                "heavily modified from transformers version 4.17.0. You need to convert the tokenizer you are using to be compatible with this version."
+                "The easiest way to do so is "
+                '`CLIPTokenizerFast.from_pretrained("path_to_local_folder_or_hub_repo, from_slow=True)`.'
+                " If you want to use your existing tokenizer, you will have to revert to a version prior to "
+                "4.17.0 of transformers."
+            )
 
-        self.add_prefix_space = add_prefix_space
+        self._wrap_decode_method_backend_tokenizer()
 
-    # Very ugly hack to enable padding
-    @property
-    def pad_token_id(self) -> Optional[int]:
+    # Very ugly hack to enable padding to have a correct decoding see https://github.com/huggingface/tokenizers/issues/872
+    def _wrap_decode_method_backend_tokenizer(self):
+        orig_decode_method = self.backend_tokenizer.decode
+
+        def new_decode_method(*args, **kwargs):
+            text = orig_decode_method(*args, **kwargs)
+            text = text.replace(self.backend_tokenizer.model.end_of_word_suffix, " ").strip()
+            return text
+
+        self.backend_tokenizer.decode = new_decode_method
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
         """
-        `Optional[int]`: Id of the padding token in the vocabulary. Returns `None` if the token has not been set.
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A CLIP sequence has the following format:
+
+        - single sequence: `<|startoftext|> X <|endoftext|>`
+
+        Pairs of sequences are not the expected use case, but they will be handled without a separator.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
-        return 0
+        bos_token = [self.bos_token_id]
+        eos_token = [self.eos_token_id]
 
-    def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
-        is_split_into_words = kwargs.get("is_split_into_words", False)
-        assert self.add_prefix_space or not is_split_into_words, (
-            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
-            "to use it with pretokenized inputs."
-        )
+        if token_ids_1 is None:
+            return bos_token + token_ids_0 + eos_token
+        return bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token
 
-        return super()._batch_encode_plus(*args, **kwargs)
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed. CLIP does not make use of token type ids, therefore a list of
+        zeros is returned.
 
-    def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
-        is_split_into_words = kwargs.get("is_split_into_words", False)
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
 
-        assert self.add_prefix_space or not is_split_into_words, (
-            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
-            "to use it with pretokenized inputs."
-        )
+        Returns:
+            `List[int]`: List of zeros.
+        """
+        bos_token = [self.bos_token_id]
+        eos_token = [self.eos_token_id]
 
-        return super()._encode_plus(*args, **kwargs)
+        if token_ids_1 is None:
+            return len(bos_token + token_ids_0 + eos_token) * [0]
+        return len(bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token) * [0]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)

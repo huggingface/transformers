@@ -69,6 +69,36 @@ def quick_gelu(x):
     return x * tf.math.sigmoid(coeff * x)
 
 
+def gelu_10(x):
+    """
+    Clip the range of possible GeLU outputs between [-10, 10]. This is especially useful for quantization purpose, as
+    it allows mapping 2 negatives values in the GeLU spectrum. For more information on this trick, please refer to
+    https://arxiv.org/abs/2004.09602
+
+    Gaussian Error Linear Unit. Original Implementation of the gelu activation function in Google Bert repo when
+    initially created. For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
+    0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))) Also see
+    https://arxiv.org/abs/1606.08415 :param x: :return:
+    """
+    return tf.clip_by_value(_gelu(x), -10, 10)
+
+
+def glu(x, axis=-1):
+    """
+    Gated Linear Unit. Implementation as defined in the original paper (see https://arxiv.org/abs/1612.08083), where
+    the input `x` is split in two halves across a dimension (`axis`), A and B, returning A * sigmoid(B).
+
+    Args:
+        `x`: float Tensor to perform activation
+        `axis`: dimension across which `x` be split in half
+
+    Returns:
+        `x` with the GLU activation applied (with its size halved across the dimension `axis`).
+    """
+    a, b = tf.split(x, 2, axis=axis)
+    return a * tf.math.sigmoid(b)
+
+
 if version.parse(tf.version.VERSION) >= version.parse("2.4"):
 
     def approximate_gelu_wrap(x):
@@ -91,6 +121,8 @@ ACT2FN = {
     "tanh": tf.keras.activations.tanh,
     "gelu_fast": gelu_fast,
     "quick_gelu": quick_gelu,
+    "gelu_10": gelu_10,
+    "glu": glu,
 }
 
 

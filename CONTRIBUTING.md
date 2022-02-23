@@ -388,7 +388,7 @@ You can now use `make` from any terminal (Powershell, cmd.exe, etc) 🎉
 
 ### Syncing forked master with upstream (HuggingFace) master
 
-To avoid pinging the upstream repository which adds reference notes to each upstream PR and sends unnessary notifications to the developers involved in these PRs,
+To avoid pinging the upstream repository which adds reference notes to each upstream PR and sends unnecessary notifications to the developers involved in these PRs,
 when syncing the master branch of a forked repository, please, follow these steps:
 1. When possible, avoid syncing with the upstream using a branch and PR on the forked repository. Instead merge directly into the forked master.
 2. If a PR is absolutely necessary, use the following steps after checking out your branch:

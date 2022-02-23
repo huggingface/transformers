@@ -1,0 +1,59 @@
+name: Delete dev documentation
+
+on:
+  pull_request:
+    types: [ closed ]
+
+
+jobs:
+  build_and_package:
+    runs-on: [self-hosted, doc-builder]
+    container:
+      image: huggingface/doc-builder-transformers
+      options: "-v /home/github_actions:/mnt"
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set env
+        run: echo "WRITE=$(cat /mnt/WRITE)" >> $GITHUB_ENV
+
+      - uses: actions/checkout@v2
+        with:
+          repository: 'huggingface/doc-build-dev'
+          path: doc-build-dev
+          token: ${{ env.WRITE }}
+
+      - name: Setup git
+        run: |
+          git config --global user.name "Hugging Face Doc Builder"
+          git config --global user.email docs@huggingface.co
+
+      - name: Push to repositories
+        run: |
+          cd doc-build-dev
+          ls
+          rm -rf transformers/pr_$PR_NUMBER
+          ls
+          git add .
+          git commit -m "Closed PR ${GITHUB_REF##*/}"
+          git push origin main
+
+      - name: Find Comment
+        if: ${{ always() }}
+        uses: peter-evans/find-comment@v1
+        id: fc
+        with:
+          issue-number: ${{ env.PR_NUMBER }}
+          comment-author: HuggingFaceDocBuilder
+
+      - name: Update comment
+        if: ${{ always() }}
+        uses: peter-evans/create-or-update-comment@v1
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          token: ${{ env.WRITE }}
+          edit-mode: replace
+          body: |
+            _The documentation is not available anymore as the PR was closed or merged._

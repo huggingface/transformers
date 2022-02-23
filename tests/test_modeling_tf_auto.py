@@ -85,35 +85,25 @@ if is_tf_available():
 class TFAutoModelTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
-        import h5py
+        model_name = "bert-base-cased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-        self.assertTrue(h5py.version.hdf5_version.startswith("1.10"))
-
-        # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-        for model_name in ["bert-base-uncased"]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
-
-            model = TFAutoModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, TFBertModel)
+        model = TFAutoModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, TFBertModel)
 
     @slow
     def test_model_for_pretraining_from_pretrained(self):
-        import h5py
+        model_name = "bert-base-cased"
+        config = AutoConfig.from_pretrained(model_name)
+        self.assertIsNotNone(config)
+        self.assertIsInstance(config, BertConfig)
 
-        self.assertTrue(h5py.version.hdf5_version.startswith("1.10"))
-
-        # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-        for model_name in ["bert-base-uncased"]:
-            config = AutoConfig.from_pretrained(model_name)
-            self.assertIsNotNone(config)
-            self.assertIsInstance(config, BertConfig)
-
-            model = TFAutoModelForPreTraining.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, TFBertForPreTraining)
+        model = TFAutoModelForPreTraining.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, TFBertForPreTraining)
 
     @slow
     def test_model_for_causal_lm(self):
@@ -309,3 +299,26 @@ class TFAutoModelTest(unittest.TestCase):
             ):
                 if NewModelConfig in mapping._extra_content:
                     del mapping._extra_content[NewModelConfig]
+
+    def test_repo_not_found(self):
+        with self.assertRaisesRegex(
+            EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"
+        ):
+            _ = TFAutoModel.from_pretrained("bert-base")
+
+    def test_revision_not_found(self):
+        with self.assertRaisesRegex(
+            EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
+        ):
+            _ = TFAutoModel.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
+
+    def test_model_file_not_found(self):
+        with self.assertRaisesRegex(
+            EnvironmentError,
+            "hf-internal-testing/config-no-model does not appear to have a file named tf_model.h5",
+        ):
+            _ = TFAutoModel.from_pretrained("hf-internal-testing/config-no-model")
+
+    def test_model_from_pt_suggestion(self):
+        with self.assertRaisesRegex(EnvironmentError, "Use `from_pt=True` to load this model"):
+            _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")

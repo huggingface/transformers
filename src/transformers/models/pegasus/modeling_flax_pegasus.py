@@ -1058,6 +1058,7 @@ class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
         >>> model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
@@ -1327,6 +1328,7 @@ class FlaxPegasusForConditionalGeneration(FlaxPegasusPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
         >>> model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
@@ -1480,7 +1482,7 @@ class FlaxPegasusForConditionalGeneration(FlaxPegasusPreTrainedModel):
 FLAX_PEGASUS_CONDITIONAL_GENERATION_DOCSTRING = """
     Returns:
 
-    Summarization example::
+    Summarization example:
 
         >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
@@ -1493,7 +1495,7 @@ FLAX_PEGASUS_CONDITIONAL_GENERATION_DOCSTRING = """
         >>> # Generate Summary >>> summary_ids = model.generate(inputs['input_ids']).sequences >>>
         print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
 
-    Mask filling example::
+    Mask filling example:
 
         >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration >>> tokenizer =
         PegasusTokenizer.from_pretrained('google/pegasus-large') >>> TXT = "My friends are <mask> but they eat too many

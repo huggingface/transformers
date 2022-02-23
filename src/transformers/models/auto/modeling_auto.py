@@ -28,6 +28,14 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("poolformer", "PoolFormerModel"),
+        ("convnext", "ConvNextModel"),
+        ("yoso", "YosoModel"),
+        ("swin", "SwinModel"),
+        ("vilt", "ViltModel"),
+        ("vit_mae", "ViTMAEModel"),
+        ("nystromformer", "NystromformerModel"),
+        ("xglm", "XGLMModel"),
         ("imagegpt", "ImageGPTModel"),
         ("qdqbert", "QDQBertModel"),
         ("fnet", "FNetModel"),
@@ -36,6 +44,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("perceiver", "PerceiverModel"),
         ("gptj", "GPTJModel"),
         ("layoutlmv2", "LayoutLMv2Model"),
+        ("plbart", "PLBartModel"),
         ("beit", "BeitModel"),
         ("rembert", "RemBertModel"),
         ("visual_bert", "VisualBertModel"),
@@ -69,6 +78,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("distilbert", "DistilBertModel"),
         ("albert", "AlbertModel"),
         ("camembert", "CamembertModel"),
+        ("xlm-roberta-xl", "XLMRobertaXLModel"),
         ("xlm-roberta", "XLMRobertaModel"),
         ("bart", "BartModel"),
         ("longformer", "LongformerModel"),
@@ -108,6 +118,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
+        ("vit_mae", "ViTMAEForPreTraining"),
         ("fnet", "FNetForPreTraining"),
         ("visual_bert", "VisualBertForPreTraining"),
         ("layoutlm", "LayoutLMForMaskedLM"),
@@ -116,6 +127,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("distilbert", "DistilBertForMaskedLM"),
         ("albert", "AlbertForPreTraining"),
         ("camembert", "CamembertForMaskedLM"),
+        ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
         ("fsmt", "FSMTForConditionalGeneration"),
@@ -150,6 +162,9 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
+        ("yoso", "YosoForMaskedLM"),
+        ("nystromformer", "NystromformerForMaskedLM"),
+        ("plbart", "PLBartForConditionalGeneration"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -169,6 +184,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("distilbert", "DistilBertForMaskedLM"),
         ("albert", "AlbertForMaskedLM"),
         ("camembert", "CamembertForMaskedLM"),
+        ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("marian", "MarianMTModel"),
         ("fsmt", "FSMTForConditionalGeneration"),
@@ -201,6 +217,8 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("xglm", "XGLMForCausalLM"),
+        ("plbart", "PLBartForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
@@ -211,6 +229,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BigBirdForCausalLM"),
         ("camembert", "CamembertForCausalLM"),
         ("distilbert", "DistilBertForCausalLM"),
+        ("xlm-roberta-xl", "XLMRobertaXLForCausalLM"),
         ("xlm-roberta", "XLMRobertaForCausalLM"),
         ("roberta", "RobertaForCausalLM"),
         ("bert", "BertLMHeadModel"),
@@ -236,6 +255,15 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
+    [
+        ("vit", "ViTForMaskedImageModeling"),
+        ("deit", "DeiTForMaskedImageModeling"),
+        ("swin", "SwinForMaskedImageModeling"),
+    ]
+)
+
+
 MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     # Model for Causal Image Modeling mapping
     [
@@ -259,13 +287,25 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
                 "PerceiverForImageClassificationConvProcessing",
             ),
         ),
+        ("swin", "SwinForImageClassification"),
+        ("convnext", "ConvNextForImageClassification"),
+        ("poolformer", "PoolFormerForImageClassification"),
     ]
 )
 
 MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
+        # Do not add new models here, this class will be deprecated in the future.
         # Model for Image Segmentation mapping
         ("detr", "DetrForSegmentation"),
+    ]
+)
+
+MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Semantic Segmentation mapping
+        ("beit", "BeitForSemanticSegmentation"),
+        ("segformer", "SegformerForSemanticSegmentation"),
     ]
 )
 
@@ -278,6 +318,8 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
+        ("yoso", "YosoForMaskedLM"),
+        ("nystromformer", "NystromformerForMaskedLM"),
         ("perceiver", "PerceiverForMaskedLM"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
@@ -292,6 +334,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("bart", "BartForConditionalGeneration"),
         ("mbart", "MBartForConditionalGeneration"),
         ("camembert", "CamembertForMaskedLM"),
+        ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("longformer", "LongformerForMaskedLM"),
         ("roberta", "RobertaForMaskedLM"),
@@ -322,6 +365,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("plbart", "PLBartForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("m2m_100", "M2M100ForConditionalGeneration"),
         ("led", "LEDForConditionalGeneration"),
@@ -350,6 +394,9 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("yoso", "YosoForSequenceClassification"),
+        ("nystromformer", "NystromformerForSequenceClassification"),
+        ("plbart", "PLBartForSequenceClassification"),
         ("perceiver", "PerceiverForSequenceClassification"),
         ("qdqbert", "QDQBertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
@@ -365,6 +412,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("distilbert", "DistilBertForSequenceClassification"),
         ("albert", "AlbertForSequenceClassification"),
         ("camembert", "CamembertForSequenceClassification"),
+        ("xlm-roberta-xl", "XLMRobertaXLForSequenceClassification"),
         ("xlm-roberta", "XLMRobertaForSequenceClassification"),
         ("mbart", "MBartForSequenceClassification"),
         ("bart", "BartForSequenceClassification"),
@@ -397,6 +445,8 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
+        ("yoso", "YosoForQuestionAnswering"),
+        ("nystromformer", "NystromformerForQuestionAnswering"),
         ("qdqbert", "QDQBertForQuestionAnswering"),
         ("fnet", "FNetForQuestionAnswering"),
         ("gptj", "GPTJForQuestionAnswering"),
@@ -414,6 +464,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("bart", "BartForQuestionAnswering"),
         ("mbart", "MBartForQuestionAnswering"),
         ("longformer", "LongformerForQuestionAnswering"),
+        ("xlm-roberta-xl", "XLMRobertaXLForQuestionAnswering"),
         ("xlm-roberta", "XLMRobertaForQuestionAnswering"),
         ("roberta", "RobertaForQuestionAnswering"),
         ("squeezebert", "SqueezeBertForQuestionAnswering"),
@@ -445,6 +496,8 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
+        ("yoso", "YosoForTokenClassification"),
+        ("nystromformer", "NystromformerForTokenClassification"),
         ("qdqbert", "QDQBertForTokenClassification"),
         ("fnet", "FNetForTokenClassification"),
         ("layoutlmv2", "LayoutLMv2ForTokenClassification"),
@@ -458,6 +511,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertForTokenClassification"),
         ("flaubert", "FlaubertForTokenClassification"),
         ("xlm", "XLMForTokenClassification"),
+        ("xlm-roberta-xl", "XLMRobertaXLForTokenClassification"),
         ("xlm-roberta", "XLMRobertaForTokenClassification"),
         ("longformer", "LongformerForTokenClassification"),
         ("roberta", "RobertaForTokenClassification"),
@@ -480,6 +534,8 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
+        ("yoso", "YosoForMultipleChoice"),
+        ("nystromformer", "NystromformerForMultipleChoice"),
         ("qdqbert", "QDQBertForMultipleChoice"),
         ("fnet", "FNetForMultipleChoice"),
         ("rembert", "RemBertForMultipleChoice"),
@@ -489,6 +545,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("convbert", "ConvBertForMultipleChoice"),
         ("camembert", "CamembertForMultipleChoice"),
         ("electra", "ElectraForMultipleChoice"),
+        ("xlm-roberta-xl", "XLMRobertaXLForMultipleChoice"),
         ("xlm-roberta", "XLMRobertaForMultipleChoice"),
         ("longformer", "LongformerForMultipleChoice"),
         ("roberta", "RobertaForMultipleChoice"),
@@ -574,8 +631,14 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = _LazyAutoMapping(
 MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES
 )
+MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES
+)
 MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
 MODEL_FOR_MASKED_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_LM_MAPPING_NAMES)
+MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES
+)
 MODEL_FOR_OBJECT_DETECTION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES)
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
@@ -716,6 +779,15 @@ class AutoModelForImageSegmentation(_BaseAutoModelClass):
 AutoModelForImageSegmentation = auto_class_update(AutoModelForImageSegmentation, head_doc="image segmentation")
 
 
+class AutoModelForSemanticSegmentation(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
+
+
+AutoModelForSemanticSegmentation = auto_class_update(
+    AutoModelForSemanticSegmentation, head_doc="semantic segmentation"
+)
+
+
 class AutoModelForObjectDetection(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
@@ -749,7 +821,7 @@ class AutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
 
 
 AutoModelForSpeechSeq2Seq = auto_class_update(
-    AutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeing"
+    AutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeling"
 )
 
 
@@ -767,6 +839,13 @@ class AutoModelForAudioXVector(_BaseAutoModelClass):
 
 
 AutoModelForAudioXVector = auto_class_update(AutoModelForAudioXVector, head_doc="audio retrieval via x-vector")
+
+
+class AutoModelForMaskedImageModeling(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING
+
+
+AutoModelForMaskedImageModeling = auto_class_update(AutoModelForMaskedImageModeling, head_doc="masked image modeling")
 
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):

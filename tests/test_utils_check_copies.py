@@ -68,7 +68,8 @@ class CopyCheckTester(unittest.TestCase):
         code = comment + f"\nclass {class_name}(nn.Module):\n" + class_code
         if overwrite_result is not None:
             expected = comment + f"\nclass {class_name}(nn.Module):\n" + overwrite_result
-        code = black.format_str(code, mode=black.FileMode([black.TargetVersion.PY35], line_length=119))
+        mode = black.Mode(target_versions={black.TargetVersion.PY35}, line_length=119)
+        code = black.format_str(code, mode=mode)
         fname = os.path.join(self.transformer_dir, "new_code.py")
         with open(fname, "w", newline="\n") as f:
             f.write(code)

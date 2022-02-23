@@ -17,15 +17,12 @@ Processor class for LayoutXLM.
 """
 from typing import List, Optional, Union
 
-from transformers.models.layoutlmv2.feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
-
 from ...file_utils import TensorType
+from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from .tokenization_layoutxlm import LayoutXLMTokenizer
-from .tokenization_layoutxlm_fast import LayoutXLMTokenizerFast
 
 
-class LayoutXLMProcessor:
+class LayoutXLMProcessor(ProcessorMixin):
     r"""
     Constructs a LayoutXLM processor which combines a LayoutXLM feature extractor and a LayoutXLM tokenizer into a
     single processor.
@@ -44,84 +41,8 @@ class LayoutXLMProcessor:
         tokenizer (`LayoutXLMTokenizer` or `LayoutXLMTokenizerFast`):
             An instance of [`LayoutXLMTokenizer`] or [`LayoutXLMTokenizerFast`]. The tokenizer is a required input.
     """
-
-    def __init__(self, feature_extractor, tokenizer):
-        if not isinstance(feature_extractor, LayoutLMv2FeatureExtractor):
-            raise ValueError(
-                f"`feature_extractor` has to be of type {LayoutLMv2FeatureExtractor.__class__}, but is {type(feature_extractor)}"
-            )
-        if not isinstance(tokenizer, (LayoutXLMTokenizer, LayoutXLMTokenizerFast)):
-            raise ValueError(
-                f"`tokenizer` has to be of type {LayoutXLMTokenizer.__class__} or {LayoutXLMTokenizerFast.__class__}, but is {type(tokenizer)}"
-            )
-
-        self.feature_extractor = feature_extractor
-        self.tokenizer = tokenizer
-
-    def save_pretrained(self, save_directory):
-        """
-        Save a LayoutXLM feature_extractor object and LayoutXLM tokenizer object to the directory `save_directory`, so
-        that it can be re-loaded using the [`~LayoutXLMProcessor.from_pretrained`] class method.
-
-        <Tip>
-
-        This class method is simply calling [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] and
-        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the docstrings of the methods
-        above for more information.
-
-        </Tip>
-
-        Args:
-            save_directory (`str` or `os.PathLike`):
-                Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
-                be created if it does not exist).
-        """
-        self.feature_extractor._set_processor_class(self.__class__.__name__)
-        self.feature_extractor.save_pretrained(save_directory)
-
-        self.tokenizer._set_processor_class(self.__class__.__name__)
-        self.tokenizer.save_pretrained(save_directory)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, use_fast=True, **kwargs):
-        r"""
-        Instantiate a [`LayoutXLMProcessor`] from a pretrained LayoutXLM processor.
-
-        <Tip>
-
-        This class method is simply calling Layoutv2FeatureExtractor's
-        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and LayoutXLMTokenizerFast's
-        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the docstrings of the methods
-        above for more information.
-
-        </Tip>
-
-        Args:
-            pretrained_model_name_or_path (`str` or `os.PathLike`):
-                This can be either:
-
-                - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
-                - a path to a *directory* containing a feature extractor file saved using the
-                  [`~SequenceFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
-                - a path or url to a saved feature extractor JSON *file*, e.g.,
-                  `./my_model_directory/preprocessor_config.json`.
-
-            use_fast (`bool`, *optional*, defaults to `True`):
-                Whether or not to instantiate a fast tokenizer.
-
-            **kwargs
-                Additional keyword arguments passed along to both [`SequenceFeatureExtractor`] and
-                [`PreTrainedTokenizer`]
-        """
-        feature_extractor = LayoutLMv2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        if use_fast:
-            tokenizer = LayoutXLMTokenizerFast.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        else:
-            tokenizer = LayoutXLMTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    feature_extractor_class = "LayoutLMv2FeatureExtractor"
+    tokenizer_class = ("LayoutXLMTokenizer", "LayoutXLMTokenizerFast")
 
     def __call__(
         self,

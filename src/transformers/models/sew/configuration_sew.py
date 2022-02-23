@@ -14,6 +14,8 @@
 # limitations under the License.
 """ SEW model configuration"""
 
+import math
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -243,3 +245,7 @@ class SEWConfig(PretrainedConfig):
         # sequence classification
         self.use_weighted_layer_sum = use_weighted_layer_sum
         self.classifier_proj_size = classifier_proj_size
+
+    @property
+    def inputs_to_logits_ratio(self):
+        return math.prod(self.conv_stride)
