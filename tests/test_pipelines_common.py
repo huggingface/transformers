@@ -126,14 +126,14 @@ def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_
 
 
 class ANY:
-    def __init__(self, _type):
-        self._type = _type
+    def __init__(self, *_types):
+        self._types = _types
 
     def __eq__(self, other):
-        return isinstance(other, self._type)
+        return isinstance(other, self._types)
 
     def __repr__(self):
-        return f"ANY({self._type.__name__})"
+        return f"ANY({', '.join(_type.__name__ for _type in self._types)})"
 
 
 class PipelineTestCaseMeta(type):
