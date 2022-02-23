@@ -165,10 +165,17 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                       np.array}` with optionally a `"stride": (left: int, right: int)` than can ask the pipeline to
                       treat the first `left` samples and last `right` samples to be ignored in decoding (but used at
                       inference to provide more context to the model). Only use `stride` with CTC models.
+            return_timestamps (`bool`, defaults to `False`):
+                Only available for pure CTC models. If set to `True`, the pipeline will return `timestamps` along the
+                text. For instance if you get `{"text": "Hi", "timestamps": [(0.5,0.6), (0.7, .9)]}`, then it means the
+                model assumes the letter "H" was pronounces and the 0.5s mark in the incoming audio and lasted for
+                0.1s.
 
         Return:
             `Dict`: A dictionary with the following keys:
                 - **text** (`str`) -- The recognized text.
+                - **timestamps** (`List[Tuple[float, float]]`) -- Optionally returned, when the pipeline is called with
+                  `return_timestamps` argument. Only available for pure CTC models at the moment.
         """
         return super().__call__(inputs, **kwargs)
 
@@ -183,6 +190,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         postprocess_params = {}
         if "decoder_kwargs" in kwargs:
             postprocess_params["decoder_kwargs"] = kwargs["decoder_kwargs"]
+        if "return_timestamps" in kwargs:
+            postprocess_params["return_timestamps"] = kwargs["return_timestamps"]
 
         return preprocess_params, {}, postprocess_params
 
@@ -323,7 +332,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         extra = model_inputs
         return {"is_last": is_last, **out, **extra}
 
-    def postprocess(self, model_outputs, decoder_kwargs: Optional[Dict] = None):
+    def postprocess(self, model_outputs, decoder_kwargs: Optional[Dict] = None, return_timestamps=False):
+        # Optional return types
+        optional = {}
+
+        if return_timestamps and self.type != "ctc":
+            raise ValueError("We cannot return_timestamps yet on non-ctc models !")
+
         if self.type == "ctc_with_lm":
             final_logits = []
             for outputs in model_outputs:
@@ -347,7 +362,30 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             skip_special_tokens = self.type != "ctc"
             tokens = np.concatenate([outputs["tokens"].numpy() for outputs in model_outputs], axis=-1)
             tokens = tokens.squeeze(0)
-            text = self.tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
+
+            if return_timestamps:
+                decoded = self.tokenizer.decode(
+                    tokens, skip_special_tokens=skip_special_tokens, output_char_offsets=True
+                )
+                text = ""
+                timestamps = []
+                for item in decoded.char_offsets:
+                    text += item["char"]
+                    start = (
+                        item["start_offset"]
+                        * self.model.config.inputs_to_logits_ratio
+                        / self.feature_extractor.sampling_rate
+                    )
+                    stop = (
+                        item["end_offset"]
+                        * self.model.config.inputs_to_logits_ratio
+                        / self.feature_extractor.sampling_rate
+                    )
+                    timestamps.append((start, stop))
+                optional["timestamps"] = timestamps
+
+            else:
+                text = self.tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
 
         extra = defaultdict(list)
         for output in model_outputs:
@@ -357,4 +395,4 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 if k == "is_last":
                     continue
                 extra[k].append(v)
-        return {"text": text, **extra}
+        return {"text": text, **optional, **extra}

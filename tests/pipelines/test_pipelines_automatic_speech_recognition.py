@@ -82,14 +82,28 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         outputs = speech_recognizer(audio)
         self.assertEqual(outputs, {"text": ANY(str)})
 
+        # Striding
         audio = {"raw": audio, "stride": (0, 4000), "sampling_rate": speech_recognizer.feature_extractor.sampling_rate}
         if speech_recognizer.type == "ctc":
             outputs = speech_recognizer(audio)
             self.assertEqual(outputs, {"text": ANY(str)})
+
         else:
-            # Non CTC models cannot use striding.
+            # Non CTC models cannot use stridin
             with self.assertRaises(ValueError):
                 outputs = speech_recognizer(audio)
+            outputs = speech_recognizer(audio, return_timestamps=True)
+
+        # Timestamps
+        audio = np.zeros((34000,))
+        if speech_recognizer.type == "ctc":
+            outputs = speech_recognizer(audio, return_timestamps=True)
+            n = len(outputs["text"])
+            self.assertEqual(outputs, {"text": ANY(str), "timestamps": [(ANY(int), ANY(int)) for i in range(n)]})
+        else:
+            # Non CTC models cannot use stridin
+            with self.assertRaises(ValueError):
+                outputs = speech_recognizer(audio, return_timestamps=True)
 
     @require_torch
     @slow
@@ -302,6 +316,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
+
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "a man said to the universe sir i exist"})
 
@@ -321,6 +336,23 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output = speech_recognizer([audio_tiled], batch_size=2)
         self.assertEqual(output, [{"text": ANY(str)}])
         self.assertEqual(output[0]["text"][:6], "ZBT ZC")
+
+    @require_torch
+    def test_return_timestamps_ctc_fast(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-wav2vec2",
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        # Take short audio to keep the test readable
+        audio = ds[40]["audio"]["array"][:500]
+
+        output = speech_recognizer(audio, return_timestamps=True)
+        self.assertEqual(
+            output,
+            {"text": " Z T", "timestamps": [(0.0, 0.012), (0.012, 0.016), (0.016, 0.02), (0.02, 0.024)]},
+        )
 
     @require_torch
     @require_pyctcdecode
@@ -416,11 +448,61 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         audio = ds[40]["audio"]["array"]
 
         n_repeats = 10
-        audio = np.tile(audio, n_repeats)
-        output = speech_recognizer([audio], batch_size=2)
-        expected_text = "A MAN SAID TO THE UNIVERSE SIR I EXIST " * n_repeats
-        expected = [{"text": expected_text.strip()}]
-        self.assertEqual(output, expected)
+        audio_tiled = np.tile(audio, n_repeats)
+        output = speech_recognizer([audio_tiled], batch_size=2)
+        self.assertEqual(output, [{"text": ("A MAN SAID TO THE UNIVERSE SIR I EXIST " * n_repeats).strip()}])
+
+        output = speech_recognizer(audio, return_timestamps=True)
+        self.assertEqual(audio.shape, (74_400,))
+        self.assertEqual(speech_recognizer.feature_extractor.sampling_rate, 16_000)
+        # The audio is 74_400 / 16_000 = 4.65s long.
+        self.assertEqual(
+            output,
+            {
+                "text": "A MAN SAID TO THE UNIVERSE SIR I EXIST ",
+                "timestamps": [
+                    (0.6, 0.62),
+                    (0.62, 0.66),
+                    (0.68, 0.7),
+                    (0.78, 0.8),
+                    (0.84, 0.86),
+                    (0.92, 0.98),
+                    (1.06, 1.08),
+                    (1.14, 1.16),
+                    (1.16, 1.18),
+                    (1.2, 1.24),
+                    (1.24, 1.28),
+                    (1.28, 1.32),
+                    (1.34, 1.36),
+                    (1.38, 1.42),
+                    (1.42, 1.44),
+                    (1.44, 1.46),
+                    (1.46, 1.5),
+                    (1.5, 1.56),
+                    (1.58, 1.62),
+                    (1.64, 1.68),
+                    (1.7, 1.72),
+                    (1.76, 1.78),
+                    (1.84, 1.86),
+                    (1.86, 1.9),
+                    (1.96, 1.98),
+                    (1.98, 2.02),
+                    (2.02, 2.06),
+                    (2.82, 2.86),
+                    (2.94, 2.96),
+                    (2.98, 3.02),
+                    (3.06, 3.12),
+                    (3.5, 3.52),
+                    (3.58, 3.6),
+                    (3.66, 3.68),
+                    (3.68, 3.7),
+                    (3.9, 3.92),
+                    (3.94, 3.96),
+                    (4.0, 4.02),
+                    (4.06, 4.1),
+                ],
+            },
+        )
 
     @require_torch
     @slow
