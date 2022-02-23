@@ -1,18 +1,6 @@
 name: Self-hosted runner (scheduled)
 
 on:
-  push:
-    branches:
-      - master
-      - ci_*
-      - ci-*
-      - github-actions-workflows
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-      - "templates/**"
-      - "utils/**"
   repository_dispatch:
   schedule:
     - cron: "0 2 * * *"
