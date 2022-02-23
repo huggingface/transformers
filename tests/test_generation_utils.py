@@ -2488,3 +2488,43 @@ class GenerationIntegrationTests(unittest.TestCase):
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         self.assertListEqual(outputs, ["Wie alter sind Sie?"])
+
+    def test_constrained_beam_search_mixin_type_checks(self):
+        tokenizer = AutoTokenizer.from_pretrained("t5-base")
+        model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+
+        encoder_input_str = "translate English to German: How old are you?"
+        input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
+
+        with self.assertRaises(ValueError):
+            force_words = ["sind"]
+            force_words_ids = tokenizer(force_words, return_tensors="pt").input_ids
+            model.generate(
+                input_ids,
+                force_words_ids=force_words_ids,
+                num_beams=10,
+                num_return_sequences=1,
+                no_repeat_ngram_size=1,
+                remove_invalid_values=True,
+            )
+
+        with self.assertRaises(ValueError):
+            force_words = ["sind"]
+            force_words_ids = [tokenizer(force_words, return_tensors="pt").input_ids]
+            model.generate(
+                input_ids,
+                force_words_ids=force_words_ids,
+                num_beams=10,
+                num_return_sequences=1,
+                no_repeat_ngram_size=1,
+                remove_invalid_values=True,
+            )
+
+        with self.assertRaises(ValueError):
+            model.generate(input_ids, force_words_ids=[])
+
+        with self.assertRaises(ValueError):
+            model.generate(input_ids, force_words_ids=[[-1]])
+
+        with self.assertRaises(ValueError):
+            model.generate(input_ids, force_words_ids=[[[-1]]])

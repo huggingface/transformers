@@ -1380,11 +1380,35 @@ class GenerationMixin:
             if constraints is not None:
                 final_constraints = constraints
             if force_words_ids is not None:
+
+                def typeerror():
+                    raise ValueError(
+                        "`force_words_ids` has to either be a `List[List[List[int]]]` or `List[List[int]]`"
+                        f"of positive integers, but is {force_words_ids}."
+                    )
+
+                if not isinstance(force_words_ids, list) or len(force_words_ids) == 0:
+                    typeerror()
+
                 for word_ids in force_words_ids:
-                    is_seq_tensor = isinstance(word_ids[0], torch.LongTensor) and len(word_ids[0].size()) > 0
-                    if isinstance(word_ids[0], list) or is_seq_tensor:
+                    if isinstance(word_ids[0], list):
+                        if not isinstance(word_ids, list) or len(word_ids) == 0:
+                            typeerror()
+                        if any(not isinstance(token_ids, list) for token_ids in word_ids):
+                            typeerror()
+                        if any(
+                            any((not isinstance(token_id, int) or token_id < 0) for token_id in token_ids)
+                            for token_ids in word_ids
+                        ):
+                            typeerror()
+
                         constraint = DisjunctiveConstraint(word_ids)
                     else:
+                        if not isinstance(word_ids, list) or len(word_ids) == 0:
+                            typeerror()
+                        if any((not isinstance(token_id, int) or token_id < 0) for token_id in word_ids):
+                            typeerror()
+
                         constraint = PhrasalConstraint(word_ids)
                     final_constraints.append(constraint)
             # 10. prepare beam search scorer
