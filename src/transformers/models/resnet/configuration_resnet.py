@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ConvNeXT model configuration"""
+""" ResNet model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -45,8 +45,8 @@ class ResNetConfig(PretrainedConfig):
             Depth (number of blocks) for each stage.
         embeddings_type (`str`, *optional*, defaults to `"classic"`):
             The embedding layer to use, either `"classic"` or `"3x3"`. If `"classic"`, the original resnet embedding, a
-            single agressive convolution, is applied. If `"3x3"`, three `3x3` are applied instead.
-        layer_type="basic" (`str`, *optional*, defaults to `"bottleneck"`):
+            single agressive `7x7` convolution, is applied. If `"3x3"`, three `3x3` are applied instead.
+        layer_type (`str`, *optional*, defaults to `"bottleneck"`):
             The layer to use, it can be either `"basic"` (`ResNetBasicLayer`) or `"bottleneck"`
             (`ResNetBottleNeckLayer`).
         hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):

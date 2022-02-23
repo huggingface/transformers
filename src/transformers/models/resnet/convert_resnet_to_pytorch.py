@@ -152,23 +152,23 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
         convert_weight_and_push(model_name, names_to_config[model_name], save_directory)
     else:
         for name, config in names_to_config.items():
-            # from_model = timm.create_model(name, pretrained=True)
-            # our_model = ResNetForImageClassification(config)
-            # module_transfer = ModuleTransfer(src=from_model, dest=our_model)
-            # x = torch.randn((1, 3, 224, 224))
-            # module_transfer(x)
+            from_model = timm.create_model(name, pretrained=True)
+            our_model = ResNetForImageClassification(config)
+            module_transfer = ModuleTransfer(src=from_model, dest=our_model)
+            x = torch.randn((1, 3, 224, 224))
+            module_transfer(x)
 
-            # assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
+            assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
 
             checkpoint_name = f"{name}-224-1k"
 
-            # our_model.push_to_hub(
-            #     repo_path_or_name=save_directory / checkpoint_name,
-            #     organization="Francesco",
-            #     commit_message="Add model",
-            #     use_temp_dir=True,
-            # )
-
+            our_model.push_to_hub(
+                repo_path_or_name=save_directory / checkpoint_name,
+                organization="Francesco",
+                commit_message="Add model",
+                use_temp_dir=True,
+            )
+            # we can use the convnext one
             feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
             feature_extractor.push_to_hub(
                 repo_path_or_name=save_directory / checkpoint_name,
@@ -187,7 +187,7 @@ if __name__ == "__main__":
         "--model_name",
         default=None,
         type=str,
-        help="The name of the model you wish to convert, it must be one of the supported resnet* architecture, (e.g. resnet18). If `None`, all of them will the converted",
+        help="The name of the model you wish to convert, it must be one of the supported resnet* architecture, (e.g. resnet18). If `None`, all of them will the converted.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
