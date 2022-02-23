@@ -20,6 +20,7 @@ from typing import Tuple
 
 from transformers import Wav2Vec2PhonemeCTCTokenizer
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
+from transformers.models.wav2vec2_phoneme.tokenization_wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizerOutput
 from transformers.testing_utils import require_phonemizer
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -248,23 +249,94 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         batch_tokens = tokenizer.batch_decode(sample_ids)
         self.assertEqual(batch_tokens, ["k s ɾ ɾ l ɭʲ!?!? $$$", "j ð s j ð s oːɹ $$$"])
 
-    # overwrite common test
+    @staticmethod
+    def get_from_offsets(offsets, key):
+        retrieved_list = [d[key] for d in offsets]
+        return retrieved_list
+
+    def test_offsets(self):
+        tokenizer = self.get_tokenizer(word_delimiter_token="|")
+        tokenizer.add_tokens("|")
+
+        # fmt: off
+        # ksssɾɾ|ɾɾ<pad>ɾɾ|<pad>ɾlll|ɭʲ -> k s ɾ ɾ | ɾ l | ɭʲ"
+        sample_ids = [11, 5, 5, 5, 15, 15, tokenizer.pad_token_id, 15, 15, tokenizer.word_delimiter_token_id, tokenizer.pad_token_id, 15, 8, 8, 8, tokenizer.word_delimiter_token_id, 98]
+        # fmt: on
+
+        outputs = tokenizer.decode(sample_ids, output_char_offsets=True, filter_word_delimiter_token=False)
+        # check Wav2Vec2CTCTokenizerOutput keys for char
+        self.assertTrue(len(outputs.keys()), 2)
+        self.assertTrue("text" in outputs)
+        self.assertTrue("char_offsets" in outputs)
+        self.assertTrue(isinstance(outputs, Wav2Vec2PhonemeCTCTokenizerOutput))
+
+        # check that order of chars is correct and identical for both outputs
+        self.assertEqual(" ".join(self.get_from_offsets(outputs["char_offsets"], "char")), outputs.text)
+        self.assertListEqual(
+            self.get_from_offsets(outputs["char_offsets"], "char"), ["k", "s", "ɾ", "ɾ", "|", "ɾ", "l", "|", "ɭʲ"]
+        )
+
+        # check that offsets are actually correct for char
+        # 0-1 is 11, 1-4 is 5, 4-6 is first 15, 6-7 is <pad> (thus not shown), 7-9 is second 15, 9-10 is word_delimiter_token,
+        # 10-11 is <pad> (thus not shown), 11-12 is third 15, 12-15 is 8, 15-16 is word_delimiter_token, 16-17 is 98
+        self.assertListEqual(
+            self.get_from_offsets(outputs["char_offsets"], "start_offset"), [0, 1, 4, 7, 9, 11, 12, 15, 16]
+        )
+        self.assertListEqual(
+            self.get_from_offsets(outputs["char_offsets"], "end_offset"), [1, 4, 6, 9, 10, 12, 15, 16, 17]
+        )
+
+    def test_offsets_batch(self):
+        tokenizer = self.get_tokenizer(word_delimiter_token="|")
+
+        def check_list_tuples_equal(outputs_batch, outputs_list):
+            self.assertTrue(isinstance(outputs_batch, Wav2Vec2PhonemeCTCTokenizerOutput))
+            self.assertTrue(isinstance(outputs_list[0], Wav2Vec2PhonemeCTCTokenizerOutput))
+
+            # transform list to ModelOutput
+            outputs_batch_2 = Wav2Vec2PhonemeCTCTokenizerOutput(
+                {k: [d[k] for d in outputs_list] for k in outputs_list[0]}
+            )
+
+            self.assertListEqual(outputs_batch["text"], outputs_batch_2["text"])
+
+            def recursive_check(list_or_dict_1, list_or_dict_2):
+                if isinstance(list_or_dict_1, list):
+                    [recursive_check(l1, l2) for l1, l2 in zip(list_or_dict_1, list_or_dict_2)]
+                self.assertEqual(list_or_dict_1, list_or_dict_2)
+
+            if "char_offsets" in outputs_batch:
+                recursive_check(outputs_batch["char_offsets"], outputs_batch_2["char_offsets"])
+
+        # fmt: off
+        sample_ids = [
+            [11, 5, 15, tokenizer.pad_token_id, 15, 4, 8, 98, 32, 32, 32, 32, 4, 33, tokenizer.word_delimiter_token_id, 32, 32, 33, 34, 34],
+            [24, 22, 5, tokenizer.word_delimiter_token_id, tokenizer.word_delimiter_token_id, 24, 22, 22, 22, 4, 5, 77, tokenizer.pad_token_id, 22, 22, 4, 34, 34, 34, 34],
+        ]
+        # fmt: on
+
+        # We assume that `decode` works as expected. All we will check now is
+        # the output type is correct and the output is identical to `decode`
+
+        # char
+        outputs_char_batch = tokenizer.batch_decode(sample_ids, output_char_offsets=True)
+        outputs_char = [tokenizer.decode(ids, output_char_offsets=True) for ids in sample_ids]
+        check_list_tuples_equal(outputs_char_batch, outputs_char)
+
+    @unittest.skip("Wav2Vec2PhonemeTokenizer always lower cases letters to correctly map to phonemes")
     def test_added_tokens_do_lower_case(self):
-        # Wav2Vec2PhonemeTokenizer always lower cases letters to correctly map to phonemes
         pass
 
-    # overwrite common test
+    @unittest.skip("Wav2Vec2PhonemeTokenizer always puts spaces between phonemes")
     def test_encode_decode_with_spaces(self):
-        # Wav2Vec2PhonemeTokenizer always puts spaces between phonemes
         pass
 
-    # overwrite common test
+    @unittest.skip("encodes to text to ids, but decodes ids to phonemes -> not possible to have internal consistency")
     def test_internal_consistency(self):
-        # encodes to text to ids, but decodes ids to phonemes -> not possible to have internal consistency
         pass
 
+    @unittest.skip("Wav2Vec2PhonemeModel has no max model length => no testing")
     def test_pretrained_model_lists(self):
-        # Wav2Vec2PhonemeModel has no max model length => no testing
         pass
 
     # overwrite common

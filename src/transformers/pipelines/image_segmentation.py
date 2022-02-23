@@ -1,5 +1,3 @@
-import base64
-import io
 from typing import Any, Dict, List, Union
 
 import numpy as np
@@ -16,8 +14,13 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
+    from torch import nn
 
-    from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_SEGMENTATION_MAPPING
+    from ..models.auto.modeling_auto import (
+        MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+        MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
+    )
+
 
 logger = logging.get_logger(__name__)
 
@@ -46,7 +49,9 @@ class ImageSegmentationPipeline(Pipeline):
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
         requires_backends(self, "vision")
-        self.check_model_type(MODEL_FOR_IMAGE_SEGMENTATION_MAPPING)
+        self.check_model_type(
+            dict(MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items() + MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items())
+        )
 
     def _sanitize_parameters(self, **kwargs):
         postprocess_kwargs = {}
@@ -77,16 +82,16 @@ class ImageSegmentationPipeline(Pipeline):
 
         Return:
             A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a
-            dictionary, if the input is a list of several images, will return a list of dictionaries corresponding to
-            each image.
+            list of dictionaries, if the input is a list of several images, will return a list of list of dictionaries
+            corresponding to each image.
 
             The dictionaries contain the following keys:
 
             - **label** (`str`) -- The class label identified by the model.
-            - **score** (`float`) -- The score attributed by the model for that label.
-            - **mask** (`str`) -- base64 string of a grayscale (single-channel) PNG image that contain masks
-              information. The PNG image has size (heigth, width) of the original image. Pixel values in the image are
-              either 0 or 255 (i.e. mask is absent VS mask is present).
+            - **mask** (`PIL.Image`) -- Pil Image with size (heigth, width) of the original image. Pixel values in the
+              image are in the range 0-255. 0 means the pixel is *not* part of the *label*, 255 means it definitely is.
+            - **score** (*optional* `float`) -- Optionally, when the model is capable of estimating a confidence of the
+              "object" described by the label and the mask.
         """
 
         return super().__call__(*args, **kwargs)
@@ -104,40 +109,55 @@ class ImageSegmentationPipeline(Pipeline):
         model_outputs["target_size"] = target_size
         return model_outputs
 
-    def postprocess(self, model_outputs, threshold=0.9, mask_threshold=0.5):
-        raw_annotations = self.feature_extractor.post_process_segmentation(
-            model_outputs, model_outputs["target_size"], threshold=threshold, mask_threshold=0.5
-        )
-        raw_annotation = raw_annotations[0]
+    def postprocess(self, model_outputs, raw_image=False, threshold=0.9, mask_threshold=0.5):
+        if hasattr(self.feature_extractor, "post_process_segmentation"):
+            # Panoptic
+            raw_annotations = self.feature_extractor.post_process_segmentation(
+                model_outputs, model_outputs["target_size"], threshold=threshold, mask_threshold=0.5
+            )
+            raw_annotation = raw_annotations[0]
+            raw_annotation["masks"] *= 255  # [0,1] -> [0,255] black and white pixels
+            raw_annotation["scores"] = raw_annotation["scores"].tolist()
+            raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in raw_annotation["labels"]]
+            raw_annotation["masks"] = [
+                Image.fromarray(mask.numpy().astype(np.uint8), mode="L") for mask in raw_annotation["masks"]
+            ]
+            # {"scores": [...], ...} --> [{"score":x, ...}, ...]
+            keys = ["score", "label", "mask"]
+            annotation = [
+                dict(zip(keys, vals))
+                for vals in zip(raw_annotation["scores"], raw_annotation["labels"], raw_annotation["masks"])
+            ]
+        else:
+            # Default logits
+            logits = model_outputs.logits
+            logits = logits.softmax(dim=1)
+            if len(logits.shape) != 4:
+                raise ValueError(f"Logits don't have expected dimensions, expected [1, N, H, W], got {logits.shape}")
+            batch_size, num_labels, height, width = logits.shape
+            expected_num_labels = len(self.model.config.id2label)
+            if num_labels != expected_num_labels:
+                raise ValueError(
+                    f"Logits don't have expected dimensions, expected [1, {num_labels}, H, W], got {logits.shape}"
+                )
+            size = model_outputs["target_size"].squeeze(0).tolist()
+            logits_reshaped = nn.functional.interpolate(logits, size=size, mode="bilinear", align_corners=False)
+            classes = logits_reshaped.argmax(dim=1)[0]
+            annotation = []
 
-        raw_annotation["masks"] *= 255  # [0,1] -> [0,255] black and white pixels
+            for label_id in range(num_labels):
+                label = self.model.config.id2label[label_id]
+                mask = classes == label_id
+                mask_sum = mask.sum()
 
-        raw_annotation["scores"] = raw_annotation["scores"].tolist()
-        raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in raw_annotation["labels"]]
-        raw_annotation["masks"] = [self._get_mask_str(mask) for mask in raw_annotation["masks"].cpu().numpy()]
-
-        # {"scores": [...], ...} --> [{"score":x, ...}, ...]
-        keys = ["score", "label", "mask"]
-        annotation = [
-            dict(zip(keys, vals))
-            for vals in zip(raw_annotation["scores"], raw_annotation["labels"], raw_annotation["masks"])
-        ]
-
+                # Remove empty masks.
+                if mask_sum == 0:
+                    continue
+                mask = Image.fromarray((mask * 255).numpy().astype(np.uint8), mode="L")
+                # Semantic segmentation does not output a global score for the mask
+                # so we don't attempt to compute one.
+                # XXX: We could send a mask with values between 0 and 255 instead
+                # of a pure mask to enable users to get the probabilities that
+                # are really outputted by the logits.
+                annotation.append({"score": None, "label": label, "mask": mask})
         return annotation
-
-    def _get_mask_str(self, mask: np.array) -> str:
-        """
-        Turns mask numpy array into mask base64 str.
-
-        Args:
-            mask (`np.array`): Numpy array (with shape (heigth, width) of the original image) containing masks
-                information. Values in the array are either 0 or 255 (i.e. mask is absent VS mask is present).
-
-        Returns:
-            A base64 string of a single-channel PNG image that contain masks information.
-        """
-        img = Image.fromarray(mask.astype(np.int8), mode="L")
-        with io.BytesIO() as out:
-            img.save(out, format="PNG")
-            png_string = out.getvalue()
-            return base64.b64encode(png_string).decode("utf-8")
