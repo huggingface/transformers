@@ -333,7 +333,6 @@ class DisjunctiveConstraint(Constraint):
         if isinstance(token_id, torch.Tensor):
             token_id = token_id.cpu()
 
-        # move to cpu to guarantee no device issues.
         return token_id in next_tokens
 
     def update(self, token_id: int):
