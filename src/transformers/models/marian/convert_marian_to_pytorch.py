@@ -493,10 +493,9 @@ class OpusState:
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
         check_marian_cfg_assumptions(cfg)
         self.hf_config = MarianConfig(
-            #             vocab_size=cfg["vocab_size"],
-            src_vocab_size=cfg["src_vocab_size"],
-            tgt_vocab_size=cfg["tgt_vocab_size"],
-            share_embeddings=cfg["tied-embeddings-src"],
+            vocab_size=cfg.get("vocab_size", cfg["src_vocab_size"]),
+            decoder_vocab_size=cfg.get("tgt_vocab_size", cfg["vocab_size"]),
+            share_encoder_decoder_embeddings=cfg["tied-embeddings-src"],
             decoder_layers=cfg["dec-depth"],
             encoder_layers=cfg["enc-depth"],
             decoder_attention_heads=cfg["transformer-heads"],
