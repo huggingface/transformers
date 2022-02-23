@@ -101,7 +101,11 @@ class SegformerModelTester:
         if self.use_labels:
             labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
 
-        config = SegformerConfig(
+        config = self.get_config()
+        return config, pixel_values, labels
+
+    def get_config(self):
+        return SegformerConfig(
             image_size=self.image_size,
             num_channels=self.num_channels,
             num_encoder_blocks=self.num_encoder_blocks,
@@ -113,8 +117,6 @@ class SegformerModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
         )
-
-        return config, pixel_values, labels
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = SegformerModel(config=config)
