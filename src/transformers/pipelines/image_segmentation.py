@@ -14,7 +14,7 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
-    from torch.nn import functional as F
+    from torch import nn
 
     from ..models.auto.modeling_auto import (
         MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
@@ -90,7 +90,7 @@ class ImageSegmentationPipeline(Pipeline):
             - **label** (`str`) -- The class label identified by the model.
             - **mask** (`PIL.Image`) -- Pil Image with size (heigth, width) of the original image. Pixel values in the
               image are in the range 0-255. 0 means the pixel is *not* part of the *label*, 255 means it definitely is.
-            - **score** (*optional* `float`) -- Optionnally, when the model is capable of estimating a confidence of
+            - **score** (*optional* `float`) -- Optionally, when the model is capable of estimating a confidence of
               the "object" described by the label and the mask.
         """
 
@@ -134,7 +134,6 @@ class ImageSegmentationPipeline(Pipeline):
             logits = logits.softmax(dim=1)
             if len(logits.shape) != 4:
                 raise ValueError(f"Logits don't have expected dimensions, expected [1, N, H, W], got {logits.shape}")
-            # logits = logits.log_softmax(dim=1)
             batch_size, num_labels, height, width = logits.shape
             expected_num_labels = len(self.model.config.id2label)
             if num_labels != expected_num_labels:
@@ -142,7 +141,7 @@ class ImageSegmentationPipeline(Pipeline):
                     f"Logits don't have expected dimensions, expected [1, {num_labels}, H, W], got {logits.shape}"
                 )
             size = model_outputs["target_size"].squeeze(0).tolist()
-            logits_reshaped = F.interpolate(logits, size=size, mode="bilinear", align_corners=False)
+            logits_reshaped = nn.functional.interpolate(logits, size=size, mode="bilinear", align_corners=False)
             classes = logits_reshaped.argmax(dim=1)[0]
             annotation = []
 
