@@ -173,7 +173,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
 
         model = TF{{cookiecutter.camelcase_modelname}}Model(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        sequence_output, pooled_output = model(inputs)
+        result = model(inputs)
 
         inputs = [input_ids, input_mask]
         result = model(inputs)
@@ -181,7 +181,6 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_as_decoder(
         self,
@@ -207,7 +206,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
             "encoder_hidden_states": encoder_hidden_states,
             "encoder_attention_mask": encoder_attention_mask,
         }
-        sequence_output, pooled_output = model(inputs)
+        result = model(inputs)
 
         inputs = [input_ids, input_mask]
         result = model(inputs, token_type_ids=token_type_ids, encoder_hidden_states=encoder_hidden_states)
@@ -216,7 +215,6 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_causal_lm_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
