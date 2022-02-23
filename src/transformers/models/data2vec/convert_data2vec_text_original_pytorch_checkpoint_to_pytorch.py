@@ -32,10 +32,11 @@ from transformers.models.bert.modeling_bert import (
     BertSelfAttention,
     BertSelfOutput,
 )
-from transformers.utils import logging
 
+# IMPORTANT: In order for this script to run, please make sure to download the dictionary: `dict.txt` from wget https://dl.fbaipublicfiles.com/fairseq/models/roberta.large.tar.gz
 # File copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_text.py
-from .data2vec_text import Data2VecTextModel
+from transformers.models.data2vec.data2vec_text import Data2VecTextModel
+from transformers.utils import logging
 
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):
@@ -80,17 +81,17 @@ def convert_data2vec_checkpoint_to_pytorch(
 
     # Now let's copy all the weights.
     # Embeddings
-    model.data2vec.embeddings.word_embeddings.weight = data2vec_sent_encoder.embed_tokens.weight
-    model.data2vec.embeddings.position_embeddings.weight = data2vec_sent_encoder.embed_positions.weight
-    model.data2vec.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
-        model.data2vec.embeddings.token_type_embeddings.weight
+    model.data2vec_text.embeddings.word_embeddings.weight = data2vec_sent_encoder.embed_tokens.weight
+    model.data2vec_text.embeddings.position_embeddings.weight = data2vec_sent_encoder.embed_positions.weight
+    model.data2vec_text.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
+        model.data2vec_text.embeddings.token_type_embeddings.weight
     )  # just zero them out b/c data2vec doesn't use them.
-    model.data2vec.embeddings.LayerNorm.weight = data2vec_sent_encoder.layernorm_embedding.weight
-    model.data2vec.embeddings.LayerNorm.bias = data2vec_sent_encoder.layernorm_embedding.bias
+    model.data2vec_text.embeddings.LayerNorm.weight = data2vec_sent_encoder.layernorm_embedding.weight
+    model.data2vec_text.embeddings.LayerNorm.bias = data2vec_sent_encoder.layernorm_embedding.bias
 
     for i in range(config.num_hidden_layers):
         # Encoder: start of layer
-        layer: BertLayer = model.data2vec.encoder.layer[i]
+        layer: BertLayer = model.data2vec_text.encoder.layer[i]
         data2vec_layer: TransformerSentenceEncoderLayer = data2vec_sent_encoder.layers[i]
 
         # self attention
