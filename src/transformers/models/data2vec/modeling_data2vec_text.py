@@ -961,7 +961,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
         >>> from transformers import Data2VecTextTokenizer, Data2VecTextForCausalLM, Data2VecTextConfig
         >>> import torch
 
-        >>> tokenizer = Data2VecTextTokenizer.from_pretrained("data2vec-base")
+        >>> tokenizer = Data2VecTextTokenizer.from_pretrained("facebook/data2vec-text-base")
         >>> config = Data2VecTextConfig.from_pretrained("data2vec-base")
         >>> config.is_decoder = True
         >>> model = Data2VecTextForCausalLM.from_pretrained("data2vec-base", config=config)
