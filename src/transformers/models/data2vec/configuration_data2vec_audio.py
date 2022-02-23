@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+import math
 
 
 logger = logging.get_logger(__name__)
@@ -318,3 +319,7 @@ class Data2VecAudioConfig(PretrainedConfig):
         self.tdnn_kernel = list(tdnn_kernel)
         self.tdnn_dilation = list(tdnn_dilation)
         self.xvector_output_dim = xvector_output_dim
+
+    @property
+    def inputs_to_logits_ratio(self):
+        return math.prod(self.conv_stride)
