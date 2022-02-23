@@ -341,27 +341,13 @@ class TFBertModelTester:
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
 
-        # change a random masked slice from input_ids
-        random_seq_idx_to_change = ids_tensor((1,), half_seq_length).numpy() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, self.seq_length), config.vocab_size)
-        vector_condition = tf.range(self.seq_length) == (self.seq_length - random_seq_idx_to_change)
-        condition = tf.transpose(
-            tf.broadcast_to(tf.expand_dims(vector_condition, -1), (self.seq_length, self.batch_size))
-        )
-        input_ids = tf.where(condition, random_other_next_tokens, input_ids)
-
         # append to next input_ids and attn_mask
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        attn_mask = tf.concat(
-            [attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)],
-            axis=1,
-        )
 
-        # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask).last_hidden_state
+        output_from_no_past = model(next_input_ids, output_hidden_states=True).hidden_states[0]
         output_from_past = model(
-            next_tokens, past_key_values=outputs.past_key_values, attention_mask=attn_mask
-        ).last_hidden_state
+            next_tokens, past_key_values=past_key_values, output_hidden_states=True
+        ).hidden_states[0]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
@@ -402,14 +388,28 @@ class TFBertModelTester:
 
         past_key_values = outputs.past_key_values
 
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+        # change a random masked slice from input_ids
+        random_seq_idx_to_change = ids_tensor((1,), half_seq_length).numpy() + 1
+        random_other_next_tokens = ids_tensor((self.batch_size, self.seq_length), config.vocab_size)
+        vector_condition = tf.range(self.seq_length) == (self.seq_length - random_seq_idx_to_change)
+        condition = tf.transpose(
+            tf.broadcast_to(tf.expand_dims(vector_condition, -1), (self.seq_length, self.batch_size))
+        )
+        input_ids = tf.where(condition, random_other_next_tokens, input_ids)
 
         # append to next input_ids and
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+        attn_mask = tf.concat(
+            [attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)],
+            axis=1,
+        )
 
-        output_from_no_past = model(next_input_ids).last_hidden_state
-        output_from_past = model(next_tokens, past_key_values=past_key_values).last_hidden_state
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask, output_hidden_states=True).hidden_states[
+            0
+        ]
+        output_from_past = model(
+            next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, output_hidden_states=True
+        ).hidden_states[0]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
@@ -446,16 +446,23 @@ class TFBertModelTester:
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_attn_mask = tf.cast(ids_tensor((self.batch_size, 3), 2), tf.int8)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
         # append to next input_ids and
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
         next_attention_mask = tf.concat([input_mask, next_attn_mask], axis=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask).last_hidden_state
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            output_hidden_states=True,
+        ).hidden_states[0]
         output_from_past = model(
-            next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values
-        ).last_hidden_state
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+            output_hidden_states=True,
+        ).hidden_states[0]
 
         self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
 
@@ -487,6 +494,8 @@ class TFBertModelTester:
 
         input_ids = input_ids[:1, :]
         input_mask = input_mask[:1, :]
+        encoder_hidden_states = encoder_hidden_states[:1, :, :]
+        encoder_attention_mask = encoder_attention_mask[:1, :]
         self.batch_size = 1
 
         # first forward pass
@@ -501,7 +510,7 @@ class TFBertModelTester:
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_attn_mask = tf.cast(ids_tensor((self.batch_size, 3), 2), tf.int8)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
         # append to next input_ids and
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
