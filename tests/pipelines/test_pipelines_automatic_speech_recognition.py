@@ -99,7 +99,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         if speech_recognizer.type == "ctc":
             outputs = speech_recognizer(audio, return_timestamps=True)
             n = len(outputs["text"])
-            self.assertEqual(outputs, {"text": ANY(str), "timestamps": [(ANY(int), ANY(int)) for i in range(n)]})
+            self.assertEqual(outputs, {"text": ANY(str), "timestamps": [(ANY(float), ANY(float)) for i in range(n)]})
         else:
             # Non CTC models cannot use return_timestamps
             with self.assertRaises(ValueError):
