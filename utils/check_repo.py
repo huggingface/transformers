@@ -364,7 +364,7 @@ def check_all_models_are_tested():
     failures = []
     for module in modules:
         test_file = [file for file in test_files if f"test_{module.__name__.split('.')[-1]}.py" in file]
-        if not len(test_file):
+        if len(test_file) == 0:
             failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
         elif len(test_file) > 1:
             failures.append(f"{module.__name__} has several test files: {test_file}.")

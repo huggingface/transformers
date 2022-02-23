@@ -202,13 +202,15 @@ def get_test_dependencies(test_fname):
     # Removes the double trailing '..' for parent imports, and creates an absolute path from the root dir with
     # `tests` as a prefix.
     parent_imports = [imp.strip(".") for imp in relative_imports if ".." in imp]
-    parent_imports = [os.path.join("tests", f"{test.replace('.', '/')}.py") for test in parent_imports]
+    parent_imports = [os.path.join("tests", f"{test.replace('.', os.path.sep)}.py") for test in parent_imports]
 
     # Removes the single trailing '.' for current dir imports, and creates an absolute path from the root dir with
     # tests/{module_name} as a prefix.
     current_dir_imports = [imp.strip(".") for imp in relative_imports if ".." not in imp]
-    directory = re.findall(r"(.*)[/]", test_fname)[0]
-    current_dir_imports = [os.path.join(directory, f"{test.replace('.', '/')}.py") for test in current_dir_imports]
+    directory = os.path.sep.join(test_fname.split(os.path.sep)[:-1])
+    current_dir_imports = [
+        os.path.join(directory, f"{test.replace('.', os.path.sep)}.py") for test in current_dir_imports
+    ]
 
     return [f for f in [*parent_imports, *current_dir_imports] if os.path.isfile(f)]
 
@@ -518,4 +520,12 @@ if __name__ == "__main__":
             print("Master branch detected, fetching tests against last commit.")
             diff_with_last_commit = True
 
-        infer_tests_to_run(args.output_file, diff_with_last_commit=diff_with_last_commit, filters=args.filters)
+        try:
+            infer_tests_to_run(args.output_file, diff_with_last_commit=diff_with_last_commit, filters=args.filters)
+        except Exception as e:
+            print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
+            with open(args.output_file, "w", encoding="utf-8") as f:
+                if args.filters is None:
+                    f.write("./tests/")
+                else:
+                    f.write(" ".join(args.filters))
