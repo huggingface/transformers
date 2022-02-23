@@ -1305,7 +1305,13 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             self.frameworks = config.get("frameworks", ["pt", "tf", "flax"])
             self.old_checkpoint = config.get("old_checkpoint", None)
         else:
-            self.old_model_type, self.model_patterns, self.add_copied_from, self.frameworks, self.old_checkpoint = get_user_input()
+            (
+                self.old_model_type,
+                self.model_patterns,
+                self.add_copied_from,
+                self.frameworks,
+                self.old_checkpoint,
+            ) = get_user_input()
 
         self.path_to_repo = path_to_repo
 
