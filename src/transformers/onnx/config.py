@@ -198,6 +198,12 @@ class OnnxConfig(ABC):
 
     @property
     def is_torch_support_available(self) -> bool:
+        """
+        The minimum PyTorch version required to export the model.
+
+        Returns:
+            Bool
+        """
         if is_torch_available():
             from transformers.file_utils import torch_version
 
