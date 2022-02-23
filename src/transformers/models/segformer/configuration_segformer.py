@@ -83,8 +83,6 @@ class SegformerConfig(PretrainedConfig):
             required for the semantic segmentation model.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
-        resize_logits (`bool`, *optional*, defaults to `False`):
-            Whether to resize the logits to the same size as the `pixel_values` or not.
 
     Example:
 
@@ -126,7 +124,6 @@ class SegformerConfig(PretrainedConfig):
         is_encoder_decoder=False,
         reshape_last_stage=True,
         semantic_loss_ignore_index=255,
-        resize_logits=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -152,4 +149,3 @@ class SegformerConfig(PretrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.reshape_last_stage = reshape_last_stage
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
-        self.resize_logits = resize_logits

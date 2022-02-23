@@ -696,15 +696,11 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        resize_logits=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-        resize_logits (`bool`, *optional*):
-            Whether to resize the logits to the same size as the `pixel_values` or not. If `False`, the logits will
-            have a shape `height / 4 , width / 4`.
 
         Returns:
 
@@ -729,7 +725,6 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        resize_logits = resize_logits if resize_logits is not None else self.config.resize_logits
 
         outputs = self.segformer(
             pixel_values,
@@ -742,7 +737,6 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
 
         logits = self.decode_head(encoder_hidden_states)
 
-        upsampled_logits = None
         loss = None
         if labels is not None:
             if self.config.num_labels == 1:
@@ -750,17 +744,10 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             else:
                 # upsample logits to the images' original size
                 upsampled_logits = nn.functional.interpolate(
-                    logits, size=pixel_values.shape[-2:], mode="bilinear", align_corners=False
+                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
                 )
                 loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
                 loss = loss_fct(upsampled_logits, labels)
-
-        if resize_logits:
-            if upsampled_logits is None:
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=pixel_values.shape[-2:], mode="bilinear", align_corners=False
-                )
-            logits = upsampled_logits
 
         if not return_dict:
             if output_hidden_states:

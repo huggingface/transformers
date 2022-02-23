@@ -1120,8 +1120,11 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def compute_loss(self, upsampled_logits, auxiliary_logits, labels):
+    def compute_loss(self, logits, auxiliary_logits, labels):
         # upsample logits to the images' original size
+        upsampled_logits = nn.functional.interpolate(
+            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+        )
         if auxiliary_logits is not None:
             upsampled_auxiliary_logits = nn.functional.interpolate(
                 auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
@@ -1144,15 +1147,11 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        resize_logits=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-        resize_logits (`bool`, *optional*):
-            Whether to resize the logits to the same size as the `pixel_values` or not. If `False`, the logits will
-            have a shape `height / 4 , width / 4`.
 
         Returns:
 
@@ -1178,7 +1177,6 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        resize_logits = resize_logits if resize_logits is not None else self.config.resize_logits
 
         outputs = self.beit(
             pixel_values,
@@ -1210,24 +1208,12 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         if self.auxiliary_head is not None:
             auxiliary_logits = self.auxiliary_head(features)
 
-        upsampled_logits = None
         loss = None
         if labels is not None:
             if self.config.num_labels == 1:
                 raise ValueError("The number of labels should be greater than one")
             else:
-                # upsample logits to the images' original size
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=pixel_values.shape[-2:], mode="bilinear", align_corners=False
-                )
-                loss = self.compute_loss(upsampled_logits, auxiliary_logits, labels)
-
-        if resize_logits:
-            if upsampled_logits is None:
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=pixel_values.shape[-2:], mode="bilinear", align_corners=False
-                )
-            logits = upsampled_logits
+                loss = self.compute_loss(logits, auxiliary_logits, labels)
 
         if not return_dict:
             if output_hidden_states:

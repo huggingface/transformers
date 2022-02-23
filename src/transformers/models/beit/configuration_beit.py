@@ -93,8 +93,6 @@ class BeitConfig(PretrainedConfig):
             Whether to concatenate the output of the auxiliary head with the input before the classification layer.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
-        resize_logits (`bool`, *optional*, defaults to `False`):
-            Whether to resize the logits to the same size as the `pixel_values` or not.
 
     Example:
 
@@ -143,7 +141,6 @@ class BeitConfig(PretrainedConfig):
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
         semantic_loss_ignore_index=255,
-        resize_logits=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -179,4 +176,3 @@ class BeitConfig(PretrainedConfig):
         self.auxiliary_num_convs = auxiliary_num_convs
         self.auxiliary_concat_input = auxiliary_concat_input
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
-        self.resize_logits = resize_logits
