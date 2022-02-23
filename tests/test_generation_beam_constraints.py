@@ -30,21 +30,19 @@ if is_torch_available():
 class ConstraintTest(unittest.TestCase):
     def test_input_types(self):
         # For consistency across different places the DisjunctiveConstraint is called,
-        # dc.token_ids is a list of tensors, where each of those tensors is the same thing as
-        # PhrasalConstraint.token_ids. We ensure this while keeping the initialization completely flexible.
+        # dc.token_ids is a list of integers. It is also initialized only by integers.
 
         cset = [[1, 2, 4], [1, 2, 3, 4]]
         dc = DisjunctiveConstraint(cset)
         self.assertTrue(isinstance(dc.token_ids, list))
-        self.assertTrue(False not in [isinstance(dc_i, torch.Tensor) for dc_i in dc.token_ids])
 
-        dc = DisjunctiveConstraint(torch.LongTensor([[1, 2, 4], [1, 2, 3]]))
-        self.assertTrue(isinstance(dc.token_ids, list))
-        self.assertTrue(False not in [isinstance(dc_i, torch.Tensor) for dc_i in dc.token_ids])
+        with self.assertRaises(ValueError):
+            dc = DisjunctiveConstraint(torch.LongTensor([[1, 2, 4], [1, 2, 3]]))
+            self.assertTrue(dc is None)  # flake8 complains otherwise for not using it
 
-        dc = DisjunctiveConstraint([torch.LongTensor([1, 2, 4]), torch.LongTensor([1, 2, 3, 4, 5])])
-        self.assertTrue(isinstance(dc.token_ids, list))
-        self.assertTrue(False not in [isinstance(dc_i, torch.Tensor) for dc_i in dc.token_ids])
+        with self.assertRaises(ValueError):
+            dc = DisjunctiveConstraint([torch.LongTensor([1, 2, 4]), torch.LongTensor([1, 2, 3, 4, 5])])
+            self.assertTrue(dc is None)  # flake8 complains otherwise for not using it
 
     def test_check_illegal_input(self):
         # We can't have constraints that are complete subsets of another. This leads to a preverse
@@ -56,6 +54,7 @@ class ConstraintTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             dc = DisjunctiveConstraint(cset)  # fails here
+            print(dc.trie.trie)
             self.assertTrue(dc is None)  # flake8 complains otherwise for not using it
 
     def test_example_progression(self):

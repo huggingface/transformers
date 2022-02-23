@@ -260,8 +260,8 @@ class ConstrainedBeamSearchTester:
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
 
         if constraints is None:
-            force_tokens = torch.randint(10, 50, (1, 2)).type(torch.LongTensor)[0]
-            disjunctive_tokens = torch.randint(10, 50, (2, 2)).type(torch.LongTensor)
+            force_tokens = torch.randint(10, 50, (1, 2))[0].tolist()
+            disjunctive_tokens = torch.randint(10, 50, (2, 2)).tolist()
 
             constraints = [PhrasalConstraint(force_tokens), DisjunctiveConstraint(disjunctive_tokens)]
             self.constraints = constraints
@@ -334,10 +334,10 @@ class ConstrainedBeamSearchTester:
         stacked_token_ids = []
         for constraint in self.constraints:
             token_ids = constraint.token_ids
-            token_ids = token_ids[0] if isinstance(token_ids, list) else token_ids
-            stacked_token_ids.append(token_ids)
+            token_ids = token_ids[0] if isinstance(token_ids[0], list) else token_ids
+            stacked_token_ids = stacked_token_ids + token_ids
 
-        fulfilling_sequence = torch.stack(stacked_token_ids).flatten()
+        fulfilling_sequence = torch.LongTensor(stacked_token_ids)
         fulfill_len = fulfilling_sequence.size(0)
         input_ids[:, :fulfill_len] = fulfilling_sequence
 
@@ -407,10 +407,11 @@ class ConstrainedBeamSearchTester:
         stacked_token_ids = []
         for constraint in self.constraints:
             token_ids = constraint.token_ids
-            token_ids = token_ids[0] if isinstance(token_ids, list) else token_ids
-            stacked_token_ids.append(token_ids)
+            token_ids = token_ids[0] if isinstance(token_ids[0], list) else token_ids
+            stacked_token_ids = stacked_token_ids + token_ids
 
-        fulfilling_sequence = torch.stack(stacked_token_ids).flatten()
+        fulfilling_sequence = torch.LongTensor(stacked_token_ids)
+
         fulfill_len = fulfilling_sequence.size(0)
         input_ids[:, :fulfill_len] = fulfilling_sequence
 
@@ -465,7 +466,7 @@ class ConstrainedBeamSearchTester:
         # test that the constraint is indeed fulfilled
         for (output, constraint) in [(s, c) for s in sequences for c in constraints]:
             forced_token_ids = constraint.token_ids
-            if isinstance(forced_token_ids, list):
+            if isinstance(forced_token_ids[0], list):
                 # disjunctive case
                 flag = False
                 for token_ids in forced_token_ids:
@@ -502,17 +503,20 @@ class ConstrainedBeamSearchTester:
         # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
         # set to same device. we don't care what device.
 
-        tensor_1, tensor_2 = tensor_1.cpu(), tensor_2.cpu()
+        if not isinstance(tensor_1, list):
+            tensor_1 = tensor_1.cpu().tolist()
+        if not isinstance(tensor_2, list):
+            tensor_2 = tensor_2.cpu().tolist()
 
-        in_order = tensor_1.size(0) <= tensor_2.size(0)
+        in_order = len(tensor_1) <= len(tensor_2)
         longer = tensor_2 if in_order else tensor_1
         shorter = tensor_1 if in_order else tensor_2
 
         flag = False
-        chunk_size = shorter.size(0)
-        for chunk_idx in range(longer.size(0) - chunk_size + 1):
+        chunk_size = len(shorter)
+        for chunk_idx in range(len(longer) - chunk_size + 1):
             subseq = longer[chunk_idx : chunk_idx + chunk_size]
-            if torch.equal(subseq, shorter):
+            if subseq == shorter:
                 flag = True
                 break
 

@@ -2315,8 +2315,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
-        force_tokens = tokenizer.encode(" scared", return_tensors="pt").to(torch_device)[0]
-        force_tokens_2 = tokenizer.encode(" big weapons", return_tensors="pt").to(torch_device)[0]
+        force_tokens = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
+        force_tokens_2 = tokenizer("big weapons", add_prefix_space=True, add_special_tokens=False).input_ids
 
         constraints = [
             PhrasalConstraint(force_tokens),
@@ -2351,8 +2351,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
-        force_phrase = tokenizer.encode(" scared", return_tensors="pt")[0]
-        flexible_phrases = tokenizer([" scream", " screams", " screaming", " screamed"])["input_ids"]
+        force_phrase = tokenizer("scared", add_prefix_space=True, add_special_tokens=False).input_ids
+        flexible_phrases = tokenizer(
+            ["scream", "screams", "screaming", "screamed"], add_prefix_space=True, add_special_tokens=False
+        ).input_ids
 
         constraints = [
             PhrasalConstraint(force_phrase),
@@ -2428,7 +2430,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         force_words = ["sind"]
 
         input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
-        force_words_ids = tokenizer(force_words, add_special_tokens=False, return_tensors="pt").input_ids
+        force_words_ids = tokenizer(force_words, add_special_tokens=False).input_ids
 
         outputs = model.generate(
             input_ids,
