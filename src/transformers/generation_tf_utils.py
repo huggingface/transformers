@@ -2107,10 +2107,8 @@ class TFGenerationMixin:
         if hasattr(self, "new_prepare_inputs_for_generation") and hasattr(self, "update_cache_for_generation"):
             # For now, we make some hard assumptions
             # 1) No stopping based on stop tokens
-            # 2) Input IDs are a 2D array
-            # 3) No model_kwargs
-            # 4) Max length is a constant
-            # 5) Only returning the token IDs, nothing else like attentions/past
+            # 2) No model_kwargs
+            # 3) Only returning the token IDs, nothing else like attentions/past
             # Notes: new_prepare_inputs_for_generation should return constant-size arrays
             max_length = self.config.max_length if max_length is None else max_length
             return self.xla_greedy_generate(input_ids, max_length=max_length)
