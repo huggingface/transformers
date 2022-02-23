@@ -131,7 +131,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
             shutil.move(
                 f"{directory}/test_modeling_{lowercase_model_name}.py",
-                f"{path_to_transformer_root}/tests/test_modeling_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/tests/{lowercase_model_name}/test_modeling_{lowercase_model_name}.py",
             )
         else:
             os.remove(f"{directory}/modeling_{lowercase_model_name}.py")
@@ -148,7 +148,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
             shutil.move(
                 f"{directory}/test_modeling_tf_{lowercase_model_name}.py",
-                f"{path_to_transformer_root}/tests/test_modeling_tf_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/tests/{lowercase_model_name}/test_modeling_tf_{lowercase_model_name}.py",
             )
         else:
             os.remove(f"{directory}/modeling_tf_{lowercase_model_name}.py")
@@ -165,7 +165,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
             shutil.move(
                 f"{directory}/test_modeling_flax_{lowercase_model_name}.py",
-                f"{path_to_transformer_root}/tests/test_modeling_flax_{lowercase_model_name}.py",
+                f"{path_to_transformer_root}/tests/{lowercase_model_name}/test_modeling_flax_{lowercase_model_name}.py",
             )
         else:
             os.remove(f"{directory}/modeling_flax_{lowercase_model_name}.py")

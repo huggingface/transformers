@@ -554,7 +554,7 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     ]
     test_files = filter_framework_files(test_files, frameworks=frameworks)
     # Add the test directory
-    test_files = [REPO_PATH / "tests" / f for f in test_files]
+    test_files = [REPO_PATH / "tests" / module_name / f for f in test_files]
     # Filter by existing files
     test_files = [f for f in test_files if f.exists()]
 
