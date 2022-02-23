@@ -110,14 +110,14 @@ jobs:
 
       - name: Make documentation
         run: |
-          cd doc-builder
-          doc-builder build transformers ../transformers/docs/source --build_dir ../doc-build-dev --notebook_dir notebooks/transformers_doc --clean --version pr_$PR_NUMBER --html
+          cd doc-builder &&
+          doc-builder build transformers ../transformers/docs/source --build_dir ../doc-build-dev --notebook_dir notebooks/transformers_doc --clean --version pr_$PR_NUMBER --html &&
           cd ..
 
       - name: Push to repositories
         run: |
-          cd doc-build-dev
-          ls
-          git add .
-          git commit -m "Updated with commit ${{ github.sha }} See: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
+          cd doc-build-dev &&
+          ls &&
+          git add . &&
+          git commit -m "Updated with commit ${{ github.sha }} See: https://github.com/huggingface/transformers/commit/${{ github.sha }}" &&
           git push origin main
