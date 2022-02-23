@@ -112,6 +112,43 @@ class TFTemperatureLogitsWarper(TFLogitsWarper):
         return scores
 
 
+class TFTopKLogitsWarper(TFLogitsWarper):
+    r"""
+    [`TFLogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
+
+    Args:
+        top_k (`int`):
+            The number of highest probability vocabulary tokens to keep for top-k-filtering.
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+            All filtered values will be set to this float value.
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
+            Minimum number of tokens that cannot be filtered.
+    """
+
+    def __init__(self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        if not isinstance(top_k, int) or top_k <= 0:
+            raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
+
+        self.top_k = top_k
+        self.filter_value = filter_value
+        self.min_tokens_to_keep = min_tokens_to_keep
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+        topk = min(max(self.top_k, self.min_tokens_to_keep), scores.shape[-1])  # Safety check
+        topk_next_scores, topk_indices = tf.math.top_k(scores, topk)
+
+        # converts the 2D matrix of per-row original indices of shape (batch_size, topk) to a 3D tensor of shape
+        # (batch_size, topk, 2) containing the original score coordinate, from which we can scatter. In other
+        # words, `scatter_indices[row, col, :]` is a tensor containing `[row, topk_indices[row, col]]`
+        scatter_rows = tf.tile(tf.expand_dims(tf.range(topk_indices.shape[0]), axis=-1), [1, topk_indices.shape[-1]])
+        scatter_indices = tf.stack((scatter_rows, topk_indices), axis=-1)
+        next_scores = tf.scatter_nd(scatter_indices, topk_next_scores, shape=scores.shape)
+
+        # replaces the 0's, the empty values from the scatter above, with `self.filter_value`
+        next_scores = tf.where(next_scores == 0.0, self.filter_value, next_scores)
+        return next_scores
+
+
 class TFTopPLogitsWarper(TFLogitsWarper):
     """
     [`TFLogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
@@ -162,42 +199,6 @@ class TFTopPLogitsWarper(TFLogitsWarper):
         scatter_indices = tf.stack((scatter_rows, topk_indices), axis=-1)
         next_scores = tf.scatter_nd(scatter_indices, topk_next_scores, shape=topk_next_scores.shape)
 
-        return next_scores
-
-
-class TFTopKLogitsWarper(TFLogitsWarper):
-    r"""
-    [`TFLogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
-
-    Args:
-        top_k (`int`):
-            The number of highest probability vocabulary tokens to keep for top-k-filtering.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
-            All filtered values will be set to this float value.
-        min_tokens_to_keep (`int`, *optional*, defaults to 1):
-            Minimum number of tokens that cannot be filtered.
-    """
-
-    def __init__(self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
-        if not isinstance(top_k, int) or top_k <= 0:
-            raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
-
-        self.top_k = top_k
-        self.filter_value = filter_value
-        self.min_tokens_to_keep = min_tokens_to_keep
-
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
-        batch_size, vocab_size = scores.shape
-        next_scores_flat = jnp.full(batch_size * vocab_size, self.filter_value)
-
-        topk = min(max(self.top_k, self.min_tokens_to_keep), scores.shape[-1])  # Safety check
-        topk_scores, topk_indices = lax.top_k(scores, topk)
-        shift = jnp.broadcast_to((jnp.arange(batch_size) * vocab_size)[:, None], (batch_size, topk)).flatten()
-        topk_scores_flat = topk_scores.flatten()
-        topk_indices_flat = topk_indices.flatten() + shift
-
-        next_scores_flat = jax.ops.index_update(next_scores_flat, topk_indices_flat, topk_scores_flat)
-        next_scores = next_scores_flat.reshape(batch_size, vocab_size)
         return next_scores
 
 

@@ -1650,6 +1650,9 @@ if is_tf_available():
         "TFNoBadWordsLogitsProcessor",
         "TFNoRepeatNGramLogitsProcessor",
         "TFRepetitionPenaltyLogitsProcessor",
+        "TFTemperatureLogitsWarper",
+        "TFTopKLogitsWarper",
+        "TFTopPLogitsWarper",
     ]
     _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
     _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
@@ -3692,6 +3695,9 @@ if TYPE_CHECKING:
             TFNoBadWordsLogitsProcessor,
             TFNoRepeatNGramLogitsProcessor,
             TFRepetitionPenaltyLogitsProcessor,
+            TFTemperatureLogitsWarper,
+            TFTopKLogitsWarper,
+            TFTopPLogitsWarper,
         )
         from .generation_tf_utils import tf_top_k_top_p_filtering
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
