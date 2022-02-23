@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import tensorflow as tf
+import numpy as np
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
@@ -857,6 +858,44 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             inputs = tf.expand_dims(inputs[:, -1], -1)
 
         return {"input_ids": inputs, "past": past, "use_cache": kwargs["use_cache"]}
+
+    def new_prepare_inputs_for_generation(self, input_ids, max_length):
+        # initializing the cache
+        batch_size, seq_length = input_ids.shape
+
+        outputs = self(input_ids, use_cache=True)
+        logits = outputs.logits[:, -1:]
+        next_tokens = tf.argmax(logits, axis=-1, output_type=tf.int32)
+        past_key_values = outputs.past_key_values
+        padding_values = np.zeros((5, 2), dtype=np.int32)
+        padding_values[3, 1] = max_length - past_key_values[0].shape[3] - 1
+        padding_values = tf.constant(padding_values)
+        past_key_values = list(past_key_values)
+        for i in range(len(past_key_values)):
+            past_key_values[i] = tf.pad(past_key_values[i], padding_values)
+        past_key_values = tuple(past_key_values)
+        generated = tf.TensorArray(element_shape=(batch_size, 1), dtype=tf.int32, dynamic_size=False,
+                                   size=max_length - seq_length, clear_after_read=False)
+        generated = generated.write(0, next_tokens)
+        transposed_attention_mask = np.ones((max_length, batch_size), dtype=np.int64)
+        transposed_attention_mask[seq_length + 1:] = 0
+        transposed_attention_mask = tf.constant(transposed_attention_mask)
+
+        return {
+            "past_key_values": past_key_values,
+            "generated": generated,
+            "next_tokens": next_tokens,
+            "transposed_attention_mask": transposed_attention_mask
+        }
+
+    def update_cache_for_generation(self, past, ptr):
+        new_past = [None for _ in range(len(past))]
+        for i in range(len(past)):
+            new_past[i] = tf.transpose(past[i], perm=(3, 0, 1, 2, 4))
+            new_past[i] = tf.tensor_scatter_nd_update(new_past[i], tf.reshape(ptr, (1, 1)), new_past[i][-1:])
+            new_past[i] = tf.transpose(new_past[i][:-1], perm=(1, 2, 3, 0, 4))
+        return tuple(new_past)
+
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

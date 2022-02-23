@@ -1920,7 +1920,7 @@ class TFGenerationMixin:
                 )
             return tf.cast(tf.fill((1, 1), bos_token_id), dtype=tf.int32)
 
-        return inputs
+        return tf.cast(inputs, tf.int32)
 
     def _update_model_kwargs_for_generation(
         self, outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
@@ -2104,6 +2104,17 @@ class TFGenerationMixin:
         unfinished_sequences = tf.ones_like(input_ids[:, 0])
         cur_len = input_ids.shape[-1]
 
+        if hasattr(self, "new_prepare_inputs_for_generation") and hasattr(self, "update_cache_for_generation"):
+            # For now, we make some hard assumptions
+            # 1) No stopping based on stop tokens
+            # 2) Input IDs are a 2D array
+            # 3) No model_kwargs
+            # 4) Max length is a constant
+            # 5) Only returning the token IDs, nothing else like attentions/past
+            # Notes: new_prepare_inputs_for_generation should return constant-size arrays
+            max_length = self.config.max_length if max_length is None else max_length
+            return self.xla_greedy_generate(input_ids, max_length=max_length)
+
         while cur_len < max_length:
             # TODO(Patrick): remove following line by cleaning up `prepare_inputs_for_generation`
             # in all models
@@ -2194,6 +2205,45 @@ class TFGenerationMixin:
                 )
         else:
             return input_ids
+
+    @tf.function(jit_compile=True)
+    def xla_greedy_generate(self, input_ids, max_length):
+        model_inputs = self.new_prepare_inputs_for_generation(input_ids, max_length=max_length)
+        past = model_inputs["past_key_values"]
+        generated = model_inputs["generated"]
+        next_tokens = model_inputs["next_tokens"]
+        transposed_attention_mask = model_inputs["transposed_attention_mask"]
+        batch_size, seq_length = input_ids.shape
+
+        ptr = tf.ones(shape=(1,), dtype=tf.int32)
+        max_tokens_to_generate = max_length - seq_length
+
+        def greedy_search_cond_fn(input_ids, transposed_attention_mask, next_tokens, past, ptr):
+            """state termination condition fn."""
+            return ptr < max_tokens_to_generate
+
+        def greedy_search_body_fn(generated, transposed_attention_mask, next_tokens, past, ptr):
+            """state update fn."""
+            attention_mask = tf.transpose(transposed_attention_mask)
+            position_ids = tf.broadcast_to(ptr + seq_length - 1, (batch_size, 1))
+            model_outputs = self(input_ids=next_tokens, past=past,
+                                 attention_mask=attention_mask, position_ids=position_ids)
+            logits = model_outputs.logits[:, -1:]
+            next_tokens = tf.argmax(logits, axis=-1, output_type=tf.int32)
+            past = model_outputs.past_key_values
+            past = self.update_cache_for_generation(past, ptr)
+            generated = generated.write(ptr[0], next_tokens)
+            transposed_attention_mask = tf.tensor_scatter_nd_update(transposed_attention_mask, tf.reshape(ptr + seq_length, (1, 1)), tf.ones((1, batch_size), dtype=tf.int64))
+            ptr += 1
+            return generated, transposed_attention_mask, next_tokens, past, ptr
+
+        generated, _, _, _, _ = tf.while_loop(greedy_search_cond_fn, greedy_search_body_fn, (generated, transposed_attention_mask, next_tokens, past, ptr))
+
+        output = tf.transpose(tf.reshape(generated.concat(), (-1, batch_size)))
+
+        output = tf.concat((input_ids, output), axis=-1)
+
+        return output
 
 
 def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
