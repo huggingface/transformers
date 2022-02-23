@@ -1,6 +1,6 @@
 from transformers import CvtConfig, CvtForImageClassification, CvtFeatureExtractor
 from transformers import BeitForImageClassification
-from CvT.lib.models.cls_cvt import ConvolutionalVisionTransformer as CVT
+from lib.models.cls_cvt import ConvolutionalVisionTransformer as CVT
 import torch
 import yaml
 from PIL import Image
