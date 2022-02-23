@@ -30,6 +30,10 @@ jobs:
           repository: 'huggingface/notebooks'
           path: notebooks
 
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+
       - name: Set env
         run: echo "WRITE=$(cat /mnt/WRITE)" >> $GITHUB_ENV
 
@@ -95,9 +99,6 @@ jobs:
           git config --global user.name "Hugging Face Doc Builder"
           git config --global user.email docs@huggingface.co
           
-          cd doc-builder
-          git pull origin main
-          cd ..
 
           cd notebooks
           git pull origin master
@@ -109,7 +110,9 @@ jobs:
 
       - name: Make documentation
         run: |
-          doc-builder build transformers transformers/docs/source --build_dir doc-build-dev --notebook_dir notebooks/transformers_doc --clean --version pr_$PR_NUMBER
+          cd doc-builder
+          doc-builder build transformers ../transformers/docs/source --build_dir ../doc-build-dev --notebook_dir notebooks/transformers_doc --clean --version pr_$PR_NUMBER --html
+          cd ..
 
       - name: Push to repositories
         run: |
