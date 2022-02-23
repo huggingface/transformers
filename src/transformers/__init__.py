@@ -1646,6 +1646,7 @@ if is_tf_available():
     _import_structure["generation_tf_logits_process"] = [
         "TFLogitsProcessor",
         "TFLogitsProcessorList",
+        "TFLogitsWarper",
         "TFMinLengthLogitsProcessor",
         "TFNoBadWordsLogitsProcessor",
         "TFNoRepeatNGramLogitsProcessor",
@@ -3691,6 +3692,7 @@ if TYPE_CHECKING:
         from .generation_tf_logits_process import (
             TFLogitsProcessor,
             TFLogitsProcessorList,
+            TFLogitsWarper,
             TFMinLengthLogitsProcessor,
             TFNoBadWordsLogitsProcessor,
             TFNoRepeatNGramLogitsProcessor,

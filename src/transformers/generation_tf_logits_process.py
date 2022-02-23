@@ -185,9 +185,9 @@ class TFTopPLogitsWarper(TFLogitsWarper):
         score_mask = tf.concat(
             (
                 tf.ones([score_mask.shape[0], self.min_tokens_to_keep], dtype=tf.bool),
-                score_mask[:, self.min_tokens_to_keep:]
+                score_mask[:, self.min_tokens_to_keep :],
             ),
-            axis=-1
+            axis=-1,
         )
 
         topk_next_scores = tf.where(score_mask, topk_scores, mask_scores)

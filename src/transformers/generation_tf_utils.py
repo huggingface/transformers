@@ -1677,8 +1677,8 @@ class TFGenerationMixin:
         encoder_outputs: Optional[ModelOutput] = None,
         **model_kwargs,
     ) -> Tuple[tf.Tensor, Dict[str, Any]]:
-        expanded_return_idx = (
-            tf.reshape(tf.tile(tf.reshape(tf.range(input_ids.shape[0]), (-1, 1)), (1, expand_size)), (-1))
+        expanded_return_idx = tf.reshape(
+            tf.tile(tf.reshape(tf.range(input_ids.shape[0]), (-1, 1)), (1, expand_size)), (-1)
         )
         input_ids = tf.gather(input_ids, expanded_return_idx, axis=0)
 
@@ -1747,7 +1747,10 @@ class TFGenerationMixin:
         return model_kwargs
 
     def _get_logits_warper(
-        self, top_k: Optional[int] = None, top_p: Optional[float] = None, temperature: Optional[float] = None,
+        self,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        temperature: Optional[float] = None,
     ) -> TFLogitsProcessorList:
         """
         This class returns a [`TFLogitsProcessorList`] list object that contains all relevant [`TFLogitsWarper`]
@@ -1844,8 +1847,8 @@ class TFGenerationMixin:
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
             model_kwargs:
-                Additional model specific keyword arguments will be forwarded to the `call` function of the model.
-                If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
+                Additional model specific keyword arguments will be forwarded to the `call` function of the model. If
+                model is an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
             [`~generation_tf_utils.TFGreedySearchDecoderOnlyOutput`],
@@ -2055,8 +2058,8 @@ class TFGenerationMixin:
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
             model_kwargs:
-                Additional model specific kwargs will be forwarded to the `call` function of the model. If model is
-                an encoder-decoder model the kwargs should include `encoder_outputs`.
+                Additional model specific kwargs will be forwarded to the `call` function of the model. If model is an
+                encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
             [`~generation_tf_utils.TFSampleDecoderOnlyOutput`], [`~generation_tf_utils.TFSampleEncoderDecoderOutput`]
