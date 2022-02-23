@@ -24,7 +24,6 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import torch
 from torch import Tensor, nn
-from torch.nn.functional import binary_cross_entropy_with_logits, cross_entropy, interpolate
 
 from transformers.utils import logging
 
@@ -136,7 +135,7 @@ class MaskFormerSwinBaseModelOutput(ModelOutput):
 # Copied from transformers.models.detr.modeling_detr.DetrDecoderOutput
 class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
-    Base class for outputs of the Transformer decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
+    Base class for outputs of the DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
     namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
     gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
 
@@ -335,7 +334,7 @@ def upsample_like(pixel_values: Tensor, like: Tensor, mode: str = "bilinear") ->
         Tensor: The upsampled tensor
     """
     _, _, height, width = like.shape
-    upsampled = interpolate(pixel_values, size=(height, width), mode=mode, align_corners=False)
+    upsampled = nn.functional.interpolate(pixel_values, size=(height, width), mode=mode, align_corners=False)
     return upsampled
 
 
@@ -395,13 +394,14 @@ def sigmoid_focal_loss(
         alpha (float, *optional*, defaults to 0.25):
             Weighting factor in range (0,1) to balance positive vs negative examples.
         gamma (float, *optional*, defaults to 2.0):
-            Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples.
+            Exponent of the modulating factor \\(1 - p_t)\\ to balance easy vs hard examples.
 
     Returns:
         `torch.Tensor`: The computed loss.
     """
+    criterion = nn.BCEWithLogitsLoss(reduction="none")
     probs = inputs.sigmoid()
-    cross_entropy_loss = binary_cross_entropy_with_logits(inputs, labels, reduction="none")
+    cross_entropy_loss = criterion(inputs, labels)
     p_t = probs * labels + (1 - probs) * (1 - labels)
     loss = cross_entropy_loss * ((1 - p_t) ** gamma)
 
@@ -460,12 +460,13 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 
 
     height_and_width = inputs.shape[1]
 
+    criterion = nn.BCEWithLogitsLoss(reduction="none")
     prob = inputs.sigmoid()
-    cross_entropy_loss_pos = binary_cross_entropy_with_logits(inputs, torch.ones_like(inputs), reduction="none")
+    cross_entropy_loss_pos = criterion(inputs, torch.ones_like(inputs))
     focal_pos = ((1 - prob) ** gamma) * cross_entropy_loss_pos
     focal_pos *= alpha
 
-    cross_entropy_loss_neg = binary_cross_entropy_with_logits(inputs, torch.zeros_like(inputs), reduction="none")
+    cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs))
 
     focal_neg = (prob**gamma) * cross_entropy_loss_neg
     focal_neg *= 1 - alpha
@@ -1645,7 +1646,7 @@ class MaskFormerHungarianMatcher(nn.Module):
         preds_masks = masks_queries_logits
         preds_probs = class_queries_logits.softmax(dim=-1)
         # downsample all masks in one go -> save memory
-        mask_labels = interpolate(mask_labels, size=preds_masks.shape[-2:], mode="nearest")
+        mask_labels = nn.functional.interpolate(mask_labels, size=preds_masks.shape[-2:], mode="nearest")
         # iterate through batch size
         for pred_probs, pred_mask, target_mask, labels in zip(preds_probs, preds_masks, mask_labels, class_labels):
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
@@ -1741,7 +1742,7 @@ class MaskFormerLoss(nn.Module):
 
         pred_logits = class_queries_logits
         batch_size, num_queries, _ = pred_logits.shape
-
+        criterion = nn.CrossEntropyLoss(weight=self.empty_weight)
         idx = self._get_predictions_permutation_indices(indices)
         # shape = [BATCH, N_QUERIES]
         target_classes_o = torch.cat([target[j] for target, (_, j) in zip(class_labels, indices)])
@@ -1752,7 +1753,7 @@ class MaskFormerLoss(nn.Module):
         target_classes[idx] = target_classes_o
         # target_classes is a [BATCH, CLASSES, N_QUERIES], we need to permute pred_logits "b q c -> b c q"
         pred_logits_permuted = pred_logits.permute(0, 2, 1)
-        loss_ce = cross_entropy(pred_logits_permuted, target_classes, self.empty_weight)
+        loss_ce = criterion(pred_logits_permuted, target_classes)
         losses = {"loss_cross_entropy": loss_ce}
         return losses
 
@@ -1784,7 +1785,7 @@ class MaskFormerLoss(nn.Module):
         target_masks = mask_labels  # shape [BATCH, NUM_QUERIES, H, W]
         target_masks = target_masks[tgt_idx]  # shape [BATCH * NUM_QUERIES, H, W]
         # upsample predictions to the target size, we have to add one dim to use interpolate
-        pred_masks = interpolate(
+        pred_masks = nn.functional.interpolate(
             pred_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
         )
         pred_masks = pred_masks[:, 0].flatten(1)
@@ -1965,7 +1966,7 @@ class MaskFormerFPNLayer(nn.Module):
 
     def forward(self, down: Tensor, left: Tensor) -> Tensor:
         left = self.proj(left)
-        down = interpolate(down, size=left.shape[-2:], mode="nearest")
+        down = nn.functional.interpolate(down, size=left.shape[-2:], mode="nearest")
         down += left
         down = self.block(down)
         return down
@@ -2101,8 +2102,8 @@ class MaskFormerPixelLevelModule(nn.Module):
     def __init__(self, config: MaskFormerConfig):
         """
         Pixel Level Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
-        Segmentation](https://arxiv.org/abs/2107.06278). It runs the input image through a backbone and a pixel decoder,
-        generating an image feature map and pixel embeddings.
+        Segmentation](https://arxiv.org/abs/2107.06278). It runs the input image through a backbone and a pixel
+        decoder, generating an image feature map and pixel embeddings.
 
         Args:
             config ([`MaskFormerConfig`]):

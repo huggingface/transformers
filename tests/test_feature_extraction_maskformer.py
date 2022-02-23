@@ -17,7 +17,6 @@
 import unittest
 
 import numpy as np
-import pytest
 
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision
@@ -283,14 +282,6 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
                 # check if divisible
                 self.assertTrue((pixel_values.shape[-1] % size_divisibility) == 0)
                 self.assertTrue((pixel_values.shape[-2] % size_divisibility) == 0)
-
-    def test_return_tensors(self):
-        faulty_tensor_types = ["tf", "jax", "np"]
-        for tensor_type in faulty_tensor_types:
-            feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-            with pytest.raises(ValueError) as excinfo:
-                feature_extractor([np.random.rand(3, 100, 100)], return_tensors=tensor_type)
-                self.assertTrue("Only PyTorch is supported for the moment." in excinfo.value)
 
     def test_call_with_numpy_annotations(self):
         num_classes = 8
