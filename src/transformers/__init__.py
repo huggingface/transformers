@@ -875,7 +875,8 @@ if is_torch_available():
     )
     _import_structure["models.data2vec"].extend(
         [
-            "DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Data2VecAudioForAudioFrameClassification",
             "Data2VecAudioForCTC",
             "Data2VecAudioForSequenceClassification",
@@ -3037,7 +3038,8 @@ if TYPE_CHECKING:
             CTRLPreTrainedModel,
         )
         from .models.data2vec import (
-            DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Data2VecAudioForAudioFrameClassification,
             Data2VecAudioForCTC,
             Data2VecAudioForSequenceClassification,

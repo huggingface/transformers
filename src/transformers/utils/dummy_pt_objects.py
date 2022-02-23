@@ -347,6 +347,9 @@ def load_tf_weights_in_albert(*args, **kwargs):
 MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
 
 
+MODEL_FOR_AUDIO_XVECTOR_MAPPING = None
+
+
 MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING = None
 
 
@@ -1211,7 +1214,10 @@ class CTRLPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST = None
+DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class Data2VecAudioForAudioFrameClassification(metaclass=DummyObject):
