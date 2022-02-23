@@ -45,6 +45,9 @@ PRIVATE_MODELS = [
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
     "SegformerDecodeHead",  # Building part of bigger (tested) model.
+    "PLBartEncoder",  # Building part of bigger (tested) model.
+    "PLBartDecoder",  # Building part of bigger (tested) model.
+    "PLBartDecoderWrapper",  # Building part of bigger (tested) model.
     "BigBirdPegasusEncoder",  # Building part of bigger (tested) model.
     "BigBirdPegasusDecoder",  # Building part of bigger (tested) model.
     "BigBirdPegasusDecoderWrapper",  # Building part of bigger (tested) model.
@@ -119,9 +122,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PerceiverForMultimodalAutoencoding",
     "PerceiverForOpticalFlow",
     "SegformerDecodeHead",
-    "SegformerForSemanticSegmentation",
-    "BeitForSemanticSegmentation",
     "FlaxBeitForMaskedImageModeling",
+    "PLBartEncoder",
+    "PLBartDecoder",
+    "PLBartDecoderWrapper",
     "BeitForMaskedImageModeling",
     "CLIPTextModel",
     "CLIPVisionModel",

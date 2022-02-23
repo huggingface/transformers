@@ -158,6 +158,13 @@ except importlib_metadata.PackageNotFoundError:
     except importlib_metadata.PackageNotFoundError:
         _faiss_available = False
 
+_ftfy_available = importlib.util.find_spec("ftfy") is not None
+try:
+    _ftfy_version = importlib_metadata.version("ftfy")
+    logger.debug(f"Successfully imported ftfy version {_ftfy_version}")
+except importlib_metadata.PackageNotFoundError:
+    _ftfy_available = False
+
 
 coloredlogs = importlib.util.find_spec("coloredlogs") is not None
 try:
@@ -322,7 +329,7 @@ HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOIN
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
-TORCH_FX_REQUIRED_VERSION = version.parse("1.9")
+TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
 
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
@@ -441,6 +448,10 @@ def is_flax_available():
     return _flax_available
 
 
+def is_ftfy_available():
+    return _ftfy_available
+
+
 def is_torch_tpu_available():
     if not _torch_available:
         return False
@@ -514,10 +525,6 @@ def is_pytesseract_available():
 
 def is_spacy_available():
     return importlib.util.find_spec("spacy") is not None
-
-
-def is_ftfy_available():
-    return importlib.util.find_spec("ftfy") is not None
 
 
 def is_in_notebook():
@@ -722,6 +729,13 @@ FLAX_IMPORT_ERROR = """
 installation page: https://github.com/google/flax and follow the ones that match your environment.
 """
 
+# docstyle-ignore
+FTFY_IMPORT_ERROR = """
+{0} requires the ftfy library but it was not found in your environment. Checkout the instructions on the
+installation section: https://github.com/rspeer/python-ftfy/tree/master#installing and follow the ones
+that match your environment.
+"""
+
 
 # docstyle-ignore
 SCATTER_IMPORT_ERROR = """
@@ -801,6 +815,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
+        ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
@@ -827,8 +842,10 @@ def requires_backends(obj, backends):
         backends = [backends]
 
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not all(BACKENDS_MAPPING[backend][0]() for backend in backends):
-        raise ImportError("".join([BACKENDS_MAPPING[backend][1].format(name) for backend in backends]))
+    checks = (BACKENDS_MAPPING[backend] for backend in backends)
+    failed = [msg.format(name) for available, msg in checks if not available()]
+    if failed:
+        raise ImportError("".join(failed))
 
 
 class DummyObject(type):
@@ -2300,16 +2317,14 @@ def get_file_from_repo(
             use_auth_token=use_auth_token,
         )
 
-    except RepositoryNotFoundError as err:
-        logger.error(err)
+    except RepositoryNotFoundError:
         raise EnvironmentError(
             f"{path_or_repo} is not a local folder and is not a valid model identifier "
             "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
             "pass a token having permission to this repo with `use_auth_token` or log in with "
             "`huggingface-cli login` and pass `use_auth_token=True`."
         )
-    except RevisionNotFoundError as err:
-        logger.error(err)
+    except RevisionNotFoundError:
         raise EnvironmentError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
             "for this model name. Check the model page at "

@@ -310,6 +310,38 @@ class AutoTokenizerTest(unittest.TestCase):
             if CustomConfig in TOKENIZER_MAPPING._extra_content:
                 del TOKENIZER_MAPPING._extra_content[CustomConfig]
 
+    def test_from_pretrained_dynamic_tokenizer(self):
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/test_dynamic_tokenizer", trust_remote_code=True)
+        self.assertTrue(tokenizer.special_attribute_present)
+        if is_tokenizers_available():
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
+
+            # Test we can also load the slow version
+            tokenizer = AutoTokenizer.from_pretrained(
+                "hf-internal-testing/test_dynamic_tokenizer", trust_remote_code=True, use_fast=False
+            )
+            self.assertTrue(tokenizer.special_attribute_present)
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+        else:
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+
+    def test_from_pretrained_dynamic_tokenizer_legacy_format(self):
+        tokenizer = AutoTokenizer.from_pretrained(
+            "hf-internal-testing/test_dynamic_tokenizer_legacy", trust_remote_code=True
+        )
+        self.assertTrue(tokenizer.special_attribute_present)
+        if is_tokenizers_available():
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
+
+            # Test we can also load the slow version
+            tokenizer = AutoTokenizer.from_pretrained(
+                "hf-internal-testing/test_dynamic_tokenizer_legacy", trust_remote_code=True, use_fast=False
+            )
+            self.assertTrue(tokenizer.special_attribute_present)
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+        else:
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"

@@ -363,7 +363,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
-    fx_ready_model_classes = all_model_classes
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
     test_model_parallel = False

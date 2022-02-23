@@ -14,6 +14,8 @@
 # limitations under the License.
 """ UniSpeech model configuration"""
 
+import math
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -289,3 +291,7 @@ class UniSpeechConfig(PretrainedConfig):
 
         # pretraining loss
         self.replace_prob = replace_prob
+
+    @property
+    def inputs_to_logits_ratio(self):
+        return math.prod(self.conv_stride)

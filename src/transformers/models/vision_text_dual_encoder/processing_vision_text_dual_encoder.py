@@ -15,17 +15,12 @@
 """
 Processor class for VisionTextDualEncoder
 """
-from typing import Union
 
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
-from transformers.feature_extraction_utils import FeatureExtractionMixin
-
+from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ..auto.feature_extraction_auto import AutoFeatureExtractor
-from ..auto.tokenization_auto import AutoTokenizer
 
 
-class VisionTextDualEncoderProcessor:
+class VisionTextDualEncoderProcessor(ProcessorMixin):
     r"""
     Constructs a VisionTextDualEncoder processor which wraps a vision feature extractor and a tokenizer into a single
     processor.
@@ -40,81 +35,12 @@ class VisionTextDualEncoderProcessor:
         tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer is a required input.
     """
+    feature_extractor_class = "AutoFeatureExtractor"
+    tokenizer_class = "AutoTokenizer"
 
-    def __init__(
-        self, feature_extractor: FeatureExtractionMixin, tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
-    ):
-        if not isinstance(feature_extractor, FeatureExtractionMixin):
-            raise ValueError(
-                f"`feature_extractor` has to be of type {FeatureExtractionMixin.__class__}, but is {type(feature_extractor)}"
-            )
-        if not isinstance(tokenizer, (PreTrainedTokenizer, PreTrainedTokenizerFast)):
-            raise ValueError(
-                f"`tokenizer` has to be of type `PreTrainedTokenizer` or `PreTrainedTokenizerFast`, but is {type(tokenizer)}"
-            )
-
-        self.feature_extractor = feature_extractor
-        self.tokenizer = tokenizer
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
         self.current_processor = self.feature_extractor
-
-    def save_pretrained(self, save_directory):
-        """
-        Save a VisionTextDualEncoder feature extractor object and VisionTextDualEncoder tokenizer object to the
-        directory `save_directory`, so that it can be re-loaded using the
-        [`~VisionTextDualEncoderProcessor.from_pretrained`] class method.
-
-        <Tip>
-
-        This class method is simply calling [`~PreTrainedFeatureExtractor.save_pretrained`] and
-        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the docstrings of the methods
-        above for more information.
-
-        </Tip>
-
-        Args:
-            save_directory (`str` or `os.PathLike`):
-                Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
-                be created if it does not exist).
-        """
-        self.feature_extractor._set_processor_class(self.__class__.__name__)
-        self.feature_extractor.save_pretrained(save_directory)
-
-        self.tokenizer._set_processor_class(self.__class__.__name__)
-        self.tokenizer.save_pretrained(save_directory)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        r"""
-        Instantiate a [`VisionTextDualEncoderProcessor`] from a pretrained VisionTextDualEncoder processor.
-
-        <Tip>
-
-        This class method is simply calling AutoFeatureExtractor's [`~PreTrainedFeatureExtractor.from_pretrained`] and
-        AutoTokenizer's [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the
-        docstrings of the methods above for more information.
-
-        </Tip>
-
-        Args:
-            pretrained_model_name_or_path (`str` or `os.PathLike`):
-                This can be either:
-
-                - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
-                - a path to a *directory* containing a feature extractor file saved using the
-                  [`~PreTrainedFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
-                - a path or url to a saved feature extractor JSON *file*, e.g.,
-                  `./my_model_directory/preprocessor_config.json`.
-
-            **kwargs
-                Additional keyword arguments passed along to both [`PreTrainedFeatureExtractor`] and
-                [`PreTrainedTokenizer`]
-        """
-        feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """

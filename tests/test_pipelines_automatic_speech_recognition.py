@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 from datasets import load_dataset
 
+from huggingface_hub import snapshot_download
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
@@ -106,6 +107,24 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "(Applaudissements)"})
+
+    @require_torch
+    def test_small_model_pt_seq2seq(self):
+        model_id = "hf-internal-testing/tiny-random-speech-encoder-decoder"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model=model_id,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            framework="pt",
+        )
+
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        output = speech_recognizer(waveform)
+        self.assertEqual(output, {"text": "あл ش 湯 清 ه ܬ া लᆨしث ल eか u w 全 u"})
 
     @slow
     @require_torch
@@ -336,6 +355,34 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     def test_with_lm_fast(self):
         speech_recognizer = pipeline(
             model="hf-internal-testing/processor_with_lm",
+        )
+        self.assertEqual(speech_recognizer.type, "ctc_with_lm")
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        n_repeats = 2
+        audio_tiled = np.tile(audio, n_repeats)
+
+        output = speech_recognizer([audio_tiled], batch_size=2)
+        self.assertEqual(output, [{"text": ANY(str)}])
+        self.assertEqual(output[0]["text"][:6], "<s> <s")
+
+        # Making sure the argument are passed to the decoder
+        # Since no change happens in the result, check the error comes from
+        # the `decode_beams` function.
+        with self.assertRaises(TypeError) as e:
+            output = speech_recognizer([audio_tiled], decoder_kwargs={"num_beams": 2})
+            self.assertContains(e.msg, "TypeError: decode_beams() got an unexpected keyword argument 'num_beams'")
+        output = speech_recognizer([audio_tiled], decoder_kwargs={"beam_width": 2})
+
+    @require_torch
+    @require_pyctcdecode
+    def test_with_local_lm_fast(self):
+        local_dir = snapshot_download("hf-internal-testing/processor_with_lm")
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model=local_dir,
         )
         self.assertEqual(speech_recognizer.type, "ctc_with_lm")
 

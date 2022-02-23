@@ -66,7 +66,7 @@ class HfArgumentParser(ArgumentParser):
         super().__init__(**kwargs)
         if dataclasses.is_dataclass(dataclass_types):
             dataclass_types = [dataclass_types]
-        self.dataclass_types = dataclass_types
+        self.dataclass_types = list(dataclass_types)
         for dtype in self.dataclass_types:
             self._add_dataclass_arguments(dtype)
 

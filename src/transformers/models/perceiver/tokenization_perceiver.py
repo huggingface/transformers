@@ -87,7 +87,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self._utf_vocab_size = 2 ** 8  # utf is 8 bits
+        self._utf_vocab_size = 2**8  # utf is 8 bits
 
         # define special tokens dict
         self.special_tokens_encoder: Dict[str, int] = {
