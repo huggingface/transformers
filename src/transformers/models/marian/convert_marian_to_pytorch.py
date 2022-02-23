@@ -470,12 +470,13 @@ class OpusState:
             cfg["vocab_size"] = self.pad_token_id + 1
         else:
             self.wemb, _ = add_emb_entries(self.state_dict["encoder_Wemb"], self.state_dict[BIAS_KEY], 1)
-            self.dec_wemb, self.final_bias = add_emb_entries(self.state_dict["decoder_Wemb"], self.state_dict[BIAS_KEY], 1)
+            self.dec_wemb, self.final_bias = add_emb_entries(
+                self.state_dict["decoder_Wemb"], self.state_dict[BIAS_KEY], 1
+            )
             # still assuming that vocab size is same for encoder and decoder
             self.pad_token_id = self.wemb.shape[0] - 1
             cfg["src_vocab_size"] = self.pad_token_id + 1
             cfg["tgt_vocab_size"] = self.pad_token_id + 1
-
 
         # self.state_dict['Wemb'].sha
         self.state_keys = list(self.state_dict.keys())
@@ -492,7 +493,7 @@ class OpusState:
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
         check_marian_cfg_assumptions(cfg)
         self.hf_config = MarianConfig(
-#             vocab_size=cfg["vocab_size"],
+            #             vocab_size=cfg["vocab_size"],
             src_vocab_size=cfg["src_vocab_size"],
             tgt_vocab_size=cfg["tgt_vocab_size"],
             share_embeddings=cfg["tied-embeddings-src"],
@@ -573,7 +574,7 @@ class OpusState:
         else:
             wemb_tensor = nn.Parameter(torch.FloatTensor(self.wemb))
             model.model.encoder.embed_tokens.weight = wemb_tensor
-            
+
             decoder_wemb_tensor = nn.Parameter(torch.FloatTensor(self.dec_wemb))
             bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
             model.model.decoder.embed_tokens.weight = decoder_wemb_tensor

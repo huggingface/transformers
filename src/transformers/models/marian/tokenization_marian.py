@@ -302,13 +302,15 @@ class MarianTokenizer(PreTrainedTokenizer):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         saved_files = []
-        
+
         if self.separate_vocabs:
             out_src_vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["src_vocab_file"]
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["src_vocab_file"],
             )
             out_tgt_vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["tgt_vocab_file"]
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["tgt_vocab_file"],
             )
             save_json(self.src_encoder, out_src_vocab_file)
             save_json(self.tgt_encoder, out_tgt_vocab_file)
@@ -342,7 +344,7 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self) -> Dict:
         return self.get_src_vocab()
-    
+
     def get_src_vocab(self):
         return dict(self.src_encoder, **self.added_tokens_encoder)
 
