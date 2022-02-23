@@ -62,6 +62,7 @@ from .token_classification import (
     TokenClassificationPipeline,
 )
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
+from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 
 
 if is_tf_available():
@@ -238,6 +239,13 @@ SUPPORTED_TASKS = {
             "tokenizer": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
         },
         "type": "text",
+    },
+    "zero-shot-image-classification": {
+        "impl": ZeroShotImageClassificationPipeline,
+        "tf": (TFAutoModel,) if is_tf_available() else (),
+        "pt": (AutoModel,) if is_torch_available() else (),
+        "default": {"pt": "openai/clip-vit-base-patch32", "tf": "openai/clip-vit-base-patch32"},
+        "type": "multimodal",
     },
     "conversational": {
         "impl": ConversationalPipeline,
