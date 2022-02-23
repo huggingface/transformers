@@ -33,6 +33,8 @@
     title: Multi-lingual models
   title: Tutorials
 - sections:
+  - local: create_a_model
+    title: Create a custom model
   - local: examples
     title: Examples
   - local: troubleshooting
@@ -166,6 +168,8 @@
       title: CamemBERT
     - local: model_doc/canine
       title: CANINE
+    - local: model_doc/convnext
+      title: ConvNeXT
     - local: model_doc/clip
       title: CLIP
     - local: model_doc/convbert
@@ -258,6 +262,10 @@
       title: Pegasus
     - local: model_doc/phobert
       title: PhoBERT
+    - local: model_doc/plbart
+      title: PLBart
+    - local: model_doc/poolformer
+      title: PoolFormer
     - local: model_doc/prophetnet
       title: ProphetNet
     - local: model_doc/qdqbert

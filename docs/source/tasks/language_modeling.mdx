@@ -12,14 +12,21 @@ specific language governing permissions and limitations under the License.
 
 # Language modeling
 
-Language modeling predicts words in a sentence. There are two forms of language modeling:
+Language modeling predicts words in a sentence. There are two forms of language modeling.
 
-- Causal language modeling: predict the next token in a sequence of tokens, and the model can only attend to tokens on the left.
-- Masked language modeling: predict a masked token in a sequence, and the model can attend to tokens bidirectionally.
+<Youtube id="Vpjb1lu0MDk"/>
 
-This guide will show you how to fine-tune [DistilGPT2](https://huggingface.co/distilgpt2) or [DistilRoBERTa](https://huggingface.co/distilroberta-base) on the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/eli5) dataset for causal and masked language modeling respectively.
+Causal language modeling predicts the next token in a sequence of tokens, and the model can only attend to tokens on the left.
+
+<Youtube id="mqElG5QJWUg"/>
+
+Masked language modeling predicts a masked token in a sequence, and the model can attend to tokens bidirectionally.
+
+This guide will show you how to fine-tune [DistilGPT2](https://huggingface.co/distilgpt2) for causal language modeling and [DistilRoBERTa](https://huggingface.co/distilroberta-base) for masked language modeling on the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/eli5) dataset.
 
 <Tip>
+
+You can fine-tune other architectures for language modeling such as [GPT-Neo](https://huggingface.co/EleutherAI/gpt-neo-125M), [GPT-J](https://huggingface.co/EleutherAI/gpt-j-6B), and [BERT](https://huggingface.co/bert-base-uncased), following the same steps presented in this guide!
 
 See the text generation [task page](https://huggingface.co/tasks/text-generation) and fill mask [task page](https://huggingface.co/tasks/fill-mask) for more information about their associated models, datasets, and metrics.
 
@@ -157,6 +164,10 @@ You can use the end of sequence token as the padding token, and set `mlm=False`.
 
 >>> tokenizer.pad_token = tokenizer.eos_token
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+===PT-TF-SPLIT===
+>>> from transformers import DataCollatorForLanguageModeling
+
+>>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="tf")
 ```
 
 For masked language modeling, use the same [`DataCollatorForLanguageModeling`] except you should specify `mlm_probability` to randomly mask tokens each time you iterate over the data.
@@ -166,11 +177,13 @@ For masked language modeling, use the same [`DataCollatorForLanguageModeling`] e
 
 >>> tokenizer.pad_token = tokenizer.eos_token
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
+===PT-TF-SPLIT===
+>>> from transformers import DataCollatorForLanguageModeling
+
+>>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="tf")
 ```
 
 ## Causal language modeling
-
-<Youtube id="Vpjb1lu0MDk"/>
 
 Causal language modeling is frequently used for text generation. This section shows you how to fine-tune [DistilGPT2](https://huggingface.co/distilgpt2) to generate new text.
 
@@ -186,7 +199,7 @@ Load DistilGPT2 with [`AutoModelForCausalLM`]:
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with Trainer, take a look at the basic tutorial [here](training#finetune-with-trainer)!
+If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](training#finetune-with-trainer)!
 
 </Tip>
 
@@ -224,14 +237,6 @@ To fine-tune a model in TensorFlow is just as easy, with only a few differences.
 If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
 
 </Tip>
-
-When you create a batch with [`DataCollatorForLanguageModeling`], instruct the data collator to return `tf.Tensor`'s instead of PyTorch tensors:
-
-```py
->>> from transformers import DataCollatorForLanguageModeling
-
->>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="tf")
-```
 
 Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
 
@@ -285,8 +290,6 @@ Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fin
 
 ## Masked language modeling
 
-<Youtube id="mqElG5QJWUg"/>
-
 Masked language modeling is also known as a fill-mask task because it predicts a masked token in a sequence. Models for masked language modeling require a good contextual understanding of an entire sequence instead of only the left context. This section shows you how to fine-tune [DistilRoBERTa](https://huggingface.co/distilroberta-base) to predict a masked word.
 
 ### Fine-tune with Trainer
@@ -301,7 +304,7 @@ Load DistilRoBERTa with [`AutoModelForMaskedlM`]:
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with Trainer, take a look at the basic tutorial [here](training#finetune-with-trainer)!
+If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](training#finetune-with-trainer)!
 
 </Tip>
 
@@ -340,14 +343,6 @@ To fine-tune a model in TensorFlow is just as easy, with only a few differences.
 If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
 
 </Tip>
-
-When you create a batch with [`DataCollatorForLanguageModeling`], instruct the data collator to return `tf.Tensor`'s instead of PyTorch tensors:
-
-```py
->>> from transformers import DataCollatorForLanguageModeling
-
->>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="tf")
-```
 
 Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
 

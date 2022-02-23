@@ -138,6 +138,10 @@ Use [`DataCollatorForTokenClassification`] to create a batch of examples. It wil
 >>> from transformers import DataCollatorForTokenClassification
 
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
+===PT-TF-SPLIT===
+>>> from transformers import DataCollatorForTokenClassification
+
+>>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
 ```
 
 ## Fine-tune with Trainer
@@ -152,7 +156,7 @@ Load DistilBERT with [`AutoModelForTokenClassification`] along with the number o
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with Trainer, take a look at the basic tutorial [here](training#finetune-with-trainer)!
+If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](training#finetune-with-trainer)!
 
 </Tip>
 
@@ -194,14 +198,6 @@ To fine-tune a model in TensorFlow is just as easy, with only a few differences.
 If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
 
 </Tip>
-
-When you create a batch with [`DataCollatorWithPadding`], instruct the data collator to return `tf.Tensor`'s instead of PyTorch tensors:
-
-```py
->>> from transformers import DataCollatorForTokenClassification
-
->>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
-```
 
 Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
 

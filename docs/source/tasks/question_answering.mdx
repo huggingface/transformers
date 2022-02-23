@@ -23,7 +23,7 @@ This guide will show you how to fine-tune [DistilBERT](https://huggingface.co/di
 
 <Tip>
 
-See the question answering [task page](https://huggingface.co/tasks/token-classification) for more information about other forms of question answering and their associated models, datasets, and metrics.
+See the question answering [task page](https://huggingface.co/tasks/question-answering) for more information about other forms of question answering and their associated models, datasets, and metrics.
 
 </Tip>
 
@@ -138,6 +138,10 @@ Use [`DefaultDataCollator`] to create a batch of examples. Unlike other data col
 >>> from transformers import DefaultDataCollator
 
 >>> data_collator = DefaultDataCollator()
+===PT-TF-SPLIT===
+>>> from transformers import DefaultDataCollator
+
+>>> data_collator = DefaultDataCollator(return_tensors="tf")
 ```
 
 ## Fine-tune with Trainer
@@ -152,7 +156,7 @@ Load DistilBERT with [`AutoModelForQuestionAnswering`]:
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with Trainer, take a look at the basic tutorial [here](training#finetune-with-trainer)!
+If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](training#finetune-with-trainer)!
 
 </Tip>
 
@@ -194,14 +198,6 @@ To fine-tune a model in TensorFlow is just as easy, with only a few differences.
 If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
 
 </Tip>
-
-When you create a batch with [`DefaultDataCollator`], instruct the data collator to return `tf.Tensor`'s instead of PyTorch tensors:
-
-```py
->>> from transformers import DefaultDataCollator
-
->>> data_collator = DefaultDataCollator(return_tensors="tf")
-```
 
 Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and the start and end positions of an answer in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
 
