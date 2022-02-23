@@ -22,7 +22,7 @@
   - local: model_summary
     title: Summary of the models
   - local: training
-    title: Fine-tune a pretrained model
+    title: Fine-tuning a pretrained model
   - local: accelerate
     title: Distributed training with 🤗 Accelerate
   - local: model_sharing
@@ -41,6 +41,22 @@
     title: Troubleshooting
   - local: custom_datasets
     title: Fine-tuning with custom datasets
+  - sections:
+    - local: tasks/sequence_classification
+      title: Text classification
+    - local: tasks/token_classification
+      title: Token classification
+    - local: tasks/question_answering
+      title: Question answering
+    - local: tasks/language_modeling
+      title: Language modeling
+    - local: tasks/translation
+      title: Translation
+    - local: tasks/summarization
+      title: Summarization
+    - local: tasks/multiple_choice
+      title: Multiple choice
+    title: Fine-tune for downstream tasks
   - local: notebooks
     title: "🤗 Transformers Notebooks"
   - local: sagemaker
@@ -73,7 +89,7 @@
     title: Sharing custom models
   - local: pr_checks
     title: Checks on a Pull Request
-  title: Advanced guides
+  title: How-to guides
 - sections:
   - local: bertology
     title: BERTology
