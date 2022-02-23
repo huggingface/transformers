@@ -19,7 +19,6 @@ jobs:
         with:
           repository: 'huggingface/doc-builder'
           path: doc-builder
-          ref: "kit"
 
       - uses: actions/checkout@v2
         with:
@@ -34,8 +33,6 @@ jobs:
       - uses: actions/setup-node@v2
         with:
           node-version: '14'
-          # cache: 'npm'
-          # cache-dependency-path: doc-builder/kit/package-lock.json
 
       - name: Set env
         run: echo "WRITE=$(cat /mnt/WRITE)" >> $GITHUB_ENV
@@ -81,7 +78,7 @@ jobs:
           apt-get -y update && apt-get install -y libsndfile1-dev
 
           pip uninstall -y doc-builder
-          pip install git+https://github.com/huggingface/doc-builder@kit -U
+          pip install git+https://github.com/huggingface/doc-builder -U
           cd transformers
           pip install .[dev]
           cd ..

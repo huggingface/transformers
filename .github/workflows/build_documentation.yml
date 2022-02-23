@@ -23,7 +23,6 @@ jobs:
         with:
           repository: 'huggingface/doc-builder'
           path: doc-builder
-          ref: "kit"
 
       - uses: actions/checkout@v2
         with:
@@ -56,7 +55,7 @@ jobs:
         run: |
           sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
 
-          pip install git+https://github.com/huggingface/doc-builder@kit
+          pip install git+https://github.com/huggingface/doc-builder
           cd transformers
           pip install .[dev]
           cd ..
