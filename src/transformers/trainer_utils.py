@@ -519,6 +519,17 @@ class TrainerMemoryTracker:
             self.update_metrics(stage, metrics)
 
 
+def has_length(dataset):
+    """
+    Checks if the dataset implements __len__() and it doesn't raise an error
+    """
+    try:
+        return len(dataset) is not None
+    except TypeError:
+        # TypeError: len() of unsized object
+        return False
+
+
 def denumpify_detensorize(metrics):
     """
     Recursively calls `.item()` on the element of the dictionary passed

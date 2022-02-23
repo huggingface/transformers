@@ -30,6 +30,8 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("poolformer", "PoolFormerConfig"),
+        ("convnext", "ConvNextConfig"),
         ("yoso", "YosoConfig"),
         ("swin", "SwinConfig"),
         ("vilt", "ViltConfig"),
@@ -47,6 +49,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("perceiver", "PerceiverConfig"),
         ("gptj", "GPTJConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
+        ("plbart", "PLBartConfig"),
         ("beit", "BeitConfig"),
         ("rembert", "RemBertConfig"),
         ("visual_bert", "VisualBertConfig"),
@@ -125,6 +128,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here
+        ("poolformer", "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("convnext", "CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -140,6 +145,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("perceiver", "PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gptj", "GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("layoutlmv2", "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("plbart", "PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("rembert", "REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("visual_bert", "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -207,6 +213,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("poolformer", "PoolFormer"),
+        ("convnext", "ConvNext"),
         ("yoso", "YOSO"),
         ("swin", "Swin"),
         ("vilt", "ViLT"),
@@ -224,6 +232,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("perceiver", "Perceiver"),
         ("gptj", "GPT-J"),
         ("beit", "BEiT"),
+        ("plbart", "PLBart"),
         ("rembert", "RemBERT"),
         ("layoutlmv2", "LayoutLMv2"),
         ("visual_bert", "VisualBert"),
@@ -626,7 +635,7 @@ class AutoConfig:
                     "the option `trust_remote_code=True` to remove this error."
                 )
             if kwargs.get("revision", None) is None:
-                logger.warn(
+                logger.warning(
                     "Explicitly passing a `revision` is encouraged when loading a configuration with custom code to "
                     "ensure no malicious code has been contributed in a newer revision."
                 )

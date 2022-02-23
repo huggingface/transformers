@@ -1,25 +1,22 @@
-FROM nvidia/cuda:10.1-cudnn7-runtime-ubuntu18.04
+FROM nvidia/cuda:11.2.2-cudnn8-runtime-ubuntu20.04
 LABEL maintainer="Hugging Face"
-LABEL repository="transformers"
 
-RUN apt update && \
-    apt install -y bash \
-                   build-essential \
-                   git \
-                   curl \
-                   ca-certificates \
-                   python3 \
-                   python3-pip && \
-    rm -rf /var/lib/apt/lists
+ARG DEBIAN_FRONTEND=noninteractive
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip && \
-    python3 -m pip install --no-cache-dir \
-    mkl \
-    tensorflow
+RUN apt update
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
+RUN python3 -m pip install --no-cache-dir --upgrade pip
 
-WORKDIR /workspace
-COPY . transformers/
-RUN cd transformers/ && \
-    python3 -m pip install --no-cache-dir .
+ARG REF=master
+RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime]
 
-CMD ["/bin/bash"]
+# If set to nothing, will install the latest version
+ARG TENSORFLOW=''
+
+RUN [ ${#TENSORFLOW} -gt 0 ] && VERSION='tensorflow=='$TENSORFLOW'.*' ||  VERSION='tensorflow'; python3 -m pip install --no-cache-dir -U $VERSION
+RUN python3 -m pip uninstall -y torch flax
+
+# When installing in editable mode, `transformers` is not recognized as a package.
+# this line must be added in order for python to be aware of transformers.
+RUN cd transformers && python3 setup.py develop

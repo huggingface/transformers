@@ -3,7 +3,7 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow",
-    "black": "black==21.4b0",
+    "black": "black~=22.0",
     "codecarbon": "codecarbon==1.2.0",
     "cookiecutter": "cookiecutter==1.7.2",
     "dataclasses": "dataclasses",
@@ -15,6 +15,7 @@ deps = {
     "filelock": "filelock",
     "flake8": "flake8>=3.8.3",
     "flax": "flax>=0.3.5",
+    "ftfy": "ftfy",
     "fugashi": "fugashi>=1.0",
     "GitPython": "GitPython<3.1.19",
     "huggingface-hub": "huggingface-hub>=0.1.0,<1.0",
@@ -59,7 +60,7 @@ deps = {
     "tf2onnx": "tf2onnx",
     "timeout-decorator": "timeout-decorator",
     "timm": "timm",
-    "tokenizers": "tokenizers>=0.10.1,!=0.11.3",
+    "tokenizers": "tokenizers>=0.11.1,!=0.11.3",
     "torch": "torch>=1.0",
     "torchaudio": "torchaudio",
     "pyctcdecode": "pyctcdecode>=0.3.0",

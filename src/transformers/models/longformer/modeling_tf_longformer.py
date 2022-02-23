@@ -38,8 +38,8 @@ from ...modeling_tf_utils import (
     get_initializer,
     input_processing,
     keras_serializable,
-    shape_list,
 )
+from ...tf_utils import shape_list
 from ...utils import logging
 from .configuration_longformer import LongformerConfig
 
@@ -405,13 +405,10 @@ def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_se
     else:
         # last token is separation token and should not be counted and in the middle are two separation tokens
         question_end_index = tf.tile(question_end_index + 1, (1, input_ids_shape[1]))
-        attention_mask = (
-            tf.cast(
-                attention_mask > question_end_index,
-                dtype=question_end_index.dtype,
-            )
-            * tf.cast(attention_mask < input_ids_shape[-1], dtype=question_end_index.dtype)
-        )
+        attention_mask = tf.cast(
+            attention_mask > question_end_index,
+            dtype=question_end_index.dtype,
+        ) * tf.cast(attention_mask < input_ids_shape[-1], dtype=question_end_index.dtype)
 
     return attention_mask
 
@@ -1590,12 +1587,22 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
                 all_attentions = all_attentions + (tf.transpose(layer_outputs[1], (0, 2, 1, 3)),)
 
                 # bzs x num_attn_heads x num_global_attn x seq_len => bzs x num_attn_heads x seq_len x num_global_attn
-                all_global_attentions = all_global_attentions + (tf.transpose(layer_outputs[2], (0, 1, 3, 2)))
+                all_global_attentions = all_global_attentions + (tf.transpose(layer_outputs[2], (0, 1, 3, 2)),)
 
         # Add last layer
         if output_hidden_states:
             hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
             all_hidden_states = all_hidden_states + (hidden_states_to_add,)
+
+        # undo padding
+        # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
+        hidden_states = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
+        if output_attentions:
+            all_attentions = (
+                tuple([state[:, :, :-padding_len, :] for state in all_attentions])
+                if padding_len > 0
+                else all_attentions
+            )
 
         if not return_dict:
             return tuple(
@@ -1765,11 +1772,6 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        # undo padding
-        if padding_len > 0:
-            # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
-            sequence_output = sequence_output[:, :-padding_len]
 
         if not inputs["return_dict"]:
             return (

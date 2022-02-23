@@ -12,11 +12,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import ast
+import collections
+import functools
+import json
+import math
+import operator
 import os
 import re
 import sys
+import time
+from typing import Dict, List, Optional, Union
 
+import requests
 from slack_sdk import WebClient
+
+
+client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
+
+NON_MODEL_TEST_MODULES = [
+    "benchmark",
+    "deepspeed",
+    "extended",
+    "fixtures",
+    "generation",
+    "onnx",
+    "optimization",
+    "pipelines",
+    "sagemaker",
+    "trainer",
+    "utils",
+]
 
 
 def handle_test_results(test_results):
@@ -38,183 +64,616 @@ def handle_test_results(test_results):
     return failed, success, time_spent
 
 
-def format_for_slack(total_results, results, scheduled: bool, title: str):
-    print(total_results, results)
-    header = {
-        "type": "header",
-        "text": {
-            "type": "plain_text",
-            "text": title,
-            "emoji": True,
-        },
-    }
+def handle_stacktraces(test_results):
+    # These files should follow the following architecture:
+    # === FAILURES ===
+    # <path>:<line>: Error ...
+    # <path>:<line>: Error ...
+    # <empty line>
 
-    if total_results["failed"] > 0:
-        total = {
-            "type": "section",
-            "fields": [
-                {"type": "mrkdwn", "text": f"*Failures:*\n❌ {total_results['failed']} failures."},
-                {"type": "mrkdwn", "text": f"*Passed:*\n✅ {total_results['success']} tests passed."},
-            ],
-        }
+    total_stacktraces = test_results.split("\n")[1:-1]
+    stacktraces = []
+    for stacktrace in total_stacktraces:
+        try:
+            line = stacktrace[: stacktrace.index(" ")].split(":")[-2]
+            error_message = stacktrace[stacktrace.index(" ") :]
+
+            stacktraces.append(f"(line {line}) {error_message}")
+        except Exception:
+            stacktraces.append("Cannot retrieve error message.")
+
+    return stacktraces
+
+
+def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
+    if isinstance(objects, dict):
+        lists = objects.values()
     else:
-        total = {
+        lists = objects
+
+    # Convert each dictionary to counter
+    counters = map(collections.Counter, lists)
+    # Sum all the counters
+    return functools.reduce(operator.add, counters)
+
+
+class Message:
+    def __init__(self, title: str, model_results: Dict, additional_results: Dict):
+        self.title = title
+
+        # Failures and success of the modeling tests
+        self.n_model_success = sum(r["success"] for r in model_results.values())
+        self.n_model_single_gpu_failures = sum(dicts_to_sum(r["failed"])["single"] for r in model_results.values())
+        self.n_model_multi_gpu_failures = sum(dicts_to_sum(r["failed"])["multi"] for r in model_results.values())
+
+        # Some suites do not have a distinction between single and multi GPU.
+        self.n_model_unknown_failures = sum(dicts_to_sum(r["failed"])["unclassified"] for r in model_results.values())
+        self.n_model_failures = (
+            self.n_model_single_gpu_failures + self.n_model_multi_gpu_failures + self.n_model_unknown_failures
+        )
+
+        # Failures and success of the additional tests
+        self.n_additional_success = sum(r["success"] for r in additional_results.values())
+
+        all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
+        self.n_additional_single_gpu_failures = all_additional_failures["single"]
+        self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
+        self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
+        self.n_additional_failures = (
+            self.n_additional_single_gpu_failures
+            + self.n_additional_multi_gpu_failures
+            + self.n_additional_unknown_gpu_failures
+        )
+
+        # Results
+        self.n_failures = self.n_model_failures + self.n_additional_failures
+        self.n_success = self.n_model_success + self.n_additional_success
+        self.n_tests = self.n_failures + self.n_success
+
+        self.model_results = model_results
+        self.additional_results = additional_results
+
+        self.thread_ts = None
+
+    @property
+    def time(self) -> str:
+        all_results = [*self.model_results.values(), *self.additional_results.values()]
+        time_spent = [r["time_spent"].split(", ")[0] for r in all_results if len(r["time_spent"])]
+        total_secs = 0
+
+        for time in time_spent:
+            time_parts = time.split(":")
+
+            # Time can be formatted as xx:xx:xx, as .xx, or as x.xx if the time spent was less than a minute.
+            if len(time_parts) == 1:
+                time_parts = [0, 0, time_parts[0]]
+
+            hours, minutes, seconds = int(time_parts[0]), int(time_parts[1]), float(time_parts[2])
+            total_secs += hours * 3600 + minutes * 60 + seconds
+
+        hours, minutes, seconds = total_secs // 3600, (total_secs % 3600) // 60, total_secs % 60
+        return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
+
+    @property
+    def header(self) -> Dict:
+        return {"type": "header", "text": {"type": "plain_text", "text": self.title}}
+
+    @property
+    def no_failures(self) -> Dict:
+        return {
             "type": "section",
-            "fields": [
-                {"type": "mrkdwn", "text": "\n🌞 All tests passed."},
-            ],
+            "text": {
+                "type": "plain_text",
+                "text": f"🌞 There were no failures: all {self.n_tests} tests passed. The suite ran in {self.time}.",
+                "emoji": True,
+            },
+            "accessory": {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+            },
         }
 
-    blocks = [header, total]
+    @property
+    def failures(self) -> Dict:
+        return {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in {self.time}.",
+                "emoji": True,
+            },
+            "accessory": {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+            },
+        }
 
-    if total_results["failed"] > 0:
-        for key, result in results.items():
-            print(key, result)
-            blocks.append({"type": "header", "text": {"type": "plain_text", "text": key, "emoji": True}})
-            blocks.append(
-                {
-                    "type": "section",
-                    "fields": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Results:*\n{result['failed']} failed, {result['success']} passed.",
-                        },
-                        {"type": "mrkdwn", "text": f"*Time spent:*\n{result['time_spent']}"},
-                    ],
-                }
-            )
-    elif not scheduled:
-        for key, result in results.items():
-            blocks.append(
-                {"type": "section", "fields": [{"type": "mrkdwn", "text": f"*{key}*\n{result['time_spent']}."}]}
-            )
+    @staticmethod
+    def get_device_report(report, rjust=6):
+        if "single" in report and "multi" in report:
+            return f"{str(report['single']).rjust(rjust)} | {str(report['multi']).rjust(rjust)} | "
+        elif "single" in report:
+            return f"{str(report['single']).rjust(rjust)} | {'0'.rjust(rjust)} | "
+        elif "multi" in report:
+            return f"{'0'.rjust(rjust)} | {str(report['multi']).rjust(rjust)} | "
 
-    footer = {
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": f"<https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}|View on GitHub>",
-        },
-    }
+    @property
+    def category_failures(self) -> Dict:
+        model_failures = [v["failed"] for v in self.model_results.values()]
 
-    blocks.append(footer)
+        category_failures = {}
 
-    blocks = {"blocks": blocks}
+        for model_failure in model_failures:
+            for key, value in model_failure.items():
+                if key not in category_failures:
+                    category_failures[key] = dict(value)
+                else:
+                    category_failures[key]["unclassified"] += value["unclassified"]
+                    category_failures[key]["single"] += value["single"]
+                    category_failures[key]["multi"] += value["multi"]
 
-    return blocks
+        individual_reports = []
+        for key, value in category_failures.items():
+            device_report = self.get_device_report(value)
+
+            if sum(value.values()):
+                if device_report:
+                    individual_reports.append(f"{device_report}{key}")
+                else:
+                    individual_reports.append(key)
+
+        header = "Single |  Multi | Category\n"
+        category_failures_report = header + "\n".join(sorted(individual_reports))
+
+        return {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"The following modeling categories had failures:\n\n```\n{category_failures_report}\n```",
+            },
+        }
+
+    @property
+    def model_failures(self) -> Dict:
+        # Obtain per-model failures
+        def per_model_sum(model_category_dict):
+            return dicts_to_sum(model_category_dict["failed"].values())
+
+        failures = {k: per_model_sum(v) for k, v in self.model_results.items() if sum(per_model_sum(v).values())}
+
+        model_reports = []
+        other_module_reports = []
+        for key, value in failures.items():
+            device_report = self.get_device_report(value)
+
+            if sum(value.values()):
+                if device_report:
+                    report = f"{device_report}{key}"
+                else:
+                    report = key
+
+                if key in NON_MODEL_TEST_MODULES:
+                    other_module_reports.append(report)
+                else:
+                    model_reports.append(report)
+
+        header = "Single |  Multi | Category\n"
+        model_failures_report = header + "\n".join(sorted(model_reports, key=lambda s: s.split("] ")[-1]))
+        module_failures_report = header + "\n".join(sorted(other_module_reports, key=lambda s: s.split("] ")[-1]))
+
+        report = ""
+
+        if len(model_failures_report):
+            report += f"These following model modules had failures:\n```\n{model_failures_report}\n```\n\n"
+
+        if len(module_failures_report):
+            report += f"The following non-model modules had failures:\n```\n{module_failures_report}\n```\n\n"
+
+        return {"type": "section", "text": {"type": "mrkdwn", "text": report}}
+
+    @property
+    def additional_failures(self) -> Dict:
+        failures = {k: v["failed"] for k, v in self.additional_results.items()}
+        errors = {k: v["error"] for k, v in self.additional_results.items()}
+
+        individual_reports = []
+        for key, value in failures.items():
+            device_report = self.get_device_report(value)
+
+            if sum(value.values()) or errors[key]:
+                report = f"{key}"
+                if errors[key]:
+                    report = f"[Errored out] {report}"
+                if device_report:
+                    report = f"{device_report}{report}"
+
+                individual_reports.append(report)
+
+        header = "Single |  Multi | Category\n"
+        failures_report = header + "\n".join(sorted(individual_reports))
+
+        return {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"The following non-modeling tests had failures:\n```\n{failures_report}\n```",
+            },
+        }
+
+    @property
+    def payload(self) -> str:
+        blocks = [self.header]
+
+        if self.n_model_failures > 0 or self.n_additional_failures > 0:
+            blocks.append(self.failures)
+
+        if self.n_model_failures > 0:
+            blocks.extend([self.category_failures, self.model_failures])
+
+        if self.n_additional_failures > 0:
+            blocks.append(self.additional_failures)
+
+        if self.n_model_failures == 0 and self.n_additional_failures == 0:
+            blocks.append(self.no_failures)
+
+        return json.dumps(blocks)
+
+    @staticmethod
+    def error_out():
+        payload = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "plain_text",
+                    "text": "There was an issue running the tests.",
+                },
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                    "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+                },
+            }
+        ]
+
+        print("Sending the following payload")
+        print(json.dumps({"blocks": json.loads(payload)}))
+
+        client.chat_postMessage(
+            channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+            text="There was an issue running the tests.",
+            blocks=payload,
+        )
+
+    def post(self):
+        print("Sending the following payload")
+        print(json.dumps({"blocks": json.loads(self.payload)}))
+
+        text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
+
+        self.thread_ts = client.chat_postMessage(
+            channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+            blocks=self.payload,
+            text=text,
+        )
+
+    def get_reply_blocks(self, job_name, job_result, failures, device, text):
+        if len(failures) > 2500:
+            failures = "\n".join(failures.split("\n")[:20]) + "\n\n[Truncated]"
+
+        title = job_name
+        if device is not None:
+            title += f" ({device}-gpu)"
+
+        content = {"type": "section", "text": {"type": "mrkdwn", "text": text}}
+
+        if job_result["job_link"] is not None:
+            content["accessory"] = {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "GitHub Action job", "emoji": True},
+                "url": job_result["job_link"],
+            }
+
+        return [
+            {"type": "header", "text": {"type": "plain_text", "text": title.upper(), "emoji": True}},
+            content,
+            {"type": "section", "text": {"type": "mrkdwn", "text": failures}},
+        ]
+
+    def post_reply(self):
+        if self.thread_ts is None:
+            raise ValueError("Can only post reply if a post has been made.")
+
+        sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
+        for job, job_result in sorted_dict:
+            if len(job_result["failures"]):
+                for device, failures in job_result["failures"].items():
+                    text = "\n".join(
+                        sorted([f"*{k}*: {v[device]}" for k, v in job_result["failed"].items() if v[device]])
+                    )
+
+                    blocks = self.get_reply_blocks(job, job_result, failures, device, text=text)
+
+                    print("Sending the following reply")
+                    print(json.dumps({"blocks": blocks}))
+
+                    client.chat_postMessage(
+                        channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+                        text=f"Results for {job}",
+                        blocks=blocks,
+                        thread_ts=self.thread_ts["ts"],
+                    )
+
+                    time.sleep(1)
+
+        for job, job_result in self.additional_results.items():
+            if len(job_result["failures"]):
+                for device, failures in job_result["failures"].items():
+                    blocks = self.get_reply_blocks(
+                        job,
+                        job_result,
+                        failures,
+                        device,
+                        text=f"Number of failures: {sum(job_result['failed'].values())}",
+                    )
+
+                    print("Sending the following reply")
+                    print(json.dumps({"blocks": blocks}))
+
+                    client.chat_postMessage(
+                        channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+                        text=f"Results for {job}",
+                        blocks=blocks,
+                        thread_ts=self.thread_ts["ts"],
+                    )
+
+                    time.sleep(1)
+
+
+def get_job_links():
+    run_id = os.environ["GITHUB_RUN_ID"]
+    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{run_id}/jobs?per_page=100"
+    result = requests.get(url).json()
+    jobs = {}
+
+    try:
+        jobs.update({job["name"]: job["html_url"] for job in result["jobs"]})
+        pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
+
+        for i in range(pages_to_iterate_over):
+            result = requests.get(url + f"&page={i + 2}").json()
+            jobs.update({job["name"]: job["html_url"] for job in result["jobs"]})
+
+        return jobs
+    except Exception as e:
+        print("Unknown error, could not fetch links.", e)
+
+    return {}
+
+
+def retrieve_artifact(name: str, gpu: Optional[str]):
+    if gpu not in [None, "single", "multi"]:
+        raise ValueError(f"Invalid GPU for artifact. Passed GPU: `{gpu}`.")
+
+    if gpu is not None:
+        name = f"{gpu}-gpu-docker_{name}"
+
+    _artifact = {}
+
+    if os.path.exists(name):
+        files = os.listdir(name)
+        for file in files:
+            try:
+                with open(os.path.join(name, file)) as f:
+                    _artifact[file.split(".")[0]] = f.read()
+            except UnicodeDecodeError as e:
+                raise ValueError(f"Could not open {os.path.join(name, file)}.") from e
+
+    return _artifact
+
+
+def retrieve_available_artifacts():
+    class Artifact:
+        def __init__(self, name: str, single_gpu: bool = False, multi_gpu: bool = False):
+            self.name = name
+            self.single_gpu = single_gpu
+            self.multi_gpu = multi_gpu
+            self.paths = []
+
+        def __str__(self):
+            return self.name
+
+        def add_path(self, path: str, gpu: str = None):
+            self.paths.append({"name": self.name, "path": path, "gpu": gpu})
+
+    _available_artifacts: Dict[str, Artifact] = {}
+
+    directories = filter(os.path.isdir, os.listdir())
+    for directory in directories:
+        if directory.startswith("single-gpu-docker"):
+            artifact_name = directory[len("single-gpu-docker") + 1 :]
+
+            if artifact_name in _available_artifacts:
+                _available_artifacts[artifact_name].single_gpu = True
+            else:
+                _available_artifacts[artifact_name] = Artifact(artifact_name, single_gpu=True)
+
+            _available_artifacts[artifact_name].add_path(directory, gpu="single")
+
+        elif directory.startswith("multi-gpu-docker"):
+            artifact_name = directory[len("multi-gpu-docker") + 1 :]
+
+            if artifact_name in _available_artifacts:
+                _available_artifacts[artifact_name].multi_gpu = True
+            else:
+                _available_artifacts[artifact_name] = Artifact(artifact_name, multi_gpu=True)
+
+            _available_artifacts[artifact_name].add_path(directory, gpu="multi")
+        else:
+            artifact_name = directory
+            if artifact_name not in _available_artifacts:
+                _available_artifacts[artifact_name] = Artifact(artifact_name)
+
+            _available_artifacts[artifact_name].add_path(directory)
+
+    return _available_artifacts
 
 
 if __name__ == "__main__":
-    arguments = sys.argv[1:]
-
-    if "scheduled" in arguments:
-        arguments.remove("scheduled")
-        scheduled = True
-    else:
-        scheduled = False
-
-    if scheduled:
-        # The scheduled run has several artifacts for each job.
-        file_paths = {
-            "TF Single GPU": {
-                "common": "run_all_tests_tf_gpu_test_reports/tests_tf_gpu_[].txt",
-                "pipeline": "run_all_tests_tf_gpu_test_reports/tests_tf_pipeline_gpu_[].txt",
-            },
-            "Torch Single GPU": {
-                "common": "run_all_tests_torch_gpu_test_reports/tests_torch_gpu_[].txt",
-                "pipeline": "run_all_tests_torch_gpu_test_reports/tests_torch_pipeline_gpu_[].txt",
-                "examples": "run_all_tests_torch_gpu_test_reports/examples_torch_gpu_[].txt",
-            },
-            "TF Multi GPU": {
-                "common": "run_all_tests_tf_multi_gpu_test_reports/tests_tf_multi_gpu_[].txt",
-                "pipeline": "run_all_tests_tf_multi_gpu_test_reports/tests_tf_pipeline_multi_gpu_[].txt",
-            },
-            "Torch Multi GPU": {
-                "common": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_multi_gpu_[].txt",
-                "pipeline": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_pipeline_multi_gpu_[].txt",
-            },
-            "Torch Cuda Extensions Single GPU": {
-                "common": "run_tests_torch_cuda_extensions_gpu_test_reports/tests_torch_cuda_extensions_gpu_[].txt"
-            },
-            "Torch Cuda Extensions Multi GPU": {
-                "common": "run_tests_torch_cuda_extensions_multi_gpu_test_reports/tests_torch_cuda_extensions_multi_gpu_[].txt"
-            },
-        }
-    else:
-        file_paths = {
-            "TF Single GPU": {"common": "run_all_tests_tf_gpu_test_reports/tests_tf_gpu_[].txt"},
-            "Torch Single GPU": {"common": "run_all_tests_torch_gpu_test_reports/tests_torch_gpu_[].txt"},
-            "TF Multi GPU": {"common": "run_all_tests_tf_multi_gpu_test_reports/tests_tf_multi_gpu_[].txt"},
-            "Torch Multi GPU": {"common": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_multi_gpu_[].txt"},
-            "Torch Cuda Extensions Single GPU": {
-                "common": "run_tests_torch_cuda_extensions_gpu_test_reports/tests_torch_cuda_extensions_gpu_[].txt"
-            },
-            "Torch Cuda Extensions Multi GPU": {
-                "common": "run_tests_torch_cuda_extensions_multi_gpu_test_reports/tests_torch_cuda_extensions_multi_gpu_[].txt"
-            },
-        }
-
-    client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
-
-    if not scheduled:
-        channel_id = os.environ["CI_SLACK_CHANNEL_ID"]
-    elif scheduled and len(arguments):
-        channel_id = os.environ["CI_SLACK_CHANNEL_ID_PAST_FUTURE"]
-    else:
-        channel_id = os.environ["CI_SLACK_CHANNEL_ID_DAILY"]
-
-    if scheduled:
-        title = "🤗 Results of the scheduled tests."
-    else:
-        title = "🤗 Self-push results"
-
-    if len(arguments):
-        title = f"{arguments} " + title
-
+    arguments = sys.argv[1:][0]
     try:
-        results = {}
-        for job, file_dict in file_paths.items():
+        models = ast.literal_eval(arguments)
+    except SyntaxError:
+        Message.error_out()
+        raise ValueError("Errored out.")
 
-            # Single return value for failed/success across steps of a same job
-            results[job] = {"failed": 0, "success": 0, "time_spent": "", "failures": ""}
+    github_actions_job_links = get_job_links()
+    available_artifacts = retrieve_available_artifacts()
 
-            for key, file_path in file_dict.items():
-                try:
-                    with open(file_path.replace("[]", "stats")) as f:
-                        failed, success, time_spent = handle_test_results(f.read())
-                        results[job]["failed"] += failed
-                        results[job]["success"] += success
-                        results[job]["time_spent"] += time_spent[1:-1] + ", "
-                    with open(file_path.replace("[]", "summary_short")) as f:
-                        for line in f:
-                            if re.search("FAILED", line):
-                                results[job]["failures"] += line
-                except FileNotFoundError:
-                    print("Artifact was not found, job was probably canceled.")
+    modeling_categories = [
+        "PyTorch",
+        "TensorFlow",
+        "Flax",
+        "Tokenizers",
+        "Pipelines",
+        "Trainer",
+        "ONNX",
+        "Auto",
+        "Unclassified",
+    ]
 
-            # Remove the trailing ", "
-            results[job]["time_spent"] = results[job]["time_spent"][:-2]
+    # This dict will contain all the information relative to each model:
+    # - Failures: the total, as well as the number of failures per-category defined above
+    # - Success: total
+    # - Time spent: as a comma-separated list of elapsed time
+    # - Failures: as a line-break separated list of errors
+    model_results = {
+        model: {
+            "failed": {m: {"unclassified": 0, "single": 0, "multi": 0} for m in modeling_categories},
+            "success": 0,
+            "time_spent": "",
+            "failures": {},
+        }
+        for model in models
+        if f"run_all_tests_gpu_{model}_test_reports" in available_artifacts
+    }
 
-        test_results_keys = ["failed", "success"]
-        total = {"failed": 0, "success": 0}
-        for job, job_result in results.items():
-            for result_key in test_results_keys:
-                total[result_key] += job_result[result_key]
+    unclassified_model_failures = []
 
-        if total["failed"] != 0 or scheduled:
-            to_be_sent_to_slack = format_for_slack(total, results, scheduled, title)
-
-            result = client.chat_postMessage(
-                channel=channel_id,
-                blocks=to_be_sent_to_slack["blocks"],
-            )
-
-        for job, job_result in results.items():
-            if len(job_result["failures"]):
-                client.chat_postMessage(
-                    channel=channel_id, text=f"{job}\n{job_result['failures']}", thread_ts=result["ts"]
+    for model in model_results.keys():
+        for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
+            artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
+            if "stats" in artifact:
+                # Link to the GitHub Action job
+                model_results[model]["job_link"] = github_actions_job_links.get(
+                    f"Model tests ({model}, {artifact_path['gpu']}-gpu-docker)"
                 )
 
-    except Exception as e:
-        # Voluntarily catch every exception and send it to Slack.
-        raise Exception(f"Setup error: no artifacts were found. Error: {e}") from e
+                failed, success, time_spent = handle_test_results(artifact["stats"])
+                model_results[model]["success"] += success
+                model_results[model]["time_spent"] += time_spent[1:-1] + ", "
+
+                stacktraces = handle_stacktraces(artifact["failures_line"])
+
+                for line in artifact["summary_short"].split("\n"):
+                    if re.search("FAILED", line):
+
+                        line = line.replace("FAILED ", "")
+                        line = line.split()[0].replace("\n", "")
+
+                        if artifact_path["gpu"] not in model_results[model]["failures"]:
+                            model_results[model]["failures"][artifact_path["gpu"]] = ""
+
+                        model_results[model]["failures"][
+                            artifact_path["gpu"]
+                        ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
+
+                        if re.search("_tf_", line):
+                            model_results[model]["failed"]["TensorFlow"][artifact_path["gpu"]] += 1
+
+                        elif re.search("_flax_", line):
+                            model_results[model]["failed"]["Flax"][artifact_path["gpu"]] += 1
+
+                        elif re.search("test_modeling", line):
+                            model_results[model]["failed"]["PyTorch"][artifact_path["gpu"]] += 1
+
+                        elif re.search("test_tokenization", line):
+                            model_results[model]["failed"]["Tokenizers"][artifact_path["gpu"]] += 1
+
+                        elif re.search("test_pipelines", line):
+                            model_results[model]["failed"]["Pipelines"][artifact_path["gpu"]] += 1
+
+                        elif re.search("test_trainer", line):
+                            model_results[model]["failed"]["Trainer"][artifact_path["gpu"]] += 1
+
+                        elif re.search("onnx", line):
+                            model_results[model]["failed"]["ONNX"][artifact_path["gpu"]] += 1
+
+                        elif re.search("auto", line):
+                            model_results[model]["failed"]["Auto"][artifact_path["gpu"]] += 1
+
+                        else:
+                            model_results[model]["failed"]["Unclassified"][artifact_path["gpu"]] += 1
+                            unclassified_model_failures.append(line)
+
+    # Additional runs
+    additional_files = {
+        "Examples directory": "run_examples_gpu",
+        "PyTorch pipelines": "run_tests_torch_pipeline_gpu",
+        "TensorFlow pipelines": "run_tests_tf_pipeline_gpu",
+        "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
+    }
+
+    additional_results = {
+        key: {
+            "failed": {"unclassified": 0, "single": 0, "multi": 0},
+            "success": 0,
+            "time_spent": "",
+            "error": False,
+            "failures": {},
+            "job_link": github_actions_job_links.get(key),
+        }
+        for key in additional_files.keys()
+    }
+
+    for key in additional_results.keys():
+
+        # If a whole suite of test fails, the artifact isn't available.
+        if additional_files[key] not in available_artifacts:
+            additional_results[key]["error"] = True
+            continue
+
+        for artifact_path in available_artifacts[additional_files[key]].paths:
+            if artifact_path["gpu"] is not None:
+                additional_results[key]["job_link"] = github_actions_job_links.get(
+                    f"{key} ({artifact_path['gpu']}-gpu-docker)"
+                )
+            artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
+            stacktraces = handle_stacktraces(artifact["failures_line"])
+
+            failed, success, time_spent = handle_test_results(artifact["stats"])
+            additional_results[key]["failed"][artifact_path["gpu"] or "unclassified"] += failed
+            additional_results[key]["success"] += success
+            additional_results[key]["time_spent"] += time_spent[1:-1] + ", "
+
+            if len(artifact["errors"]):
+                additional_results[key]["error"] = True
+
+            if failed:
+                for line in artifact["summary_short"].split("\n"):
+                    if re.search("FAILED", line):
+                        line = line.replace("FAILED ", "")
+                        line = line.split()[0].replace("\n", "")
+
+                        if artifact_path["gpu"] not in additional_results[key]["failures"]:
+                            additional_results[key]["failures"][artifact_path["gpu"]] = ""
+
+                        additional_results[key]["failures"][
+                            artifact_path["gpu"]
+                        ] += f"*{line}*\n_{stacktraces.pop(0)}_\n\n"
+
+    message = Message("🤗 Results of the scheduled tests.", model_results, additional_results)
+
+    message.post()
+    message.post_reply()

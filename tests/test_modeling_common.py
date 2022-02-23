@@ -59,19 +59,20 @@ from transformers.testing_utils import (
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
 
-from test_module.custom_configuration import CustomConfig  # noqa E402
+from test_module.custom_configuration import CustomConfig, NoSuperInitConfig  # noqa E402
 
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from test_module.custom_modeling import CustomModel
+    from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -116,8 +117,7 @@ class ModelTesterMixin:
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
-    fx_ready_model_classes = ()
-    fx_dynamic_ready_model_classes = ()
+    fx_compatible = False
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
@@ -165,6 +165,11 @@ class ModelTesterMixin:
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+            elif model_class in get_values(MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING):
+                num_patches = self.model_tester.image_size // self.model_tester.patch_size
+                inputs_dict["bool_masked_pos"] = torch.zeros(
+                    (self.model_tester.batch_size, num_patches**2), dtype=torch.long, device=torch_device
                 )
         return inputs_dict
 
@@ -666,19 +671,14 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
-    def test_torch_fx_dynamic_axes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self._create_and_check_torch_fx_tracing(config, inputs_dict, dynamic_axes=True)
-
-    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False, dynamic_axes=False):
-        if not is_torch_fx_available():
+    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
+        if not is_torch_fx_available() or not self.fx_compatible:
             return
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
 
-        model_classes = self.fx_ready_model_classes if not dynamic_axes else self.fx_dynamic_ready_model_classes
-        for model_class in model_classes:
+        for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()
@@ -687,8 +687,6 @@ class ModelTesterMixin:
             try:
                 if model.config.is_encoder_decoder:
                     model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                    input_ids = inputs["input_ids"]
-                    decoder_attention_mask = inputs["decoder_attention_mask"]
                     labels = inputs.get("labels", None)
                     input_names = ["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask"]
                     if labels is not None:
@@ -697,17 +695,7 @@ class ModelTesterMixin:
 
                     model_output = model(**filtered_inputs)
 
-                    batch_size = input_ids.shape[0]
-                    encoder_sequence_length = input_ids.shape[1]
-                    decoder_sequence_length = decoder_attention_mask.shape[1]
-
-                    traced_model = symbolic_trace(
-                        model,
-                        input_names,
-                        batch_size=batch_size if not dynamic_axes else -1,
-                        sequence_length=[encoder_sequence_length, decoder_sequence_length] if not dynamic_axes else -1,
-                    )
-
+                    traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
                 else:
                     input_names = ["input_ids", "attention_mask", "token_type_ids"]
@@ -729,23 +717,12 @@ class ModelTesterMixin:
                     model_output = model(**filtered_inputs)
 
                     rank = len(input_ids.shape)
-                    if rank == 2:
-                        batch_size, sequence_length = input_ids.shape
-                        num_choices = -1
-                    elif rank == 3:
-                        batch_size, num_choices, sequence_length = input_ids.shape
-                    else:
+                    if rank not in [2, 3]:
                         raise NotImplementedError(
                             f"symbolic_trace automatic parameters inference not implemented for input of rank {rank}."
                         )
 
-                    traced_model = symbolic_trace(
-                        model,
-                        input_names,
-                        batch_size=batch_size if not dynamic_axes else -1,
-                        sequence_length=sequence_length if not dynamic_axes else -1,
-                        num_choices=num_choices,
-                    )
+                    traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
 
             except RuntimeError:
@@ -1504,15 +1481,17 @@ class ModelTesterMixin:
                 if type(tensor) == bool:
                     tf_inputs_dict[key] = tensor
                 elif key == "input_values":
-                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
                 elif key == "pixel_values":
-                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
+                elif key == "input_features":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
                 else:
-                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.int32)
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.int32)
 
             # Check we can load pt model in tf and vice-versa with model => model functions
             tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
-            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
+            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model).to(torch_device)
 
             # need to rename encoder-decoder "inputs" for PyTorch
             #            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
@@ -1523,7 +1502,7 @@ class ModelTesterMixin:
             tfo = tf_model(tf_inputs_dict, training=False)
 
             tf_hidden_states = tfo[0].numpy()
-            pt_hidden_states = pto[0].numpy()
+            pt_hidden_states = pto[0].cpu().numpy()
 
             tf_nans = np.copy(np.isnan(tf_hidden_states))
             pt_nans = np.copy(np.isnan(pt_hidden_states))
@@ -1545,6 +1524,7 @@ class ModelTesterMixin:
                 tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
                 tf_model.save_weights(tf_checkpoint_path)
                 pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
+                pt_model = pt_model.to(torch_device)
 
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
             pt_model.eval()
@@ -1555,11 +1535,13 @@ class ModelTesterMixin:
                     tensor = np.array(tensor, dtype=bool)
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor, dtype=tf.int32)
                 elif key == "input_values":
-                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
                 elif key == "pixel_values":
-                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.float32)
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
+                elif key == "input_features":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
                 else:
-                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.numpy(), dtype=tf.int32)
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.int32)
 
             # need to rename encoder-decoder "inputs" for PyTorch
             #            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
@@ -1570,7 +1552,7 @@ class ModelTesterMixin:
 
             tfo = tf_model(tf_inputs_dict)
             tfo = tfo[0].numpy()
-            pto = pto[0].numpy()
+            pto = pto[0].cpu().numpy()
             tf_nans = np.copy(np.isnan(tfo))
             pt_nans = np.copy(np.isnan(pto))
 
@@ -2115,6 +2097,15 @@ class ModelUtilsTest(TestCasePlus):
         # test forcing an explicit dtype
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
+
+    def test_no_super_init_config_and_model(self):
+        config = NoSuperInitConfig(attribute=32)
+        model = NoSuperInitModel(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+
+            model = NoSuperInitModel.from_pretrained(tmp_dir)
 
 
 @require_torch

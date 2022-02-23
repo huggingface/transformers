@@ -550,7 +550,7 @@ def generate_text_pplm(
 
             unpert_probs = nn.functional.softmax(unpert_logits[:, -1, :], dim=-1)
 
-            pert_probs = (pert_probs ** gm_scale) * (unpert_probs ** (1 - gm_scale))  # + SMALL_CONST
+            pert_probs = (pert_probs**gm_scale) * (unpert_probs ** (1 - gm_scale))  # + SMALL_CONST
             pert_probs = top_k_filter(pert_probs, k=top_k, probs=True)  # + SMALL_CONST
 
             # rescale
