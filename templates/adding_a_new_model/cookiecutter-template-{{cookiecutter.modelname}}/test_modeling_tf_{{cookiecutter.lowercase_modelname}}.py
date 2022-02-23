@@ -460,8 +460,6 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        # Remove casting to `tf.int8` to avoid the following error
-        # (E     tensorflow.python.framework.errors_impl.InvalidArgumentError: cannot compute ConcatV2 as input #1(zero-based) was expected to be a int32 tensor but is a int8 tensor [Op:ConcatV2] name: concat)
         next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
         # append to next input_ids and
