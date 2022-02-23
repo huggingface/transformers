@@ -1492,11 +1492,6 @@ class TFGenerationMixin:
                 input_ids, return_dict_in_generate, model_kwargs
             )
 
-        # TODO(Patrick) - ugly `past`/`encoder_output` hack here which requires a bigger
-        # refactor of all generation models in TF. `past` should be
-        # optional everywhere and not be set equal to encoder_outputs
-        model_kwargs["past"] = model_kwargs.get("encoder_outputs")[:1] if self.config.is_encoder_decoder else None
-
         # 4. Prepare `input_ids` which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
             # if encoder-decoder then `input_ids` come from `decoder_start_token_id`
@@ -1536,6 +1531,10 @@ class TFGenerationMixin:
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
                 )
 
+            # TODO(Patrick) - ugly `past`/`encoder_output` hack here which requires a bigger refactor of all
+            # generation models in TF. `past` should be optional everywhere and not be set equal to encoder_outputs.
+            model_kwargs["past"] = model_kwargs.get("encoder_outputs")[:1] if self.config.is_encoder_decoder else None
+
             # 8. run greedy search
             return self.greedy_search(
                 input_ids,
@@ -1559,6 +1558,10 @@ class TFGenerationMixin:
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 **model_kwargs,
             )
+
+            # TODO(Patrick) - ugly `past`/`encoder_output` hack here which requires a bigger refactor of all
+            # generation models in TF. `past` should be optional everywhere and not be set equal to encoder_outputs.
+            model_kwargs["past"] = model_kwargs.get("encoder_outputs")[:1] if self.config.is_encoder_decoder else None
 
             # 10. run sample
             return self.sample(
