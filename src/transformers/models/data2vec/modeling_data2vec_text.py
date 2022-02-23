@@ -593,7 +593,7 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
     """
 
     config_class = Data2VecTextConfig
-    base_model_prefix = "data2vec"
+    base_model_prefix = "data2vec_text"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -894,7 +894,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
         if not config.is_decoder:
             logger.warning("If you want to use `Data2VecTextLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.data2vec = Data2VecTextModel(config, add_pooling_layer=False)
+        self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
         self.lm_head = Data2VecTextLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
@@ -975,7 +975,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
         if labels is not None:
             use_cache = False
 
-        outputs = self.data2vec(
+        outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1049,7 +1049,7 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
                 "bi-directional self-attention."
             )
 
-        self.data2vec = Data2VecTextModel(config, add_pooling_layer=False)
+        self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
         self.lm_head = Data2VecTextLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
@@ -1097,7 +1097,7 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.data2vec(
+        outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1173,7 +1173,7 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.data2vec = Data2VecTextModel(config, add_pooling_layer=False)
+        self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
         self.classifier = Data2VecTextClassificationHead(config)
 
         # Initialize weights and apply final processing
@@ -1207,7 +1207,7 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.data2vec(
+        outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1269,7 +1269,7 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.data2vec = Data2VecTextModel(config)
+        self.data2vec_text = Data2VecTextModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
@@ -1317,7 +1317,7 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
             else None
         )
 
-        outputs = self.data2vec(
+        outputs = self.data2vec_text(
             flat_input_ids,
             position_ids=flat_position_ids,
             token_type_ids=flat_token_type_ids,
@@ -1366,7 +1366,7 @@ class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.data2vec = Data2VecTextModel(config, add_pooling_layer=False)
+        self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1402,7 +1402,7 @@ class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.data2vec(
+        outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1474,7 +1474,7 @@ class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.data2vec = Data2VecTextModel(config, add_pooling_layer=False)
+        self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -1513,7 +1513,7 @@ class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.data2vec(
+        outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
