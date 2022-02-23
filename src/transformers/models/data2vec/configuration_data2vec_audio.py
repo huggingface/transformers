@@ -33,7 +33,7 @@ class Data2VecAudioConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Data2VecAudioModel`]. It is used to instantiate
     an Data2VecAudio model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Data2VecAudio
-    [facebook/wav2vec2-base-960h](https://huggingface.co/facebook/wav2vec2-base-960h) architecture.
+    [facebook/data2vec-audio-base-960h](https://huggingface.co/facebook/data2vec-audio-base-960h) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -71,8 +71,6 @@ class Data2VecAudioConfig(PretrainedConfig):
         feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for quantized feature encoder states.
         conv_dim (`Tuple[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
@@ -114,22 +112,6 @@ class Data2VecAudioConfig(PretrainedConfig):
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
             ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
-        num_codevectors_per_group (`int`, *optional*, defaults to 320):
-            Number of entries in each quantization codebook (group).
-        num_codevector_groups (`int`, *optional*, defaults to 2):
-            Number of codevector groups for product codevector quantization.
-        contrastive_logits_temperature (`float`, *optional*, defaults to 0.1):
-            The temperature *kappa* in the contrastive loss.
-        feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the output of the feature encoder that's used by the quantizer.
-        num_negatives (`int`, *optional*, defaults to 100):
-            Number of negative samples for the contrastive loss.
-        codevector_dim (`int`, *optional*, defaults to 256):
-            Dimensionality of the quantized feature vectors.
-        proj_codevector_dim (`int`, *optional*, defaults to 256):
-            Dimensionality of the final projection of both the quantized and the transformer features.
-        diversity_loss_weight (`int`, *optional*, defaults to 0.1):
-            The weight of the codebook diversity loss component.
         ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
             Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
             instance of [`Data2VecAudioForCTC`].
@@ -172,10 +154,10 @@ class Data2VecAudioConfig(PretrainedConfig):
     ```python
     >>> from transformers import Data2VecAudioModel, Data2VecAudioConfig
 
-    >>> # Initializing a Data2VecAudio facebook/wav2vec2-base-960h style configuration
+    >>> # Initializing a Data2VecAudio facebook/data2vec-audio-base-960h style configuration
     >>> configuration = Data2VecAudioConfig()
 
-    >>> # Initializing a model from the facebook/wav2vec2-base-960h style configuration
+    >>> # Initializing a model from the facebook/data2vec-audio-base-960h style configuration
     >>> model = Data2VecAudioModel(configuration)
 
     >>> # Accessing the model configuration
@@ -195,7 +177,6 @@ class Data2VecAudioConfig(PretrainedConfig):
         activation_dropout=0.1,
         attention_dropout=0.1,
         feat_proj_dropout=0.0,
-        feat_quantizer_dropout=0.0,
         final_dropout=0.1,
         layerdrop=0.1,
         initializer_range=0.02,
@@ -214,13 +195,6 @@ class Data2VecAudioConfig(PretrainedConfig):
         mask_feature_prob=0.0,
         mask_feature_length=10,
         mask_feature_min_masks=0,
-        num_codevectors_per_group=320,
-        num_codevector_groups=2,
-        contrastive_logits_temperature=0.1,
-        num_negatives=100,
-        codevector_dim=256,
-        proj_codevector_dim=256,
-        diversity_loss_weight=0.1,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
         use_weighted_layer_sum=False,
@@ -284,16 +258,6 @@ class Data2VecAudioConfig(PretrainedConfig):
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
         self.mask_feature_min_masks = mask_feature_min_masks
-
-        # parameters for pretraining with codevector quantized representations
-        self.num_codevectors_per_group = num_codevectors_per_group
-        self.num_codevector_groups = num_codevector_groups
-        self.contrastive_logits_temperature = contrastive_logits_temperature
-        self.feat_quantizer_dropout = feat_quantizer_dropout
-        self.num_negatives = num_negatives
-        self.codevector_dim = codevector_dim
-        self.proj_codevector_dim = proj_codevector_dim
-        self.diversity_loss_weight = diversity_loss_weight
 
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction

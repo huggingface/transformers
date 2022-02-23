@@ -260,42 +260,6 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-def _sample_negative_indices(
-    features_shape: Tuple, num_negatives: int, mask_time_indices: Optional[np.ndarray] = None
-):
-    """
-    Sample `num_negatives` vectors from feature vectors.
-    """
-    batch_size, sequence_length = features_shape
-
-    # generate indices of the positive vectors themselves, repeat them `num_negatives` times
-    sequence_length_range = np.arange(sequence_length)
-
-    # get `num_negatives` random vector indices from the same utterance
-    sampled_negative_indices = np.zeros(shape=(batch_size, sequence_length, num_negatives), dtype=np.int32)
-
-    mask_time_indices = (
-        mask_time_indices.astype(np.bool) if mask_time_indices is not None else np.ones(features_shape, dtype=np.bool)
-    )
-
-    for batch_idx in range(batch_size):
-        high = mask_time_indices[batch_idx].sum() - 1
-        mapped_masked_indices = sequence_length_range[mask_time_indices[batch_idx]]
-
-        feature_indices = np.broadcast_to(np.arange(high + 1)[:, None], (high + 1, num_negatives))
-        sampled_indices = np.random.randint(0, high, size=(high + 1, num_negatives))
-        # avoid sampling the same positive vector, but keep the distribution uniform
-        sampled_indices[sampled_indices >= feature_indices] += 1
-
-        # remap to actual indices
-        sampled_negative_indices[batch_idx][mask_time_indices[batch_idx]] = mapped_masked_indices[sampled_indices]
-
-        # correct for batch size
-        sampled_negative_indices[batch_idx] += batch_idx * sequence_length
-
-    return sampled_negative_indices
-
-
 class Data2VecAudioConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
@@ -627,38 +591,6 @@ class Data2VecAudioEncoderLayer(nn.Module):
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = hidden_states + self.feed_forward(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
-class Data2VecAudioEncoderLayerStableLayerNorm(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.attention = Data2VecAudioAttention(
-            embed_dim=config.hidden_size,
-            num_heads=config.num_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=False,
-        )
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = Data2VecAudioFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        attn_residual = hidden_states
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-        )
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = attn_residual + hidden_states
-        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
 
         outputs = (hidden_states,)
 
