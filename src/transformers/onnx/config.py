@@ -19,6 +19,7 @@ from collections import OrderedDict
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 import numpy as np
+from packaging import version
 
 from transformers import (
     PretrainedConfig,
@@ -71,6 +72,7 @@ class OnnxConfig(ABC):
 
     DEFAULT_FIXED_BATCH = 2
     DEFAULT_FIXED_SEQUENCE = 8
+    TORCH_ONNX_MINIMUM_VERSION = version.parse("1.8")
 
     _TASKS_TO_COMMON_OUTPUTS = {
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
@@ -193,6 +195,15 @@ class OnnxConfig(ABC):
             Float absolute tolerance value.
         """
         return 1e-5
+
+    @property
+    def is_torch_support_available(self) -> bool:
+        if is_torch_available():
+            from transformers.file_utils import torch_version
+
+            return torch_version >= self.TORCH_ONNX_MINIMUM_VERSION
+        else:
+            return False
 
     @staticmethod
     def use_external_data_format(num_parameters: int) -> bool:

@@ -17,6 +17,8 @@
 from collections import OrderedDict
 from typing import Mapping
 
+from packaging import version
+
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
@@ -124,6 +126,9 @@ class ViTConfig(PretrainedConfig):
 
 
 class ViTOnnxConfig(OnnxConfig):
+
+    TORCH_ONNX_MINIMUM_VERSION = version.parse("1.13")
+
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
