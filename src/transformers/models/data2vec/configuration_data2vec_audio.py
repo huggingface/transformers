@@ -14,6 +14,8 @@
 # limitations under the License.
 """ Data2VecText configuration"""
 
+import math
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -64,10 +66,6 @@ class Data2VecAudioConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        feat_extract_norm (`str`, *optional*, defaults to `"group"`):
-            The norm to be applied to 1D convolutional layers in feature encoder. One of `"group"` for group
-            normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
-            convolutional layers.
         feat_proj_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for output of the feature encoder.
         feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
@@ -202,7 +200,6 @@ class Data2VecAudioConfig(PretrainedConfig):
         layerdrop=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        feat_extract_norm="group",
         feat_extract_activation="gelu",
         conv_dim=(512, 512, 512, 512, 512, 512, 512),
         conv_stride=(5, 2, 2, 2, 2, 2, 2),
@@ -244,7 +241,6 @@ class Data2VecAudioConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.hidden_size = hidden_size
-        self.feat_extract_norm = feat_extract_norm
         self.feat_extract_activation = feat_extract_activation
         self.conv_dim = list(conv_dim)
         self.conv_stride = list(conv_stride)

@@ -339,7 +339,6 @@ class Data2VecModelTester:
 
 @require_torch
 class Data2VecModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             Data2VecTextForCausalLM,
