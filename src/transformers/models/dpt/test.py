@@ -8,3 +8,5 @@ model = DPTModel(DPTConfig())
 pixel_values = torch.randn((1, 3, 224, 224))
 
 outputs = model(pixel_values)
+
+print("Last hidden states:", outputs.last_hidden_state.shape)

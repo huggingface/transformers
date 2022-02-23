@@ -12,7 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch DPT model."""
+""" PyTorch DPT (Dense Prediction Transformers) model.
+
+This implementation is heavily inspired by OpenMMLab's implementation, found here:
+https://github.com/open-mmlab/mmsegmentation/blob/master/mmseg/models/decode_heads/dpt_head.py.
+
+"""
 
 
 import collections.abc
@@ -386,7 +391,7 @@ class DPTReassembleBlocks(nn.Module):
         super().__init__()
 
         self.config = config
-        out_channels = config.out_channels
+        out_channels = config.post_process_channels
 
         self.projects = nn.ModuleList(
             [
@@ -467,7 +472,7 @@ class DPTPreActResidualConvUnit(nn.Module):
         init_cfg (dict, optional): Initialization config dict. Default: None.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, stride=1, dilation=1):
         super().__init__()
         #          in_channels,
         #  act_cfg,
@@ -476,11 +481,11 @@ class DPTPreActResidualConvUnit(nn.Module):
         #  dilation=1,
         #  init_cfg=None):
 
-        in_channels = config.in_channels
-        dilation = config.dilation
-        stride = config.stride
+        in_channels = config.channels
+        dilation = dilation
+        stride = stride
 
-        self.act1 = nn.ReLu()
+        self.act1 = nn.ReLU()
         self.conv1 = nn.Conv2d(
             in_channels,
             in_channels,
@@ -492,7 +497,7 @@ class DPTPreActResidualConvUnit(nn.Module):
         )
         self.batch_norm = nn.BatchNorm2d(in_channels) if config.use_bn else nn.Identity()
 
-        self.act2 = nn.ReLu()
+        self.act2 = nn.ReLU()
         self.conv2 = nn.Conv2d(
             in_channels,
             in_channels,
@@ -515,28 +520,26 @@ class DPTFeatureFusionBlock(nn.Module):
     """FeatureFusionBlock, merge feature maps from different stages.
 
     Args:
-        in_channels (int): Input channels.
-        act_cfg (dict): The activation config for ResidualConvUnit.
-        norm_cfg (dict): Config dict for normalization layer.
-        expand (bool): Whether expand the channels in post process block.
+        config (dict): config dict.
+        expand (bool): Whether to expand the channels in the post process block.
             Default: False.
         align_corners (bool): align_corner setting for bilinear upsample.
             Default: True.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, expand=False, align_corners=True):
         # in_channels, act_cfg, norm_cfg, expand=False, align_corners=True, init_cfg=None):
         super().__init__()
 
-        self.in_channels = config.in_channels
-        self.expand = config.expand
-        self.align_corners = config.align_corners
+        self.expand = expand
+        self.align_corners = align_corners
 
-        self.out_channels = config.in_channels
+        self.out_channels = config.channels
         if self.expand:
-            self.out_channels = config.in_channels // 2
+            self.out_channels = config.channels // 2
 
-        self.project = nn.Conv2d(self.in_channels, self.out_channels, kernel_size=1, bias=True)
+        out_channels = config.channels // 2 if self.expand else config.channels
+        self.project = nn.Conv2d(config.channels, out_channels, kernel_size=1, bias=True)
 
         self.res_conv_unit1 = DPTPreActResidualConvUnit(config)
 
@@ -647,15 +650,19 @@ class DPTModel(DPTPreTrainedModel):
 
         # postprocessing
         self.reassemble_blocks = DPTReassembleBlocks(config)
-
-        # TODO: fusion + head
         self.post_process_channels = [
             channel * math.pow(2, i) if config.expand_channels else channel
-            for i, channel in enumerate(post_process_channels)
+            for i, channel in enumerate(config.post_process_channels)
         ]
         self.convs = nn.ModuleList()
         for channel in self.post_process_channels:
-            self.convs.append(nn.Conv2d(channel, self.channels, kernel_size=3, padding=1, bias=False))
+            self.convs.append(nn.Conv2d(channel, config.channels, kernel_size=3, padding=1, bias=False))
+
+        # TODO: fusion + head
+        self.fusion_blocks = nn.ModuleList()
+        for _ in range(len(self.convs)):
+            self.fusion_blocks.append(DPTFeatureFusionBlock(config))
+        self.fusion_blocks[0].res_conv_unit1 = None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -720,21 +727,29 @@ class DPTModel(DPTPreTrainedModel):
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
         features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
 
-        out = self.reassemble_blocks(features)
+        # postprocess features
+        features = self.reassemble_blocks(features)
 
-        for i in out:
+        for i in features:
             print(i.shape)
 
-        sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        features = [self.convs[i](feature) for i, feature in enumerate(features)]
+
+        print("After postprocessing:")
+        for i in features:
+            print(i.shape)
+
+        # fusion
+        out = self.fusion_blocks[0](features[-1])
+        for i in range(1, len(self.fusion_blocks)):
+            out = self.fusion_blocks[i](out, features[-(i + 1)])
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return (out, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
+            last_hidden_state=out,
+            pooler_output=None,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )

@@ -76,10 +76,14 @@ class DPTConfig(PretrainedConfig):
             - "project" passes information to the other tokens by concatenating the readout to all other tokens before
               projecting the
             representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
-        out_channels (`List[str]`, *optional*, defaults to [96, 192, 384, 768]):
+        post_process_channels (`List[str]`, *optional*, defaults to [96, 192, 384, 768]):
             The number of output channels for each of the four feature maps of the backbone.
+        channels (`int`, *optional*, defaults to 256):
+            The number of channels before fusion.
         expand_channels (`bool`, *optional*, defaults to `False``):
             Whether to expand the number of channels of the backbone feature maps.
+        use_bn (`bool`, *optional*, defaults to `True`):
+            Whether to use batch normalization.
 
     Example:
 
@@ -115,8 +119,10 @@ class DPTConfig(PretrainedConfig):
         qkv_bias=True,
         out_indices=[2, 5, 8, 11],
         readout_type="ignore",
-        out_channels=[96, 192, 384, 768],
+        post_process_channels=[96, 192, 384, 768],
+        channels=256,
         expand_channels=False,
+        use_bn=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -138,5 +144,7 @@ class DPTConfig(PretrainedConfig):
         if readout_type not in ["ignore", "add", "project"]:
             raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
         self.readout_type = readout_type
-        self.out_channels = out_channels
+        self.post_process_channels = post_process_channels
+        self.channels = channels
         self.expand_channels = expand_channels
+        self.use_bn = use_bn
