@@ -65,7 +65,7 @@ jobs:
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_templates_failures_short.txt
+        run: cat reports/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
