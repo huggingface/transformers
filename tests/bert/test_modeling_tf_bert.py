@@ -267,7 +267,7 @@ class TFBertModelTester:
             "encoder_hidden_states": encoder_hidden_states,
             "encoder_attention_mask": encoder_attention_mask,
         }
-        (logits,) = model(inputs)
+        result = model(inputs)
 
         inputs = [input_ids, input_mask]
         result = model(inputs, token_type_ids=token_type_ids, encoder_hidden_states=encoder_hidden_states)
@@ -370,9 +370,11 @@ class TFBertModelTester:
             axis=1,
         )
 
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask, output_hidden_states=True).hidden_states[
-            0
-        ]
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=attn_mask,
+            output_hidden_states=True,
+        ).hidden_states[0]
         output_from_past = model(
             next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, output_hidden_states=True
         ).hidden_states[0]
