@@ -90,8 +90,8 @@ class ImageSegmentationPipeline(Pipeline):
             - **label** (`str`) -- The class label identified by the model.
             - **mask** (`PIL.Image`) -- Pil Image with size (heigth, width) of the original image. Pixel values in the
               image are in the range 0-255. 0 means the pixel is *not* part of the *label*, 255 means it definitely is.
-            - **score** (*optional* `float`) -- Optionally, when the model is capable of estimating a confidence of
-              the "object" described by the label and the mask.
+            - **score** (*optional* `float`) -- Optionally, when the model is capable of estimating a confidence of the
+              "object" described by the label and the mask.
         """
 
         return super().__call__(*args, **kwargs)
