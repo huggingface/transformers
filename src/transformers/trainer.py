@@ -704,8 +704,8 @@ class Trainer:
             elif is_sagemaker_mp_enabled():
                 return SequentialDistributedSampler(
                     eval_dataset,
-                    num_replicas=smp.dp_size(),
-                    rank=smp.dp_rank(),
+                    num_replicas=smp.dp_size() if not smp.state.cfg.prescaled_batch else smp.rdp_size(),
+                    rank=smp.dp_rank() if not smp.state.cfg.prescaled_batch else smp.rdp_rank(),
                     batch_size=self.args.per_device_eval_batch_size,
                 )
             elif self.args.local_rank != -1:
