@@ -1748,52 +1748,14 @@ class RealmForOpenQA(RealmPreTrainedModel):
         return self.config.reader_beam_size
 
     def block_embedding_to(self, device):
-        """Send `self.block_emb` to a specific device. This is useful for accelerating training and inference speed.
+        """Send `self.block_emb` to a specific device.
 
         Args:
             device (`str` or `torch.device`):
-                The device that `self.block_emb` will be sent to.
+                The device to which `self.block_emb` will be sent.
         """
 
         self.block_emb = self.block_emb.to(device)
-
-    def to(self, *args, **kwargs):
-        """Override `torch.nn.Module.to` in order to prevent `self.block_emb`, which would largely consume gpu resources, from
-        sending to cuda.
-            Original TF implementation:
-            https://github.com/google-research/language/blob/61fa7260ac7d690d11ef72ca863e45a37c0bdc80/language/orqa/utils/scann_utils.py#L39-L64
-        """
-        import warnings
-
-        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(*args, **kwargs)
-
-        if dtype is not None:
-            if not (dtype.is_floating_point or dtype.is_complex):
-                raise TypeError(
-                    "nn.Module.to only accepts floating point or complex "
-                    "dtypes, but got desired dtype={}".format(dtype)
-                )
-            if dtype.is_complex:
-                warnings.warn(
-                    "Complex modules are a new feature under active development whose design may change, "
-                    "and some modules might not work as expected when using complex tensors as parameters or buffers. "
-                    "Please file an issue at https://github.com/pytorch/pytorch/issues/new?template=bug-report.md "
-                    "if a complex module does not work as expected."
-                )
-
-        def convert(t):
-            if t is self.block_emb:  # Prevent self.block_emb from sending to cuda.
-                return t
-            if convert_to_format is not None and t.dim() in (4, 5):
-                return t.to(
-                    device,
-                    dtype if t.is_floating_point() or t.is_complex() else None,
-                    non_blocking,
-                    memory_format=convert_to_format,
-                )
-            return t.to(device, dtype if t.is_floating_point() or t.is_complex() else None, non_blocking)
-
-        return self._apply(convert)
 
     @add_start_docstrings_to_model_forward(REALM_FOR_OPEN_QA_DOCSTRING.format("1, sequence_length"))
     @replace_return_docstrings(output_type=RealmForOpenQAOutput, config_class=_CONFIG_FOR_DOC)
