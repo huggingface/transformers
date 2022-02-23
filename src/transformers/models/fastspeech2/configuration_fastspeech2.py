@@ -118,6 +118,8 @@ class FastSpeech2Config(PretrainedConfig):
         pitch_min=-4.660287183665281,
         energy_max=3.2244551181793213,
         energy_min=-4.9544901847839355,
+        mean=True,
+        std=True,
         **kwargs
     ):
         self.n_frames_per_step = n_frames_per_step
@@ -151,6 +153,8 @@ class FastSpeech2Config(PretrainedConfig):
         self.energy_min = energy_min
         self.energy_max = energy_max
         self.initializer_range = self.encoder_embed_dim ** -0.5
+        self.mean = mean
+        self.std = std
         super().__init__(
             pad_token_id=pad_token_id,
             # bos_token_id=bos_token_id,

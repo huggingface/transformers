@@ -541,6 +541,15 @@ class FastSpeech2Encoder(nn.Module):
                 args.postnet_layers,
                 args.postnet_dropout,
             )
+        
+        if args.mean:
+            self.register_buffer("mean", torch.zeros(self.out_dim))
+        else:
+            self.mean = None
+        if args.std:
+            self.register_buffer("std", torch.zeros(self.out_dim))
+        else:
+            self.std = None
 
     def forward(
         self,
@@ -582,6 +591,10 @@ class FastSpeech2Encoder(nn.Module):
         x_post = None
         if self.postnet is not None:
             x_post = x + self.postnet(x)
+        if self.std is not None:
+            x = x * self.std.view(1, 1, -1).expand_as(x)
+        if self.mean is not None:
+            x = x + self.mean.view(1, 1, -1).expand_as(x)
         return x, x_post, out_lens, log_dur_out, pitch_out, energy_out
 
 
@@ -652,6 +665,14 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
+    
+    def set_mean(self, mean):
+        # NOTE: add dimensionality check?
+        self.encoder.mean = mean
+    
+    def set_std(self, std):
+        # NOTE: add dimensionality check?
+        self.encoder.std = std
 
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -663,7 +684,6 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
     def forward(
         self,
         src_tokens,
-        src_lengths=None,
         speaker=None,
         durations=None,
         pitches=None,
@@ -672,7 +692,6 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
     ):
         return self.encoder(
             src_tokens=src_tokens,
-            src_lengths=src_lengths,
             speaker=speaker,
             durations=durations,
             pitches=pitches,
