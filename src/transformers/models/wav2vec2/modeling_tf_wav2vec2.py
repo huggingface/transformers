@@ -30,13 +30,8 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
-from ...modeling_tf_utils import (
-    TFPreTrainedModel,
-    booleans_processing,
-    get_initializer,
-    keras_serializable,
-    shape_list,
-)
+from ...modeling_tf_utils import TFPreTrainedModel, booleans_processing, get_initializer, keras_serializable
+from ...tf_utils import shape_list
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config

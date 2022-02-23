@@ -14,6 +14,8 @@
 # limitations under the License.
 """ WavLM model configuration"""
 
+import math
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -330,3 +332,7 @@ class WavLMConfig(PretrainedConfig):
         self.tdnn_kernel = list(tdnn_kernel)
         self.tdnn_dilation = list(tdnn_dilation)
         self.xvector_output_dim = xvector_output_dim
+
+    @property
+    def inputs_to_logits_ratio(self):
+        return math.prod(self.conv_stride)

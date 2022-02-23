@@ -31,6 +31,7 @@ if is_torch_available():
     _import_structure["modeling_vit"] = [
         "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ViTForImageClassification",
+        "ViTForMaskedImageModeling",
         "ViTModel",
         "ViTPreTrainedModel",
     ]
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
         from .modeling_vit import (
             VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTForImageClassification,
+            ViTForMaskedImageModeling,
             ViTModel,
             ViTPreTrainedModel,
         )
