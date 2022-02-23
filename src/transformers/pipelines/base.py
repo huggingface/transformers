@@ -163,7 +163,7 @@ def infer_framework_load_model(
 
     Args:
         model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
-            The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok from.
+            The model to infer the framework from. If `str`, a checkpoint name. Otherwise, the model to infer the framework from.
         config ([`AutoConfig`]):
             The config associated with the model to help using the correct class
         model_classes (dictionary `str` to `type`, *optional*):
