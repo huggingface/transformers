@@ -97,7 +97,9 @@ Load Wav2Vec2 with [`AutoModelForAudioClassification`]. Specify the number of la
 >>> from transformers import AutoModelForAudioClassification, TrainingArguments, Trainer
 
 >>> num_labels = len(id2label)
->>> model = AutoModelForAudioClassification.from_pretrained("facebook/wav2vec2-base", num_labels=num_labels, label2id=label2id, id2label=id2label)
+>>> model = AutoModelForAudioClassification.from_pretrained(
+...     "facebook/wav2vec2-base", num_labels=num_labels, label2id=label2id, id2label=id2label
+... )
 ```
 
 <Tip>
@@ -121,7 +123,13 @@ At this point, only three steps remain:
 ...     num_train_epochs=5,
 ... )
 
->>> trainer = Trainer(model=model, args=training_args, train_dataset=encoded_ks["train"], eval_dataset=encoded_ks["validation"], tokenizer=feature_extractor)
+>>> trainer = Trainer(
+...     model=model,
+...     args=training_args,
+...     train_dataset=encoded_ks["train"],
+...     eval_dataset=encoded_ks["validation"],
+...     tokenizer=feature_extractor,
+... )
 
 >>> trainer.train()
 ```

@@ -54,8 +54,8 @@ The `image` field contains a PIL image, and each `label` is an integer that repr
 >>> labels = food["train"].features["label"].names
 >>> label2id, id2label = dict(), dict()
 >>> for i, label in enumerate(labels):
-...   label2id[label] = str(i)
-...   id2label[str(i)] = label
+...     label2id[label] = str(i)
+...     id2label[str(i)] = label
 ```
 
 Now you can convert the label number to a label name for more information:
@@ -83,20 +83,14 @@ Apply several image transformations to the dataset to make the model more robust
 >>> from torchvision.transforms import RandomResizedCrop, Compose, Normalize, ToTensor
 
 >>> normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
->>> _transforms = Compose(
-...     [
-...      RandomResizedCrop(feature_extractor.size),
-...      ToTensor(),
-...      normalize
-...     ]
-... )
+>>> _transforms = Compose([RandomResizedCrop(feature_extractor.size), ToTensor(), normalize])
 ```
 
 Create a preprocessing function that will apply the transforms and return the `pixel_values` - the inputs to the model - of the image:
 
 ```py
 >>> def transforms(examples):
-...     examples['pixel_values'] = [_transforms(img.convert("RGB")) for img in examples['image']]
+...     examples["pixel_values"] = [_transforms(img.convert("RGB")) for img in examples["image"]]
 ...     return examples
 ```
 
@@ -110,6 +104,7 @@ Use 🤗 Dataset's [`with_transform`](https://huggingface.co/docs/datasets/packa
 
 ```py
 >>> import torch
+
 
 >>> def data_collator(examples):
 ...     pixel_values = torch.stack([example["pixel_values"] for example in examples])
@@ -125,7 +120,7 @@ Load ViT with [`AutoModelForImageClassification`]. Specify the number of labels,
 >>> from transformers import AutoModelForImageClassification, TrainingArguments, Trainer
 
 >>> model = AutoModelForImageClassification.from_pretrained(
-...     'google/vit-base-patch16-224-in21k',
+...     "google/vit-base-patch16-224-in21k",
 ...     num_labels=len(labels),
 ...     id2label=id2label,
 ...     label2id=label2id,
@@ -185,7 +180,11 @@ Create a simple preprocessing function to create `pixel_values` from an image. T
 
 ```py
 >>> def process(examples):
-...     examples.update(feature_extractor(examples['image'], ))
+...     examples.update(
+...         feature_extractor(
+...             examples["image"],
+...         )
+...     )
 ...     return examples
 ```
 
@@ -235,7 +234,7 @@ Load ViT with [`TFAutoModelForImageClassification`]. Specify the number of label
 >>> from transformers import TFAutoModelForImageClassification
 
 >>> model = TFAutoModelForImageClassification.from_pretrained(
-...     'google/vit-base-patch16-224-in21k',
+...     "google/vit-base-patch16-224-in21k",
 ...     num_labels=len(labels),
 ...     id2label=id2label,
 ...     label2id=label2id,

@@ -53,7 +53,9 @@ DatasetDict({
 While the dataset contains a lot of helpful information, like `dialect_region` and `sentence_type`, you will focus on the `audio` and `text` fields in this guide. Remove the other columns:
 
 ```py
->>> timit = timit.remove_columns(["phonetic_detail", "word_detail", "dialect_region", "id", "sentence_type", "speaker_id"])
+>>> timit = timit.remove_columns(
+...     ["phonetic_detail", "word_detail", "dialect_region", "id", "sentence_type", "speaker_id"]
+... )
 ```
 
 Take a look at the example again:
@@ -89,12 +91,12 @@ The preprocessing function needs to:
 ```py
 >>> def prepare_dataset(batch):
 ...     audio = batch["audio"]
-...     
+    
 ...     batch["input_values"] = processor(audio["array"], sampling_rate=16000).input_values[0]
 ...     batch["input_length"] = len(batch["input_values"]
-... 
+
 ...     with processor.as_target_processor():
-...             batch["labels"] = processor(batch["text"]).input_ids
+...          batch["labels"] = processor(batch["text"]).input_ids
 ...     return batch
 ```
 
@@ -114,22 +116,23 @@ Unlike other data collators, `DataCollatorWithPadding` needs to apply a differen
 >>> from dataclasses import dataclass, field
 >>> from typing import Any, Dict, List, Optional, Union
 
+
 >>> @dataclass
 ... class DataCollatorCTCWithPadding:
-... 
+
 ...     processor: AutoProcessor
 ...     padding: Union[bool, str] = True
 ...     max_length: Optional[int] = None
 ...     max_length_labels: Optional[int] = None
 ...     pad_to_multiple_of: Optional[int] = None
 ...     pad_to_multiple_of_labels: Optional[int] = None
-... 
+
 ...     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
 ...         # split inputs and labels since they have to be of different lengths and need
 ...         # different padding methods
 ...         input_features = [{"input_values": feature["input_values"]} for feature in features]
 ...         label_features = [{"input_ids": feature["labels"]} for feature in features]
-... 
+
 ...         batch = self.processor.pad(
 ...             input_features,
 ...             padding=self.padding,
@@ -145,12 +148,12 @@ Unlike other data collators, `DataCollatorWithPadding` needs to apply a differen
 ...                 pad_to_multiple_of=self.pad_to_multiple_of_labels,
 ...                 return_tensors="pt",
 ...             )
-... 
+
 ...         # replace padding with -100 to ignore loss correctly
 ...         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
-... 
+
 ...         batch["labels"] = labels
-... 
+
 ...         return batch
 ```
 
@@ -167,7 +170,11 @@ Load Wav2Vec2 with [`AutoModelForCTC`]. Save GPU memory by calculating the mean 
 ```py
 >>> from transformers import AutoModelForCTC, TrainingArguments, Trainer
 
->>> model = AutoModelForCTC.from_pretrained("facebook/wav2vec-base", ctc_loss_reduction="mean", pad_token_id=processor.tokenizer.pad_token_id,)
+>>> model = AutoModelForCTC.from_pretrained(
+...     "facebook/wav2vec-base",
+...     ctc_loss_reduction="mean",
+...     pad_token_id=processor.tokenizer.pad_token_id,
+... )
 ```
 
 <Tip>
@@ -184,16 +191,16 @@ At this point, only three steps remain:
 
 ```py
 >>> training_args = TrainingArguments(
-...    output_dir="./results",
-...    group_by_length=True,
-...    per_device_train_batch_size=16,
-...    evaluation_strategy="steps",
-...    num_train_epochs=3,
-...    fp16=True,
-...    gradient_checkpointing=True,
-...    learning_rate=1e-4,
-...    weight_decay=0.005,
-...    save_total_limit=2,
+...     output_dir="./results",
+...     group_by_length=True,
+...     per_device_train_batch_size=16,
+...     evaluation_strategy="steps",
+...     num_train_epochs=3,
+...     fp16=True,
+...     gradient_checkpointing=True,
+...     learning_rate=1e-4,
+...     weight_decay=0.005,
+...     save_total_limit=2,
 ... )
 
 >>> trainer = Trainer(
@@ -205,7 +212,7 @@ At this point, only three steps remain:
 ...     data_collator=data_collator,
 ... )
 
->>>trainer.train()
+>>> rainer.train()
 ```
 
 <Tip>
