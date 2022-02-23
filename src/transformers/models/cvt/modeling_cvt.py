@@ -498,7 +498,7 @@ class CvtEncoder(nn.Module):
         
         self.patch_embeddings = nn.ModuleList(embeddings)
         self.cls_token = nn.Parameter(torch.zeros(1, 1, self.config.embed_dim[-1]))
-        
+        trunc_normal_(self.cls_token, std=.02)
 
         blocks = []
         for i in range(config.num_stages):
@@ -555,10 +555,8 @@ class CvtEncoder(nn.Module):
             hidden_states = rearrange(hidden_states, 'b c h w -> b (h w) c') 
 
             if cls_token is not None:
-                print('CLS1', hidden_states, cls_token)
                 cls_token = cls_token.expand(B, -1, -1)
                 hidden_states = torch.cat((cls_token, hidden_states), dim=1)
-                print('CLS1', hidden_states, cls_token)
             
             for j, blk in enumerate(block_layer):
                 layer_outputs = blk(hidden_states, H, W, layer_head_mask, output_attentions)
@@ -567,9 +565,7 @@ class CvtEncoder(nn.Module):
                     all_self_attentions = all_self_attentions + (layer_outputs[1],)
             
             if cls_token is not None:
-                print('CLS2', hidden_states, cls_token)
                 cls_token, hidden_states = torch.split(hidden_states, [1, H*W], 1)
-                print('CLS2', hidden_states, cls_token)
             
             hidden_states = rearrange(hidden_states, 'b (h w) c -> b c h w', h=H, w=W)
               
