@@ -102,6 +102,11 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
         model_dir = f"{path_to_transformer_root}/src/transformers/models/{lowercase_model_name}"
         os.makedirs(model_dir, exist_ok=True)
+        os.makedirs(f"{path_to_transformer_root}/tests/{lowercase_model_name}", exist_ok=True)
+
+        # Tests require submodules as they have parent imports
+        with open(f"{path_to_transformer_root}/tests/{lowercase_model_name}/__init__.py", "w"):
+            pass
 
         shutil.move(
             f"{directory}/__init__.py",
