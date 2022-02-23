@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: '14'
 
-      - uses: actions/checkout@v2
+       - uses: actions/checkout@v2
         with:
           repository: 'huggingface/doc-builder'
           path: doc-builder
@@ -55,7 +55,7 @@ jobs:
         run: |
           sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
 
-          pip install git+https://github.com/huggingface/doc-builder
+          pip install git+https://github.com/huggingface/doc-builder -U
           cd transformers
           pip install .[dev]
           cd ..
