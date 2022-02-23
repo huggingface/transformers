@@ -89,7 +89,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             self.assertEqual(outputs, {"text": ANY(str)})
 
         else:
-            # Non CTC models cannot use stridin
+            # Non CTC models cannot use striding.
             with self.assertRaises(ValueError):
                 outputs = speech_recognizer(audio)
             outputs = speech_recognizer(audio, return_timestamps=True)
@@ -101,7 +101,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             n = len(outputs["text"])
             self.assertEqual(outputs, {"text": ANY(str), "timestamps": [(ANY(int), ANY(int)) for i in range(n)]})
         else:
-            # Non CTC models cannot use stridin
+            # Non CTC models cannot use return_timestamps
             with self.assertRaises(ValueError):
                 outputs = speech_recognizer(audio, return_timestamps=True)
 
