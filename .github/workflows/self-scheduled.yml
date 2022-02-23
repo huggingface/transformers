@@ -3,533 +3,256 @@ name: Self-hosted runner (scheduled)
 on:
   push:
     branches:
-      - multi_ci_*
+      - master
+      - ci_*
+      - ci-*
+      - github-actions-workflows
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+      - "templates/**"
+      - "utils/**"
   repository_dispatch:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 2 * * *"
 
 env:
   HF_HOME: /mnt/cache
   TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
   RUN_SLOW: yes
-  OMP_NUM_THREADS: 16
-  MKL_NUM_THREADS: 16
-  PYTEST_TIMEOUT: 600
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   RUN_PT_TF_CROSS_TESTS: 1
 
 jobs:
-  run_all_tests_torch_gpu:
-    runs-on: [self-hosted, docker-gpu, single-gpu]
+  setup:
+    name: Setup
+    strategy:
+      matrix:
+        machines: [multi-gpu-docker, single-gpu-docker]
+    runs-on: ${{ matrix.machines }}
     container:
-      image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
+      image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Launcher docker
-        uses: actions/checkout@v2
+      - name: Update clone
+        working-directory: /transformers
+        run: |
+          git fetch && git checkout ${{ github.sha }}
+
+      - name: Cleanup
+        working-directory: /transformers
+        run: |
+          rm -rf tests/__pycache__
+          rm -rf reports
+
+      - id: set-matrix
+        name: Identify models to test
+        working-directory: /transformers/tests
+        run: |
+          echo "::set-output name=matrix::$(python3 -c 'import os; x = list(filter(os.path.isdir, os.listdir(os.getcwd()))); x.sort(); print(x)')"
 
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
 
-      - name: Install dependencies
-        run: |
-          apt -y update && apt install -y libsndfile1-dev git espeak-ng
-          pip install --upgrade pip
-          pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
-          pip install https://github.com/kpu/kenlm/archive/master.zip
-          python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
-          wandb login ${{ secrets.WANDB_API_KEY }}
-
-      - name: Are GPUs recognized by our DL frameworks
+      - name: GPU visibility
+        working-directory: /transformers
         run: |
           utils/print_env_pt.py
+          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
+          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
-      - name: Run all tests on GPU
-        run: |
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_gpu tests
+  run_tests_gpu:
+    name: Model tests
+    strategy:
+      fail-fast: false
+      matrix:
+        folders: ${{ fromJson(needs.setup.outputs.matrix) }}
+        machines: [multi-gpu-docker, single-gpu-docker]
+    runs-on: ${{ matrix.machines }}
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    needs: setup
+    steps:
+      - name: Echo folder ${{ matrix.folders }}
+        run: echo "${{ matrix.folders }}"
+
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Run all non-slow tests on GPU
+        working-directory: /transformers
+        run: python3 -m pytest -v --make-reports=${{ matrix.machines }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
 
       - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/tests_torch_gpu_failures_short.txt
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machines }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
 
-      - name: Test durations
+      - name: Test suite reports artifacts
         if: ${{ always() }}
-        run: cat reports/tests_torch_gpu_durations.txt
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.machines }}_run_all_tests_gpu_${{ matrix.folders }}_test_reports
+          path: /transformers/reports/${{ matrix.machines }}_tests_gpu_${{ matrix.folders }}
+
+  run_examples_gpu:
+    name: Examples directory
+    runs-on: [self-hosted, single-gpu-docker]
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    needs: setup
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
 
       - name: Run examples tests on GPU
-        if: ${{ always() }}
-        env:
-          OMP_NUM_THREADS: 16
-          MKL_NUM_THREADS: 16
-          RUN_SLOW: yes
-          HF_HOME: /mnt/cache
-          TRANSFORMERS_IS_CI: yes
+        working-directory: /transformers
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=examples_torch_gpu examples
+          python3 -m pytest -v --make-reports=examples_gpu examples/pytorch
 
       - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/examples_torch_gpu_failures_short.txt
-
-      - name: Test durations
-        if: ${{ always() }}
-        run: cat reports/examples_torch_gpu_durations.txt
-
-      - name: Run all pipeline tests on GPU
-        if: ${{ always() }}
-        env:
-          RUN_PIPELINE_TESTS: yes
-        run: |
-          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_gpu tests
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/tests_torch_pipeline_gpu_failures_short.txt
-
-      - name: Test durations
-        if: ${{ always() }}
-        run: cat reports/tests_torch_pipeline_gpu_durations.txt
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/examples_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: run_all_tests_torch_gpu_test_reports
-          path: reports
+          name: run_examples_gpu
+          path: /transformers/reports/examples_gpu
 
-#  run_all_tests_flax_gpu:
-#    runs-on: [self-hosted, docker-gpu-test, single-gpu]
-#    container:
-#      image: tensorflow/tensorflow:2.4.1-gpu
-#      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-#    steps:
-#      - name: Launcher docker
-#        uses: actions/checkout@v2
-#
-#      - name: NVIDIA-SMI
-#        continue-on-error: true
-#        run: |
-#          nvidia-smi
-#
-#      - name: Install dependencies
-#        run: |
-#          pip install --upgrade pip
-#          pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
-#          pip install .[flax,integrations,sklearn,testing,sentencepiece,flax-speech,vision]
-#          pip install https://github.com/kpu/kenlm/archive/master.zip
-#
-#      - name: Are GPUs recognized by our DL frameworks
-#        run: |
-#          python -c "from jax.lib import xla_bridge; print('GPU available:', xla_bridge.get_backend().platform)"
-#          python -c "import jax; print('Number of GPUs available:', len(jax.local_devices()))"
-#
-#      - name: Run all tests on GPU
-#        run: |
-#          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_flax_gpu tests
-#
-#      - name: Failure short reports
-#        if: ${{ always() }}
-#        run: cat reports/tests_flax_gpu_failures_short.txt
-#
-#      - name: Test durations
-#        if: ${{ always() }}
-#        run: cat reports/tests_flax_gpu_durations.txt
-#
-#      - name: Test suite reports artifacts
-#        if: ${{ always() }}
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: run_all_tests_flax_gpu_test_reports
-#          path: reports
-
-  run_all_tests_tf_gpu:
-    runs-on: [self-hosted, docker-gpu, single-gpu]
+  run_pipelines_torch_gpu:
+    name: PyTorch pipelines
+    strategy:
+      fail-fast: false
+      matrix:
+        machines: [multi-gpu-docker, single-gpu-docker]
+    runs-on: ${{ matrix.machines }}
     container:
-      image: tensorflow/tensorflow:2.4.1-gpu
+      image: huggingface/transformers-pytorch-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    needs: setup
     steps:
-      - name: Launcher docker
-        uses: actions/checkout@v2
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Install dependencies
-        run: |
-          apt -y update && apt install -y libsndfile1-dev git espeak-ng
-          pip install --upgrade pip
-          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech,vision]
-          pip install https://github.com/kpu/kenlm/archive/master.zip
-
-
-      - name: Are GPUs recognized by our DL frameworks
-        run: |
-          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
-          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
-
-      - name: Run all tests on GPU
-        env:
-          TF_NUM_INTEROP_THREADS: 1
-          TF_NUM_INTRAOP_THREADS: 16
-        run: |
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_tf_gpu tests
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/tests_tf_gpu_failures_short.txt
-
-      - name: Test durations
-        if: ${{ always() }}
-        run: cat reports/tests_tf_gpu_durations.txt
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
 
       - name: Run all pipeline tests on GPU
-        if: ${{ always() }}
+        working-directory: /transformers
         env:
           RUN_PIPELINE_TESTS: yes
-          TF_NUM_INTEROP_THREADS: 1
-          TF_NUM_INTRAOP_THREADS: 16
         run: |
-          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_gpu tests
+          python3 -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=${{ matrix.machines }}_tests_torch_pipeline_gpu tests
 
       - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/tests_tf_pipeline_gpu_failures_short.txt
-
-      - name: Test durations
-        if: ${{ always() }}
-        run: cat reports/tests_tf_pipeline_gpu_durations.txt
-
-      - name: Test suite reports artifacts
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v2
-        with:
-          name: run_all_tests_tf_gpu_test_reports
-          path: reports
-
-  run_all_examples_torch_xla_tpu:
-    runs-on: [self-hosted, docker-tpu-test, tpu-v3-8]
-    container:
-      image: gcr.io/tpu-pytorch/xla:nightly_3.8_tpuvm
-      options: --privileged -v "/lib/libtpu.so:/lib/libtpu.so" -v /mnt/cache/.cache/huggingface:/mnt/cache/ --shm-size 16G
-    steps:
-      - name: Launcher docker
-        uses: actions/checkout@v2
-
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install .[testing]
-
-      - name: Are TPUs recognized by our DL frameworks
-        env:
-          XRT_TPU_CONFIG: localservice;0;localhost:51011
-        run: |
-          python -c "import torch_xla.core.xla_model as xm; print(xm.xla_device())"
-
-      - name: Run example tests on TPU
-        env:
-          XRT_TPU_CONFIG: "localservice;0;localhost:51011"
-          MKL_SERVICE_FORCE_INTEL: "1"  # See: https://github.com/pytorch/pytorch/issues/37377
-
-        run: |
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_xla_tpu examples/pytorch/test_xla_examples.py
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/tests_torch_xla_tpu_failures_short.txt
-
-      - name: Tests durations
-        if: ${{ always() }}
-        run: cat reports/tests_torch_xla_tpu_durations.txt
-
-      - name: Test suite reports artifacts
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v2
-        with:
-          name: run_all_examples_torch_xla_tpu
-          path: reports
-
-  run_all_tests_torch_multi_gpu:
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
-    container:
-      image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    steps:
-      - name: Launcher docker
-        uses: actions/checkout@v2
-
-      - name: NVIDIA-SMI
+        if: ${{ failure() }}
         continue-on-error: true
-        run: |
-          nvidia-smi
-
-      - name: Install dependencies
-        run: |
-          apt -y update && apt install -y libsndfile1-dev git espeak-ng
-          pip install --upgrade pip
-          pip install .[integrations,sklearn,testing,onnxruntime,sentencepiece,torch-speech,vision,timm]
-          pip install https://github.com/kpu/kenlm/archive/master.zip
-          python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
-          wandb login ${{ secrets.WANDB_API_KEY }}
-
-      - name: Are GPUs recognized by our DL frameworks
-        run: |
-          utils/print_env_pt.py
-
-      - name: Run all tests on GPU
-        env:
-          MKL_SERVICE_FORCE_INTEL: 1
-        run: |
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_multi_gpu tests
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/tests_torch_multi_gpu_failures_short.txt
-
-      - name: Test durations
-        if: ${{ always() }}
-        run: cat reports/tests_torch_multi_gpu_durations.txt
-
-      - name: Run all pipeline tests on GPU
-        if: ${{ always() }}
-        env:
-          RUN_PIPELINE_TESTS: yes
-        run: |
-          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu tests
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/tests_torch_pipeline_multi_gpu_failures_short.txt
-
-      - name: Test durations
-        if: ${{ always() }}
-        run: cat reports/tests_torch_pipeline_multi_gpu_durations.txt
+        run: cat /transformers/reports/${{ matrix.machines }}_tests_torch_pipeline_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: run_all_tests_torch_multi_gpu_test_reports
-          path: reports
+          name: ${{ matrix.machines }}_run_tests_torch_pipeline_gpu
+          path: /transformers/reports/${{ matrix.machines }}_tests_torch_pipeline_gpu
 
-  run_all_tests_tf_multi_gpu:
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
+  run_pipelines_tf_gpu:
+    name: TensorFlow pipelines
+    strategy:
+      fail-fast: false
+      matrix:
+        machines: [multi-gpu-docker, single-gpu-docker]
+    runs-on: ${{ matrix.machines }}
     container:
-      image: tensorflow/tensorflow:2.4.1-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      image: huggingface/transformers-tensorflow-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    needs: setup
     steps:
-      - name: Launcher docker
-        uses: actions/checkout@v2
-
-      - name: NVIDIA-SMI
-        continue-on-error: true
+      - name: Update clone
+        working-directory: /transformers
         run: |
-          nvidia-smi
-
-      - name: Install dependencies
-        run: |
-          apt -y update && apt install -y libsndfile1-dev git espeak-ng
-          pip install --upgrade pip
-          pip install .[sklearn,testing,onnx,sentencepiece,tf-speech,vision]
-          pip install https://github.com/kpu/kenlm/archive/master.zip
-
-      - name: Are GPUs recognized by our DL frameworks
-        run: |
-          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
-          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
-
-      - name: Run all tests on GPU
-        env:
-          TF_NUM_INTEROP_THREADS: 1
-          TF_NUM_INTRAOP_THREADS: 16
-        run: |
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_tf_multi_gpu tests
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/tests_tf_multi_gpu_failures_short.txt
-
-      - name: Test durations
-        if: ${{ always() }}
-        run: cat reports/tests_tf_multi_gpu_durations.txt
+          git fetch && git checkout ${{ github.sha }}
 
       - name: Run all pipeline tests on GPU
-        if: ${{ always() }}
+        working-directory: /transformers
         env:
           RUN_PIPELINE_TESTS: yes
-          TF_NUM_INTEROP_THREADS: 1
-          TF_NUM_INTRAOP_THREADS: 16
         run: |
-          python -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_multi_gpu tests
+          python3 -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=${{ matrix.machines }}_tests_tf_pipeline_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_tf_pipeline_multi_gpu_failures_short.txt
-
-      - name: Test durations
-        if: ${{ always() }}
-        run: cat reports/tests_tf_pipeline_multi_gpu_durations.txt
+        run: |
+          cat /transformers/reports/${{ matrix.machines }}_tests_tf_pipeline_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: run_all_tests_tf_multi_gpu_test_reports
-          path: reports
-
-#  run_all_tests_flax_multi_gpu:
-#    runs-on: [self-hosted, docker-gpu, multi-gpu]
-#    container:
-#      image: tensorflow/tensorflow:2.4.1-gpu
-#      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-#    steps:
-#      - name: Launcher docker
-#        uses: actions/checkout@v2
-#
-#      - name: NVIDIA-SMI
-#        run: |
-#          nvidia-smi
-#
-#      - name: Install dependencies
-#        run: |
-#          pip install --upgrade pip
-#          pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
-#          pip install .[flax,integrations,sklearn,testing,sentencepiece,flax-speech,vision]
-#
-#      - name: Are GPUs recognized by our DL frameworks
-#        run: |
-#          python -c "from jax.lib import xla_bridge; print('GPU available:', xla_bridge.get_backend().platform)"
-#          python -c "import jax; print('Number of GPUs available:', len(jax.local_devices()))"
-#
-#      - name: Run all tests on GPU
-#        run: |
-#          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_flax_gpu tests
-#
-#      - name: Failure short reports
-#        if: ${{ always() }}
-#        run: cat reports/tests_flax_gpu_failures_short.txt
-#
-#      - name: Test suite reports artifacts
-#        if: ${{ always() }}
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: run_all_tests_flax_gpu_test_reports
-#          path: reports
+          name: ${{ matrix.machines }}_run_tests_tf_pipeline_gpu
+          path: /transformers/reports/${{ matrix.machines }}_tests_tf_pipeline_gpu
 
   run_all_tests_torch_cuda_extensions_gpu:
-    runs-on: [self-hosted, docker-gpu, single-gpu]
+    name: Torch CUDA extension tests
+    strategy:
+      fail-fast: false
+      matrix:
+        machines: [multi-gpu-docker, single-gpu-docker]
+    runs-on: ${{ matrix.machines }}
+    needs: setup
     container:
-      image: nvcr.io/nvidia/pytorch:21.03-py3
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      image: huggingface/transformers-pytorch-deepspeed-latest-gpu
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: Launcher docker
-        uses: actions/checkout@v2
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Install dependencies
-        run: |
-          apt -y update && apt install -y libaio-dev
-          pip install --upgrade pip
-          pip install .[testing,deepspeed]
-
-      - name: Are GPUs recognized by our DL frameworks
-        run: |
-          utils/print_env_pt.py
+      - name: Update clone
+        working-directory: /workspace/transformers
+        run: git fetch && git checkout ${{ github.sha }}
 
       - name: Run all tests on GPU
+        working-directory: /workspace/transformers
         run: |
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
+          python -m pytest -v --make-reports=${{ matrix.machines }}_tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
 
       - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/tests_torch_cuda_extensions_gpu_failures_short.txt
-
-      - name: Test durations
-        if: ${{ always() }}
-        run: cat reports/tests_torch_cuda_extensions_gpu_durations.txt
-
-      - name: Test suite reports artifacts
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v2
-        with:
-          name: run_tests_torch_cuda_extensions_gpu_test_reports
-          path: reports
-
-  run_all_tests_torch_cuda_extensions_multi_gpu:
-    runs-on: [self-hosted, docker-gpu, multi-gpu]
-    container:
-      image: nvcr.io/nvidia/pytorch:21.03-py3
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    steps:
-      - name: Launcher docker
-        uses: actions/checkout@v2
-
-      - name: NVIDIA-SMI
+        if: ${{ failure() }}
         continue-on-error: true
-        run: |
-          nvidia-smi
-
-      - name: Install dependencies
-        run: |
-          apt -y update && apt install -y libaio-dev
-          pip install --upgrade pip
-          rm -rf ~/.cache/torch_extensions/ # shared between conflicting builds
-          pip install .[testing,deepspeed,fairscale]
-
-      - name: Are GPUs recognized by our DL frameworks
-        run: |
-          utils/print_env_pt.py
-
-      - name: Run all tests on GPU
-        run: |
-          python -m pytest -n 1 -v --dist=loadfile --make-reports=tests_torch_cuda_extensions_multi_gpu tests/deepspeed tests/extended
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/tests_torch_cuda_extensions_multi_gpu_failures_short.txt
-
-      - name: Test durations
-        if: ${{ always() }}
-        run: cat reports/tests_torch_cuda_extensions_multi_gpu_durations.txt
+        run: cat /workspace/transformers/reports/${{ matrix.machines }}_tests_torch_cuda_extensions_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: run_tests_torch_cuda_extensions_multi_gpu_test_reports
-          path: reports
+          name: ${{ matrix.machines }}_run_tests_torch_cuda_extensions_gpu_test_reports
+          path: /workspace/transformers/reports/${{ matrix.machines }}_tests_torch_cuda_extensions_gpu
+
 
   send_results:
     name: Send results to webhook
     runs-on: ubuntu-latest
     if: always()
-    needs: [
-        run_all_tests_torch_gpu,
-        run_all_tests_tf_gpu,
-        run_all_tests_torch_multi_gpu,
-        run_all_tests_tf_multi_gpu,
-        run_all_tests_torch_cuda_extensions_gpu,
-        run_all_tests_torch_cuda_extensions_multi_gpu
-    ]
+    needs: [setup, run_tests_gpu, run_examples_gpu, run_pipelines_tf_gpu, run_pipelines_torch_gpu, run_all_tests_torch_cuda_extensions_gpu]
     steps:
       - uses: actions/checkout@v2
-
       - uses: actions/download-artifact@v2
-
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
           CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
-
-
+          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
         run: |
           pip install slack_sdk
-          python utils/notification_service.py scheduled
+          python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"
