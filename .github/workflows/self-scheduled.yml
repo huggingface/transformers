@@ -16,6 +16,8 @@ env:
   MKL_NUM_THREADS: 16
   PYTEST_TIMEOUT: 600
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+  RUN_PT_TF_CROSS_TESTS: 1
 
 jobs:
   run_all_tests_torch_gpu:
