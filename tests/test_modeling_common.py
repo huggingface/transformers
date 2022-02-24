@@ -2105,7 +2105,10 @@ class ModelUtilsTest(TestCasePlus):
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
 
-            model = NoSuperInitModel.from_pretrained(tmp_dir)
+            new_model = NoSuperInitModel.from_pretrained(tmp_dir)
+
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
 
 
 @require_torch
