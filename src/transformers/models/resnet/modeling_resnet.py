@@ -133,9 +133,7 @@ class ResNetEmbeddings(nn.Sequential):
 
     def __init__(self, num_channels: int, out_channels: int, activation: str = "relu"):
         super().__init__()
-        self.embedder = ResNetConvLayer(
-            num_channels, out_channels, kernel_size=7, stride=2, activation=activation
-        )
+        self.embedder = ResNetConvLayer(num_channels, out_channels, kernel_size=7, stride=2, activation=activation)
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
 
@@ -272,7 +270,8 @@ class ResNetStage(nn.Sequential):
         depth (`int`,*optional*, defaults to 2):
             The number of layers.
         layer_type (`str`, *optional*, defaults to `"basic"`):
-            The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or `"bottleneck"` (used for larger models like resnet-50 and above).
+            The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or
+            `"bottleneck"` (used for larger models like resnet-50 and above).
         activation (`int`, *optional*, defaults to `"relu"`):
             The activation used by all layers.
     """
@@ -426,7 +425,9 @@ class ResNetModel(ResNetPreTrainedModel):
 
         embedding_output = self.embedder(pixel_values)
 
-        encoder_outputs = self.encoder( embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        encoder_outputs = self.encoder(
+            embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict
+        )
 
         last_hidden_state = encoder_outputs[0]
 

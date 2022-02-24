@@ -70,8 +70,8 @@ class ModuleTransfer:
 
     def __call__(self, x: Tensor):
         """
-        Transfer the weights of `self.src` to `self.dest` by performing a forward pass using `x` as input.
-        Under the hood we tracked all the operations in both modules.
+        Transfer the weights of `self.src` to `self.dest` by performing a forward pass using `x` as input. Under the
+        hood we tracked all the operations in both modules.
         """
         dest_traced = Tracker(self.dest)(x).parametrized
         src_traced = Tracker(self.src)(x).parametrized
