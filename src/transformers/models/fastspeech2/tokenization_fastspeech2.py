@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for FastSpeech2."""
-import os
 import json
+import os
 from typing import List, Optional, Tuple
 
+from ...file_utils import requires_backends
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
-from ...file_utils import requires_backends
 
 
 logger = logging.get_logger(__name__)

@@ -618,6 +618,7 @@ def is_speech_available():
 def is_phonemizer_available():
     return _phonemizer_available
 
+
 def is_g2p_en_available():
     return _g2p_en_available
 

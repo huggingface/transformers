@@ -28,9 +28,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-)
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import (
     PreTrainedModel,
     SequenceSummary,
@@ -61,6 +59,7 @@ def lengths_to_padding_mask(lens: torch.LongTensor) -> torch.BoolTensor:
     mask = mask.expand(bsz, -1) >= lens.view(bsz, 1).expand(-1, max_lens)
     return mask
 
+
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -74,6 +73,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     inverted_mask = 1.0 - expanded_mask
 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
+
 
 # Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding with Speech2Text->FastSpeech2
 class FastSpeech2PositionalEmbedding(nn.Module):
@@ -541,7 +541,7 @@ class FastSpeech2Encoder(nn.Module):
                 args.postnet_layers,
                 args.postnet_dropout,
             )
-        
+
         if args.mean:
             self.register_buffer("mean", torch.zeros(self.out_dim))
         else:
@@ -665,11 +665,11 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
-    
+
     def set_mean(self, mean):
         # NOTE: add dimensionality check?
         self.encoder.mean = mean
-    
+
     def set_std(self, std):
         # NOTE: add dimensionality check?
         self.encoder.std = std
