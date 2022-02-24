@@ -28,15 +28,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     import torch
 
-    from transformers import (
-        FastSpeech2ForCausalLM,
-        FastSpeech2ForMaskedLM,
-        FastSpeech2ForMultipleChoice,
-        FastSpeech2ForQuestionAnswering,
-        FastSpeech2ForSequenceClassification,
-        FastSpeech2ForTokenClassification,
-        FastSpeech2Model,
-    )
+    from transformers import FastSpeech2Model
     from transformers.models.fastspeech2.modeling_fastspeech2 import FASTSPEECH2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -50,7 +42,7 @@ class FastSpeech2ModelTester:
         use_input_mask=True,
         use_token_type_ids=True,
         use_labels=True,
-        vocab_size=99,
+        vocab_size=75,
         hidden_size=32,
         num_hidden_layers=5,
         num_attention_heads=4,
