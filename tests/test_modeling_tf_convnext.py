@@ -16,6 +16,7 @@
 
 import inspect
 import unittest
+from typing import List, Tuple
 
 from transformers import ConvNextConfig
 from transformers.file_utils import cached_property, is_tf_available, is_vision_available
@@ -221,6 +222,50 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    # Since ConvNext does not have any attention we need to rewrite this test.
+    def test_model_outputs_equivalence(self):
+        (
+            config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            tuple_output = model(tuple_inputs, return_dict=False, **additional_kwargs)
+            dict_output = model(dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+            def recursive_check(tuple_object, dict_object):
+                if isinstance(tuple_object, (List, Tuple)):
+                    for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        recursive_check(tuple_iterable_value, dict_iterable_value)
+                elif tuple_object is None:
+                    return
+                else:
+                    self.assertTrue(
+                        all(tf.equal(tuple_object, dict_object)),
+                        msg=f"Tuple and dict output are not equal. Difference: {tf.math.reduce_max(tf.abs(tuple_object - dict_object))}",
+                    )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
