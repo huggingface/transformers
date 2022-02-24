@@ -162,11 +162,11 @@ class BeitModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size, self.image_size)
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
         )
         result = model(pixel_values, labels=pixel_labels)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size, self.image_size)
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -533,14 +533,14 @@ class BeitModelIntegrationTest(unittest.TestCase):
         logits = outputs.logits
 
         # verify the logits
-        expected_shape = torch.Size((1, 150, 640, 640))
+        expected_shape = torch.Size((1, 150, 160, 160))
         self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [
-                [[-4.9225, -4.9225, -4.6066], [-4.9225, -4.9225, -4.6066], [-4.6675, -4.6675, -4.3617]],
-                [[-5.8168, -5.8168, -5.5163], [-5.8168, -5.8168, -5.5163], [-5.5728, -5.5728, -5.2842]],
-                [[-0.0078, -0.0078, 0.4926], [-0.0078, -0.0078, 0.4926], [0.3664, 0.3664, 0.8309]],
+                [[-4.9225, -2.3954, -3.0522], [-2.8822, -1.0046, -1.7561], [-2.9549, -1.3228, -2.1347]],
+                [[-5.8168, -3.4129, -4.0778], [-3.8651, -2.2214, -3.0277], [-3.8356, -2.4643, -3.3535]],
+                [[-0.0078, 3.9952, 4.0754], [2.9856, 4.6944, 5.0035], [3.2413, 4.7813, 4.9969]],
             ]
         ).to(torch_device)
 
