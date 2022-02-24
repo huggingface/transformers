@@ -166,20 +166,22 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                       treat the first `left` samples and last `right` samples to be ignored in decoding (but used at
                       inference to provide more context to the model). Only use `stride` with CTC models.
             return_timestamps (*optional*, `str`):
-                Only available for pure CTC models.
-                If set to `"char"`, the pipeline will return `timestamps` along the
-                text for every character in the text. For instance if you get `[{"text": "H", "timestamps": (0.5,0.6), {"text": "i", "timestamps": (0.7, .9)}]`, then it means the
-                model assumes the letter "H" was pronounces and the `0.5s and 0.6s` of the input audio
-                If set to `"word"`, the pipeline will return `timestamps` along the
-                text for every word in the text. For instance if could get `[{"text": "Hi ", "timestamps": (0.5,0.9), {"text": "there", "timestamps": (1.0, .1.5)}]`, then it means the
-                model assumes the word "Hi" was pronounces and the `0.5s and 0.9s` of the input audio
+                Only available for pure CTC models. If set to `"char"`, the pipeline will return `timestamps` along the
+                text for every character in the text. For instance if you get `[{"text": "H", "timestamps": (0.5,0.6),
+                {"text": "i", "timestamps": (0.7, .9)}]`, then it means the model assumes the letter "H" was pronounces
+                and the `0.5s and 0.6s` of the input audio If set to `"word"`, the pipeline will return `timestamps`
+                along the text for every word in the text. For instance if could get `[{"text": "Hi ", "timestamps":
+                (0.5,0.9), {"text": "there", "timestamps": (1.0, .1.5)}]`, then it means the model assumes the word
+                "Hi" was pronounces and the `0.5s and 0.9s` of the input audio
 
         Return:
             `Dict`: A dictionary with the following keys:
                 - **text** (`str` ) -- The recognized text.
                 - **chunks** (*optional(, `List[Dict]`)
-                        When using `return_timestamps`, the `chunks` will become a list of containing all the various text chunks identified by the model `[{"text": "Hi ", "timestamps": (0.5,0.9), {"text": "there", "timestamps": (1.0, .1.5)}]`
-                        The original full text can roughly be recovered by doing `"".join(chunk["text"] for chunk in output["chunks"])`.
+                        When using `return_timestamps`, the `chunks` will become a list of containing all the various
+                        text chunks identified by the model `[{"text": "Hi ", "timestamps": (0.5,0.9), {"text":
+                        "there", "timestamps": (1.0, .1.5)}]` The original full text can roughly be recovered by doing
+                        `"".join(chunk["text"] for chunk in output["chunks"])`.
         """
         return super().__call__(inputs, **kwargs)
 
