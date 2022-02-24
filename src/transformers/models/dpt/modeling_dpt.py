@@ -839,7 +839,7 @@ class DPTInterpolate(nn.Module):
 
 @add_start_docstrings(
     """
-    DPT Model transformer with a depth estimation head on top e.g. for KITTI, NYUv2.
+    DPT Model transformer with a depth estimation head an output head (consisting of 3 convolutional layers on top) e.g. for KITTI, NYUv2.
     """,
     DPT_START_DOCSTRING,
 )
@@ -911,6 +911,9 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         )
 
         logits = self.head(outputs.last_hidden_state)
+        logits = logits.squeeze(dim=1)
+
+        print("First elements of logits:", logits[0,:3,:3])
 
         loss = None
         if labels is not None:

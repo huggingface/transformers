@@ -167,7 +167,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
+def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our DPT structure.
     """
@@ -205,15 +205,28 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     logits = model(pixel_values).logits
 
     print("Shape of logits:", logits.shape)
-    print("First elements of logits:", logits[0,0,:3,:3])
+    print("First elements of logits:", logits[0,:3,:3])
 
     # TODO assert logits
+    expected_slice = torch.tensor([[6.3199, 6.3629, 6.4148],
+        [6.3850, 6.3615, 6.4166],
+        [6.3519, 6.3176, 6.3575]])
+    assert torch.allclose(logits[0,:3,:3], expected_slice)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
     #print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     #feature_extractor.save_pretrained(pytorch_dump_folder_path)
+
+    if push_to_hub:
+        print("Pushing model to hub...")
+        model_name = "dpt-large-ade"
+        model.push_to_hub(
+            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
+            organization="nielsr",
+            commit_message="Add model",
+        )
 
 
 if __name__ == "__main__":
@@ -232,6 +245,14 @@ if __name__ == "__main__":
         required=True,
         help="Path to the output PyTorch model directory.",
     )
+    parser.add_argument(
+        "--push_to_hub",
+        default=False,
+        type=bool,
+        required=False,
+        help="Whether to push the model to the hub.",
+    )
+
 
     args = parser.parse_args()
-    convert_dpt_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path)
+    convert_dpt_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)
