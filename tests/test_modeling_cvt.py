@@ -31,7 +31,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import CvtForImageClassification, CvtModel
-    from transformers.models.cvt.modeling_cvt import CVT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
 if is_vision_available():
@@ -44,41 +44,36 @@ class CvtModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
+        batch_size = 13,
+        image_size = 32,
+        num_channels = 3,
+        num_stages = 3,
+        embed_dim = [64, 192, 384],
+        num_heads = [1, 3, 6],
+        depth = [1, 2, 10],
+        attention_drop_rate = [0.0, 0.0, 0.0],
+        initializer_range=0.02,
+        layer_norm_eps=1e-12,
         is_training=True,
         use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
-        initializer_range=0.02,
         num_labels=3,
-        scope=None,
+        type_sequence_label_size = 10
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
         self.is_training = is_training
         self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
+        self.num_labels = num_labels
+        self.num_channels = num_channels
+        self.num_stages = num_stages
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.depth = depth
+        self.attention_drop_rate = attention_drop_rate
         self.initializer_range = initializer_range
-        self.scope = scope
+        self.layer_norm_eps = layer_norm_eps
+        self.type_sequence_label_size= type_sequence_label_size
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -94,15 +89,9 @@ class CvtModelTester:
     def get_config(self):
         return CvtConfig(
             image_size=self.image_size,
-            patch_size=self.patch_size,
+
             num_channels=self.num_channels,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
@@ -320,7 +309,7 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in VIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = CvtModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -336,11 +325,11 @@ def prepare_img():
 class CvtModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return CvtFeatureExtractor.from_pretrained("microsoft/cvt-base-patch13-224") if is_vision_available() else None
+        return CvtFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = CvtForImageClassification.from_pretrained("microsoft/cvt-base-patch13-224").to(torch_device)
+        model = CvtForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
