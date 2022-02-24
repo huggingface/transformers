@@ -1499,22 +1499,28 @@ class GenerationTesterMixin:
         )
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
+        # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
         # set to same device. we don't care what device.
-        tensor_1, tensor_2 = tensor_1.cpu(), tensor_2.cpu()
 
-        in_order = tensor_1.size(0) <= tensor_2.size(0)
+        if not isinstance(tensor_1, list):
+            tensor_1 = tensor_1.cpu().tolist()
+        if not isinstance(tensor_2, list):
+            tensor_2 = tensor_2.cpu().tolist()
+
+        in_order = len(tensor_1) <= len(tensor_2)
         longer = tensor_2 if in_order else tensor_1
         shorter = tensor_1 if in_order else tensor_2
 
         flag = False
-        chunk_size = shorter.size(0)
-        for chunk_idx in range(longer.size(0) - chunk_size + 1):
+        chunk_size = len(shorter)
+        for chunk_idx in range(len(longer) - chunk_size + 1):
             subseq = longer[chunk_idx : chunk_idx + chunk_size]
-            if torch.equal(subseq, shorter):
+            if subseq == shorter:
                 flag = True
                 break
 
         self.assertTrue(flag)
+
 
 
 @require_torch
