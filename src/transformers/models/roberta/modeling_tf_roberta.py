@@ -1308,7 +1308,7 @@ class TFRobertaForCausalLM(TFRobertaPreTrainedModel, TFCausalLanguageModelingLos
         )
 
         sequence_output = outputs[0]
-        logits = self.lm_head(hidden_states=sequence_output)
+        logits = self.lm_head(hidden_states=sequence_output, training=inputs["training"])
         loss = None
 
         if inputs["labels"] is not None:
