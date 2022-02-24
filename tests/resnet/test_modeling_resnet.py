@@ -330,7 +330,11 @@ class ResNetModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ResNetForImageClassification.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = (
+            ResNetForImageClassification.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+            .to(torch_device)
+            .eval()
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -344,6 +348,6 @@ class ResNetModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-9.9593, -7.9535, -6.8911]).to(torch_device)
+        expected_slice = torch.tensor([-9.9646, -7.8984, -6.7838]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

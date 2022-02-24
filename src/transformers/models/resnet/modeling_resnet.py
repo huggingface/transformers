@@ -49,7 +49,7 @@ _IMAGE_CLASS_CHECKPOINT = ""
 _IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Francesco/resnet50-224-1k",
+    "Francesco/resnet50",
     # See all resnet models at https://huggingface.co/models?filter=resnet
 ]
 
