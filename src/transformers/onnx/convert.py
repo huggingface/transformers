@@ -264,6 +264,11 @@ def export(
         if not is_torch_onnx_dict_inputs_support_available():
             raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
+        if not config.is_torch_support_available:
+            raise AssertionError(
+                f"Unsupported PyTorch version for this model. Minimum required is {config.TORCH_ONNX_MINIMUM_VERSION}, got: {torch_version}"
+            )
+
     if is_torch_available() and issubclass(type(model), PreTrainedModel):
         return export_pytorch(preprocessor, model, config, opset, output, tokenizer=tokenizer)
     elif is_tf_available() and issubclass(type(model), TFPreTrainedModel):
