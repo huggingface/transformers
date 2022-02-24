@@ -375,11 +375,11 @@ class TokenizerTesterMixin:
 
         self.assertEqual(reverse_text, text)
 
-        special_tokens =  tokenizer.all_special_tokens
+        special_tokens = tokenizer.all_special_tokens
         special_tokens_string = tokenizer.convert_tokens_to_string(special_tokens)
         for special_token in special_tokens:
             self.assertIn(special_token, special_tokens_string)
-        
+
         if self.test_rust_tokenizer:
             rust_tokenizer = self.get_rust_tokenizer()
             special_tokens_string_rust = rust_tokenizer.convert_tokens_to_string(special_tokens)
