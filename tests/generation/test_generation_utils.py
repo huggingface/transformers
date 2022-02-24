@@ -1202,7 +1202,7 @@ class GenerationTesterMixin:
                 min_id = 3
                 max_id = 100
 
-            force_tokens = torch.randint(min_id, max_id, (1, 2)).type(torch.LongTensor)[0]
+            force_tokens = torch.randint(min_id, max_id, (1, 2)).tolist()[0]
             constraints = [
                 PhrasalConstraint(force_tokens),
             ]
@@ -1227,7 +1227,7 @@ class GenerationTesterMixin:
 
             # check `generate()` and `constrained_beam_search()` are equal for `num_return_sequences`
             # Sample constraints
-            force_tokens = torch.randint(min_id, max_id, (1, 2)).type(torch.LongTensor)[0]
+            force_tokens = torch.randint(min_id, max_id, (1, 2)).tolist()[0]
             constraints = [
                 PhrasalConstraint(force_tokens),
             ]
@@ -1288,7 +1288,7 @@ class GenerationTesterMixin:
                 # otherwise this throws an error for Speech2TextModel since its inputs are floating points
                 min_id = 3
                 max_id = 100
-            force_tokens = torch.randint(min_id, max_id, (1, 2)).type(torch.LongTensor)[0]
+            force_tokens = torch.randint(min_id, max_id, (1, 2)).tolist()[0]
             constraints = [
                 PhrasalConstraint(force_tokens),
             ]
