@@ -215,7 +215,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         # Add full (and cased) model names here
         ("poolformer", "PoolFormer"),
         ("convnext", "ConvNext"),
-        ("resnet", "resnet"),
+        ("resnet", "ResNet"),
         ("yoso", "YOSO"),
         ("swin", "Swin"),
         ("vilt", "ViLT"),
