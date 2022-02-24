@@ -1026,9 +1026,9 @@ if is_torch_available():
         [
             "LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "LayoutLMv2ForQuestionAnswering",
+            "LayoutLMv2ForRelationExtraction",
             "LayoutLMv2ForSequenceClassification",
             "LayoutLMv2ForTokenClassification",
-            "LayoutLMv2ForRelationExtraction",
             "LayoutLMv2Model",
             "LayoutLMv2PreTrainedModel",
         ]
@@ -2982,9 +2982,9 @@ if TYPE_CHECKING:
         from .models.layoutlmv2 import (
             LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMv2ForQuestionAnswering,
+            LayoutLMv2ForRelationExtraction,
             LayoutLMv2ForSequenceClassification,
             LayoutLMv2ForTokenClassification,
-            LayoutLMv2ForRelationExtraction,
             LayoutLMv2Model,
             LayoutLMv2PreTrainedModel,
         )

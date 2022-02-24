@@ -1951,6 +1951,13 @@ class LayoutLMv2ForQuestionAnswering(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class LayoutLMv2ForRelationExtraction(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class LayoutLMv2ForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -1959,13 +1966,6 @@ class LayoutLMv2ForSequenceClassification(metaclass=DummyObject):
 
 
 class LayoutLMv2ForTokenClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class LayoutLMv2ForRelationExtraction:
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
