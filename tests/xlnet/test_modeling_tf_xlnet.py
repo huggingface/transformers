@@ -496,9 +496,8 @@ class TFXLNetModelLanguageGenerationTest(unittest.TestCase):
         #  him for making such an accusation, Rasputin watches as the man is chased outside and beaten.
         #  Twenty years later, Rasputin sees a vision of the Virgin Mary, prompting him to become a priest.
         #  Rasputin quickly becomes famous, with people, even a bishop, begging for his blessing.
-        #  <sep><cls>, Rasputin is asked to perform magic.
-        #  He is not able to perform magic, and his father and
-        # the men are forced to leave the monastery. Rasputin is forced to return to
+        #  <sep><cls>, Rasputin is asked to perform magic. He is asked to perform a ritual of the Virgin Mary.
+        #  He is asked to perform a ritual of the Virgin Mary. He is asked to perform
 
         output_ids = model.generate(input_ids, max_length=200, do_sample=False)
 
