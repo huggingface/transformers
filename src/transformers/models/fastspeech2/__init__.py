@@ -18,16 +18,13 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
     "configuration_fastspeech2": ["FASTSPEECH2_PRETRAINED_CONFIG_ARCHIVE_MAP", "FastSpeech2Config"],
     "tokenization_fastspeech2": ["FastSpeech2Tokenizer"],
 }
-
-if is_tokenizers_available():
-    _import_structure["tokenization_fastspeech2_fast"] = ["FastSpeech2TokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_fastspeech2"] = [
@@ -40,9 +37,6 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_fastspeech2 import FASTSPEECH2_PRETRAINED_CONFIG_ARCHIVE_MAP, FastSpeech2Config
     from .tokenization_fastspeech2 import FastSpeech2Tokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_fastspeech2_fast import FastSpeech2TokenizerFast
 
     if is_torch_available():
         from .modeling_fastspeech2 import (
