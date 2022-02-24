@@ -15,6 +15,7 @@
 """ PyTorch LayoutLMv2 model."""
 
 
+import copy
 import math
 
 import torch
@@ -36,12 +37,10 @@ from ...modeling_outputs import (
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
-    ReOutput,
 )
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...utils import logging
 from .configuration_layoutlmv2 import LayoutLMv2Config
-from .re import REDecoder
 
 
 # soft dependency
@@ -196,6 +195,54 @@ class LayoutLMv2SelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
+
+
+class LayoutLMv2BiaffineAttention(torch.nn.Module):
+    """Implements a biaffine attention operator for binary relation classification.
+
+    PyTorch implementation of the biaffine attention operator from "End-to-end neural relation
+    extraction using deep biaffine attention" (https://arxiv.org/abs/1812.11275) which can be used
+    as a classifier for binary relation classification.
+
+    Args:
+        in_features (int): The size of the feature dimension of the inputs.
+        out_features (int): The size of the feature dimension of the output.
+
+    Shape:
+        - x_1: `(N, *, in_features)` where `N` is the batch dimension and `*` means any number of
+          additional dimensisons.
+        - x_2: `(N, *, in_features)`, where `N` is the batch dimension and `*` means any number of
+          additional dimensions.
+        - Output: `(N, *, out_features)`, where `N` is the batch dimension and `*` means any number
+            of additional dimensions.
+
+    Examples:
+        >>> batch_size, in_features, out_features = 32, 100, 4
+        >>> biaffine_attention = LayoutLMv2BiaffineAttention(in_features, out_features)
+        >>> x_1 = torch.randn(batch_size, in_features)
+        >>> x_2 = torch.randn(batch_size, in_features)
+        >>> output = biaffine_attention(x_1, x_2)
+        >>> print(output.size())
+        torch.Size([32, 4])
+    """
+
+    def __init__(self, in_features, out_features):
+        super(LayoutLMv2BiaffineAttention, self).__init__()
+
+        self.in_features = in_features
+        self.out_features = out_features
+
+        self.bilinear = torch.nn.Bilinear(in_features, in_features, out_features, bias=False)
+        self.linear = torch.nn.Linear(2 * in_features, out_features, bias=True)
+
+        self.reset_parameters()
+
+    def forward(self, x_1, x_2):
+        return self.bilinear(x_1, x_2) + self.linear(torch.cat((x_1, x_2), dim=-1))
+
+    def reset_parameters(self):
+        self.bilinear.reset_parameters()
+        self.linear.reset_parameters()
 
 
 class LayoutLMv2Attention(nn.Module):
@@ -497,6 +544,107 @@ class LayoutLMv2Encoder(nn.Module):
         )
 
 
+class LayoutLmv2RelationExtractionDecoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.entity_emb = nn.Embedding(config.num_labels, config.hidden_size, scale_grad_by_freq=True)
+        projection = nn.Sequential(
+            nn.Linear(config.hidden_size * 2, config.hidden_size),
+            nn.ReLU(),
+            nn.Dropout(config.hidden_dropout_prob),
+            nn.Linear(config.hidden_size, config.hidden_size // 2),
+            nn.ReLU(),
+            nn.Dropout(config.hidden_dropout_prob),
+        )
+        self.ffnn_head = copy.deepcopy(projection)
+        self.ffnn_tail = copy.deepcopy(projection)
+        self.rel_classifier = BiaffineAttention(config.hidden_size // 2, 2)
+        self.loss_fct = CrossEntropyLoss()
+
+    def build_relation(self, relations, entities):
+        batch_size = len(relations)
+        new_relations = []
+        for b in range(batch_size):
+            if len(entities[b]["start"]) <= 2:
+                entities[b] = {"end": [1, 1], "label": [0, 0], "start": [0, 0]}
+            all_possible_relations = set(
+                [
+                    (i, j)
+                    for i in range(len(entities[b]["label"]))
+                    for j in range(len(entities[b]["label"]))
+                    if entities[b]["label"][i] == 1 and entities[b]["label"][j] == 2
+                ]
+            )
+            if len(all_possible_relations) == 0:
+                all_possible_relations = set([(0, 1)])
+            positive_relations = set(list(zip(relations[b]["head"], relations[b]["tail"])))
+            negative_relations = all_possible_relations - positive_relations
+            positive_relations = set([i for i in positive_relations if i in all_possible_relations])
+            reordered_relations = list(positive_relations) + list(negative_relations)
+            relation_per_doc = {"head": [], "tail": [], "label": []}
+            relation_per_doc["head"] = [i[0] for i in reordered_relations]
+            relation_per_doc["tail"] = [i[1] for i in reordered_relations]
+            relation_per_doc["label"] = [1] * len(positive_relations) + [0] * (
+                len(reordered_relations) - len(positive_relations)
+            )
+            assert len(relation_per_doc["head"]) != 0
+            new_relations.append(relation_per_doc)
+        return new_relations, entities
+
+    def get_predicted_relations(self, logits, relations, entities):
+        pred_relations = []
+        for i, pred_label in enumerate(logits.argmax(-1)):
+            if pred_label != 1:
+                continue
+            rel = {}
+            rel["head_id"] = relations["head"][i]
+            rel["head"] = (entities["start"][rel["head_id"]], entities["end"][rel["head_id"]])
+            rel["head_type"] = entities["label"][rel["head_id"]]
+
+            rel["tail_id"] = relations["tail"][i]
+            rel["tail"] = (entities["start"][rel["tail_id"]], entities["end"][rel["tail_id"]])
+            rel["tail_type"] = entities["label"][rel["tail_id"]]
+            rel["type"] = 1
+            pred_relations.append(rel)
+        return pred_relations
+
+    def forward(self, hidden_states, entities, relations):
+        batch_size, max_n_words, context_dim = hidden_states.size()
+        device = hidden_states.device
+        relations, entities = self.build_relation(relations, entities)
+        loss = 0
+        all_pred_relations = []
+        for b in range(batch_size):
+            head_entities = torch.tensor(relations[b]["head"], device=device)
+            tail_entities = torch.tensor(relations[b]["tail"], device=device)
+            relation_labels = torch.tensor(relations[b]["label"], device=device)
+            entities_start_index = torch.tensor(entities[b]["start"], device=device)
+            entities_labels = torch.tensor(entities[b]["label"], device=device)
+            head_index = entities_start_index[head_entities]
+            head_label = entities_labels[head_entities]
+            head_label_repr = self.entity_emb(head_label)
+
+            tail_index = entities_start_index[tail_entities]
+            tail_label = entities_labels[tail_entities]
+            tail_label_repr = self.entity_emb(tail_label)
+
+            head_repr = torch.cat(
+                (hidden_states[b][head_index], head_label_repr),
+                dim=-1,
+            )
+            tail_repr = torch.cat(
+                (hidden_states[b][tail_index], tail_label_repr),
+                dim=-1,
+            )
+            heads = self.ffnn_head(head_repr)
+            tails = self.ffnn_tail(tail_repr)
+            logits = self.rel_classifier(heads, tails)
+            loss += self.loss_fct(logits, relation_labels)
+            pred_relations = self.get_predicted_relations(logits, relations[b], entities[b])
+            all_pred_relations.append(pred_relations)
+        return loss, all_pred_relations
+
+
 class LayoutLMv2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -614,6 +762,86 @@ class LayoutLMv2VisualBackbone(nn.Module):
         node_rank = self_rank // node_size
 
         self.backbone = my_convert_sync_batchnorm(self.backbone, process_group=sync_bn_groups[node_rank])
+
+
+@dataclass
+class LayoutLMv2RelationExtractionOutput(ModelOutput):
+    """
+    Class for outputs of [`LayoutLMv2ForRelationExtraction`].
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided) :
+            Classification loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 2)`):
+            Classification scores (before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        entities (list of dicts of shape `(batch_size,)` where each dict contains:
+            {
+                'start': `torch.IntTensor` of shape `(num_entites)`,
+                    Each value in the list represents the id of the token (element of range(0, len(tokens)) where the
+                    entity starts
+                'end': `torch.IntTensor` of shape `(num_entites)`,
+                    Each value in the list represents the id of the token (element of range(0, len(tokens)) where the
+                    entity ends
+                'label': `torch.IntTensor` of shape `(num_entites)`
+                    Each value in the list represents the label (as an int) of the entity
+            }
+        relations (list of dicts of shape `(batch_size,)` where each dict contains:
+            {
+                'head': `torch.IntTensor` of shape `(num_entites)`,
+                    Each value in the list represents the key of a different relation. A value can be used to map to
+                    the entity list as it tells you what index to inspect in any of the lists inside the entities dict
+                    (reps the id of the entity `(element of range(0, len(entities)`)
+                'tail': `torch.IntTensor` of shape `(num_entites)`,
+                    Each value in the list represents the value of a different relation. A value can be used to map to
+                    the entity list as it tells you what index to inspect in any of the lists inside the entities dict
+                    (reps the id of the entity `(element of range(0, len(entities)`)
+                'start_index': `torch.IntTensor` of shape `(num_entites)`,
+                    Each value in this list represents the start index (element of range(0, len(tokens)) for the
+                    combined head and tail entities e.g. `min(entities['start']['head'], entities['start']['tail'])`
+                'end_index': `torch.IntTensor` of shape `(num_entites)`,
+                    Each value in this list represents the end index (element of range(0, len(tokens)) for the
+                    combined head and tail entities e.g. `min(entities['end']['head'], entities['end']['tail'])`
+            }
+        pred_relations (list of lists of shape `(batch_size, pred_relations)` where each element is a dict containing:
+            {
+                'head': `tuple` of `(start_token_index, end_token_index)`,
+                    This value shows gets the start and end tokens of the entity for which the relation predicted to
+                    be the key
+                'head_id': `int`,
+                    This value can be used to map to the entity list as it tells you what index to inspect in any of
+                    the lists inside the entities dict(reps the id of the entity `(element of range(0, len(entities)`)
+                'head_type': `int`,
+                    This value is set to the label value of the corrosponding entity
+                'tail': `tuple` of `(start_token_index, end_token_index)`,
+                    This value shows gets the start and end tokens of the entity for which the relation predicted to
+                    be the value
+                'tail_id': `int`,
+                    This value can be used to map to the entity list as it tells you what index to inspect in any of
+                    the lists inside the entities dict(reps the id of the entity `(element of range(0, len(entities)`)
+                'tail_type': `int`,
+                    This value is set to the label value of the corrosponding entity
+                'type': `int`,
+                    This value is set to `1` for a predicted relation
+            }
+    """
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    entities: Optional[Dict] = None
+    relations: Optional[Dict] = None
+    pred_relations: Optional[Dict] = None
 
 
 LAYOUTLMV2_START_DOCSTRING = r"""
@@ -1233,7 +1461,8 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
         super().__init__(config)
         self.layoutlmv2 = LayoutLMv2Model(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.extractor = REDecoder(config)
+        self.extractor = LayoutLmv2RelationExtractionDecoder(config)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1241,7 +1470,7 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
         return self.layoutlmv2.embeddings.word_embeddings
 
     @add_start_docstrings_to_model_forward(LAYOUTLMV2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=ReOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=LayoutLMv2RelationExtractionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids,
@@ -1299,7 +1528,7 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
         sequence_output = self.dropout(sequence_output)
         loss, pred_relations = self.extractor(sequence_output, entities, relations)
 
-        return ReOutput(
+        return LayoutLMv2RelationExtractionOutput(
             loss=loss,
             entities=entities,
             relations=relations,
