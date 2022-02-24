@@ -21,15 +21,15 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, 
 import numpy as np
 from packaging import version
 
-from ..feature_extraction_utils import FeatureExtractionMixin
 from ..file_utils import TensorType, is_torch_available, is_vision_available
-from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import logging
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
 
 
 if TYPE_CHECKING:
     from ..configuration_utils import PretrainedConfig
+    from ..feature_extraction_utils import FeatureExtractionMixin
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
 
 
 if is_vision_available():
@@ -238,7 +238,7 @@ class OnnxConfig(ABC):
 
     def generate_dummy_inputs(
         self,
-        preprocessor: Union[PreTrainedTokenizerBase, FeatureExtractionMixin],
+        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -246,7 +246,7 @@ class OnnxConfig(ABC):
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
-        tokenizer: PreTrainedTokenizerBase = None,
+        tokenizer: "PreTrainedTokenizerBase" = None,
     ) -> Mapping[str, Any]:
         """
         Generate inputs to provide to the ONNX exporter for the specific framework
@@ -272,6 +272,9 @@ class OnnxConfig(ABC):
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
         """
+        from ..feature_extraction_utils import FeatureExtractionMixin
+        from ..tokenization_utils_base import PreTrainedTokenizerBase
+
         if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
             raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
         if tokenizer is not None:
@@ -286,13 +289,11 @@ class OnnxConfig(ABC):
             batch_size = compute_effective_axis_dimension(
                 batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
             )
-
             # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
             token_to_add = preprocessor.num_special_tokens_to_add(is_pair)
             seq_length = compute_effective_axis_dimension(
                 seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
             )
-
             # Generate dummy inputs according to compute batch and sequence
             dummy_input = [" ".join([preprocessor.unk_token]) * seq_length] * batch_size
             return dict(preprocessor(dummy_input, return_tensors=framework))
@@ -400,7 +401,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizerBase,
+        tokenizer: "PreTrainedTokenizerBase",
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -519,7 +520,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizerBase,
+        tokenizer: "PreTrainedTokenizerBase",
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
