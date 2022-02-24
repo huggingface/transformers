@@ -13,18 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for FastSpeech2."""
-from typing import List, Optional
+import collections
+import os
+import json
+from typing import List, Optional, Tuple
 
 from tokenizers import ByteLevelBPETokenizer
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...file_utils import requires_backends
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -52,35 +56,69 @@ class FastSpeech2Tokenizer(PreTrainedTokenizer):
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
-        self, vocab_file, unk_token="<|endoftext|>", bos_token="<|endoftext|>", eos_token="<|endoftext|>", **kwargs
+        self,
+        vocab_file,
+        unk_token="<unk>",
+        bos_token="<s>",
+        eos_token="</s>",
+        do_phonemize=True,
+        preserve_punctuation=False,
+        **kwargs
     ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
-
-        "Initialisation"
+        self.do_phonemize = do_phonemize
+        self.preserve_punctuation = preserve_punctuation
+        with open(vocab_file, encoding="utf-8") as vocab_handle:
+            self.encoder = json.load(vocab_handle)
+        self.decoder = {v: k for k, v in self.encoder.items()}
 
     @property
     def vocab_size(self):
-        "Returns vocab size"
+        return len(self.decoder)
 
     def get_vocab(self):
         "Returns vocab as a dict"
+        return dict(self.encoder, **self.added_tokens_encoder)
+
+    def phonemize(self, text):
+        requires_backends(self, "g2p_en")
+        import g2p_en
+
+        g2p = g2p_en.G2p()
+        if self.preserve_punctuation:
+            return " ".join("|" if p == " " else p for p in g2p(text))
+        res = [{",": "sp", ";": "sp"}.get(p, p) for p in g2p(text)]
+        return " ".join(p for p in res if p.isalnum())
 
     def _tokenize(self, text):
         """Returns a tokenized string."""
 
+        # make sure whitespace is stripped to prevent <unk>
+        text = text.strip()
+
+        # phonemize
+        if self.do_phonemize:
+            text = self.phonemize(text)
+
+        # make sure ' ' is between phonemes
+        tokens = text.split(" ")
+
+        tokens = list(filter(lambda p: p.strip() != "", tokens))
+        return tokens
+
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
+        return self.encoder.get(token, self.unk_token_id)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
+        return self.decoder.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
+        pass
 
-    def save_vocabulary(self, save_directory):
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
         Save the vocabulary and special tokens file to a directory.
 
@@ -91,154 +129,21 @@ class FastSpeech2Tokenizer(PreTrainedTokenizer):
         Returns:
             `Tuple(str)`: Paths to the files saved.
         """
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return
+        vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
 
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A FastSpeech2 sequence has the following format:
+        with open(vocab_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(self.get_vocab(), ensure_ascii=False))
 
-        - single sequence: `<s> X </s>`
-        - pair of sequences: `<s> A </s></s> B </s>`
+        return (vocab_file,)
 
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
-        cls = [self.cls_token_id]
-        sep = [self.sep_token_id]
-        return cls + token_ids_0 + sep + sep + token_ids_1 + sep
-
-    def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
-
-        if token_ids_1 is None:
-            return [1] + ([0] * len(token_ids_0)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
-
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. FastSpeech2 does
-        not make use of token type ids, therefore a list of zeros is returned.
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of zeros.
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-
-        if token_ids_1 is None:
-            return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
         if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
             text = " " + text
         return (text, kwargs)
-
-
-class FastSpeech2TokenizerFast(PreTrainedTokenizerFast):
-    """
-    Construct a "fast" FastSpeech2 tokenizer (backed by HuggingFace's *tokenizers* library).
-
-    Args:
-        vocab_file (`str`):
-            Path to the vocabulary file.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["input_ids", "attention_mask"]
-
-    def __init__(
-        self,
-        vocab_file,
-        merges_file,
-        unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
-        eos_token="<|endoftext|>",
-        add_prefix_space=False,
-        trim_offsets=True,
-        **kwargs
-    ):
-        super().__init__(
-            ByteLevelBPETokenizer(
-                vocab_file=vocab_file,
-                merges_file=merges_file,
-                add_prefix_space=add_prefix_space,
-                trim_offsets=trim_offsets,
-            ),
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            **kwargs,
-        )
-        self.add_prefix_space = add_prefix_space
-
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
-        if token_ids_1 is None:
-            return output
-
-        return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
-
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. FastSpeech2 does
-        not make use of token type ids, therefore a list of zeros is returned.
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of zeros.
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-
-        if token_ids_1 is None:
-            return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
