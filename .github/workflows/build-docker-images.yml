@@ -1,17 +1,6 @@
 name: Build docker images (scheduled)
 
 on:
-  push:
-    branches:
-      - master
-      - updating-dockerfiles
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-      - "templates/**"
-      - "utils/**"
-      - "docker/**"
   repository_dispatch:
   schedule:
     - cron: "0 1 * * *"
