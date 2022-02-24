@@ -16,6 +16,7 @@
 
 
 import inspect
+from math import floor
 import unittest
 
 from transformers import CvtConfig
@@ -31,7 +32,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import CvtForImageClassification, CvtModel
-    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers.models.cvt.modeling_cvt import CVT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
 if is_vision_available():
@@ -39,29 +40,42 @@ if is_vision_available():
 
     from transformers import CvtFeatureExtractor
 
+class CvtConfigTester(ConfigTester):
+    def create_and_test_config_common_properties(self):
+        config = self.config_class(**self.inputs_dict)
+        self.parent.assertTrue(hasattr(config, "embed_dim"))
+        self.parent.assertTrue(hasattr(config, "num_heads"))
+        self.parent.assertTrue(hasattr(config, "num_stages"))
 
 class CvtModelTester:
     def __init__(
         self,
         parent,
         batch_size = 13,
-        image_size = 32,
+        image_size = 64,
         num_channels = 3,
         num_stages = 3,
         embed_dim = [64, 192, 384],
         num_heads = [1, 3, 6],
         depth = [1, 2, 10],
+        patch_sizes = [7, 3, 3],
+        patch_stride = [4, 2, 2],
+        patch_padding = [2, 1, 1],
+        stride_kv = [2, 2, 2],
+        cls_token = [False, False, True],
         attention_drop_rate = [0.0, 0.0, 0.0],
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         is_training=True,
         use_labels=True,
-        num_labels=3,
-        type_sequence_label_size = 10
+        num_labels=1000, #Check
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
+        self.patch_sizes = patch_sizes
+        self.patch_stride = patch_stride
+        self.patch_padding = patch_padding
         self.is_training = is_training
         self.use_labels = use_labels
         self.num_labels = num_labels
@@ -69,18 +83,19 @@ class CvtModelTester:
         self.num_stages = num_stages
         self.embed_dim = embed_dim
         self.num_heads = num_heads
+        self.stride_kv = stride_kv
         self.depth = depth
+        self.cls_token = cls_token
         self.attention_drop_rate = attention_drop_rate
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.type_sequence_label_size= type_sequence_label_size
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = self.get_config()
 
@@ -89,10 +104,17 @@ class CvtModelTester:
     def get_config(self):
         return CvtConfig(
             image_size=self.image_size,
-
+            num_labels=self.num_labels,
             num_channels=self.num_channels,
-
-            is_decoder=False,
+            embed_dim=self.embed_dim,
+            num_heads=self.num_heads,
+            patch_sizes=self.patch_sizes,
+            patch_padding=self.patch_padding,
+            patch_stride=self.patch_stride,
+            stride_kv=self.stride_kv,
+            depth=self.depth,
+            cls_token=self.cls_token,
+            attention_drop_rate=self.attention_drop_rate,
             initializer_range=self.initializer_range,
         )
 
@@ -103,17 +125,19 @@ class CvtModelTester:
         result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = to_2tuple(self.image_size)
-        patch_size = to_2tuple(self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        height, width = image_size[0], image_size[1]
+        for i in range(self.num_stages):
+            height = floor(((height + 2*self.patch_padding[i] - self.patch_sizes[i])/self.patch_stride[i]) + 1)
+            width = floor(((width + 2*self.patch_padding[i] - self.patch_sizes[i])/self.patch_stride[i]) + 1)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dim[-1], height, width))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
+        config.num_labels = self.num_labels
         model = CvtForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -149,23 +173,21 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CvtModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CvtConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = CvtConfigTester(self, config_class=CvtConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip("Cvt does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # Cvt does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+        pass
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -179,24 +201,9 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
-
-        # in Cvt, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
-        image_size = to_2tuple(self.model_tester.image_size)
-        patch_size = to_2tuple(self.model_tester.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        seq_len = num_patches + 1
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-        chunk_length = getattr(self.model_tester, "chunk_length", None)
-        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
-            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -207,8 +214,10 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            attentions = outputs.attentions
+
+            expected_num_attentions = sum(self.model_tester.depth)
+            self.assertEqual(len(attentions), expected_num_attentions)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -218,19 +227,29 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            attentions = outputs.attentions
 
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
+            self.assertEqual(len(attentions), expected_num_attentions)
+
+            # verify the first attentions (first block, first layer)
+            
+            expected_seq_len = (self.model_tester.image_size // 4) ** 2
+            expected_reduced_seq_len = (self.model_tester.image_size // (4 * self.model_tester.stride_kv[0])) ** 2
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_heads[0], expected_seq_len, expected_reduced_seq_len],
+            )
+
+            # verify the last attentions (last block, last layer)
+            expected_seq_len = (self.model_tester.image_size // 16) ** 2
+            expected_reduced_seq_len = (self.model_tester.image_size // (16 * self.model_tester.stride_kv[-1])) ** 2
+            if self.model_tester.cls_token[-1] is True:
+                expected_seq_len = expected_seq_len + 1
+                expected_reduced_seq_len = expected_reduced_seq_len + 1
+            self.assertListEqual(
+                list(attentions[-1].shape[-3:]),
+                [self.model_tester.num_heads[-1], expected_seq_len, expected_reduced_seq_len],
+            )
             out_len = len(outputs)
 
             # Check attention is always last and order is fine
@@ -242,27 +261,18 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
-            else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
+            self.assertEqual(out_len + 1, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = outputs.attentions
 
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
+            self.assertEqual(len(self_attentions), expected_num_attentions)
+            # verify the first attentions (first block, first layer)
+            expected_seq_len = (self.model_tester.image_size // 4) ** 2
+            expected_reduced_seq_len = (self.model_tester.image_size // (4 * self.model_tester.stride_kv[0])) ** 2
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_heads[0], expected_seq_len, expected_reduced_seq_len],
+            )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -273,22 +283,19 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = outputs.hidden_states
 
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
+            expected_num_layers = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            # Cvt has a different seq_length
-            image_size = to_2tuple(self.model_tester.image_size)
-            patch_size = to_2tuple(self.model_tester.patch_size)
-            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-            seq_length = num_patches + 1
-
+            # verify the first hidden states (first block)
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-3:]),
+                [
+                    self.model_tester.embed_dim[0],
+                    self.model_tester.image_size // 4,
+                    self.model_tester.image_size // 4,
+                ],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -309,7 +316,7 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in CVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = CvtModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -325,11 +332,11 @@ def prepare_img():
 class CvtModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return CvtFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+        return CvtFeatureExtractor.from_pretrained("anugunj/testcvtmodel") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = CvtForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
+        model = CvtForImageClassification.from_pretrained("anugunj/testcvtmodel").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -343,6 +350,6 @@ class CvtModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
+        expected_slice = torch.tensor([1.5788, 1.1755, -0.0690]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
