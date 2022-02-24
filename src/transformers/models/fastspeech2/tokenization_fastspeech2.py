@@ -15,10 +15,10 @@
 """Tokenization classes for FastSpeech2."""
 import json
 import os
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 from ...file_utils import requires_backends
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -62,6 +62,11 @@ class FastSpeech2Tokenizer(PreTrainedTokenizer):
         preserve_punctuation=False,
         **kwargs
     ):
+        requires_backends(self, "g2p_en")
+        import g2p_en
+
+        # make attribute to avoid creating g2p object every call
+        self.g2p = g2p_en.G2p()
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, pad_token=pad_token, **kwargs)
         self.do_phonemize = do_phonemize
         self.preserve_punctuation = preserve_punctuation
@@ -78,13 +83,9 @@ class FastSpeech2Tokenizer(PreTrainedTokenizer):
         return dict(self.encoder, **self.added_tokens_encoder)
 
     def phonemize(self, text):
-        requires_backends(self, "g2p_en")
-        import g2p_en
-
-        g2p = g2p_en.G2p()
         if self.preserve_punctuation:
-            return " ".join("|" if p == " " else p for p in g2p(text))
-        res = [{",": "sp", ";": "sp"}.get(p, p) for p in g2p(text)]
+            return " ".join("|" if p == " " else p for p in self.g2p(text))
+        res = [{",": "sp", ";": "sp"}.get(p, p) for p in self.g2p(text)]
         return " ".join(p for p in res if p.isalnum())
 
     def _tokenize(self, text):
@@ -101,13 +102,15 @@ class FastSpeech2Tokenizer(PreTrainedTokenizer):
         tokens = text.split(" ")
 
         tokens = list(filter(lambda p: p.strip() != "", tokens))
+
+        # fastspeech2 needs eos at the end
+        tokens.append(self.eos_token)
+
         return tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        return self.encoder.get(
-            token,
-        )
+        return self.encoder.get(token, self.encoder[self.unk_token])
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
@@ -140,6 +143,3 @@ class FastSpeech2Tokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.get_vocab(), ensure_ascii=False))
 
         return (vocab_file,)
-
-    def prepare_for_tokenization(self, text, **kwargs):
-        return (text, {})
