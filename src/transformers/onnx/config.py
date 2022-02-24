@@ -269,14 +269,14 @@ class OnnxConfig(ABC):
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
         """
-        if tokenizer:
+        if tokenizer is not None:
             warnings.warn(
                 "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
                 FutureWarning,
             )
-        if isinstance(preprocessor, PreTrainedTokenizer) and tokenizer:
+        if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
             raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
-        if isinstance(preprocessor, PreTrainedTokenizer) or isinstance(preprocessor, PreTrainedTokenizerFast):
+        if isinstance(preprocessor, PreTrainedTokenizerBase):
             if tokenizer:
                 warnings.warn("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
                 preprocessor = tokenizer

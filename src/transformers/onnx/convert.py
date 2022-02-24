@@ -265,7 +265,7 @@ def export(
             raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
         if not config.is_torch_support_available:
-            raise AssertionError(
+            raise ImportError(
                 f"Unsupported PyTorch version for this model. Minimum required is {config.TORCH_ONNX_MINIMUM_VERSION}, got: {torch_version}"
             )
 
@@ -292,9 +292,7 @@ def validate_model_outputs(
     # dynamic input shapes.
     if issubclass(type(reference_model), PreTrainedModel):
         reference_model_inputs = config.generate_dummy_inputs(
-            preprocessor,
-            tokenizer=tokenizer,
-            framework=TensorType.PYTORCH,
+            preprocessor, tokenizer=tokenizer, framework=TensorType.PYTORCH
         )
     else:
         reference_model_inputs = config.generate_dummy_inputs(
