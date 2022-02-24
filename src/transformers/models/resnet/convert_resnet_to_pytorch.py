@@ -160,7 +160,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
 
             assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
 
-            checkpoint_name = f"{name}-224-1k"
+            checkpoint_name = f"{name}"
 
             our_model.push_to_hub(
                 repo_path_or_name=save_directory / checkpoint_name,
