@@ -143,7 +143,7 @@ class ResNetEmbeddings3x3(nn.Sequential):
     Networks](https://arxiv.org/pdf/1812.01187.pdf) The observation is that the computational cost of a convolution is
     quadratic to the kernel width or height. A `7x7` convolution is `5.4` times more expensive than a `3x3`
     convolution. So this tweak replacing the `7x7` convolution in the input stem with three conservative `3x3`
-    convolution.
+    convolution. Using this layer without changing anything else will result in ResNet version C.
     """
 
     def __init__(
