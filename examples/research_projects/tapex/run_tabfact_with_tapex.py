@@ -42,7 +42,7 @@ from transformers import (
     Trainer,
     TrainingArguments,
     default_data_collator,
-    set_seed,
+    set_seed
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
@@ -308,9 +308,8 @@ def main():
         padding = False
 
     # Some models have set the order of the labels to use, so let's make sure we do use it.
-    label_to_id = {v: i for i, v in enumerate(label_list)}
-    model.config.label2id = label_to_id
-    model.config.id2label = {id: label for label, id in config.label2id.items()}
+    model.config.label2id = {"Refused": 0, "Entailed": 1}
+    model.config.id2label = {0: "Refused", 1: "Entailed"}
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
@@ -394,7 +393,7 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
-        data_collator=data_collator,
+        data_collator=data_collator
     )
 
     # Training
