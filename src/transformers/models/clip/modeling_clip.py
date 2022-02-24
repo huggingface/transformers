@@ -572,7 +572,7 @@ class CLIPEncoder(nn.Module):
                     output_attentions=output_attentions,
                 )
 
-                hidden_states = layer_outputs[0]
+            hidden_states = layer_outputs[0]
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
