@@ -57,11 +57,12 @@ class FastSpeech2Tokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         bos_token="<s>",
         eos_token="</s>",
+        pad_token="<pad>",
         do_phonemize=True,
         preserve_punctuation=False,
         **kwargs
     ):
-        super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
+        super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, pad_token=pad_token, **kwargs)
         self.do_phonemize = do_phonemize
         self.preserve_punctuation = preserve_punctuation
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -104,7 +105,9 @@ class FastSpeech2Tokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        return self.encoder.get(token, )
+        return self.encoder.get(
+            token,
+        )
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
