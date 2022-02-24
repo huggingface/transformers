@@ -16,17 +16,25 @@ import warnings
 from inspect import signature
 from itertools import chain
 from pathlib import Path
-from typing import Iterable, List, Tuple, Union
+from typing import TYPE_CHECKING, Iterable, List, Tuple, Union
 
 import numpy as np
 from packaging.version import Version, parse
 
-from transformers import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
-from transformers.file_utils import is_tf_available, is_torch_onnx_dict_inputs_support_available
-from transformers.onnx.config import OnnxConfig
-from transformers.utils import logging
+from ..file_utils import TensorType, is_tf_available, is_torch_available, is_torch_onnx_dict_inputs_support_available
+from ..utils import logging
+from .config import OnnxConfig
 
-from ..feature_extraction_utils import FeatureExtractionMixin
+
+if is_torch_available():
+    from ..modeling_utils import PreTrainedModel
+
+if is_tf_available():
+    from ..modeling_tf_utils import TFPreTrainedModel
+
+if TYPE_CHECKING:
+    from ..feature_extraction_utils import FeatureExtractionMixin
+    from ..tokenization_utils import PreTrainedTokenizer
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -66,12 +74,12 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 
 def export_pytorch(
-    preprocessor: Union[PreTrainedTokenizer, FeatureExtractionMixin],
-    model: PreTrainedModel,
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    model: "PreTrainedModel",
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: PreTrainedTokenizer = None,
+    tokenizer: "PreTrainedTokenizer" = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a PyTorch model to an ONNX Intermediate Representation (IR)
@@ -161,12 +169,12 @@ def export_pytorch(
 
 
 def export_tensorflow(
-    preprocessor: Union[PreTrainedTokenizer, FeatureExtractionMixin],
-    model: TFPreTrainedModel,
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    model: "TFPreTrainedModel",
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: PreTrainedTokenizer = None,
+    tokenizer: "PreTrainedTokenizer" = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a TensorFlow model to an ONNX Intermediate Representation (IR)
@@ -221,12 +229,12 @@ def export_tensorflow(
 
 
 def export(
-    preprocessor: Union[PreTrainedTokenizer, FeatureExtractionMixin],
-    model: Union[PreTrainedModel, TFPreTrainedModel],
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    model: Union["PreTrainedModel", "TFPreTrainedModel"],
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: PreTrainedTokenizer = None,
+    tokenizer: "PreTrainedTokenizer" = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a Pytorch or TensorFlow model to an ONNX Intermediate Representation (IR)
@@ -277,12 +285,12 @@ def export(
 
 def validate_model_outputs(
     config: OnnxConfig,
-    preprocessor: Union[PreTrainedTokenizer, FeatureExtractionMixin],
-    reference_model: Union[PreTrainedModel, TFPreTrainedModel],
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    reference_model: Union["PreTrainedModel", "TFPreTrainedModel"],
     onnx_model: Path,
     onnx_named_outputs: List[str],
     atol: float,
-    tokenizer: PreTrainedTokenizer = None,
+    tokenizer: "PreTrainedTokenizer" = None,
 ):
     from onnxruntime import InferenceSession, SessionOptions
 
@@ -375,7 +383,7 @@ def validate_model_outputs(
 
 
 def ensure_model_and_config_inputs_match(
-    model: Union[PreTrainedModel, TFPreTrainedModel], model_inputs: Iterable[str]
+    model: Union["PreTrainedModel", "TFPreTrainedModel"], model_inputs: Iterable[str]
 ) -> Tuple[bool, List[str]]:
     """
 

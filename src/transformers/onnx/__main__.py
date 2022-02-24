@@ -15,10 +15,9 @@
 from argparse import ArgumentParser
 from pathlib import Path
 
-from transformers import AutoConfig, AutoFeatureExtractor, AutoTokenizer
-from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
-from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
-
+from ..models.auto import AutoConfig, AutoFeatureExtractor, AutoTokenizer
+from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
+from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from ..utils import logging
 from .convert import export, validate_model_outputs
 from .features import FeaturesManager

@@ -16,17 +16,20 @@ import dataclasses
 import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 import numpy as np
 from packaging import version
 
-from ..configuration_utils import PretrainedConfig
 from ..feature_extraction_utils import FeatureExtractionMixin
 from ..file_utils import TensorType, is_torch_available, is_vision_available
 from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import logging
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
+
+
+if TYPE_CHECKING:
+    from ..configuration_utils import PretrainedConfig
 
 
 if is_vision_available():
@@ -87,7 +90,7 @@ class OnnxConfig(ABC):
         "image-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
     }
 
-    def __init__(self, config: PretrainedConfig, task: str = "default", patching_specs: List[PatchingSpec] = None):
+    def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: List[PatchingSpec] = None):
         self._config = config
 
         if task not in self._tasks_to_common_outputs:
@@ -104,7 +107,7 @@ class OnnxConfig(ABC):
             self._patching_specs.append(final_spec)
 
     @classmethod
-    def from_model_config(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfig":
+    def from_model_config(cls, config: "PretrainedConfig", task: str = "default") -> "OnnxConfig":
         """
         Instantiate a OnnxConfig for a specific model
 
@@ -336,7 +339,7 @@ class OnnxConfig(ABC):
 class OnnxConfigWithPast(OnnxConfig, ABC):
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: "PretrainedConfig",
         task: str = "default",
         patching_specs: List[PatchingSpec] = None,
         use_past: bool = False,
@@ -345,7 +348,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         self.use_past = use_past
 
     @classmethod
-    def with_past(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfigWithPast":
+    def with_past(cls, config: "PretrainedConfig", task: str = "default") -> "OnnxConfigWithPast":
         """
         Instantiate a OnnxConfig with `use_past` attribute set to True
 
