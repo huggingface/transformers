@@ -13,7 +13,7 @@ cvt_hugging_config = CvtConfig()
 model1 = CvtForImageClassification(cvt_hugging_config)
 model3 = CVT(spec=original_config['MODEL']['SPEC'])
 
-model1.load_state_dict(torch.load('microsoft-cvt-huggingface.pth'))
+model1.load_state_dict(torch.load('anugunj/cvt-base-patch13-224.pth'))
 model2 = BeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224")
 model3.load_state_dict(torch.load('CvT-13-224x224-IN-1k.pth', map_location=torch.device('cpu')))
 
