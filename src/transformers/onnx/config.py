@@ -195,7 +195,7 @@ class OnnxConfig(ABC):
         The minimum PyTorch version required to export the model.
 
         Returns:
-            `bool`:
+            `bool`: Whether the installed version of PyTorch is compatible with the model.
         """
         if is_torch_available():
             from transformers.file_utils import torch_version
