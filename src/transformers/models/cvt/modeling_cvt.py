@@ -26,10 +26,11 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from einops import rearrange
 from einops.layers.torch import Rearrange
+from dataclasses import dataclass
 
 from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput, SequenceClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_cvt import CvtConfig
@@ -43,7 +44,7 @@ _FEAT_EXTRACTOR_FOR_DOC = "CvtFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/cvt-base-patch13-224-in1k"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+_EXPECTED_OUTPUT_SHAPE = [1, 384, 14, 14]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "microsoft/cvt-base-patch13-224"
@@ -51,7 +52,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby cat'"
 
 
 CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/cvt-base-patch13-224",
+    "anugunj/testcvtmodel",
     # See all Cvt models at https://huggingface.co/models?filter=cvt
 ]
 
@@ -138,10 +139,7 @@ def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
     return _no_grad_trunc_normal_(tensor, mean, std, a, b)
 
 
-class QuickGELU(nn.Module):
-    def forward(self, x: torch.Tensor):
-        return x * torch.sigmoid(1.702 * x)
-
+@dataclass
 class BaseModelOutputWithCLSToken(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states and attentions.
@@ -655,7 +653,6 @@ class CvtModel(CvtPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.encoder = CvtEncoder(config)
-        self.layernorm = nn.LayerNorm(config.embed_dim[-1])
         self.pooler = CvtPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
@@ -673,7 +670,7 @@ class CvtModel(CvtPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
+        output_type=BaseModelOutputWithCLSToken,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -710,22 +707,13 @@ class CvtModel(CvtPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        cls_token = encoder_outputs[1]
-        
-        if self.config.cls_token[-1]:
-            sequence_output = self.layernorm(cls_token)
-            pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-        else:
-            sequence_output = rearrange(sequence_output, 'b c h w -> b (h w) c')
-            sequence_output = self.layernorm(sequence_output)
-            pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[2:]
+            return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithCLSToken(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
+            cls_token_value=encoder_outputs.cls_token_value,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -757,7 +745,7 @@ class CvtForImageClassification(CvtPreTrainedModel):
 
         self.num_labels = config.num_labels
         self.cvt = CvtModel(config, add_pooling_layer=False)
-
+        self.layernorm = nn.LayerNorm(config.embed_dim[-1])
         # Classifier head
         self.classifier = nn.Linear(config.embed_dim[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
 
@@ -798,6 +786,13 @@ class CvtForImageClassification(CvtPreTrainedModel):
         )
 
         sequence_output = outputs[0]
+        cls_token = outputs[1]
+        if self.config.cls_token[-1]:
+            sequence_output = self.layernorm(cls_token)
+        else:
+            sequence_output = rearrange(sequence_output, 'b c h w -> b (h w) c')
+            sequence_output = self.layernorm(sequence_output)
+
         sequence_output_mean = sequence_output.mean(dim=1)
         logits = self.classifier(sequence_output_mean)
 
