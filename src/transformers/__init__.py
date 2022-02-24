@@ -148,6 +148,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -635,6 +636,14 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
+    _import_structure["models.decision_transformer"].extend(
+        [
+            "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DecisionTransformerModel",
+            "DecisionTransformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2494,6 +2503,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.decision_transformer import DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, DecisionTransformerConfig
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2854,6 +2864,7 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -3126,6 +3137,11 @@ if TYPE_CHECKING:
             DebertaV2ForTokenClassification,
             DebertaV2Model,
             DebertaV2PreTrainedModel,
+        )
+        from .models.decision_transformer import (
+            DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DecisionTransformerModel,
+            DecisionTransformerPreTrainedModel,
         )
         from .models.deit import (
             DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,

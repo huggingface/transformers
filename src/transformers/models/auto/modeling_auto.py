@@ -30,6 +30,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         # Base model mapping
         ("glpn", "GLPNModel"),
         ("maskformer", "MaskFormerModel"),
+        ("decision_transformer", "DecisionTransformerModel"),
         ("poolformer", "PoolFormerModel"),
         ("convnext", "ConvNextModel"),
         ("van", "VanModel"),
