@@ -266,7 +266,7 @@ def export(
 
         if not config.is_torch_support_available:
             raise ImportError(
-                f"Unsupported PyTorch version for this model. Minimum required is {config.TORCH_ONNX_MINIMUM_VERSION}, got: {torch_version}"
+                f"Unsupported PyTorch version for this model. Minimum required is {config.torch_onnx_minimum_version}, got: {torch_version}"
             )
 
     if is_torch_available() and issubclass(type(model), PreTrainedModel):

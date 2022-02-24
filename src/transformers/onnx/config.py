@@ -64,11 +64,10 @@ class OnnxConfig(ABC):
     Base class for ONNX exportable model describing metadata on how to export the model through the ONNX format.
     """
 
-    DEFAULT_FIXED_BATCH = 2
-    DEFAULT_FIXED_SEQUENCE = 8
-    TORCH_ONNX_MINIMUM_VERSION = version.parse("1.8")
-
-    _TASKS_TO_COMMON_OUTPUTS = {
+    default_fixed_batch = 2
+    default_fixed_sequence = 8
+    torch_onnx_minimum_version = version.parse("1.8")
+    _tasks_to_common_outputs = {
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
         "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
@@ -88,9 +87,9 @@ class OnnxConfig(ABC):
     def __init__(self, config: PretrainedConfig, task: str = "default", patching_specs: List[PatchingSpec] = None):
         self._config = config
 
-        if task not in self._TASKS_TO_COMMON_OUTPUTS:
+        if task not in self._tasks_to_common_outputs:
             raise ValueError(
-                f"{task} is not a supported task, supported tasks: {self._TASKS_TO_COMMON_OUTPUTS.keys()}"
+                f"{task} is not a supported task, supported tasks: {self._tasks_to_common_outputs.keys()}"
             )
         self.task = task
 
@@ -133,7 +132,7 @@ class OnnxConfig(ABC):
         Returns:
             For each output: its name associated to the axes symbolic name and the axis position within the tensor
         """
-        common_outputs = self._TASKS_TO_COMMON_OUTPUTS[self.task]
+        common_outputs = self._tasks_to_common_outputs[self.task]
         return copy.deepcopy(common_outputs)
 
     @property
@@ -158,7 +157,7 @@ class OnnxConfig(ABC):
             Integer > 0
         """
         # Using 2 avoid ONNX making assumption about single sample batch
-        return OnnxConfig.DEFAULT_FIXED_BATCH
+        return OnnxConfig.default_fixed_batch
 
     @property
     def default_sequence_length(self) -> int:
@@ -168,7 +167,7 @@ class OnnxConfig(ABC):
         Returns:
             Integer > 0
         """
-        return OnnxConfig.DEFAULT_FIXED_SEQUENCE
+        return OnnxConfig.default_fixed_sequence
 
     @property
     def default_onnx_opset(self) -> int:
@@ -196,12 +195,12 @@ class OnnxConfig(ABC):
         The minimum PyTorch version required to export the model.
 
         Returns:
-            Bool
+            `bool`:
         """
         if is_torch_available():
             from transformers.file_utils import torch_version
 
-            return torch_version >= self.TORCH_ONNX_MINIMUM_VERSION
+            return torch_version >= self.torch_onnx_minimum_version
         else:
             return False
 
@@ -280,13 +279,13 @@ class OnnxConfig(ABC):
                 preprocessor = tokenizer
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
             batch_size = compute_effective_axis_dimension(
-                batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH, num_token_to_add=0
+                batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
             )
 
             # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
             token_to_add = preprocessor.num_special_tokens_to_add(is_pair)
             seq_length = compute_effective_axis_dimension(
-                seq_length, fixed_dimension=OnnxConfig.DEFAULT_FIXED_SEQUENCE, num_token_to_add=token_to_add
+                seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
             )
 
             # Generate dummy inputs according to compute batch and sequence
@@ -295,7 +294,7 @@ class OnnxConfig(ABC):
         # TODO(lewtun): Find a way to distinguish vision and audio modalities since both have the same preprocessor type
         elif isinstance(preprocessor, FeatureExtractionMixin):
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
-            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH)
+            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
             dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
             return dict(preprocessor(images=dummy_input, return_tensors=framework))
         else:
