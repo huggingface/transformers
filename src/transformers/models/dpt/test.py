@@ -2,6 +2,7 @@ import torch
 
 from transformers import DPTConfig, DPTForDepthEstimation
 
+
 config = DPTConfig()
 config.image_size = 384
 config.hidden_size = 1024

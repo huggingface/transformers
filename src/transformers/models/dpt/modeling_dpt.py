@@ -34,7 +34,12 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    SemanticSegmentationModelOutput,
+    SequenceClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_dpt import DPTConfig
@@ -507,29 +512,29 @@ class DPTPreActResidualConvUnit(nn.Module):
         )
 
         if self.use_batch_norm:
-            self.batch_norm_1 = nn.BatchNorm2d(config.channels)
-            self.batch_norm_2 = nn.BatchNorm2d(config.channels)
+            self.batch_norm1 = nn.BatchNorm2d(config.channels)
+            self.batch_norm2 = nn.BatchNorm2d(config.channels)
 
     def forward(self, inputs):
         inputs_ = inputs.clone()
         x = self.act1(inputs)
 
-        print("Output after first relu:", x[0,:3,:3,:3])
+        print("Output after first relu:", x[0, :3, :3, :3])
 
         x = self.conv1(x)
 
         if self.use_batch_norm:
-            x = self.batch_norm_1(x)
+            x = self.batch_norm1(x)
 
-        print("Output after first relu + conv:", x[0,:3,:3,:3])
+        print("Output after first relu + conv:", x[0, :3, :3, :3])
 
         x = self.act2(x)
         x = self.conv2(x)
 
         if self.use_batch_norm:
-            x = self.batch_norm_2(x)
+            x = self.batch_norm2(x)
 
-        print("Output after 2 convs and 2 relu's:", x[0,:3,:3,:3])
+        print("Output after 2 convs and 2 relu's:", x[0, :3, :3, :3])
 
         return x + inputs_
 
@@ -565,7 +570,7 @@ class DPTFeatureFusionBlock(nn.Module):
 
     def forward(self, *inputs):
         x = inputs[0]
-        print("First elements of x before res conv unit 1:", x[0,:3,:3,:3])
+        print("First elements of x before res conv unit 1:", x[0, :3, :3, :3])
         if len(inputs) == 2:
             if x.shape != inputs[1].shape:
                 res = nn.functional.interpolate(
@@ -574,19 +579,19 @@ class DPTFeatureFusionBlock(nn.Module):
             else:
                 res = inputs[1]
             x = x + self.res_conv_unit1(res)
-        
-        print("First elements of x before res conv unit 2:", x[0,:3,:3,:3])
+
+        print("First elements of x before res conv unit 2:", x[0, :3, :3, :3])
         x = self.res_conv_unit2(x)
-        
-        print("First elements of x after res conv unit 2:", x[0,:3,:3,:3])
-        
+
+        print("First elements of x after res conv unit 2:", x[0, :3, :3, :3])
+
         x = nn.functional.interpolate(x, scale_factor=2, mode="bilinear", align_corners=self.align_corners)
 
-        print("First elements of x after interpolation:", x[0,:3,:3,:3])
+        print("First elements of x after interpolation:", x[0, :3, :3, :3])
 
         x = self.project(x)
 
-        print("First elements of x after projection:", x[0,:3,:3,:3])
+        print("First elements of x after projection:", x[0, :3, :3, :3])
 
         return x
 
@@ -666,7 +671,7 @@ class DPTModel(DPTPreTrainedModel):
         self.embeddings = DPTViTEmbeddings(config)
         self.encoder = DPTViTEncoder(config)
 
-        #self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = DPTViTPooler(config) if add_pooling_layer else None
 
         # postprocessing
@@ -683,7 +688,7 @@ class DPTModel(DPTPreTrainedModel):
         self.fusion_blocks = nn.ModuleList()
         for _ in range(len(self.convs)):
             self.fusion_blocks.append(DPTFeatureFusionBlock(config))
-        self.fusion_blocks[0].res_conv_unit1 = None # not sure why this is done in mmseg
+        self.fusion_blocks[0].res_conv_unit1 = None  # not sure why this is done in mmseg
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -751,32 +756,32 @@ class DPTModel(DPTPreTrainedModel):
         print("ViT features:")
         for idx, tensor in enumerate(features):
             print(tensor.shape)
-            print(f"Layer {idx+1}:", tensor[0,:3,:3])
-        
+            print(f"Layer {idx+1}:", tensor[0, :3, :3])
+
         # postprocess features
         features = self.reassemble_blocks(features)
 
         print("After postprocessing:")
         for idx, tensor in enumerate(features):
             print(tensor.shape)
-            print(f"Layer {idx+1}:", tensor[0,:3,:3,:3])
+            print(f"Layer {idx+1}:", tensor[0, :3, :3, :3])
 
         features = [self.convs[i](feature) for i, feature in enumerate(features)]
 
         print("After convs:")
         for idx, tensor in enumerate(features):
             print(tensor.shape)
-            print(f"Layer {idx+1}:", tensor[0,:3,:3,:3])
-        
+            print(f"Layer {idx+1}:", tensor[0, :3, :3, :3])
+
         # fusion
         out = self.fusion_blocks[0](features[-1])
-        print("First elements after first fusion:", out[0,:3,:3,:3])
+        print("First elements after first fusion:", out[0, :3, :3, :3])
         for i in range(1, len(self.fusion_blocks)):
             out = self.fusion_blocks[i](out, features[-(i + 1)])
 
         print("Shape after fusion:", out.shape)
-        print("First elements after fusion:", out[0,:3,:3,:3])
-        
+        print("First elements after fusion:", out[0, :3, :3, :3])
+
         if not return_dict:
             return (out,) + encoder_outputs[1:]
 
@@ -839,7 +844,7 @@ class DPTInterpolate(nn.Module):
 
 @add_start_docstrings(
     """
-    DPT Model transformer with a depth estimation head an output head (consisting of 3 convolutional layers on top) e.g. for KITTI, NYUv2.
+    DPT Model with a depth estimation head on top (consisting of 3 convolutional layers) e.g. for KITTI, NYUv2.
     """,
     DPT_START_DOCSTRING,
 )
@@ -877,8 +882,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+            Ground truth depth estimation maps for computing the loss.
 
         Returns:
 
@@ -890,11 +894,13 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
-        >>> model = DPTForDepthEstimation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("islorg/dpt-large-ade")
+        >>> model = DPTForDepthEstimation.from_pretrained("islorg/dpt-large-ade")
+
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
+
         >>> outputs = model(**inputs)
-        >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -913,7 +919,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         logits = self.head(outputs.last_hidden_state)
         logits = logits.squeeze(dim=1)
 
-        print("First elements of logits:", logits[0,:3,:3])
+        print("First elements of logits:", logits[0, :3, :3])
 
         loss = None
         if labels is not None:
@@ -924,6 +930,109 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    DPT Model with a semantic segmentation head on top e.g. for ADE20k, CityScapes.
+    """,
+    DPT_START_DOCSTRING,
+)
+class DPTForSemanticSegmentation(DPTPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.dpt = DPTModel(config, add_pooling_layer=False)
+
+        # Segmentation head + auxiliary head
+        features = config.channels
+        self.head = nn.Sequential(
+            nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(features),
+            nn.ReLU(True),
+            nn.Dropout(0.1, False),
+            nn.Conv2d(features, self.num_labels, kernel_size=1),
+            DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
+        )
+
+        self.auxlayer = nn.Sequential(
+            nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(features),
+            nn.ReLU(True),
+            nn.Dropout(0.1, False),
+            nn.Conv2d(features, self.num_labels, kernel_size=1),
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(DPT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SemanticSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values=None,
+        head_mask=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples:
+        ```python
+        >>> from transformers import AutoFeatureExtractor, DPTForSemanticSegmentation
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        >>> model = DPTForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        outputs = self.dpt(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=True,  # we need the intermediate hidden states
+            return_dict=return_dict,
+        )
+
+        logits = self.head(outputs.last_hidden_state)
+
+        print("First elements of logits:", logits[0, :3, :3])
+
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not implemented yet")
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SemanticSegmentationModelOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,

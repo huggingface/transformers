@@ -21,13 +21,12 @@ from pathlib import Path
 
 import torch
 from PIL import Image
+from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import DPTConfig, DPTForDepthEstimation
+from transformers import DPTConfig, DPTForDepthEstimation, DPTForSemanticSegmentation
 from transformers.utils import logging
-
-from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 
 
 logging.set_verbosity_info()
@@ -45,7 +44,16 @@ def get_dpt_config(checkpoint_url):
         config.out_indices = [5, 11, 17, 23]
         config.post_process_channels = [256, 512, 1024, 1024]
 
-    # TODO set id2label and label2id
+    if "ade" in checkpoint_url:
+        config.use_batch_norm = True
+
+        config.num_labels = 150
+        repo_id = "datasets/huggingface/label-files"
+        filename = "ade20k-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
 
     return config
 
@@ -62,7 +70,12 @@ def remove_ignore_keys_(state_dict):
 
 
 def rename_key(name):
-    if "pretrained.model" in name and "cls_token" not in name and "pos_embed" not in name and "patch_embed" not in name:
+    if (
+        "pretrained.model" in name
+        and "cls_token" not in name
+        and "pos_embed" not in name
+        and "patch_embed" not in name
+    ):
         name = name.replace("pretrained.model", "dpt.encoder")
     if "pretrained.model" in name:
         name = name.replace("pretrained.model", "dpt.embeddings")
@@ -97,7 +110,7 @@ def rename_key(name):
     if "layer4_rn" in name:
         name = name.replace("layer4_rn", "convs.3")
     if "refinenet" in name:
-        layer_idx = int(name[len("dpt.refinenet"):len("dpt.refinenet") + 1])
+        layer_idx = int(name[len("dpt.refinenet") : len("dpt.refinenet") + 1])
         # tricky here: we need to map 4 to 0, 3 to 1, 2 to 2 and 1 to 3
         name = name.replace(f"refinenet{layer_idx}", f"fusion_blocks.{abs(layer_idx-4)}")
     if "out_conv" in name:
@@ -132,6 +145,8 @@ def rename_key(name):
         name = name.replace("act_postprocess4.3", "reassemble_blocks.projects.3")
     if "act_postprocess4.4" in name:
         name = name.replace("act_postprocess4.4", "reassemble_blocks.resize_layers.3")
+    if "bn" in name:
+        name = name.replace("bn", "batch_norm")
 
     return name
 
@@ -143,9 +158,7 @@ def read_in_q_k_v(state_dict, config):
         in_proj_weight = state_dict.pop(f"dpt.encoder.layer.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"dpt.encoder.layer.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"dpt.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
+        state_dict[f"dpt.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
         state_dict[f"dpt.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
         state_dict[f"dpt.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             config.hidden_size : config.hidden_size * 2, :
@@ -186,7 +199,7 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     read_in_q_k_v(state_dict, config)
 
     # load HuggingFace model
-    model = DPTForDepthEstimation(config)
+    model = DPTForSemanticSegmentation(config) if "ade" in checkpoint_url else DPTForDepthEstimation(config)
     model.load_state_dict(state_dict)
     model.eval()
 
@@ -194,30 +207,32 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     # TODO prepare image by DPTFeatureExtractor
     image = prepare_img()
 
-    transform = Compose([
-        Resize((384, 384)),
-        ToTensor(),
-        Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-    ])
+    transform = Compose(
+        [
+            Resize((384, 384)),
+            ToTensor(),
+            Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+        ]
+    )
     pixel_values = transform(image).unsqueeze(0)
 
     # forward pass
     logits = model(pixel_values).logits
 
     print("Shape of logits:", logits.shape)
-    print("First elements of logits:", logits[0,:3,:3])
+    print("First elements of logits:", logits[0, :3, :3])
 
-    # TODO assert logits
-    expected_slice = torch.tensor([[6.3199, 6.3629, 6.4148],
-        [6.3850, 6.3615, 6.4166],
-        [6.3519, 6.3176, 6.3575]])
-    assert torch.allclose(logits[0,:3,:3], expected_slice)
+    # Tassert logits
+    expected_slice = torch.tensor([[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]])
+    if "ade" in checkpoint_url:
+        expected_slice = torch.tensor([])
+    assert torch.allclose(logits[0, :3, :3], expected_slice)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    #print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    #feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print("Pushing model to hub...")
@@ -252,7 +267,6 @@ if __name__ == "__main__":
         required=False,
         help="Whether to push the model to the hub.",
     )
-
 
     args = parser.parse_args()
     convert_dpt_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)

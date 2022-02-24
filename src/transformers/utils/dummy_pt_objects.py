@@ -1614,6 +1614,13 @@ class DPTForDepthEstimation(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class DPTForSemanticSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class DPTLayer(metaclass=DummyObject):
     _backends = ["torch"]
 

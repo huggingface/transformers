@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DPTForDepthEstimation, DPTModel
+    from transformers import DPTForDepthEstimation, DPTModel, DPTForSemanticSegmentation
     from transformers.models.dpt.modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
@@ -129,6 +129,14 @@ class DPTModelTester:
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
+    def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels):
+        config.num_labels = self.type_sequence_label_size
+        model = DPTForSemanticSegmentation(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -151,6 +159,7 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
         (
             DPTModel,
             DPTForDepthEstimation,
+            DPTForSemanticSegmentation,
         )
         if is_torch_available()
         else ()
@@ -196,6 +205,14 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_for_depth_estimation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
+
+    def test_model_for_semantic_segmentation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -32,6 +32,7 @@ if is_torch_available():
     _import_structure["modeling_dpt"] = [
         "DPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DPTForDepthEstimation",
+        "DPTForSemanticSegmentation",
         "DPTLayer",
         "DPTModel",
         "DPTPreTrainedModel",
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
         from .modeling_dpt import (
             DPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DPTForDepthEstimation,
+            DPTForSemanticSegmentation,
             DPTLayer,
             DPTModel,
             DPTPreTrainedModel,
