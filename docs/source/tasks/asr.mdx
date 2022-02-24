@@ -93,7 +93,7 @@ The preprocessing function needs to:
 ...     audio = batch["audio"]
     
 ...     batch["input_values"] = processor(audio["array"], sampling_rate=16000).input_values[0]
-...     batch["input_length"] = len(batch["input_values"]
+...     batch["input_length"] = len(batch["input_values"])
 
 ...     with processor.as_target_processor():
 ...          batch["labels"] = processor(batch["text"]).input_ids
