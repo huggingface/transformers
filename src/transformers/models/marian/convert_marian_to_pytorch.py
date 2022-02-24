@@ -360,9 +360,9 @@ def _parse_readme(lns):
     return subres
 
 
-def save_tokenizer_config(dest_dir: Path):
+def save_tokenizer_config(dest_dir: Path, separate_vocabs=False):
     dname = dest_dir.name.split("-")
-    dct = dict(target_lang=dname[-1], source_lang="-".join(dname[:-1]))
+    dct = dict(target_lang=dname[-1], source_lang="-".join(dname[:-1]), separate_vocabs=separate_vocabs)
     save_json(dct, dest_dir / "tokenizer_config.json")
 
 
@@ -381,13 +381,33 @@ def find_vocab_file(model_dir):
     return list(model_dir.glob("*vocab.yml"))[0]
 
 
-def add_special_tokens_to_vocab(model_dir: Path) -> None:
-    vocab = load_yaml(find_vocab_file(model_dir))
-    vocab = {k: int(v) for k, v in vocab.items()}
-    num_added = add_to_vocab_(vocab, ["<pad>"])
-    print(f"added {num_added} tokens to vocab")
-    save_json(vocab, model_dir / "vocab.json")
-    save_tokenizer_config(model_dir)
+def find_src_vocab_file(model_dir):
+    return list(model_dir.glob("*src.vocab.yml"))[0]
+
+
+def find_tgt_vocab_file(model_dir):
+    return list(model_dir.glob("*trg.vocab.yml"))[0]
+
+
+def add_special_tokens_to_vocab(model_dir: Path, separate_vocab=False) -> None:
+    if separate_vocab:
+        vocab = load_yaml(find_src_vocab_file(model_dir))
+        vocab = {k: int(v) for k, v in vocab.items()}
+        num_added = add_to_vocab_(vocab, ["<pad>"])
+        save_json(vocab, model_dir / "vocab.json")
+
+        vocab = load_yaml(find_tgt_vocab_file(model_dir))
+        vocab = {k: int(v) for k, v in vocab.items()}
+        num_added = add_to_vocab_(vocab, ["<pad>"])
+        save_json(vocab, model_dir / "vocab-target.json")
+        save_tokenizer_config(model_dir, separate_vocabs=separate_vocab)
+    else:
+        vocab = load_yaml(find_vocab_file(model_dir))
+        vocab = {k: int(v) for k, v in vocab.items()}
+        num_added = add_to_vocab_(vocab, ["<pad>"])
+        print(f"added {num_added} tokens to vocab")
+        save_json(vocab, model_dir / "vocab.json")
+        save_tokenizer_config(model_dir)
 
 
 def check_equal(marian_cfg, k1, k2):
@@ -464,6 +484,7 @@ class OpusState:
         if "Wpos" in self.state_dict:
             raise ValueError("Wpos key in state dictionary")
         self.state_dict = dict(self.state_dict)
+        self.share_encoder_decoder_embeddings = cfg["tied-embeddings-src"]
         if cfg["tied-embeddings-src"]:
             self.wemb, self.final_bias = add_emb_entries(self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
             self.pad_token_id = self.wemb.shape[0] - 1
@@ -475,8 +496,8 @@ class OpusState:
             )
             # still assuming that vocab size is same for encoder and decoder
             self.pad_token_id = self.wemb.shape[0] - 1
-            cfg["src_vocab_size"] = self.pad_token_id + 1
-            cfg["tgt_vocab_size"] = self.pad_token_id + 1
+            cfg["vocab_size"] = self.pad_token_id + 1
+            cfg["decoder_vocab_size"] = self.pad_token_id + 1
 
         # self.state_dict['Wemb'].sha
         self.state_keys = list(self.state_dict.keys())
@@ -493,8 +514,8 @@ class OpusState:
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
         check_marian_cfg_assumptions(cfg)
         self.hf_config = MarianConfig(
-            vocab_size=cfg.get("vocab_size", cfg["src_vocab_size"]),
-            decoder_vocab_size=cfg.get("tgt_vocab_size", cfg["vocab_size"]),
+            vocab_size=cfg["vocab_size"],
+            decoder_vocab_size=cfg.get("decoder_vocab_size", cfg["vocab_size"]),
             share_encoder_decoder_embeddings=cfg["tied-embeddings-src"],
             decoder_layers=cfg["dec-depth"],
             encoder_layers=cfg["enc-depth"],
@@ -512,6 +533,7 @@ class OpusState:
             scale_embedding=True,
             normalize_embedding="n" in cfg["transformer-preprocess"],
             static_position_embeddings=not cfg["transformer-train-position-embeddings"],
+            tie_word_embeddings=cfg["tied-embeddings"],
             dropout=0.1,  # see opus-mt-train repo/transformer-dropout param.
             # default: add_final_layer_norm=False,
             num_beams=decoder_yml["beam-size"],
@@ -593,8 +615,12 @@ class OpusState:
 
         if self.extra_keys:
             raise ValueError(f"Failed to convert {self.extra_keys}")
-        if model.model.shared.padding_idx != self.pad_token_id:
-            raise ValueError(f"Padding tokens {model.model.shared.padding_idx} and {self.pad_token_id} mismatched")
+
+        # TODO: check this for decoder embeddings as well
+        if model.get_input_embeddings().padding_idx != self.pad_token_id:
+            raise ValueError(
+                f"Padding tokens {model.get_input_embeddings().padding_idx} and {self.pad_token_id} mismatched"
+            )
         return model
 
 
@@ -613,16 +639,24 @@ def convert(source_dir: Path, dest_dir):
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(exist_ok=True)
 
-    add_special_tokens_to_vocab(source_dir)
+    # add_special_tokens_to_vocab(source_dir)
+    # tokenizer = MarianTokenizer.from_pretrained(str(source_dir))
+    # tokenizer.save_pretrained(dest_dir)
+
+    # retrieve EOS token and set correctly
+    # tokenizer_has_eos_token_id = hasattr(tokenizer, "eos_token_id") and tokenizer.eos_token_id is not None
+    # eos_token_id = tokenizer.eos_token_id if tokenizer_has_eos_token_id else 0
+    # TODO: ^^
+    eos_token_id = 2
+
+    opus_state = OpusState(source_dir, eos_token_id=eos_token_id)
+
+    # save tokenizer
+    add_special_tokens_to_vocab(source_dir, not opus_state.share_encoder_decoder_embeddings)
     tokenizer = MarianTokenizer.from_pretrained(str(source_dir))
     tokenizer.save_pretrained(dest_dir)
 
-    # retrieve EOS token and set correctly
-    tokenizer_has_eos_token_id = hasattr(tokenizer, "eos_token_id") and tokenizer.eos_token_id is not None
-    eos_token_id = tokenizer.eos_token_id if tokenizer_has_eos_token_id else 0
-
-    opus_state = OpusState(source_dir, eos_token_id=eos_token_id)
-    if opus_state.cfg["vocab_size"] != len(tokenizer.encoder):
+    if opus_state.cfg["vocab_size"] != tokenizer.vocab_size:
         raise ValueError(
             f"Original vocab size {opus_state.cfg['vocab_size']} and new vocab size {len(tokenizer.encoder)} mismatched"
         )
