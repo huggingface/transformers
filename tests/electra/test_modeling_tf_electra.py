@@ -101,7 +101,7 @@ class TFElectraModelTester:
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-    def create_and_check_electra_model(
+    def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFElectraModel(config=config)
@@ -115,7 +115,55 @@ class TFElectraModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_electra_for_masked_lm(
+    def create_and_check_causal_lm_base_model(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.is_decoder = True
+
+        model = TFElectraModel(config=config)
+        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+        result = model(inputs)
+
+        inputs = [input_ids, input_mask]
+        result = model(inputs)
+
+        result = model(input_ids)
+
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    def create_and_check_model_as_decoder(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        config.add_cross_attention = True
+
+        model = TFElectraModel(config=config)
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+            "encoder_hidden_states": encoder_hidden_states,
+            "encoder_attention_mask": encoder_attention_mask,
+        }
+        result = model(inputs)
+
+        inputs = [input_ids, input_mask]
+        result = model(inputs, token_type_ids=token_type_ids, encoder_hidden_states=encoder_hidden_states)
+
+        # Also check the case where encoder outputs are not passed
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFElectraForMaskedLM(config=config)
@@ -123,7 +171,7 @@ class TFElectraModelTester:
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_electra_for_pretraining(
+    def create_and_check_for_pretraining(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFElectraForPreTraining(config=config)
@@ -131,7 +179,7 @@ class TFElectraModelTester:
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
 
-    def create_and_check_electra_for_sequence_classification(
+    def create_and_check_for_sequence_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
@@ -140,7 +188,7 @@ class TFElectraModelTester:
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_electra_for_multiple_choice(
+    def create_and_check_for_multiple_choice(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
@@ -156,7 +204,7 @@ class TFElectraModelTester:
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
-    def create_and_check_electra_for_question_answering(
+    def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFElectraForQuestionAnswering(config=config)
@@ -165,7 +213,7 @@ class TFElectraModelTester:
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
-    def create_and_check_electra_for_token_classification(
+    def create_and_check_for_token_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
@@ -215,33 +263,50 @@ class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_electra_model(self):
+    def test_model(self):
+        """Test the base model"""
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_electra_model(*config_and_inputs)
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_causal_lm_base_model(self):
+        """Test the base model of the causal LM model
+
+        is_deocder=True, no cross_attention, no encoder outputs
+        """
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_causal_lm_base_model(*config_and_inputs)
+
+    def test_model_as_decoder(self):
+        """Test the base model as a decoder (of an encoder-decoder architecture)
+
+        is_deocder=True + cross_attention + pass encoder outputs
+        """
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_electra_for_masked_lm(*config_and_inputs)
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_electra_for_pretraining(*config_and_inputs)
+        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_electra_for_question_answering(*config_and_inputs)
+        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_electra_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_electra_for_multiple_choice(*config_and_inputs)
+        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_electra_for_token_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
