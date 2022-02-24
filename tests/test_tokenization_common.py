@@ -375,11 +375,15 @@ class TokenizerTesterMixin:
 
         self.assertEqual(reverse_text, text)
 
-        input_ids = tokenizer(text).input_ids
-        tokens_including_special = tokenizer.convert_ids_to_tokens(input_ids)
-        reverse_text = tokenizer.convert_tokens_to_string(tokens_including_special)
-
-        self.assertEqual(len(tokenizer.tokenize(reverse_text)), len(input_ids))
+        special_tokens =  tokenizer.all_special_tokens
+        special_tokens_string = tokenizer.convert_tokens_to_string(special_tokens)
+        for special_token in special_tokens:
+            self.assertIn(special_token, special_tokens_string)
+        
+        if self.test_rust_tokenizer:
+            rust_tokenizer = self.get_rust_tokenizer()
+            special_tokens_string_rust = rust_tokenizer.convert_tokens_to_string(special_tokens)
+            self.assertEqual(special_tokens_string, special_tokens_string_rust)
 
     def test_subword_regularization_tokenizer(self) -> None:
         if not self.test_sentencepiece:
