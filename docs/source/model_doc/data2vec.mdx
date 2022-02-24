@@ -33,8 +33,8 @@ Models and code are available at www.github.com/pytorch/fairseq/tree/master/exam
 
 Tips:
 
-- This implementation has a shared encoder for all different modalities and different pre-processors for each modality.
-  For example, in the case of text, preprocessing is identical to [`RobertaModel`], including tokenization.
+- Both Data2VecAudio and Data2VecText have been trained using the same self-supervised learning method.
+  In the case of Data2VecAudio, preprocessing is identical to [`RobertaModel`], including tokenization.
 
 This model was contributed by [edugp](https://huggingface.co/edugp).
 The original code can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/data2vec).
