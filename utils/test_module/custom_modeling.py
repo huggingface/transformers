@@ -7,7 +7,6 @@ from .custom_configuration import CustomConfig, NoSuperInitConfig
 
 class CustomModel(PreTrainedModel):
     config_class = CustomConfig
-    base_model_prefix = "custom"
 
     def __init__(self, config):
         super().__init__(config)
@@ -22,7 +21,6 @@ class CustomModel(PreTrainedModel):
 
 class NoSuperInitModel(PreTrainedModel):
     config_class = NoSuperInitConfig
-    base_model_prefix = "custom"
 
     def __init__(self, config):
         super().__init__(config)
