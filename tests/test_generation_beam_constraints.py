@@ -37,12 +37,10 @@ class ConstraintTest(unittest.TestCase):
         self.assertTrue(isinstance(dc.token_ids, list))
 
         with self.assertRaises(ValueError):
-            dc = DisjunctiveConstraint(torch.LongTensor([[1, 2, 4], [1, 2, 3]]))
-            self.assertTrue(dc is None)  # flake8 complains otherwise for not using it
+            DisjunctiveConstraint(torch.LongTensor([[1, 2, 4], [1, 2, 3]]))
 
         with self.assertRaises(ValueError):
-            dc = DisjunctiveConstraint([torch.LongTensor([1, 2, 4]), torch.LongTensor([1, 2, 3, 4, 5])])
-            self.assertTrue(dc is None)  # flake8 complains otherwise for not using it
+            DisjunctiveConstraint([torch.LongTensor([1, 2, 4]), torch.LongTensor([1, 2, 3, 4, 5])])
 
     def test_check_illegal_input(self):
         # We can't have constraints that are complete subsets of another. This leads to a preverse
@@ -53,9 +51,7 @@ class ConstraintTest(unittest.TestCase):
         cset = [[1, 2], [1, 2, 3, 4]]
 
         with self.assertRaises(ValueError):
-            dc = DisjunctiveConstraint(cset)  # fails here
-            print(dc.trie.trie)
-            self.assertTrue(dc is None)  # flake8 complains otherwise for not using it
+            DisjunctiveConstraint(cset)  # fails here
 
     def test_example_progression(self):
         cset = [[1, 2, 3], [1, 2, 4]]

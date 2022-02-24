@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
 
 class Constraint(ABC):
@@ -205,29 +205,22 @@ class DisjunctiveTrie:
     def __init__(self, nested_token_ids: List[List[int]], no_subsets=True):
         r"""
         A helper class that builds a trie with the words represented in `nested_token_ids`.
-
-        For example, if `nested_token_ids==[[1,2,3], [1,2,4], [1,5,6]]`, then the trie is: 1 -> 2 -> 3
-                            \ -> 4 -> 5 -> 6
         """
         self.max_height = max([len(one) for one in nested_token_ids])
 
-        leaves = []
         root = dict()
         for token_ids in nested_token_ids:
             level = root
             for tidx, token_id in enumerate(token_ids):
-                if id(level) in leaves:
-                    raise ValueError(
-                        f"Each list in `nested_token_ids` can't be a complete subset of another list, but is {nested_token_ids}."
-                    )
-
                 if token_id not in level:
                     level[token_id] = dict()
 
                 level = level[token_id]
 
-                if tidx == len(token_ids) - 1:
-                    leaves.append(id(level))
+        if no_subsets and self.has_subsets(root, nested_token_ids):
+            raise ValueError(
+                f"Each list in `nested_token_ids` can't be a complete subset of another list, but is {nested_token_ids}."
+            )
 
         self.trie = root
 
@@ -248,6 +241,20 @@ class DisjunctiveTrie:
         next_tokens = self.next_tokens(current_seq)
 
         return len(next_tokens) == 0
+
+    def count_leaves(self, root):
+        next_nodes = list(root.values())
+        if len(next_nodes) == 0:
+            return 1
+        else:
+            return sum([self.count_leaves(nn) for nn in next_nodes])
+
+    def has_subsets(self, trie, nested_token_ids):
+        """
+        Returns whether # of leaves == # of words. Otherwise some word is a subset of another.
+        """
+        leaf_count = self.count_leaves(trie)
+        return len(nested_token_ids) != leaf_count
 
 
 class DisjunctiveConstraint(Constraint):
@@ -283,7 +290,6 @@ class DisjunctiveConstraint(Constraint):
 
     def advance(self):
         token_list = self.trie.next_tokens(self.current_seq)
-        token_list = [t for t in token_list if t >= 0]
 
         if len(token_list) == 0:
             return None
@@ -394,26 +400,26 @@ class ConstraintListState:
                 if isinstance(advance, int):
                     token_list.append(advance)
                 elif isinstance(advance, list):
-                    token_list = token_list + advance
+                    token_list.extend(advance)
         else:
             advance = self.inprogress_constraint.advance()
             if isinstance(advance, int):
                 token_list.append(advance)
             elif isinstance(advance, list):
-                token_list = token_list + advance
+                token_list.extend(advance)
 
         if len(token_list) == 0:
             return None
         else:
             return token_list
 
-    def reset(self, token_ids: List[int]):
+    def reset(self, token_ids: Optional[List[int]]):
         """
         token_ids: the tokens generated thus far to reset the state of the progress through constraints.
         """
         self.init_state()
 
-        if token_ids is not None and len(token_ids) > 0:
+        if token_ids is not None:
             for token in token_ids:
                 # completes or steps **one** constraint
                 complete, stepped = self.add(token)
@@ -421,8 +427,6 @@ class ConstraintListState:
                 # the entire list of constraints are fulfilled
                 if self.completed:
                     break
-
-        return self
 
     def add(self, token_id: int):
         if not isinstance(token_id, int):

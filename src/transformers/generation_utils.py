@@ -1379,6 +1379,7 @@ class GenerationMixin:
             final_constraints = []
             if constraints is not None:
                 final_constraints = constraints
+
             if force_words_ids is not None:
 
                 def typeerror():
@@ -1411,6 +1412,7 @@ class GenerationMixin:
 
                         constraint = PhrasalConstraint(word_ids)
                     final_constraints.append(constraint)
+
             # 10. prepare beam search scorer
             constrained_beam_scorer = ConstrainedBeamSearchScorer(
                 constraints=final_constraints,

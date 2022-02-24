@@ -443,7 +443,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
     def check_completes_constraints(self, sequence):
         new_state = self.make_constraint_states(1)[0]
-        new_state = new_state.reset(sequence)
+        new_state.reset(sequence)
         return new_state.completed
 
     def process(
