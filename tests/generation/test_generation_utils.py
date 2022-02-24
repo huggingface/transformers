@@ -1522,7 +1522,6 @@ class GenerationTesterMixin:
         self.assertTrue(flag)
 
 
-
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
 
