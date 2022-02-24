@@ -49,7 +49,7 @@ class ResNetConfig(PretrainedConfig):
         layer_type (`str`, *optional*, defaults to `"bottleneck"`):
             The layer to use, it can be either `"basic"` (`ResNetBasicLayer`) or `"bottleneck"`
             (`ResNetBottleNeckLayer`).
-        hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):
+        hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
         downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
@@ -59,9 +59,9 @@ class ResNetConfig(PretrainedConfig):
     ```python
     >>> from transformers import ResNetModel, ResNetConfig
 
-    >>> # Initializing a ResNet resnet50-224 style configuration
+    >>> # Initializing a ResNet resnet50 style configuration
     >>> configuration = ResNetConfig()
-    >>> # Initializing a model from the resnet50-224 style configuration
+    >>> # Initializing a model from the resnet50 style configuration
     >>> model = ResNetModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config

@@ -114,7 +114,7 @@ class ResNetClassifierOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class ResNetConvBnActLayer(nn.Sequential):
+class ResNetConvLayer(nn.Sequential):
     def __init__(
         self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
     ):
@@ -133,7 +133,7 @@ class ResNetEmbeddings(nn.Sequential):
 
     def __init__(self, num_channels: int, out_channels: int, activation: str = "relu"):
         super().__init__()
-        self.embedder = ResNetConvBnActLayer(
+        self.embedder = ResNetConvLayer(
             num_channels, out_channels, kernel_size=7, stride=2, activation=activation
         )
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -159,9 +159,9 @@ class ResNetEmbeddings3x3(nn.Sequential):
         hidden_channels = hidden_channels + [out_channels]
 
         self.embedder = nn.Sequential(
-            ResNetConvBnActLayer(num_channels, hidden_channels[0], kernel_size=3, stride=2, activation=activation),
+            ResNetConvLayer(num_channels, hidden_channels[0], kernel_size=3, stride=2, activation=activation),
             *[
-                ResNetConvBnActLayer(in_channels, out_channels, kernel_size=3, activation=activation)
+                ResNetConvLayer(in_channels, out_channels, kernel_size=3, activation=activation)
                 for in_channels, out_channels in zip(hidden_channels, hidden_channels[1:])
             ],
         )
@@ -184,7 +184,7 @@ class ResNetBasicLayer(nn.Module):
             The number of input channels.
         out_channels (`int`):
             The number of outputs channels.
-        stride (`int`, *optional`, defaults to 1):
+        stride (`int`, *optional*, defaults to 1):
             The stride used in the first convolution.
         activation (`int`, *optional*, defaults to `"relu"`):
             The activation used by the layer.
@@ -197,8 +197,8 @@ class ResNetBasicLayer(nn.Module):
             ResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
         )
         self.layer = nn.Sequential(
-            ResNetConvBnActLayer(in_channels, out_channels, stride=stride),
-            ResNetConvBnActLayer(out_channels, out_channels, activation=None),
+            ResNetConvLayer(in_channels, out_channels, stride=stride),
+            ResNetConvLayer(out_channels, out_channels, activation=None),
         )
         self.activation = ACT2FN[activation]
 
@@ -225,7 +225,7 @@ class ResNetBottleNeckLayer(nn.Module):
             The number of input channels.
         out_channels (`int`):
             The number of outputs channels.
-        stride (`int`, *optional`, defaults to 1):
+        stride (`int`, *optional*, defaults to 1):
             The stride used in the first convolution.
         activation (`int`, *optional*, defaults to `"relu"`):
             The activation used by the layer.
@@ -243,9 +243,9 @@ class ResNetBottleNeckLayer(nn.Module):
             ResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
         )
         self.layer = nn.Sequential(
-            ResNetConvBnActLayer(in_channels, reduces_channels, kernel_size=1),
-            ResNetConvBnActLayer(reduces_channels, reduces_channels, stride=stride),
-            ResNetConvBnActLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
+            ResNetConvLayer(in_channels, reduces_channels, kernel_size=1),
+            ResNetConvLayer(reduces_channels, reduces_channels, stride=stride),
+            ResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
         )
         self.activation = ACT2FN[activation]
 
@@ -427,11 +427,7 @@ class ResNetModel(ResNetPreTrainedModel):
 
         embedding_output = self.embedder(pixel_values)
 
-        encoder_outputs = self.encoder(
-            embedding_output,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        encoder_outputs = self.encoder( embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         last_hidden_state = encoder_outputs[0]
 
@@ -458,7 +454,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = ResNetModel(config)
+        self.resnet = ResNetModel(config)
         # classification head
         self.classifier = nn.Sequential(
             nn.Flatten(),
@@ -484,7 +480,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs: ResNetModelOutput = self.model(
+        outputs: ResNetModelOutput = self.resnet(
             pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict
         )
 
@@ -494,9 +490,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
 
         loss = None
 
-        we_have_labels = labels is not None
-
-        if we_have_labels:
+        if labels is not None:
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -520,8 +514,4 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ResNetClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-        )
+        return ResNetClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)

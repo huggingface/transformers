@@ -69,9 +69,9 @@ class ModuleTransfer:
     dest_skip: List = field(default_factory=list)
 
     def __call__(self, x: Tensor):
-        """Transfer the weights of `self.src` to `self.dest` by performing a forward pass using `x` as input.
-        Under the hood we tracked all the operations in booth modules. :param x: [The input to the modules] :type x:
-        torch.tensor
+        """
+        Transfer the weights of `self.src` to `self.dest` by performing a forward pass using `x` as input.
+        Under the hood we tracked all the operations in both modules.
         """
         dest_traced = Tracker(self.dest)(x).parametrized
         src_traced = Tracker(self.src)(x).parametrized
@@ -164,7 +164,6 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
 
             our_model.push_to_hub(
                 repo_path_or_name=save_directory / checkpoint_name,
-                organization="Francesco",
                 commit_message="Add model",
                 use_temp_dir=True,
             )
@@ -172,7 +171,6 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
             feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
             feature_extractor.push_to_hub(
                 repo_path_or_name=save_directory / checkpoint_name,
-                organization="Francesco",
                 commit_message="Add feature extractor",
                 use_temp_dir=True,
             )
@@ -187,7 +185,7 @@ if __name__ == "__main__":
         "--model_name",
         default=None,
         type=str,
-        help="The name of the model you wish to convert, it must be one of the supported resnet* architecture, (e.g. resnet18). If `None`, all of them will the converted.",
+        help="The name of the model you wish to convert, it must be one of the supported resnet* architecture, currently: resnet18,26,34,50,101,152. If `None`, all of them will the converted.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
