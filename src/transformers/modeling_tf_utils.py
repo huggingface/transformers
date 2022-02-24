@@ -312,7 +312,7 @@ def booleans_processing(config, **kwargs):
 
     if tf.executing_eagerly():
         final_booleans["output_attentions"] = kwargs.get("output_attentions", None)
-        if not final_booleans["output_attentions"]:
+        if final_booleans["output_attentions"] is None:
             final_booleans["output_attentions"] = config.output_attentions
 
         final_booleans["output_hidden_states"] = (
@@ -366,7 +366,17 @@ def input_processing(func, config, input_ids, **kwargs):
     signature.pop("self", None)
     parameter_names = list(signature.keys())
     output = {}
-    allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray, KerasTensor)
+    allowed_types = (
+        tf.Tensor,
+        bool,
+        int,
+        ModelOutput,
+        tuple,
+        list,
+        dict,
+        np.ndarray,
+        KerasTensor,
+    )
 
     if "inputs" in kwargs["kwargs_call"]:
         warnings.warn(
@@ -479,7 +489,13 @@ def input_processing(func, config, input_ids, **kwargs):
     boolean_dict = {
         k: v
         for k, v in output.items()
-        if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
+        if k
+        in [
+            "return_dict",
+            "output_attentions",
+            "output_hidden_states",
+            "use_cache",
+        ]
     }
 
     output.update(
@@ -578,11 +594,18 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
                             # If yes we reshape the weight from the H5 file accordingly to the current weight
                             # If the two shapes are not compatible we raise an issue
                             try:
-                                array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
+                                array = np.reshape(
+                                    saved_weight_value,
+                                    K.int_shape(symbolic_weight),
+                                )
                             except ValueError as e:
                                 if ignore_mismatched_sizes:
                                     mismatched_layers.append(
-                                        (symbolic_weight_name, saved_weight_value.shape, K.int_shape(symbolic_weight))
+                                        (
+                                            symbolic_weight_name,
+                                            saved_weight_value.shape,
+                                            K.int_shape(symbolic_weight),
+                                        )
                                     )
                                     continue
                                 else:
@@ -626,11 +649,17 @@ def init_copy_embeddings(old_embeddings, new_num_tokens):
         # and we create a mask to properly identify the padded values and be replaced by the values of the newly created
         # embeddings
         current_weights = tf.pad(
-            old_embeddings.value(), tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=-1
+            old_embeddings.value(),
+            tf.convert_to_tensor([[0, size_diff], [0, 0]]),
+            constant_values=-1,
         )
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
         mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy, 1]), True)
-        mask = tf.pad(mask, tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=False)
+        mask = tf.pad(
+            mask,
+            tf.convert_to_tensor([[0, size_diff], [0, 0]]),
+            constant_values=False,
+        )
     else:
         # if the new size if lower than the old one, we take the current embeddings until the new size
         current_weights = tf.slice(
@@ -775,7 +804,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # internally and which users are likely to use too
         weights_path = os.path.join(checkpoint_dir, "weights.h5")
         self.save_weights(weights_path)
-        extra_data = {"epoch": epoch, "optimizer_state": self.optimizer.get_weights()}
+        extra_data = {
+            "epoch": epoch,
+            "optimizer_state": self.optimizer.get_weights(),
+        }
         extra_data_path = os.path.join(checkpoint_dir, "extra_data.pickle")
         with open(extra_data_path, "wb") as f:
             pickle.dump(extra_data, f)
@@ -801,7 +833,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if not os.path.isdir(repo_path_or_name):
             # If this isn't a local path, check that the remote repo exists and has a checkpoint in it
             repo_files = list_repo_files(repo_path_or_name)
-            for file in ("checkpoint/weights.h5", "checkpoint/extra_data.pickle"):
+            for file in (
+                "checkpoint/weights.h5",
+                "checkpoint/extra_data.pickle",
+            ):
                 if file not in repo_files:
                     raise FileNotFoundError(f"Repo {repo_path_or_name} does not contain checkpoint file {file}!")
             if "/" not in repo_path_or_name:
@@ -809,7 +844,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 repo_path_or_name = self.get_full_repo_name(repo_path_or_name)
             else:
                 model_id = repo_path_or_name.split("/")[-1]
-            repo = Repository(model_id, clone_from=f"https://huggingface.co/{repo_path_or_name}")
+            repo = Repository(
+                model_id,
+                clone_from=f"https://huggingface.co/{repo_path_or_name}",
+            )
             local_dir = repo.local_dir
         else:
             local_dir = repo_path_or_name
@@ -1066,7 +1104,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `tf.keras.layers.Layer`: The layer that handles the bias, None if not an LM model.
         """
         warnings.warn(
-            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
+            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.",
+            FutureWarning,
         )
         return self.get_lm_head()
 
@@ -1077,7 +1116,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Return:
             `str`: The _prefix name of the bias.
         """
-        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        warnings.warn(
+            "The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.",
+            FutureWarning,
+        )
         return None
 
     def get_bias(self) -> Union[None, Dict[str, tf.Variable]]:
@@ -1225,15 +1267,25 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             # initialize new bias
             if tf.math.greater(size_diff, 0):
                 padding_shape = [[0, size_diff]] if first_dim is None else [[0, 0], [0, size_diff]]
-                current_bias = tf.pad(weight.value(), tf.convert_to_tensor(padding_shape), constant_values=-1)
+                current_bias = tf.pad(
+                    weight.value(),
+                    tf.convert_to_tensor(padding_shape),
+                    constant_values=-1,
+                )
                 num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
                 mask_shape = [num_tokens_to_copy] if first_dim is None else [1, num_tokens_to_copy]
                 bias_mask = tf.fill(tf.convert_to_tensor(mask_shape), True)
-                bias_mask = tf.pad(bias_mask, tf.convert_to_tensor(padding_shape), constant_values=False)
+                bias_mask = tf.pad(
+                    bias_mask,
+                    tf.convert_to_tensor(padding_shape),
+                    constant_values=False,
+                )
             else:
                 slice_from = [0] if first_dim is None else [0, 0]
                 current_bias = tf.slice(
-                    weight.value(), tf.convert_to_tensor(slice_from), tf.convert_to_tensor(final_shape)
+                    weight.value(),
+                    tf.convert_to_tensor(slice_from),
+                    tf.convert_to_tensor(final_shape),
                 )
                 bias_mask = tf.fill(tf.convert_to_tensor(final_shape), True)
 
@@ -1374,7 +1426,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if saved_model:
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
-            self.save(saved_model_dir, include_optimizer=False, signatures=self.serving)
+            self.save(
+                saved_model_dir,
+                include_optimizer=False,
+                signatures=self.serving,
+            )
             logger.info(f"Saved model created in {saved_model_dir}")
 
         # Save configuration file
@@ -1526,7 +1582,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
 
-        user_agent = {"file_type": "model", "framework": "tensorflow", "from_auto_class": from_auto_class}
+        user_agent = {
+            "file_type": "model",
+            "framework": "tensorflow",
+            "from_auto_class": from_auto_class,
+        }
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
@@ -1622,7 +1682,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         "proxies": proxies,
                         "use_auth_token": use_auth_token,
                     }
-                    if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
+                    if has_file(
+                        pretrained_model_name_or_path,
+                        WEIGHTS_NAME,
+                        **has_file_kwargs,
+                    ):
                         raise EnvironmentError(
                             f"{pretrained_model_name_or_path} does not appear to have a file named {TF2_WEIGHTS_NAME} "
                             "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from "
@@ -1772,7 +1836,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
 TFPreTrainedModel.push_to_hub = copy_func(TFPreTrainedModel.push_to_hub)
 TFPreTrainedModel.push_to_hub.__doc__ = TFPreTrainedModel.push_to_hub.__doc__.format(
-    object="model", object_class="TFAutoModel", object_files="model checkpoint"
+    object="model",
+    object_class="TFAutoModel",
+    object_files="model checkpoint",
 )
 
 
@@ -1801,7 +1867,9 @@ class TFConv1D(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.weight = self.add_weight(
-            "weight", shape=[self.nx, self.nf], initializer=get_initializer(self.initializer_range)
+            "weight",
+            shape=[self.nx, self.nf],
+            initializer=get_initializer(self.initializer_range),
         )
         self.bias = self.add_weight("bias", shape=[1, self.nf], initializer=tf.zeros_initializer())
 
@@ -1839,7 +1907,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.initializer_range = hidden_size**-0.5 if initializer_range is None else initializer_range
+        self.initializer_range = hidden_size ** -0.5 if initializer_range is None else initializer_range
 
     def build(self, input_shape):
         """
@@ -1847,7 +1915,9 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         self.weight = self.add_weight(
-            "weight", shape=[self.vocab_size, self.hidden_size], initializer=get_initializer(self.initializer_range)
+            "weight",
+            shape=[self.vocab_size, self.hidden_size],
+            initializer=get_initializer(self.initializer_range),
         )
         super().build(input_shape)
 
@@ -1961,7 +2031,9 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             else:
                 num_classes = config.hidden_size
             self.summary = tf.keras.layers.Dense(
-                num_classes, kernel_initializer=get_initializer(initializer_range), name="summary"
+                num_classes,
+                kernel_initializer=get_initializer(initializer_range),
+                name="summary",
             )
 
         self.has_activation = False
@@ -2056,7 +2128,9 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         cls._auto_class = auto_class
 
 
-def get_initializer(initializer_range: float = 0.02) -> tf.initializers.TruncatedNormal:
+def get_initializer(
+    initializer_range: float = 0.02,
+) -> tf.initializers.TruncatedNormal:
     """
     Creates a `tf.initializers.TruncatedNormal` with the given range.
 
