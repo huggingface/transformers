@@ -39,9 +39,9 @@ class ResNetConfig(PretrainedConfig):
             The number of input channels.
         patch_size (`int`, optional, defaults to 4):
             Patch size to use in the patch embedding layer.
-        hidden_sizes (`List[int]`, *optional*, defaults to [64, 256, 512, 1024, 2048]):
+        hidden_sizes (`List[int]`, *optional*, defaults to `[64, 256, 512, 1024, 2048]`):
             Dimensionality (hidden size) embeddings + at each stage .
-        depths (`List[int]`, *optional*, defaults to [3, 4, 6, 3]):
+        depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
             Depth (number of blocks) for each stage.
         embeddings_type (`str`, *optional*, defaults to `"classic"`):
             The embedding layer to use, either `"classic"` or `"3x3"`. If `"classic"`, the original resnet embedding, a
@@ -71,8 +71,8 @@ class ResNetConfig(PretrainedConfig):
     def __init__(
         self,
         num_channels=3,
-        hidden_sizes=None,
-        depths=None,
+        hidden_sizes=[64, 256, 512, 1024, 2048],
+        depths=[3, 4, 6, 3],
         embeddings_type="classic",
         layer_type="bottleneck",
         hidden_act="relu",
@@ -82,8 +82,8 @@ class ResNetConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.num_channels = num_channels
-        self.hidden_sizes = [64, 256, 512, 1024, 2048] if hidden_sizes is None else hidden_sizes
-        self.depths = [3, 4, 6, 3] if depths is None else depths
+        self.hidden_sizes = hidden_sizes
+        self.depths = depths
         self.layer_type = layer_type
         self.embeddings_type = embeddings_type
         self.hidden_act = hidden_act
