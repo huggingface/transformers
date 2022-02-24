@@ -226,11 +226,6 @@ class PegasusTokenizer(SentencePieceStringConversionMixin, PreTrainedTokenizer):
             token = self.sp_model.IdToPiece(index - self.offset)
         return token
 
-    # def convert_tokens_to_string(self, tokens):
-    #     """Converts a sequence of tokens (string) in a single string."""
-    #     out_string = self.sp_model.decode_pieces(tokens)
-    #     return out_string
-
     def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""
         return 1

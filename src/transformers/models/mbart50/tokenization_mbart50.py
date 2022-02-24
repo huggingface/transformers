@@ -233,10 +233,6 @@ class MBart50Tokenizer(SentencePieceStringConversionMixin, PreTrainedTokenizer):
             return self.fairseq_ids_to_tokens[index]
         return self.sp_model.IdToPiece(index - self.fairseq_offset)
 
-    # def convert_tokens_to_string(self, tokens: List[str]) -> str:
-    #     """Converts a sequence of tokens (strings for sub-words) in a single string."""
-    #     return self.sp_model.decode(tokens)
-
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
