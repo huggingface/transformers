@@ -207,7 +207,7 @@ class TFBertModelTester:
             "encoder_hidden_states": encoder_hidden_states,
             "encoder_attention_mask": encoder_attention_mask,
         }
-        sequence_output, pooled_output = model(inputs)
+        result = model(inputs)
 
         inputs = [input_ids, input_mask]
         result = model(inputs, token_type_ids=token_type_ids, encoder_hidden_states=encoder_hidden_states)
