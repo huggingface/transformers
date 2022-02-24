@@ -129,7 +129,7 @@ class ViTConfig(PretrainedConfig):
 
 class ViTOnnxConfig(OnnxConfig):
 
-    TORCH_ONNX_MINIMUM_VERSION = version.parse("1.12")
+    torch_onnx_minimum_version = version.parse("1.12")
 
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
