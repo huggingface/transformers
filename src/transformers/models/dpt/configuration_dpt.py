@@ -82,7 +82,7 @@ class DPTConfig(PretrainedConfig):
             The number of channels before fusion.
         expand_channels (`bool`, *optional*, defaults to `False``):
             Whether to expand the number of channels of the backbone feature maps.
-        use_bn (`bool`, *optional*, defaults to `False`):
+        use_batch_norm (`bool`, *optional*, defaults to `False`):
             Whether to use batch normalization in the pre-activate residual units of the fusion blocks.
 
     Example:
@@ -122,7 +122,7 @@ class DPTConfig(PretrainedConfig):
         post_process_channels=[96, 192, 384, 768],
         channels=256,
         expand_channels=False,
-        use_bn=False,
+        use_batch_norm=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -147,4 +147,4 @@ class DPTConfig(PretrainedConfig):
         self.post_process_channels = post_process_channels
         self.channels = channels
         self.expand_channels = expand_channels
-        self.use_bn = use_bn
+        self.use_batch_norm = use_batch_norm

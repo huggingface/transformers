@@ -205,6 +205,7 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     logits = model(pixel_values).logits
 
     print("Shape of logits:", logits.shape)
+    print("First elements of logits:", logits[0,0,:3,:3])
 
     # TODO assert logits
 

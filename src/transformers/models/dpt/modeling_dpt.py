@@ -485,7 +485,7 @@ class DPTPreActResidualConvUnit(nn.Module):
         #  dilation=1,
         #  init_cfg=None):
 
-        self.config = config
+        self.use_batch_norm = config.use_batch_norm
         self.act1 = nn.ReLU()
         self.conv1 = nn.Conv2d(
             config.channels,
@@ -493,9 +493,8 @@ class DPTPreActResidualConvUnit(nn.Module):
             kernel_size=3,
             stride=1,
             padding=1,
-            bias=not config.use_bn,
+            bias=not self.use_batch_norm,
         )
-        self.batch_norm = nn.BatchNorm2d(config.channels) if config.use_bn else nn.Identity()
 
         self.act2 = nn.ReLU()
         self.conv2 = nn.Conv2d(
@@ -504,28 +503,31 @@ class DPTPreActResidualConvUnit(nn.Module):
             kernel_size=3,
             stride=1,
             padding=1,
-            bias=not config.use_bn,
+            bias=not self.use_batch_norm,
         )
 
-        if config.use_bn == True:
+        if self.use_batch_norm:
             self.batch_norm_1 = nn.BatchNorm2d(config.channels)
             self.batch_norm_2 = nn.BatchNorm2d(config.channels)
 
-    def forward(self, inputs, index=None):
+    def forward(self, inputs):
         inputs_ = inputs.clone()
         x = self.act1(inputs)
 
         print("Output after first relu:", x[0,:3,:3,:3])
 
-        if index is not None:
-            print("Kernel of conv1:", self.conv1.weight)
-
         x = self.conv1(x)
+
+        if self.use_batch_norm:
+            x = self.batch_norm_1(x)
 
         print("Output after first relu + conv:", x[0,:3,:3,:3])
 
         x = self.act2(x)
         x = self.conv2(x)
+
+        if self.use_batch_norm:
+            x = self.batch_norm_2(x)
 
         print("Output after 2 convs and 2 relu's:", x[0,:3,:3,:3])
 
@@ -561,7 +563,7 @@ class DPTFeatureFusionBlock(nn.Module):
 
         self.res_conv_unit2 = DPTPreActResidualConvUnit(config)
 
-    def forward(self, *inputs, index=None):
+    def forward(self, *inputs):
         x = inputs[0]
         print("First elements of x before res conv unit 1:", x[0,:3,:3,:3])
         if len(inputs) == 2:
@@ -574,7 +576,7 @@ class DPTFeatureFusionBlock(nn.Module):
             x = x + self.res_conv_unit1(res)
         
         print("First elements of x before res conv unit 2:", x[0,:3,:3,:3])
-        x = self.res_conv_unit2(x, index)
+        x = self.res_conv_unit2(x)
         
         print("First elements of x after res conv unit 2:", x[0,:3,:3,:3])
         
@@ -767,7 +769,7 @@ class DPTModel(DPTPreTrainedModel):
             print(f"Layer {idx+1}:", tensor[0,:3,:3,:3])
         
         # fusion
-        out = self.fusion_blocks[0](features[-1], index=0)
+        out = self.fusion_blocks[0](features[-1])
         print("First elements after first fusion:", out[0,:3,:3,:3])
         for i in range(1, len(self.fusion_blocks)):
             out = self.fusion_blocks[i](out, features[-(i + 1)])
