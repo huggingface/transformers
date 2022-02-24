@@ -1,8 +1,6 @@
-from sympy import im
 import torch
 from collections import OrderedDict
-from .configuration_cvt import CvtConfig
-from .modeling_cvt import CvtForImageClassification
+from transformers import CvtConfig, CvtForImageClassification, CvtFeatureExtractor
 
 def embeddings(idx):
     """
@@ -76,17 +74,17 @@ def final():
     Function helps in renaming final classification layer
     """
     head = []
-    head.append(('cvt.layernorm.weight', 'norm.weight'))
-    head.append(('cvt.layernorm.bias', 'norm.bias'))
+    head.append(('layernorm.weight', 'norm.weight'))
+    head.append(('layernorm.bias', 'norm.bias'))
     head.append(('classifier.weight', 'head.weight'))
     head.append(('classifier.bias', 'head.bias'))
     return head
 
 if __name__=="__main__":
-    path = "microsoft-cvt-huggingface.pth"
+    path = "new_hugging_face_model.bin"
     config = CvtConfig()
     model = CvtForImageClassification(config)
-    original_file = "CvT-13-224x224-IN-1k.pth"
+    original_file = "C:\\Users\\AH87766\\Downloads\\CvT-13-224x224-IN-1k.pth"
     original_weights = torch.load(original_file, map_location=torch.device("cpu"))
 
     hugging_face_weights = OrderedDict()
