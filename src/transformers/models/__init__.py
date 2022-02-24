@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    decision_transformer,
     albert,
     auto,
     bart,
