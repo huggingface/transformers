@@ -24,7 +24,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "edugp/data2vec-nlp-base": "https://huggingface.co/data2vec/resolve/main/config.json",
+    "facebook/data2vec-text-base": "https://huggingface.co/data2vec/resolve/main/config.json",
 }
 
 
@@ -33,7 +33,7 @@ class Data2VecTextConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Data2VecTextModel`] and [`Data2VecTextModel`]. It
     is used to instantiate a Data2VecText model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Data2VecText
-    [edugp/data2vec-nlp-base](https://huggingface.co/edugp/data2vec-nlp-base) architecture.
+    [facebook/data2vec-text-base](https://huggingface.co/facebook/data2vec-text-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -84,10 +84,10 @@ class Data2VecTextConfig(PretrainedConfig):
     ```python
     >>> from transformers import Data2VecTextModel, Data2VecTextConfig
 
-    >>> # Initializing a Data2VecText edugp/data2vec-nlp-base style configuration
+    >>> # Initializing a Data2VecText facebook/data2vec-text-base style configuration
     >>> configuration = Data2VecTextConfig()
 
-    >>> # Initializing a model from the edugp/data2vec-nlp-base style configuration
+    >>> # Initializing a model from the facebook/data2vec-text-base style configuration
     >>> model = Data2VecTextModel(configuration)
 
     >>> # Accessing the model configuration
