@@ -264,6 +264,7 @@ _import_structure = {
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
+    "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
     "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
@@ -1230,6 +1231,16 @@ if is_torch_available():
             "PerceiverLayer",
             "PerceiverModel",
             "PerceiverPreTrainedModel",
+        ]
+    )
+    _import_structure["models.plbart"].extend(
+        [
+            "PLBART_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PLBartForCausalLM",
+            "PLBartForConditionalGeneration",
+            "PLBartForSequenceClassification",
+            "PLBartModel",
+            "PLBartPreTrainedModel",
         ]
     )
     _import_structure["models.poolformer"].extend(
@@ -2519,6 +2530,7 @@ if TYPE_CHECKING:
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
+    from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
     from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
@@ -3322,6 +3334,14 @@ if TYPE_CHECKING:
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
+        )
+        from .models.plbart import (
+            PLBART_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PLBartForCausalLM,
+            PLBartForConditionalGeneration,
+            PLBartForSequenceClassification,
+            PLBartModel,
+            PLBartPreTrainedModel,
         )
         from .models.poolformer import (
             POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -654,7 +654,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default=Path("/home/zuppif/Desktop/hf/models"),
+        required=True,
         type=Path,
         help="Path to the folder to output PyTorch models.",
     )

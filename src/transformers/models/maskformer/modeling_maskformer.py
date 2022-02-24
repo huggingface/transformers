@@ -394,7 +394,7 @@ def sigmoid_focal_loss(
         alpha (float, *optional*, defaults to 0.25):
             Weighting factor in range (0,1) to balance positive vs negative examples.
         gamma (float, *optional*, defaults to 2.0):
-            Exponent of the modulating factor \\(1 - p_t)\\ to balance easy vs hard examples.
+            Exponent of the modulating factor \\(1 - p_t\\) to balance easy vs hard examples.
 
     Returns:
         `torch.Tensor`: The computed loss.
@@ -438,7 +438,7 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
 
 # refactored from original implementation
 def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 0.25, gamma: float = 2.0) -> Tensor:
-    """
+    r"""
     A pair wise version of the focal loss, see `sigmoid_focal_loss` for usage.
 
     Args:
@@ -450,7 +450,7 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 
         alpha (float, *optional*, defaults to 0.25):
             Weighting factor in range (0,1) to balance positive vs negative examples.
         gamma (float, *optional*, defaults to 2.0):
-            Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples.
+            Exponent of the modulating factor \\(1 - p_t\\) to balance easy vs hard examples.
 
     Returns:
         `torch.Tensor`: The computed loss between each pairs.
@@ -2235,13 +2235,6 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
             for layer in module:
                 nn.init.xavier_uniform_(layer[0].weight, gain=xavier_std)
                 nn.init.constant_(layer[0].bias, 0)
-        # copied from swin
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.backbone_config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
