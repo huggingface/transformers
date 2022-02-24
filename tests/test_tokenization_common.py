@@ -375,9 +375,6 @@ class TokenizerTesterMixin:
 
         self.assertEqual(reverse_text, text)
 
-        if isinstance(tokenizer, LayoutXLMTokenizer):
-            return
-
         input_ids = tokenizer(text).input_ids
         tokens_including_special = tokenizer.convert_ids_to_tokens(input_ids)
         reverse_text = tokenizer.convert_tokens_to_string(tokens_including_special)
