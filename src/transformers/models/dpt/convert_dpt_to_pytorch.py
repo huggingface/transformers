@@ -38,11 +38,12 @@ def get_dpt_config(checkpoint_url):
     config = DPTConfig()
 
     if "large" in checkpoint_url:
-        config.image_size = 384
         config.hidden_size = 1024
         config.intermediate_size = 4096
         config.num_hidden_layers = 24
         config.num_attention_heads = 16
+        config.out_indices = [5, 11, 17, 23]
+        config.post_process_channels = [256, 512, 1024, 1024]
 
     # TODO set id2label and label2id
 
@@ -97,7 +98,8 @@ def rename_key(name):
         name = name.replace("layer4_rn", "convs.3")
     if "refinenet" in name:
         layer_idx = int(name[len("dpt.refinenet"):len("dpt.refinenet") + 1])
-        name = name.replace(f"refinenet{layer_idx}", f"fusion_blocks.{layer_idx-1}")
+        # tricky here: we need to map 4 to 0, 3 to 1, 2 to 2 and 1 to 3
+        name = name.replace(f"refinenet{layer_idx}", f"fusion_blocks.{abs(layer_idx-4)}")
     if "out_conv" in name:
         name = name.replace("out_conv", "project")
     if "resConfUnit1" in name:
@@ -192,12 +194,12 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # TODO prepare image by DPTFeatureExtractor
     image = prepare_img()
 
-    transformations = Compose([
-        Resize((384,384)),
+    transform = Compose([
+        Resize((384, 384)),
         ToTensor(),
-        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
     ])
-    pixel_values = transformations(image).unsqueeze(0)
+    pixel_values = transform(image).unsqueeze(0)
 
     # forward pass
     logits = model(pixel_values).logits
@@ -209,8 +211,8 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    #print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    #feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

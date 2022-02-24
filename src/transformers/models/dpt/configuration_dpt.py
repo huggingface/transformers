@@ -57,7 +57,7 @@ class DPTConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 224):
+        image_size (`int`, *optional*, defaults to 384):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
@@ -76,7 +76,7 @@ class DPTConfig(PretrainedConfig):
             - "project" passes information to the other tokens by concatenating the readout to all other tokens before
               projecting the
             representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
-        post_process_channels (`List[str]`, *optional*, defaults to [256, 512, 1024, 1024]):
+        post_process_channels (`List[str]`, *optional*, defaults to [96, 192, 384, 768]):
             The number of output channels for each of the four feature maps of the backbone.
         channels (`int`, *optional*, defaults to 256):
             The number of channels before fusion.
@@ -113,13 +113,13 @@ class DPTConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         is_encoder_decoder=False,
-        image_size=224,
+        image_size=384,
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
         out_indices=[2, 5, 8, 11],
         readout_type="project",
-        post_process_channels=[256, 512, 1024, 1024],
+        post_process_channels=[96, 192, 384, 768],
         channels=256,
         expand_channels=False,
         use_bn=False,

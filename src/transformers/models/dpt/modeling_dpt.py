@@ -485,41 +485,55 @@ class DPTPreActResidualConvUnit(nn.Module):
         #  dilation=1,
         #  init_cfg=None):
 
-        in_channels = config.channels
-
+        self.config = config
         self.act1 = nn.ReLU()
         self.conv1 = nn.Conv2d(
-            in_channels,
-            in_channels,
+            config.channels,
+            config.channels,
             kernel_size=3,
             stride=1,
             padding=1,
             bias=not config.use_bn,
         )
-        self.batch_norm = nn.BatchNorm2d(in_channels) if config.use_bn else nn.Identity()
+        self.batch_norm = nn.BatchNorm2d(config.channels) if config.use_bn else nn.Identity()
 
         self.act2 = nn.ReLU()
         self.conv2 = nn.Conv2d(
-            in_channels,
-            in_channels,
+            config.channels,
+            config.channels,
             kernel_size=3,
             stride=1,
             padding=1,
             bias=not config.use_bn,
         )
-        self.batch_norm = nn.BatchNorm2d(in_channels) if config.use_bn else nn.Identity()
 
-    def forward(self, inputs):
+        if config.use_bn == True:
+            self.batch_norm_1 = nn.BatchNorm2d(config.channels)
+            self.batch_norm_2 = nn.BatchNorm2d(config.channels)
+
+    def forward(self, inputs, index=None):
         inputs_ = inputs.clone()
         x = self.act1(inputs)
+
+        print("Output after first relu:", x[0,:3,:3,:3])
+
+        if index is not None:
+            print("Kernel of conv1:", self.conv1.weight)
+
         x = self.conv1(x)
+
+        print("Output after first relu + conv:", x[0,:3,:3,:3])
+
         x = self.act2(x)
         x = self.conv2(x)
+
+        print("Output after 2 convs and 2 relu's:", x[0,:3,:3,:3])
+
         return x + inputs_
 
 
 class DPTFeatureFusionBlock(nn.Module):
-    """FeatureFusionBlock, merge feature maps from different stages.
+    """FeatureFusionBlock, merges feature maps from different stages.
 
     Args:
         config (dict): config dict.
@@ -547,8 +561,9 @@ class DPTFeatureFusionBlock(nn.Module):
 
         self.res_conv_unit2 = DPTPreActResidualConvUnit(config)
 
-    def forward(self, *inputs):
+    def forward(self, *inputs, index=None):
         x = inputs[0]
+        print("First elements of x before res conv unit 1:", x[0,:3,:3,:3])
         if len(inputs) == 2:
             if x.shape != inputs[1].shape:
                 res = nn.functional.interpolate(
@@ -557,9 +572,20 @@ class DPTFeatureFusionBlock(nn.Module):
             else:
                 res = inputs[1]
             x = x + self.res_conv_unit1(res)
-        x = self.res_conv_unit2(x)
+        
+        print("First elements of x before res conv unit 2:", x[0,:3,:3,:3])
+        x = self.res_conv_unit2(x, index)
+        
+        print("First elements of x after res conv unit 2:", x[0,:3,:3,:3])
+        
         x = nn.functional.interpolate(x, scale_factor=2, mode="bilinear", align_corners=self.align_corners)
+
+        print("First elements of x after interpolation:", x[0,:3,:3,:3])
+
         x = self.project(x)
+
+        print("First elements of x after projection:", x[0,:3,:3,:3])
+
         return x
 
 
@@ -651,11 +677,11 @@ class DPTModel(DPTPreTrainedModel):
         for channel in self.post_process_channels:
             self.convs.append(nn.Conv2d(channel, config.channels, kernel_size=3, padding=1, bias=False))
 
-        # TODO: fusion + head
+        # fusion
         self.fusion_blocks = nn.ModuleList()
         for _ in range(len(self.convs)):
             self.fusion_blocks.append(DPTFeatureFusionBlock(config))
-        # self.fusion_blocks[0].res_conv_unit1 = None # not sure why this is done in mmseg
+        self.fusion_blocks[0].res_conv_unit1 = None # not sure why this is done in mmseg
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -720,23 +746,35 @@ class DPTModel(DPTPreTrainedModel):
         # note that the encoder_hidden_states also include the initial embeddings
         features = [feature for idx, feature in enumerate(encoder_hidden_states[1:]) if idx in self.config.out_indices]
 
+        print("ViT features:")
+        for idx, tensor in enumerate(features):
+            print(tensor.shape)
+            print(f"Layer {idx+1}:", tensor[0,:3,:3])
+        
         # postprocess features
         features = self.reassemble_blocks(features)
 
-        for i in features:
-            print(i.shape)
+        print("After postprocessing:")
+        for idx, tensor in enumerate(features):
+            print(tensor.shape)
+            print(f"Layer {idx+1}:", tensor[0,:3,:3,:3])
 
         features = [self.convs[i](feature) for i, feature in enumerate(features)]
 
-        print("After postprocessing:")
-        for i in features:
-            print(i.shape)
-
+        print("After convs:")
+        for idx, tensor in enumerate(features):
+            print(tensor.shape)
+            print(f"Layer {idx+1}:", tensor[0,:3,:3,:3])
+        
         # fusion
-        out = self.fusion_blocks[0](features[-1])
+        out = self.fusion_blocks[0](features[-1], index=0)
+        print("First elements after first fusion:", out[0,:3,:3,:3])
         for i in range(1, len(self.fusion_blocks)):
             out = self.fusion_blocks[i](out, features[-(i + 1)])
 
+        print("Shape after fusion:", out.shape)
+        print("First elements after fusion:", out[0,:3,:3,:3])
+        
         if not return_dict:
             return (out,) + encoder_outputs[1:]
 
