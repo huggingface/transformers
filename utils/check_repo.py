@@ -93,18 +93,18 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
-    "test_modeling_camembert.py",
-    "test_modeling_flax_mt5.py",
-    "test_modeling_mbart.py",
-    "test_modeling_mt5.py",
-    "test_modeling_pegasus.py",
-    "test_modeling_tf_camembert.py",
-    "test_modeling_tf_mt5.py",
-    "test_modeling_tf_xlm_roberta.py",
-    "test_modeling_xlm_prophetnet.py",
-    "test_modeling_xlm_roberta.py",
-    "test_modeling_vision_text_dual_encoder.py",
-    "test_modeling_flax_vision_text_dual_encoder.py",
+    "camembert/test_modeling_camembert.py",
+    "mt5/test_modeling_flax_mt5.py",
+    "mbart/test_modeling_mbart.py",
+    "mt5/test_modeling_mt5.py",
+    "pegasus/test_modeling_pegasus.py",
+    "camembert/test_modeling_tf_camembert.py",
+    "mt5/test_modeling_tf_mt5.py",
+    "xlm_roberta/test_modeling_tf_xlm_roberta.py",
+    "xlm_prophetnet/test_modeling_xlm_prophetnet.py",
+    "xlm_roberta/test_modeling_xlm_roberta.py",
+    "vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
+    "vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -295,13 +295,20 @@ def get_model_test_files():
         "test_modeling_tf_encoder_decoder",
     ]
     test_files = []
-    for filename in os.listdir(PATH_TO_TESTS):
-        if (
-            os.path.isfile(f"{PATH_TO_TESTS}/{filename}")
-            and filename.startswith("test_modeling")
-            and not os.path.splitext(filename)[0] in _ignore_files
-        ):
-            test_files.append(filename)
+    for file_or_dir in os.listdir(PATH_TO_TESTS):
+        path = os.path.join(PATH_TO_TESTS, file_or_dir)
+        if os.path.isdir(path):
+            filenames = [os.path.join(file_or_dir, file) for file in os.listdir(path)]
+        else:
+            filenames = [file_or_dir]
+
+        for filename in filenames:
+            if (
+                os.path.isfile(os.path.join(PATH_TO_TESTS, filename))
+                and "test_modeling" in filename
+                and not os.path.splitext(filename)[0] in _ignore_files
+            ):
+                test_files.append(filename)
     return test_files
 
 
@@ -356,9 +363,13 @@ def check_all_models_are_tested():
     test_files = get_model_test_files()
     failures = []
     for module in modules:
-        test_file = f"test_{module.__name__.split('.')[-1]}.py"
-        if test_file not in test_files:
+        test_file = [file for file in test_files if f"test_{module.__name__.split('.')[-1]}.py" in file]
+        if len(test_file) == 0:
             failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
+        elif len(test_file) > 1:
+            failures.append(f"{module.__name__} has several test files: {test_file}.")
+        else:
+            test_file = test_file[0]
         new_failures = check_models_are_tested(module, test_file)
         if new_failures is not None:
             failures += new_failures
