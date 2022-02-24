@@ -45,12 +45,11 @@ class ResNetConfig(PretrainedConfig):
             Depth (number of blocks) for each stage.
         embeddings_type (`str`, *optional*, defaults to `"classic"`):
             The embedding layer to use, either `"classic"` or `"3x3"`. If `"classic"`, the original resnet embedding, a
-            single agressive `7x7` convolution, is applied. If `"3x3"`, three `3x3` are applied instead.
+            single agressive `7x7` convolution, is applied. If `"3x3"`, three `3x3` are applied instead resulting in the `D` variant.
         layer_type (`str`, *optional*, defaults to `"bottleneck"`):
-            The layer to use, it can be either `"basic"` (`ResNetBasicLayer`) or `"bottleneck"`
-            (`ResNetBottleNeckLayer`).
+            The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or `"bottleneck"` (used for larger models like resnet-50 and above).
         hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
+            The non-linear activation function in each block. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
         downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
             If `True`, the first stage will downsample the inputs using a `stride` of 2.

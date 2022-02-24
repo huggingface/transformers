@@ -272,8 +272,7 @@ class ResNetStage(nn.Sequential):
         depth (`int`,*optional*, defaults to 2):
             The number of layers.
         layer_type (`str`, *optional*, defaults to `"basic"`):
-            The layer to use, it can be either `"basic"` (`ResNetBasicLayer`) or `"bottleneck"`
-            (`ResNetBottleNeckLayer`).
+            The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or `"bottleneck"` (used for larger models like resnet-50 and above).
         activation (`int`, *optional*, defaults to `"relu"`):
             The activation used by all layers.
     """
