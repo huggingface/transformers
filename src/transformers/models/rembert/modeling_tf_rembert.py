@@ -741,6 +741,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
                 extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2])
             )
             if inputs["past_key_values"][0] is not None:
+                # attention_mask needs to be sliced to the shape `[batch_size, 1, from_seq_length - cached_seq_length, to_seq_length]
                 extended_attention_mask = extended_attention_mask[:, :, -seq_length:, :]
         else:
             extended_attention_mask = tf.reshape(
