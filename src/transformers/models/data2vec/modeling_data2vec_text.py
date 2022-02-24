@@ -54,17 +54,11 @@ logger = logging.get_logger(__name__)
 
 _HIDDEN_STATES_START_POSITION = 2
 
+# General docstring
 _CHECKPOINT_FOR_DOC = "facebook/data2vec-text-base"
 _CONFIG_FOR_DOC = "Data2VecTextConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
-# General docstring
-_CONFIG_FOR_DOC = "Wav2Vec2Config"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
-
-# CTC docstring
-_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
-_CTC_EXPECTED_LOSS = 53.48
 
 DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/data2vec-text-base",
@@ -163,6 +157,7 @@ class Data2VecTextForTextEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
+# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->Data2VecText
 class Data2VecTextSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -629,6 +624,9 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
 
 
 DATA2VECTEXT_START_DOCSTRING = r"""
+    Data2VecText was proposed in [data2vec: A General Framework for Self-supervised Learning in Speech,
+    Vision and Language](https://arxiv.org/pdf/2202.03555) by Alexei Baevski, Wei-Ning Hsu, Qiantong Xu, Arun Babu,
+    Jiatao Gu and Michael Auli.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
