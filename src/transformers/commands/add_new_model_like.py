@@ -554,7 +554,7 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     ]
     test_files = filter_framework_files(test_files, frameworks=frameworks)
     # Add the test directory
-    test_files = [REPO_PATH / "tests" / f for f in test_files]
+    test_files = [REPO_PATH / "tests" / module_name / f for f in test_files]
     # Filter by existing files
     test_files = [f for f in test_files if f.exists()]
 
@@ -1199,11 +1199,16 @@ def create_new_model_like(
 
     disabled_fx_test = False
 
+    tests_folder = REPO_PATH / "tests" / new_model_patterns.model_lower_cased
+    os.makedirs(tests_folder, exist_ok=True)
+    with open(tests_folder / "__init__.py", "w"):
+        pass
+
     for test_file in files_to_adapt:
         new_test_file_name = test_file.name.replace(
             old_model_patterns.model_lower_cased, new_model_patterns.model_lower_cased
         )
-        dest_file = test_file.parent / new_test_file_name
+        dest_file = test_file.parent.parent / new_model_patterns.model_lower_cased / new_test_file_name
         duplicate_module(
             test_file,
             old_model_patterns,
