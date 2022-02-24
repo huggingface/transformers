@@ -22,11 +22,9 @@ import numpy as np
 from packaging import version
 
 from ..configuration_utils import PretrainedConfig
-from ..file_utils import TensorType, is_torch_available, is_vision_available
-from ..tokenization_utils import PreTrainedTokenizer
-from ..tokenization_utils_fast import PreTrainedTokenizerFast
-
 from ..feature_extraction_utils import FeatureExtractionMixin
+from ..file_utils import TensorType, is_torch_available, is_vision_available
+from ..tokenization_utils_base import PreTrainedTokenizerBase
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
 
 
