@@ -13,15 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for FastSpeech2."""
-import collections
 import os
 import json
 from typing import List, Optional, Tuple
 
-from tokenizers import ByteLevelBPETokenizer
-
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from ...file_utils import requires_backends
 
@@ -53,7 +49,7 @@ class FastSpeech2Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["input_ids", "attention_mask"]
+    model_input_names = ["input_ids"]
 
     def __init__(
         self,
@@ -108,15 +104,16 @@ class FastSpeech2Tokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        return self.encoder.get(token, self.unk_token_id)
+        return self.encoder.get(token, )
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        return self.decoder.get(index, self.unk_token)
+        return self.decoder.get(index, self.encoder[self.unk_token])
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
-        pass
+        # TODO
+        raise NotImplementedError
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
@@ -141,9 +138,5 @@ class FastSpeech2Tokenizer(PreTrainedTokenizer):
 
         return (vocab_file,)
 
-
-    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
-            text = " " + text
-        return (text, kwargs)
+    def prepare_for_tokenization(self, text, **kwargs):
+        return (text, {})

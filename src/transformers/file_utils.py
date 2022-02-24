@@ -166,6 +166,12 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _coloredlogs_available = False
 
+_g2p_en_available = importlib.util.find_spec("g2p_en") is not None
+try:
+    _g2p_en_version = importlib_metadata.version("g2p_en")
+    logger.debug(f"Successfully imported g2p_en version {_g2p_en_version}")
+except importlib_metadata.PackageNotFoundError:
+    _g2p_en_available = False
 
 sympy_available = importlib.util.find_spec("sympy") is not None
 try:
@@ -612,6 +618,9 @@ def is_speech_available():
 def is_phonemizer_available():
     return _phonemizer_available
 
+def is_g2p_en_available():
+    return _g2p_en_available
+
 
 def torch_only_method(fn):
     def wrapper(*args, **kwargs):
@@ -722,6 +731,11 @@ FLAX_IMPORT_ERROR = """
 installation page: https://github.com/google/flax and follow the ones that match your environment.
 """
 
+# docstyle-ignore
+G2P_EN_IMPORT_ERROR = """
+{0} requires the g2p_en library but it was not found in your environment. You can install it with pip:
+`pip install g2p_en`
+"""
 
 # docstyle-ignore
 SCATTER_IMPORT_ERROR = """
@@ -801,6 +815,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
+        ("g2p_en", (is_g2p_en_available, G2P_EN_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),

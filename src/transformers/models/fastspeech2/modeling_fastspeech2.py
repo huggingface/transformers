@@ -683,7 +683,7 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
     )
     def forward(
         self,
-        src_tokens,
+        input_ids,
         speaker=None,
         durations=None,
         pitches=None,
@@ -691,7 +691,7 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
         **kwargs,
     ):
         return self.encoder(
-            src_tokens=src_tokens,
+            src_tokens=input_ids,
             speaker=speaker,
             durations=durations,
             pitches=pitches,
