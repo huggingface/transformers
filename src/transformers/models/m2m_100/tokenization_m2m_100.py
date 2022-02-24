@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece
 
-from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer, SentencePieceStringConversionMixin
+from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -62,7 +62,7 @@ FAIRSEQ_LANGUAGE_CODES = {
 # fmt: on
 
 
-class M2M100Tokenizer(SentencePieceStringConversionMixin, PreTrainedTokenizer):
+class M2M100Tokenizer(PreTrainedTokenizer):
     """
     Construct an M2M100 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
@@ -220,6 +220,20 @@ class M2M100Tokenizer(SentencePieceStringConversionMixin, PreTrainedTokenizer):
         if index in self.id_to_lang_token:
             return self.id_to_lang_token[index]
         return self.decoder.get(index, self.unk_token)
+
+    def convert_tokens_to_string(self, tokens):
+        """Converts a sequence of tokens (string) in a single string."""
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string.strip()
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False

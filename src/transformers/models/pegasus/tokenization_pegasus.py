@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...tokenization_utils import PreTrainedTokenizer, SentencePieceStringConversionMixin
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -38,7 +38,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 logger = logging.get_logger(__name__)
 
 
-class PegasusTokenizer(SentencePieceStringConversionMixin, PreTrainedTokenizer):
+class PegasusTokenizer(PreTrainedTokenizer):
     r"""
     Construct a PEGASUS tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
@@ -225,6 +225,20 @@ class PegasusTokenizer(SentencePieceStringConversionMixin, PreTrainedTokenizer):
         else:
             token = self.sp_model.IdToPiece(index - self.offset)
         return token
+
+    def convert_tokens_to_string(self, tokens):
+        """Converts a sequence of tokens (string) in a single string."""
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string.strip()
 
     def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""
