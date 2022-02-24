@@ -25,11 +25,14 @@ from ..configuration_utils import PretrainedConfig
 from ..feature_extraction_utils import FeatureExtractionMixin
 from ..file_utils import TensorType, is_torch_available, is_vision_available
 from ..tokenization_utils_base import PreTrainedTokenizerBase
+from ..utils import logging
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
 
 
 if is_vision_available():
     from PIL import Image
+
+logger = logging.get_logger(__name__)
 
 
 DEFAULT_ONNX_OPSET = 11
@@ -232,7 +235,7 @@ class OnnxConfig(ABC):
 
     def generate_dummy_inputs(
         self,
-        preprocessor: Union[PreTrainedTokenizer, FeatureExtractionMixin],
+        preprocessor: Union[PreTrainedTokenizerBase, FeatureExtractionMixin],
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -240,13 +243,13 @@ class OnnxConfig(ABC):
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
-        tokenizer: PreTrainedTokenizer = None,
+        tokenizer: PreTrainedTokenizerBase = None,
     ) -> Mapping[str, Any]:
         """
         Generate inputs to provide to the ONNX exporter for the specific framework
 
         Args:
-            preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
+            preprocessor: ([`PreTrainedTokenizerBase`] or [`FeatureExtractionMixin`]):
                 The preprocessor associated with this model configuration.
             batch_size (`int`, *optional*, defaults to -1):
                 The batch size to export the model for (-1 means dynamic axis).
@@ -266,17 +269,16 @@ class OnnxConfig(ABC):
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
         """
+        if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
+            raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
         if tokenizer is not None:
             warnings.warn(
                 "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
                 FutureWarning,
             )
-        if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
-            raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
+            logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+            preprocessor = tokenizer
         if isinstance(preprocessor, PreTrainedTokenizerBase):
-            if tokenizer:
-                warnings.warn("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
-                preprocessor = tokenizer
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
             batch_size = compute_effective_axis_dimension(
                 batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
@@ -396,7 +398,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PreTrainedTokenizerBase,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -515,7 +517,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PreTrainedTokenizerBase,
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
