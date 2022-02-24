@@ -21,14 +21,10 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 import numpy as np
 from packaging import version
 
-from transformers import (
-    PretrainedConfig,
-    PreTrainedTokenizer,
-    PreTrainedTokenizerFast,
-    TensorType,
-    is_torch_available,
-    is_vision_available,
-)
+from ..configuration_utils import PretrainedConfig
+from ..file_utils import TensorType, is_torch_available, is_vision_available
+from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_utils_fast import PreTrainedTokenizerFast
 
 from ..feature_extraction_utils import FeatureExtractionMixin
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
