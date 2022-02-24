@@ -167,9 +167,6 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.is_decoder = True
-        # Default to `False`
-        # config.add_cross_attention = False
-        config.use_cache = False
 
         model = TF{{cookiecutter.camelcase_modelname}}Model(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
@@ -194,9 +191,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        config.is_decoder = True
         config.add_cross_attention = True
-        config.use_cache = False
 
         model = TF{{cookiecutter.camelcase_modelname}}Model(config=config)
         inputs = {
@@ -220,6 +215,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.is_decoder = True
+
         model = TF{{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
         inputs = {
             "input_ids": input_ids,
@@ -243,9 +239,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        config.is_decoder = True
         config.add_cross_attention = True
-        config.use_cache = False
 
         model = TF{{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
         inputs = {
@@ -276,9 +270,6 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         choice_labels,
     ):
         config.is_decoder = True
-        # Default to `False`
-        # config.add_cross_attention = False
-        config.use_cache = True
 
         model = TF{{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
 
@@ -322,9 +313,6 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         choice_labels,
     ):
         config.is_decoder = True
-        # Default to `False`
-        # config.add_cross_attention = False
-        config.use_cache = True
 
         model = TF{{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
 
@@ -386,9 +374,6 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         choice_labels,
     ):
         config.is_decoder = True
-        # Default to `False`
-        # config.add_cross_attention = False
-        config.use_cache = True
 
         model = TF{{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
 
@@ -442,9 +427,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        config.is_decoder = True
         config.add_cross_attention = True
-        # config.use_cache = True
 
         model = TF{{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
 
