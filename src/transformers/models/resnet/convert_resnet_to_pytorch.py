@@ -100,7 +100,7 @@ def convert_weight_and_push(name: str, config: ResNetConfig, save_directory: Pat
 
     assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
 
-    checkpoint_name = f"{name}-224-1k"
+    checkpoint_name = f"{name}"
 
     our_model.push_to_hub(
         repo_path_or_name=save_directory / checkpoint_name,
@@ -109,7 +109,15 @@ def convert_weight_and_push(name: str, config: ResNetConfig, save_directory: Pat
         use_temp_dir=True,
     )
 
-    print("Done!")
+    # we can use the convnext one
+    feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
+    feature_extractor.push_to_hub(
+        repo_path_or_name=save_directory / checkpoint_name,
+        commit_message="Add feature extractor",
+        use_temp_dir=True,
+    )
+
+    print(f"Pushed {checkpoint_name}")
 
 
 def convert_weights_and_push(save_directory: Path, model_name: str = None):
@@ -151,30 +159,8 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
     if model_name:
         convert_weight_and_push(model_name, names_to_config[model_name], save_directory)
     else:
-        for name, config in names_to_config.items():
-            from_model = timm.create_model(name, pretrained=True)
-            our_model = ResNetForImageClassification(config)
-            module_transfer = ModuleTransfer(src=from_model, dest=our_model)
-            x = torch.randn((1, 3, 224, 224))
-            module_transfer(x)
-
-            assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
-
-            checkpoint_name = f"{name}"
-
-            our_model.push_to_hub(
-                repo_path_or_name=save_directory / checkpoint_name,
-                commit_message="Add model",
-                use_temp_dir=True,
-            )
-            # we can use the convnext one
-            feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
-            feature_extractor.push_to_hub(
-                repo_path_or_name=save_directory / checkpoint_name,
-                commit_message="Add feature extractor",
-                use_temp_dir=True,
-            )
-
+        for model_name, config in names_to_config.items():
+            convert_weight_and_push(model_name, config, save_directory)
     return config, expected_shape
 
 
