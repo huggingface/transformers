@@ -811,7 +811,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`, *optional*):
                 Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction. If left to
                 None, it will default to the `processed_sizes`.
-            is_thing_map (`Dict[int, bool]`, *optional*):
+            is_thing_map (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
                 Dictionary mapping class indices to either True or False, depending on whether or not they are a thing.
                 If not set, defaults to the `is_thing_map` of COCO panoptic.
             threshold (`float`, *optional*, defaults to 0.85):
