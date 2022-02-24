@@ -94,7 +94,7 @@ Create a preprocessing function that will apply the transforms and return the `p
 ...     return examples
 ```
 
-Use 🤗 Dataset's [`with_transform`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?#datasets.Dataset.with_transform) method to apply the transforms over the entire dataset. The transforms are applied on-the-fly when you load an image:
+Use 🤗 Dataset's [`with_transform`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?#datasets.Dataset.with_transform) method to apply the transforms over the entire dataset. The transforms are applied on-the-fly when you load an element of the dataset:
 
 ```py
 >>> food = food.with_transform(transforms)
@@ -180,11 +180,7 @@ Create a simple preprocessing function to create `pixel_values` from an image. T
 
 ```py
 >>> def process(examples):
-...     examples.update(
-...         feature_extractor(
-...             examples["image"],
-...         )
-...     )
+...     examples.update(feature_extractor(examples["image"],))
 ...     return examples
 ```
 
