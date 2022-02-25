@@ -32,8 +32,7 @@ VOCAB_FILES_NAMES = {
     "source_spm": "source.spm",
     "target_spm": "target.spm",
     "vocab": "vocab.json",
-    "src_vocab_file": "vocab-src.json",
-    "tgt_vocab_file": "vocab-tgt.json",
+    "target_vocab_file": "vocab-target.json",
     "tokenizer_config_file": "tokenizer_config.json",
 }
 
@@ -131,9 +130,8 @@ class MarianTokenizer(PreTrainedTokenizer):
         self,
         source_spm,
         target_spm,
-        vocab=None,
-        src_vocab_file=None,
-        tgt_vocab_file=None,
+        vocab,
+        target_vocab_file=None,
         source_lang=None,
         target_lang=None,
         unk_token="<unk>",
@@ -155,23 +153,24 @@ class MarianTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             model_max_length=model_max_length,
             sp_model_kwargs=self.sp_model_kwargs,
+            separate_vocabs=separate_vocabs,
             **kwargs,
         )
         assert Path(source_spm).exists(), f"cannot find spm source {source_spm}"
 
         self.separate_vocabs = separate_vocabs
-        if not separate_vocabs:
-            self.encoder = load_json(vocab)
-            if self.unk_token not in self.encoder:
-                raise KeyError("<unk> token must be in vocab")
-            assert self.pad_token in self.encoder
+        self.encoder = load_json(vocab)
+        if self.unk_token not in self.encoder:
+            raise KeyError("<unk> token must be in vocab")
+        assert self.pad_token in self.encoder
+
+        if separate_vocabs:
+            self.target_encoder = load_json(target_vocab_file)
+            self.decoder = {v: k for k, v in self.target_encoder.items()}
+            self.supported_language_codes = []
+        else:
             self.decoder = {v: k for k, v in self.encoder.items()}
             self.supported_language_codes: list = [k for k in self.encoder if k.startswith(">>") and k.endswith("<<")]
-        else:
-            self.src_encoder = load_json(src_vocab_file)
-            self.tgt_encoder = load_json(tgt_vocab_file)
-            self.decoder = {v: k for k, v in self.tgt_encoder.items()}
-            self.supported_language_codes = []
 
         self.source_lang = source_lang
         self.target_lang = target_lang
@@ -181,7 +180,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         self.spm_source = load_spm(source_spm, self.sp_model_kwargs)
         self.spm_target = load_spm(target_spm, self.sp_model_kwargs)
         self.current_spm = self.spm_source
-        self.current_encoder = self.src_encoder if separate_vocabs else self.encoder
+        self.current_encoder = self.encoder
 
         # Multilingual target side: default to using first supported language code.
 
@@ -287,11 +286,10 @@ class MarianTokenizer(PreTrainedTokenizer):
         """
         self.current_spm = self.spm_target
         if self.separate_vocabs:
-            self.current_encoder = self.tgt_encoder
+            self.current_encoder = self.target_encoder
         yield
         self.current_spm = self.spm_source
-        if self.separate_vocabs:
-            self.current_encoder = self.src_encoder
+        self.current_encoder = self.encoder
 
     @property
     def vocab_size(self) -> int:
@@ -306,14 +304,14 @@ class MarianTokenizer(PreTrainedTokenizer):
         if self.separate_vocabs:
             out_src_vocab_file = os.path.join(
                 save_directory,
-                (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["src_vocab_file"],
+                (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab"],
             )
             out_tgt_vocab_file = os.path.join(
                 save_directory,
-                (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["tgt_vocab_file"],
+                (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["target_vocab_file"],
             )
-            save_json(self.src_encoder, out_src_vocab_file)
-            save_json(self.tgt_encoder, out_tgt_vocab_file)
+            save_json(self.encoder, out_src_vocab_file)
+            save_json(self.target_encoder, out_tgt_vocab_file)
             saved_files.append(out_src_vocab_file)
             saved_files.append(out_tgt_vocab_file)
         else:
@@ -346,14 +344,16 @@ class MarianTokenizer(PreTrainedTokenizer):
         return self.get_src_vocab()
 
     def get_src_vocab(self):
-        return dict(self.src_encoder, **self.added_tokens_encoder)
+        return dict(self.encoder, **self.added_tokens_encoder)
 
     def get_tgt_vocab(self):
-        return dict(self.tgt_encoder, **self.added_tokens_decoder)
+        return dict(self.target_encoder, **self.added_tokens_decoder)
 
     def __getstate__(self) -> Dict:
         state = self.__dict__.copy()
-        state.update({k: None for k in ["spm_source", "spm_target", "current_spm", "punc_normalizer"]})
+        state.update(
+            {k: None for k in ["spm_source", "spm_target", "current_spm", "punc_normalizer", "target_vocab_file"]}
+        )
         return state
 
     def __setstate__(self, d: Dict) -> None:
