@@ -170,10 +170,10 @@ class TFTopPLogitsWarper(TFLogitsWarper):
         cumulative_probs = tf.math.cumsum(tf.nn.softmax(topk_scores, axis=-1), axis=-1)
         score_mask = cumulative_probs < self.top_p
 
-        # include the token that is higher than top_p as well (the first false in each row)
+        # Also include the token that is higher than top_p (the first false = shift and insert a True on the left)
         score_mask = tf.concat((tf.ones([score_mask.shape[0], 1], dtype=tf.bool), score_mask[:, :-1]), axis=-1)
 
-        # min tokens to keep
+        # Ensure min tokens to keep
         score_mask = tf.concat(
             (
                 tf.ones([score_mask.shape[0], self.min_tokens_to_keep], dtype=tf.bool),
@@ -182,11 +182,12 @@ class TFTopPLogitsWarper(TFLogitsWarper):
             axis=-1,
         )
 
+        # Mask the values that do not fit the criteria
         topk_next_scores = tf.where(score_mask, topk_scores, mask_scores)
 
-        # converts the 2D matrix of per-row original indices of shape (batch_size, vocab_size) to a 3D tensor of shape
-        # (batch_size, vocab_size, 2) containing the original score coordinate, from which we can scatter. In other
-        # words, `scatter_indices[row, col, :]` is a tensor containing `[row, topk_indices[row, col]]`
+        # Undo the topk sorting: converts the 2D matrix of per-row original indices of shape (batch_size, vocab_size)
+        # to a 3D tensor of shape (batch_size, vocab_size, 2) containing the original score coordinate, from which we
+        # can scatter (i.e. `scatter_indices[row, col, :]` is a tensor containing `[row, topk_indices[row, col]]`)
         scatter_rows = tf.tile(tf.expand_dims(tf.range(topk_indices.shape[0]), axis=-1), [1, topk_indices.shape[-1]])
         scatter_indices = tf.stack((scatter_rows, topk_indices), axis=-1)
         next_scores = tf.scatter_nd(scatter_indices, topk_next_scores, shape=topk_next_scores.shape)
