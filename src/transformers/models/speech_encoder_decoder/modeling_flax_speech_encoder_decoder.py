@@ -170,7 +170,7 @@ SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         encoder_attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            
+
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
