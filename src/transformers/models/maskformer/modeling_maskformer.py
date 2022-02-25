@@ -78,7 +78,7 @@ class MaskFormerSwinModelOutputWithPooling(ModelOutput):
         hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):
             A tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to
             `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward`
-            method:
+            method.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -110,7 +110,7 @@ class MaskFormerSwinBaseModelOutput(ModelOutput):
         hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):
             A tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to
             `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward`
-            method:
+            method.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -335,7 +335,7 @@ def upsample_like(pixel_values: Tensor, like: Tensor, mode: str = "bilinear") ->
 # refactored from original implementation
 def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     r"""
-    Compute the DICE loss, similar to generalized IOU for masks as follow:
+    Compute the DICE loss, similar to generalized IOU for masks as follows:
 
     $$ \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x \cap y }{x \cup y + 1}} $$
 
@@ -518,7 +518,7 @@ def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
 
 class MaskFormerSwinEmbeddings(nn.Module):
     """
-    Construct the patch and position embeddings for maskformer model.
+    Construct the patch and position embeddings.
     """
 
     def __init__(self, config):
@@ -555,7 +555,7 @@ class MaskFormerSwinEmbeddings(nn.Module):
 
 class MaskFormerSwinPatchEmbeddings(nn.Module):
     """
-    Image to Patch Embedding for maskformer model.
+    Image to Patch Embedding, including padding.
     """
 
     def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768):
@@ -1026,7 +1026,7 @@ class MaskFormerSwinEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_input_dimensions = ()
         all_self_attentions = () if output_attentions else None
-        # add the embebeddings
+
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -1941,8 +1941,8 @@ class MaskFormerFPNConvLayer(nn.Sequential):
 class MaskFormerFPNLayer(nn.Module):
     def __init__(self, in_features: int, lateral_features: int):
         """
-        A Feature Pyramid Network Layer. It creates a feature map by aggregating features from the previous and
-        backbone layer. Due to the spatial mismatch, the tensor coming from the previous layer is upsampled.
+        A Feature Pyramid Network Layer (FPN) layer. It creates a feature map by aggregating features from the previous
+        and backbone layer. Due to the spatial mismatch, the tensor coming from the previous layer is upsampled.
 
         Args:
             in_features (`int`):
@@ -1970,7 +1970,7 @@ class MaskFormerFPNModel(nn.Module):
     def __init__(self, in_features: int, lateral_widths: List[int], feature_size: int = 256):
         """
         Feature Pyramid Network, given an input tensor and a set of features map of different feature/spatial size, it
-        creates a list of features maps with the same feature size.
+        creates a list of feature maps with the same feature size.
 
         Args:
             in_features (`int`):
@@ -2002,7 +2002,7 @@ class MaskFormerPixelDecoder(nn.Module):
         """
         Pixel Decoder Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
         Segmentation](https://arxiv.org/abs/2107.06278). It first runs the backbone's feature into a Feature Pyramid
-        Network creating a list of features maps. Then, it projects the last one to the correct `mask_size`.
+        Network creating a list of feature maps. Then, it projects the last one to the correct `mask_size`.
 
         Args:
             feature_size (`int`, *optional*, defaults to 256):

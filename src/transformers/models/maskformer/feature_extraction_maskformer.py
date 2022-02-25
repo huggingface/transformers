@@ -387,7 +387,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             `torch.Tensor`:
                 A tensor of shape (`batch_size, num_labels, height, width`).
         """
-        # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
+        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits = outputs.class_queries_logits
         # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
         masks_queries_logits = outputs.masks_queries_logits
@@ -493,7 +493,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             logger.warning("`is_thing_map` unset. Default to COCO.")
             # default to is_thing_map of COCO panoptic
             is_thing_map = {i: i <= 90 for i in range(201)}
-        # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
+        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits = outputs.class_queries_logits
         # keep track of the number of labels, subtract -1 for null class
         num_labels = class_queries_logits.shape[-1] - 1
