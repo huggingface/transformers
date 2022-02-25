@@ -5,3 +5,5 @@ src/transformers/models/unispeech/modeling_unispeech.py
 src/transformers/models/unispeech_sat/modeling_unispeech_sat.py
 src/transformers/models/sew/modeling_sew.py
 src/transformers/models/sew_d/modeling_sew_d.py
+docs/source/quicktour.mdx
+docs/source/task_summary.mdx

@@ -340,14 +340,47 @@ seen [here](https://github.com/huggingface/transformers/actions/workflows/doctes
 
 To include your example in the daily doctests, you need add the filename that
 contains the example docstring to the [documentation_tests.txt](../utils/documentation_tests.txt).
-You can test the example locally as follows:
 
-- For Python files ending with *.py*:
+### For Python files
+
+You can run all the tests in the docstrings of a given file with the following command, here is how we test the modeling file of Wav2Vec2 for instance:
+
+```bash
+pytest --doctest-modules src/transformers/models/wav2vec2/modeling_wav2vec2.py -sv --doctest-continue-on-failure
 ```
+
+If you want to isolate a specific docstring, just add `::` after the file name then type the whole path of the function/class/method whose docstring you want to test. For instance, here is how to just test the forward method of `Wav2Vec2ForCTC`:
+
+```bash
 pytest --doctest-modules src/transformers/models/wav2vec2/modeling_wav2vec2.py::transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC.forward -sv --doctest-continue-on-failure
 ```
 
-- For Markdown files ending with *.mdx*:
+### For Markdown files
+
+You will first need to run the following command (from the root of the repository) to prepare the doc file (doc-testing needs to add additional lines that we don't include in the doc source files):
+
+```bash
+python utils/prepare_for_doc_test.py src docs
 ```
+
+Then you can test locally a given file with this command (here testing the quicktour):
+
+```bash
 pytest --doctest-modules docs/source/quicktour.mdx -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
 ```
+
+Once you're done, you can run the following command (still from the root of the repository) to undo the changes made by the first command before committing:
+
+```bash
+python utils/prepare_for_doc_test.py src docs --remove_new_line
+```
+
+### Writing doctests
+
+Here are a few tips to help you debug the doctests and make them pass:
+
+- The outputs of the code need to match the expected output **exactly**, so make sure you have the same outputs. In particular doctest will see a difference between single quotes and double quotes, or a missing parenthesis. The only exceptions to that rule are:
+  * whitespace: one give whitespace (space, tabulation, new line) is equivalent to any number of whitespace, so you can add new lines where there are spaces to make your output more readable.
+  * numerical values: you should never put more than 4 or 5 digits to expected results as different setups or library versions might get you slightly different results. `doctest` is configure to ignore any difference lower than the precision to which you wrote (so 1e-4 if you write 4 digits).
+- Don't leave a block of code that is very long to execute. If you can't make it fast, you can either not use the doctest syntax on it (so that it's ignored), or if you want to use the doctest syntax to show the results, you can add a comment `# doctest: +SKIP` at the end of the lines of code too long to execute
+- Each line of code that produces a result needs to have that result written below. You can ignore an output if you don't want to show it in your code example by adding a comment ` # doctest: +IGNORE_RESULT` at the end of the line of code produing it.
