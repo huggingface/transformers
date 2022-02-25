@@ -498,18 +498,13 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
-            if self.config.problem_type == "regression":
-                criterion = MSELoss()
-                if self.num_labels == 1:
-                    loss = criterion(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = criterion(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 criterion = CrossEntropyLoss()
                 loss = criterion(logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 criterion = BCEWithLogitsLoss()
                 loss = criterion(logits, labels)
+
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
