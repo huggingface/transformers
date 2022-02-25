@@ -16,8 +16,13 @@
 
 
 import inspect
+<<<<<<< HEAD
 import unittest
 from math import floor
+=======
+from math import floor
+import unittest
+>>>>>>> 820959f61 (feature test)
 
 from transformers import CvtConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
@@ -40,14 +45,12 @@ if is_vision_available():
 
     from transformers import CvtFeatureExtractor
 
-
 class CvtConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
         self.parent.assertTrue(hasattr(config, "embed_dim"))
         self.parent.assertTrue(hasattr(config, "num_heads"))
         self.parent.assertTrue(hasattr(config, "num_stages"))
-
 
 class CvtModelTester:
     def __init__(
@@ -232,7 +235,6 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(attentions), expected_num_attentions)
 
             # verify the first attentions (first block, first layer)
-
             expected_seq_len = (self.model_tester.image_size // 4) ** 2
             expected_reduced_seq_len = (self.model_tester.image_size // (4 * self.model_tester.stride_kv[0])) ** 2
             self.assertListEqual(
