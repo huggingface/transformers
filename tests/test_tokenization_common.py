@@ -37,7 +37,6 @@ from transformers import (
     AutoTokenizer,
     BertTokenizer,
     BertTokenizerFast,
-    LayoutXLMTokenizer,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
