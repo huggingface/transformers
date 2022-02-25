@@ -800,21 +800,13 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class UniSpeechSatModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        import soundfile as sf
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").filter(
+            lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]
+        )[:num_samples]["audio"]
 
-        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
-
-        # map files to raw
-        def map_to_array(batch):
-            speech, _ = sf.read(batch["file"])
-            batch["speech"] = speech
-            return batch
-
-        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-
-        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
-
-        return ds["speech"][:num_samples]
+        return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
         ds = load_dataset("anton-l/superb_dummy", task, split="test")
@@ -865,10 +857,10 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
 
         # fmt: off
         expected_hidden_states_slice = torch.tensor(
-            [[[-0.1172, -0.0797],
-              [-0.0012, 0.0213]],
-             [[-0.1225, -0.1277],
-              [-0.0668, -0.0585]]],
+            [[[-0.1192, -0.0825],
+              [-0.0012, 0.0235]],
+             [[-0.1240, -0.1332],
+              [-0.0658, -0.0565]]],
             device=torch_device,
         )
         # fmt: on

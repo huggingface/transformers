@@ -222,12 +222,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 {
                     "score": None,
                     "label": "LABEL_0",
-                    "mask": "01245d8ad25d03f09493ca97965788ae",
+                    "mask": "6225140faf502d272af076222776d7e4",
                 },
                 {
                     "score": None,
                     "label": "LABEL_1",
-                    "mask": "f741516de8d5196a2c830739b9ac1c8c",
+                    "mask": "8297c9f8eb43ddd3f32a6dae21e015a1",
                 },
             ],
         )

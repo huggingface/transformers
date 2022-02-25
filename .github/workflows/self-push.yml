@@ -492,4 +492,4 @@ jobs:
 
         run: |
           pip install slack_sdk
-          python utils/notification_service.py push
+          python utils/notification_service_deprecated.py push
