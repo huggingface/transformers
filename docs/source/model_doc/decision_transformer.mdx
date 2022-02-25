@@ -14,73 +14,35 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The DecisionTransformer model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>)  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The DecisionTransformer model was proposed in [Decision Transformer: Reinforcement Learning via Sequence Modeling
+](https://arxiv.org/abs/2106.01345)  
+by Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Michael Laskin, Pieter Abbeel, Aravind Srinivas, Igor Mordatch.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*We introduce a framework that abstracts Reinforcement Learning (RL) as a sequence modeling problem. 
+This allows us to draw upon the simplicity and scalability of the Transformer architecture, and associated advances
+ in language modeling such as GPT-x and BERT. In particular, we present Decision Transformer, an architecture that 
+ casts the problem of RL as conditional sequence modeling. Unlike prior approaches to RL that fit value functions or 
+ compute policy gradients, Decision Transformer simply outputs the optimal actions by leveraging a causally masked 
+ Transformer. By conditioning an autoregressive model on the desired return (reward), past states, and actions, our 
+ Decision Transformer model can generate future actions that achieve the desired return. Despite its simplicity, 
+ Decision Transformer matches or exceeds the performance of state-of-the-art model-free offline RL baselines on 
+ Atari, OpenAI Gym, and Key-to-Door tasks.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+This version of the model is for tasks where the state is a vector, image-based states will come soon.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/edbeeching). The original code can be found [here](https://github.com/kzl/decision-transformer).
 
 ## DecisionTransformerConfig
 
 [[autodoc]] DecisionTransformerConfig
 
 
-## DecisionTransformerTokenizer
-
-[[autodoc]] DecisionTransformerTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-
-## DecisionTransformerTokenizerFast
-
-[[autodoc]] DecisionTransformerTokenizerFast
-
 
 ## DecisionTransformerModel
 
 [[autodoc]] DecisionTransformerModel
-    - forward
-
-
-## DecisionTransformerForCausalLM
-
-[[autodoc]] DecisionTransformerForCausalLM
-    - forward
-
-
-## DecisionTransformerForMaskedLM
-
-[[autodoc]] DecisionTransformerForMaskedLM
-    - forward
-
-
-## DecisionTransformerForSequenceClassification
-
-[[autodoc]] transformers.DecisionTransformerForSequenceClassification
-    - forward
-
-## DecisionTransformerForMultipleChoice
-
-[[autodoc]] transformers.DecisionTransformerForMultipleChoice
-    - forward
-
-
-## DecisionTransformerForTokenClassification
-
-[[autodoc]] transformers.DecisionTransformerForTokenClassification
-    - forward
-
-
-## DecisionTransformerForQuestionAnswering
-
-[[autodoc]] DecisionTransformerForQuestionAnswering
     - forward
