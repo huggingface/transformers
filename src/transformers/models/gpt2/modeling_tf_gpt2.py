@@ -46,7 +46,7 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, dynamic_update_slice
 from ...utils import logging
 from .configuration_gpt2 import GPT2Config
 
@@ -877,25 +877,26 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         generated = tf.TensorArray(element_shape=(batch_size, 1), dtype=tf.int32, dynamic_size=False,
                                    size=max_length - seq_length, clear_after_read=False)
         generated = generated.write(0, next_tokens)
-        transposed_attention_mask = np.ones((max_length, batch_size), dtype=np.int64)
-        transposed_attention_mask[seq_length + 1:] = 0
-        transposed_attention_mask = tf.constant(transposed_attention_mask)
+        attention_mask = np.ones((batch_size, max_length), dtype=np.int64)
+        attention_mask[:, seq_length:-1] = 0
+        attention_mask = tf.constant(attention_mask)
 
         return {
             "past_key_values": past_key_values,
             "generated": generated,
             "next_tokens": next_tokens,
-            "transposed_attention_mask": transposed_attention_mask
+            "attention_mask": attention_mask
         }
 
-    def update_cache_for_generation(self, past, ptr):
+    def update_cache_for_generation(self, past, update_loc):
         new_past = [None for _ in range(len(past))]
+        slice_start_base = tf.constant([0, 0, 0, 1, 0])
         for i in range(len(past)):
-            new_past[i] = tf.transpose(past[i], perm=(3, 0, 1, 2, 4))
-            new_past[i] = tf.tensor_scatter_nd_update(new_past[i], tf.reshape(ptr, (1, 1)), new_past[i][-1:])
-            new_past[i] = tf.transpose(new_past[i][:-1], perm=(1, 2, 3, 0, 4))
+            update_slice = past[i][:, :, :, -1:]
+            # Write the last slice to the first open location in the padded past array
+            # and then truncate the last slice off the array
+            new_past[i] = dynamic_update_slice(past[i][:, :, :, :-1], update_slice, slice_start_base * update_loc)
         return tuple(new_past)
-
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

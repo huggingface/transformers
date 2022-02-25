@@ -19,6 +19,8 @@ import tensorflow as tf
 
 from .utils import logging
 
+from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
+
 
 logger = logging.get_logger(__name__)
 

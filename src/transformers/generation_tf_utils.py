@@ -29,7 +29,7 @@ from .generation_tf_logits_process import (
     TFNoRepeatNGramLogitsProcessor,
     TFRepetitionPenaltyLogitsProcessor,
 )
-from .tf_utils import set_tensor_by_indices_to_value, shape_list
+from .tf_utils import set_tensor_by_indices_to_value, shape_list, dynamic_update_slice
 from .utils import logging
 
 
@@ -2210,32 +2210,35 @@ class TFGenerationMixin:
         past = model_inputs["past_key_values"]
         generated = model_inputs["generated"]
         next_tokens = model_inputs["next_tokens"]
-        transposed_attention_mask = model_inputs["transposed_attention_mask"]
+        attention_mask = model_inputs["attention_mask"]
+        attention_mask_slice_start_base = tf.constant([0, 1], dtype=tf.int32)
         batch_size, seq_length = input_ids.shape
+        attention_mask_update_slice = tf.ones((batch_size, 1), dtype=tf.int64)
 
         ptr = tf.ones(shape=(1,), dtype=tf.int32)
         max_tokens_to_generate = max_length - seq_length
 
-        def greedy_search_cond_fn(input_ids, transposed_attention_mask, next_tokens, past, ptr):
+        def greedy_search_cond_fn(input_ids, attention_mask, next_tokens, past, ptr):
             """state termination condition fn."""
             return ptr < max_tokens_to_generate
 
-        def greedy_search_body_fn(generated, transposed_attention_mask, next_tokens, past, ptr):
+        def greedy_search_body_fn(generated, attention_mask, next_tokens, past, ptr):
             """state update fn."""
-            attention_mask = tf.transpose(transposed_attention_mask)
             position_ids = tf.broadcast_to(ptr + seq_length - 1, (batch_size, 1))
             model_outputs = self(input_ids=next_tokens, past=past,
                                  attention_mask=attention_mask, position_ids=position_ids)
             logits = model_outputs.logits[:, -1:]
             next_tokens = tf.argmax(logits, axis=-1, output_type=tf.int32)
             past = model_outputs.past_key_values
-            past = self.update_cache_for_generation(past, ptr)
+            new_past_index = ptr + seq_length - 1
+            past = self.update_cache_for_generation(past, new_past_index)
             generated = generated.write(ptr[0], next_tokens)
-            transposed_attention_mask = tf.tensor_scatter_nd_update(transposed_attention_mask, tf.reshape(ptr + seq_length, (1, 1)), tf.ones((1, batch_size), dtype=tf.int64))
+            update_start = attention_mask_slice_start_base * new_past_index
+            attention_mask = dynamic_update_slice(attention_mask, attention_mask_update_slice, update_start)
             ptr += 1
-            return generated, transposed_attention_mask, next_tokens, past, ptr
+            return generated, attention_mask, next_tokens, past, ptr
 
-        generated, _, _, _, _ = tf.while_loop(greedy_search_cond_fn, greedy_search_body_fn, (generated, transposed_attention_mask, next_tokens, past, ptr))
+        generated, _, _, _, _ = tf.while_loop(greedy_search_cond_fn, greedy_search_body_fn, (generated, attention_mask, next_tokens, past, ptr))
 
         output = tf.transpose(tf.reshape(generated.concat(), (-1, batch_size)))
 
