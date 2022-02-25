@@ -258,7 +258,7 @@ if __name__ == "__main__":
 
     config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
     model = CvtForImageClassification(config)
-    original_file = "C:\\Users\\AH87766\\Downloads\\CvT-13-224x224-IN-1k.pth"
+    original_file = "CvT-13-224x224-IN-1k.pth"
     original_weights = torch.load(original_file, map_location=torch.device("cpu"))
 
     hugging_face_weights = OrderedDict()
