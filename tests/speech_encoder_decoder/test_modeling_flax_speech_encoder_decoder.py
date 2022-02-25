@@ -316,8 +316,8 @@ class FlaxEncoderDecoderMixin:
 
         with torch.no_grad():
             pt_outputs_loaded = pt_model_loaded(**pt_inputs)
-            pt_logits_loaded = pt_outputs_loaded.logits
-            pt_outputs_loaded = pt_outputs_loaded.to_tuple()
+        pt_logits_loaded = pt_outputs_loaded.logits
+        pt_outputs_loaded = pt_outputs_loaded.to_tuple()
 
         self.assertEqual(len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch")
         self.assert_almost_equals(fx_logits, pt_logits_loaded.numpy(), 4e-2)
@@ -517,8 +517,8 @@ class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
 
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs)
-            pt_logits = pt_outputs.logits
-            pt_outputs = pt_outputs.to_tuple()
+        pt_logits = pt_outputs.logits
+        pt_outputs = pt_outputs.to_tuple()
 
         fx_outputs = fx_model(**inputs_dict)
         fx_logits = fx_outputs.logits
