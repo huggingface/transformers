@@ -288,7 +288,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
-                out_string += self.sp_model.decode(current_sub_tokens) + token
+                out_string += self.sp_model.decode(current_sub_tokens) + token + " "
                 current_sub_tokens = []
             else:
                 current_sub_tokens.append(token)
