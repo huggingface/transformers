@@ -15,6 +15,7 @@
 """ PyTorch Data2VecAudio model."""
 
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
