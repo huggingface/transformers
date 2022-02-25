@@ -267,10 +267,10 @@ def export(
         )
 
     if is_torch_available():
-        from transformers.file_utils import torch_version
+        from ..file_utils import torch_version
 
         if not is_torch_onnx_dict_inputs_support_available():
-            raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
+            raise ImportError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
         if not config.is_torch_support_available:
             raise ImportError(

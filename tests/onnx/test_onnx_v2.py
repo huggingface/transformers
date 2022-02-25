@@ -3,16 +3,18 @@ from tempfile import NamedTemporaryFile
 from unittest import TestCase
 from unittest.mock import patch
 
+import pytest
+
 from parameterized import parameterized
 from transformers import AutoConfig, AutoFeatureExtractor, AutoTokenizer, is_tf_available, is_torch_available
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
+    OnnxConfigWithPast,
     ParameterFormat,
     export,
     validate_model_outputs,
 )
-from transformers.onnx.config import OnnxConfigWithPast
 
 
 if is_torch_available() or is_tf_available():
@@ -245,6 +247,14 @@ class OnnxExportTestCaseV2(TestCase):
         config = AutoConfig.from_pretrained(model_name)
         model = model_class.from_config(config)
         onnx_config = onnx_config_class_constructor(model.config)
+
+        if is_torch_available():
+            from transformers.file_utils import torch_version
+
+            if torch_version < onnx_config.torch_onnx_minimum_version:
+                pytest.skip(
+                    f"Skipping due to incompatible PyTorch version. Minimum required is {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
+                )
 
         # Check the modality of the inputs and instantiate the appropriate preprocessor
         if model.main_input_name == "input_ids":
