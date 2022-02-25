@@ -12,14 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch DecisionTransformer model. """
+""" PyTorch DecisionTransformer model."""
 
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-
-from ..gpt2 import GPT2Model
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -28,11 +26,10 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
-    DecisionTransformerOutput,
-)
+from ...modeling_outputs import DecisionTransformerOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ..gpt2 import GPT2Model
 from .configuration_decision_transformer import DecisionTransformerConfig
 
 
@@ -50,8 +47,8 @@ DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class DecisionTransformerPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = DecisionTransformerConfig
@@ -65,15 +62,11 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(
-                mean=0.0, std=self.config.initializer_range
-            )
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(
-                mean=0.0, std=self.config.initializer_range
-            )
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -82,14 +75,14 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
 
 
 DECISION_TRANSFORMER_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config ([`~DecisionTransformerConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 DECISION_TRANSFORMER_INPUTS_DOCSTRING = r"""
@@ -97,8 +90,8 @@ DECISION_TRANSFORMER_INPUTS_DOCSTRING = r"""
         states (`torch.FloatTensor` of shape `(batch_size, episode_length, state_dim)`):
             The states for each step in the trajectory
         actions (`torch.FloatTensor` of shape `(batch_size, episode_length, act_dim)`):
-            The actions taken by the "expert" policy for the current state, these are masked for auto
-            regressive prediction
+            The actions taken by the "expert" policy for the current state, these are masked for auto regressive
+            prediction
         rewards (`torch.FloatTensor` of shape `(batch_size, episode_length, 1)`):
             The rewards for each state, action
         returns_to_go (`torch.FloatTensor` of shape `(batch_size, episode_length, 1)`):
@@ -117,9 +110,8 @@ DECISION_TRANSFORMER_INPUTS_DOCSTRING = r"""
 class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
     """
 
-    The model builds upon the GPT2 architecture to perform autoregressive prediction
-    of actions in an offline RL setting. Refer to the paper for more details:
-    https://arxiv.org/abs/2106.01345
+    The model builds upon the GPT2 architecture to perform autoregressive prediction of actions in an offline RL
+    setting. Refer to the paper for more details: https://arxiv.org/abs/2106.01345
 
     """
 
@@ -131,9 +123,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         # is that the positional embeddings are removed (since we'll add those ourselves)
         self.transformer = GPT2Model(config)
 
-        self.embed_timestep = nn.Embedding(
-            config.max_ep_len, config.hidden_size
-        )
+        self.embed_timestep = nn.Embedding(config.max_ep_len, config.hidden_size)
         self.embed_return = torch.nn.Linear(1, config.hidden_size)
         self.embed_state = torch.nn.Linear(config.state_dim, config.hidden_size)
         self.embed_action = torch.nn.Linear(config.act_dim, config.hidden_size)
@@ -141,25 +131,16 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         self.embed_ln = nn.LayerNorm(config.hidden_size)
 
         # note: we don't predict states or returns for the paper
-        self.predict_state = torch.nn.Linear(
-            config.hidden_size, config.state_dim
-        )
+        self.predict_state = torch.nn.Linear(config.hidden_size, config.state_dim)
         self.predict_action = nn.Sequential(
-            *(
-                [nn.Linear(config.hidden_size, config.act_dim)]
-                + ([nn.Tanh()] if config.action_tanh else [])
-            )
+            *([nn.Linear(config.hidden_size, config.act_dim)] + ([nn.Tanh()] if config.action_tanh else []))
         )
         self.predict_return = torch.nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(
-        DECISION_TRANSFORMER_INPUTS_DOCSTRING.format(
-            "batch_size, sequence_length"
-        )
-    )
+    @add_start_docstrings_to_model_forward(DECISION_TRANSFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=DecisionTransformerOutput,
@@ -178,9 +159,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
 
         if attention_mask is None:
             # attention mask for GPT: 1 if can be attended to, 0 if not
-            attention_mask = torch.ones(
-                (batch_size, seq_length), dtype=torch.long
-            )
+            attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long)
 
         # embed each modality with a different head
         state_embeddings = self.embed_state(states)
@@ -196,9 +175,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         # this makes the sequence look like (R_1, s_1, a_1, R_2, s_2, a_2, ...)
         # which works nice in an autoregressive sense since states predict actions
         stacked_inputs = (
-            torch.stack(
-                (returns_embeddings, state_embeddings, action_embeddings), dim=1
-            )
+            torch.stack((returns_embeddings, state_embeddings, action_embeddings), dim=1)
             .permute(0, 2, 1, 3)
             .reshape(batch_size, 3 * seq_length, self.hidden_size)
         )
@@ -220,20 +197,12 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
 
         # reshape x so that the second dimension corresponds to the original
         # returns (0), states (1), or actions (2); i.e. x[:,1,t] is the token for s_t
-        x = x.reshape(batch_size, seq_length, 3, self.hidden_size).permute(
-            0, 2, 1, 3
-        )
+        x = x.reshape(batch_size, seq_length, 3, self.hidden_size).permute(0, 2, 1, 3)
 
         # get predictions
-        return_preds = self.predict_return(
-            x[:, 2]
-        )  # predict next return given state and action
-        state_preds = self.predict_state(
-            x[:, 2]
-        )  # predict next state given state and action
-        action_preds = self.predict_action(
-            x[:, 1]
-        )  # predict next action given state
+        return_preds = self.predict_return(x[:, 2])  # predict next return given state and action
+        state_preds = self.predict_state(x[:, 2])  # predict next state given state and action
+        action_preds = self.predict_action(x[:, 1])  # predict next action given state
 
         return DecisionTransformerOutput(
             last_hidden_state=transformer_outputs["last_hidden_state"],

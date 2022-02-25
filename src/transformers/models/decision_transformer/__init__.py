@@ -18,12 +18,14 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available
-from ...file_utils import is_torch_available
+from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
+    "configuration_decision_transformer": [
+        "DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "DecisionTransformerConfig",
+    ],
     "tokenization_decision_transformer": ["DecisionTransformerTokenizer"],
 }
 
@@ -33,8 +35,8 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_decision_transformer"] = [
         "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "DecisionTransformerForMaskedLM",
         "DecisionTransformerForCausalLM",
+        "DecisionTransformerForMaskedLM",
         "DecisionTransformerForMultipleChoice",
         "DecisionTransformerForQuestionAnswering",
         "DecisionTransformerForSequenceClassification",
@@ -46,10 +48,11 @@ if is_torch_available():
     ]
 
 
-
-
 if TYPE_CHECKING:
-    from .configuration_decision_transformer import DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, DecisionTransformerConfig
+    from .configuration_decision_transformer import (
+        DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DecisionTransformerConfig,
+    )
     from .tokenization_decision_transformer import DecisionTransformerTokenizer
 
     if is_tokenizers_available():
@@ -58,8 +61,8 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_decision_transformer import (
             DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DecisionTransformerForMaskedLM,
             DecisionTransformerForCausalLM,
+            DecisionTransformerForMaskedLM,
             DecisionTransformerForMultipleChoice,
             DecisionTransformerForQuestionAnswering,
             DecisionTransformerForSequenceClassification,
@@ -69,7 +72,6 @@ if TYPE_CHECKING:
             DecisionTransformerPreTrainedModel,
             load_tf_weights_in_decision_transformer,
         )
-
 
 
 else:

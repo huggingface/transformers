@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    decision_transformer,
     albert,
     auto,
     bart,
@@ -44,6 +43,7 @@ from . import (
     data2vec,
     deberta,
     deberta_v2,
+    decision_transformer,
     deit,
     detr,
     dialogpt,
