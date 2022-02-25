@@ -40,12 +40,12 @@ class ResNetConfig(PretrainedConfig):
         patch_size (`int`, optional, defaults to 4):
             Patch size to use in the patch embedding layer.
         hidden_sizes (`List[int]`, *optional*, defaults to `[64, 256, 512, 1024, 2048]`):
-            Dimensionality (hidden size) embeddings + at each stage .
+            Dimensionality (hidden size) of the embeddings + at each stage.
         depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
             Depth (number of blocks) for each stage.
         embeddings_type (`str`, *optional*, defaults to `"classic"`):
             The embedding layer to use, either `"classic"` or `"3x3"`. If `"classic"`, the original resnet embedding, a
-            single agressive `7x7` convolution, is applied. If `"3x3"`, three `3x3` are applied instead resulting in
+            single aggressive `7x7` convolution, is applied. If `"3x3"`, three `3x3` are applied instead resulting in
             the `D` variant.
         layer_type (`str`, *optional*, defaults to `"bottleneck"`):
             The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or
