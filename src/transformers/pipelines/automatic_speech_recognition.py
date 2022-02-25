@@ -171,7 +171,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 {"text": "i", "timestamps": (0.7, .9)}]`, then it means the model predicts that the letter "h" was pronounced
                 after `0.5` and before `0.6` seconds. If set to `"word"`, the pipeline will return `timestamps`
                 along the text for every word in the text. For instance if could get `[{"text": "Hi ", "timestamps":
-                (0.5,0.9), {"text": "there", "timestamps": (1.0, .1.5)}]`, then it means the model assumes the word
+                (0.5,0.9), {"text": "there", "timestamps": (1.0, .1.5)}]`, then it means the model predicts that the word
                 "hi" was pronounces before 0.5 and after 0.9 seconds.
 
         Return:
