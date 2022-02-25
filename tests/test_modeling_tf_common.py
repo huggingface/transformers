@@ -474,8 +474,8 @@ class TFModelTesterMixin:
                     ),
                     "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
                 }
-            # TODO: A better way to handle vision models
-            elif model_class.__name__ in ["TFViTModel", "TFViTForImageClassification", "TFCLIPVisionModel"]:
+            # `pixel_values` implies that the input is an image
+            elif model_class.main_input_name == "pixel_values":
                 inputs = tf.keras.Input(
                     batch_shape=(
                         3,
