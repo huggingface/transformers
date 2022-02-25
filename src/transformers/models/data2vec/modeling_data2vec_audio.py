@@ -81,7 +81,7 @@ DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Data2VecAudioBaseModelOutput with Wav2Vec2->Data2VecAudio
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2BaseModelOutput with Wav2Vec2->Data2VecAudio
 class Data2VecAudioBaseModelOutput(ModelOutput):
     """
     Output type of [`Data2VecAudioBaseModelOutput`], with potential hidden states and attentions.
@@ -292,9 +292,9 @@ class Data2VecAudioConvLayer(nn.Module):
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->Data2VecAudio
 class Data2VecAudioPadLayer(nn.Module):
-    def __init__(self, conv_pos_kernel_size):
+    def __init__(self, num_conv_pos_embeddings):
         super().__init__()
-        self.num_pad_remove = 1 if conv_pos_kernel_size % 2 == 0 else 0
+        self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
 
     def forward(self, hidden_states):
         if self.num_pad_remove > 0:
@@ -1046,10 +1046,25 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
                 "instantiate the model as follows: `Data2VecAudioForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
+        output_hidden_size = (
+            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
+        )
+        self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1152,6 +1167,10 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        if hasattr(config, "add_adapter") and config.add_adapter:
+            raise ValueError(
+                "Sequence classification does not support the use of Data2VecAudio adapters (config.add_adapter=True)"
+            )
         self.data2vec_audio = Data2VecAudioModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
@@ -1161,6 +1180,18 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1260,6 +1291,10 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        if hasattr(config, "add_adapter") and config.add_adapter:
+            raise ValueError(
+                "Audio frame classification does not support the use of Data2VecAudio adapters (config.add_adapter=True)"
+            )
         self.data2vec_audio = Data2VecAudioModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
@@ -1267,6 +1302,18 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1417,6 +1464,18 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
         self.objective = AMSoftmaxLoss(config.xvector_output_dim, config.num_labels)
 
         self.init_weights()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
