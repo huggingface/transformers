@@ -343,7 +343,6 @@ class Data2VecAudioPositionalConvEmbedding(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder with Wav2Vec2->Data2VecAudio
 class Data2VecAudioFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
@@ -355,11 +354,13 @@ class Data2VecAudioFeatureEncoder(nn.Module):
         self.gradient_checkpointing = False
         self._requires_grad = True
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder._freeze_parameters
     def _freeze_parameters(self):
         for param in self.parameters():
             param.requires_grad = False
         self._requires_grad = False
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder.forward
     def forward(self, input_values):
         hidden_states = input_values[:, None]
 
