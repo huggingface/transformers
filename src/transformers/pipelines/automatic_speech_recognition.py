@@ -172,7 +172,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 after `0.5` and before `0.6` seconds. If set to `"word"`, the pipeline will return `timestamps`
                 along the text for every word in the text. For instance if could get `[{"text": "Hi ", "timestamps":
                 (0.5,0.9), {"text": "there", "timestamps": (1.0, .1.5)}]`, then it means the model assumes the word
-                "Hi" was pronounces and the `0.5s and 0.9s` of the input audio
+                "hi" was pronounces before 0.5 and after 0.9 seconds.
 
         Return:
             `Dict`: A dictionary with the following keys:
