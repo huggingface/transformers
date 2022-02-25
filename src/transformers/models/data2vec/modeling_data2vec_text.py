@@ -624,9 +624,9 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
 
 
 DATA2VECTEXT_START_DOCSTRING = r"""
-    Data2VecText was proposed in [data2vec: A General Framework for Self-supervised Learning in Speech,
-    Vision and Language](https://arxiv.org/pdf/2202.03555) by Alexei Baevski, Wei-Ning Hsu, Qiantong Xu, Arun Babu,
-    Jiatao Gu and Michael Auli.
+    Data2VecText was proposed in [data2vec: A General Framework for Self-supervised Learning in Speech, Vision and
+    Language](https://arxiv.org/pdf/2202.03555) by Alexei Baevski, Wei-Ning Hsu, Qiantong Xu, Arun Babu, Jiatao Gu and
+    Michael Auli.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
