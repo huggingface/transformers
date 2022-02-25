@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple
 
 import torch
 

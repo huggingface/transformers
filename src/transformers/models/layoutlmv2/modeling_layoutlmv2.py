@@ -623,6 +623,7 @@ class LayoutLmv2RelationExtractionDecoder(nn.Module):
             relation_labels = torch.tensor(relations[b]["label"], device=device)
             entities_start_index = torch.tensor(entities[b]["start"], device=device)
             entities_labels = torch.tensor(entities[b]["label"], device=device)
+
             head_index = entities_start_index[head_entities]
             head_label = entities_labels[head_entities]
             head_label_repr = self.entity_emb(head_label)
@@ -790,31 +791,31 @@ class LayoutLMv2RelationExtractionOutput(ModelOutput):
             heads.
         entities (list of dicts of shape `(batch_size,)` where each dict contains:
             {
-                'start': `torch.IntTensor` of shape `(num_entites)`,
+                'start': `torch.IntTensor` of shape `(num_entities)`,
                     Each value in the list represents the id of the token (element of range(0, len(tokens)) where the
                     entity starts
-                'end': `torch.IntTensor` of shape `(num_entites)`,
+                'end': `torch.IntTensor` of shape `(num_entities)`,
                     Each value in the list represents the id of the token (element of range(0, len(tokens)) where the
                     entity ends
-                'label': `torch.IntTensor` of shape `(num_entites)`
+                'label': `torch.IntTensor` of shape `(num_entities)`
                     Each value in the list represents the label (as an int) of the entity
             }
         relations (list of dicts of shape `(batch_size,)` where each dict contains:
             {
-                'head': `torch.IntTensor` of shape `(num_entites)`,
+                'head': `torch.IntTensor` of shape `(num_relations)`,
                     Each value in the list represents the key of a different relation. A value can be used to map to
                     the entity list as it tells you what index to inspect in any of the lists inside the entities dict
                     (reps the id of the entity `(element of range(0, len(entities)`)
-                'tail': `torch.IntTensor` of shape `(num_entites)`,
+                'tail': `torch.IntTensor` of shape `(num_relations)`,
                     Each value in the list represents the value of a different relation. A value can be used to map to
                     the entity list as it tells you what index to inspect in any of the lists inside the entities dict
                     (reps the id of the entity `(element of range(0, len(entities)`)
-                'start_index': `torch.IntTensor` of shape `(num_entites)`,
+                'start_index': `torch.IntTensor` of shape `(num_relations)`,
                     Each value in this list represents the start index (element of range(0, len(tokens)) for the
                     combined head and tail entities e.g. `min(entities['start']['head'], entities['start']['tail'])`
-                'end_index': `torch.IntTensor` of shape `(num_entites)`,
+                'end_index': `torch.IntTensor` of shape `(num_relations)`,
                     Each value in this list represents the end index (element of range(0, len(tokens)) for the combined
-                    head and tail entities e.g. `min(entities['end']['head'], entities['end']['tail'])`
+                    head and tail entities e.g. `max(entities['end']['head'], entities['end']['tail'])`
             }
         pred_relations (list of lists of shape `(batch_size, pred_relations)` where each element is a dict containing:
             {
@@ -1460,6 +1461,14 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    LayoutLMv2 Model with a relation extraction decoder on top (projection layers for hidden states of head & tail
+    entities, then a biaffine attention classifier), for relation extraction tasks such as
+    [XFUND](https://github.com/doc-analysis/XFUND/)
+    """,
+    LAYOUTLMV2_START_DOCSTRING,
+)
 class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
