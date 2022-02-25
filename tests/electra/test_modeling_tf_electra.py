@@ -190,6 +190,228 @@ class TFElectraModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_causal_lm_base_model_past(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
+        config.is_decoder = True
+
+        model = TFElectraModel(config=config)
+
+        # first forward pass
+        outputs = model(input_ids, use_cache=True)
+        outputs_use_cache_conf = model(input_ids)
+        outputs_no_past = model(input_ids, use_cache=False)
+
+        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
+        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
+
+        past_key_values = outputs.past_key_values
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # append to next input_ids and attn_mask
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+
+        output_from_no_past = model(next_input_ids, output_hidden_states=True).hidden_states[0]
+        output_from_past = model(
+            next_tokens, past_key_values=past_key_values, output_hidden_states=True
+        ).hidden_states[0]
+
+        # select random slice
+        random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx]
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx]
+
+        # test that outputs are equal for slice
+        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-6)
+
+    def create_and_check_causal_lm_base_model_past_with_attn_mask(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
+        config.is_decoder = True
+
+        model = TFElectraModel(config=config)
+
+        # create attention mask
+        half_seq_length = self.seq_length // 2
+        attn_mask_begin = tf.ones((self.batch_size, half_seq_length), dtype=tf.int32)
+        attn_mask_end = tf.zeros((self.batch_size, self.seq_length - half_seq_length), dtype=tf.int32)
+        attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
+
+        # first forward pass
+        outputs = model(input_ids, attention_mask=attn_mask, use_cache=True)
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        past_key_values = outputs.past_key_values
+
+        # change a random masked slice from input_ids
+        random_seq_idx_to_change = ids_tensor((1,), half_seq_length).numpy() + 1
+        random_other_next_tokens = ids_tensor((self.batch_size, self.seq_length), config.vocab_size)
+        vector_condition = tf.range(self.seq_length) == (self.seq_length - random_seq_idx_to_change)
+        condition = tf.transpose(
+            tf.broadcast_to(tf.expand_dims(vector_condition, -1), (self.seq_length, self.batch_size))
+        )
+        input_ids = tf.where(condition, random_other_next_tokens, input_ids)
+
+        # append to next input_ids and
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+        attn_mask = tf.concat(
+            [attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)],
+            axis=1,
+        )
+
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=attn_mask,
+            output_hidden_states=True,
+        ).hidden_states[0]
+        output_from_past = model(
+            next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, output_hidden_states=True
+        ).hidden_states[0]
+
+        # select random slice
+        random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx]
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx]
+
+        # test that outputs are equal for slice
+        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-6)
+
+    def create_and_check_causal_lm_base_model_past_large_inputs(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
+        config.is_decoder = True
+
+        model = TFElectraModel(config=config)
+
+        input_ids = input_ids[:1, :]
+        input_mask = input_mask[:1, :]
+        self.batch_size = 1
+
+        # first forward pass
+        outputs = model(input_ids, attention_mask=input_mask, use_cache=True)
+        past_key_values = outputs.past_key_values
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
+
+        # append to next input_ids and
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+        next_attention_mask = tf.concat([input_mask, next_attn_mask], axis=-1)
+
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            output_hidden_states=True,
+        ).hidden_states[0]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+            output_hidden_states=True,
+        ).hidden_states[0]
+
+        self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
+
+        # select random slice
+        random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
+        output_from_past_slice = output_from_past[:, :, random_slice_idx]
+
+        # test that outputs are equal for slice
+        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+
+    def create_and_check_decoder_model_past_large_inputs(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        config.add_cross_attention = True
+
+        model = TFElectraModel(config=config)
+
+        input_ids = input_ids[:1, :]
+        input_mask = input_mask[:1, :]
+        encoder_hidden_states = encoder_hidden_states[:1, :, :]
+        encoder_attention_mask = encoder_attention_mask[:1, :]
+        self.batch_size = 1
+
+        # first forward pass
+        outputs = model(
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            use_cache=True,
+        )
+        past_key_values = outputs.past_key_values
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
+
+        # append to next input_ids and
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+        next_attention_mask = tf.concat([input_mask, next_attn_mask], axis=-1)
+
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_hidden_states=True,
+        ).hidden_states[0]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            output_hidden_states=True,
+        ).hidden_states[0]
+
+        self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
+
+        # select random slice
+        random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
+        output_from_past_slice = output_from_past[:, :, random_slice_idx]
+
+        # test that outputs are equal for slice
+        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -310,6 +532,26 @@ class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
+
+    def test_causal_lm_base_model_past(self):
+        """Test causal LM base model with `past_key_values`"""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_causal_lm_base_model_past(*config_and_inputs)
+
+    def test_causal_lm_base_model_past_with_attn_mask(self):
+        """Test the causal LM base model with `past_key_values` and `attention_mask`"""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_causal_lm_base_model_past_with_attn_mask(*config_and_inputs)
+
+    def test_causal_lm_base_model_past_with_large_inputs(self):
+        """Test the causal LM base model with `past_key_values` and a longer decoder sequence length"""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_causal_lm_base_model_past_large_inputs(*config_and_inputs)
+
+    def test_decoder_model_past_with_large_inputs(self):
+        """Similar to `test_causal_lm_base_model_past_with_large_inputs` but with cross-attention"""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

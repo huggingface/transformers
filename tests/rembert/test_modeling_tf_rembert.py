@@ -647,7 +647,7 @@ class TFRemBertModelTest(TFModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_causal_lm_model_past_large_inputs(*config_and_inputs)
 
     def test_decoder_model_past_with_large_inputs(self):
-        """`test_causal_lm_based_model_past_with_attn_mask` with a longer input sequence"""
+        """Similar to `test_causal_lm_model_past_with_large_inputs` but with cross-attention"""
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
