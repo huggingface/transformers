@@ -21,9 +21,9 @@ import numpy as np
 from transformers import is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow, torch_device
 
-from .test_modeling_flax_common import floats_tensor, ids_tensor, random_attention_mask
-from .test_modeling_flax_gpt2 import FlaxGPT2ModelTester
-from .test_modeling_flax_wav2vec2 import FlaxWav2Vec2ModelTester
+from ..gpt2.test_modeling_flax_gpt2 import FlaxGPT2ModelTester
+from ..test_modeling_flax_common import floats_tensor, ids_tensor, random_attention_mask
+from ..wav2vec2.test_modeling_flax_wav2vec2 import FlaxWav2Vec2ModelTester
 
 
 if is_flax_available():
@@ -373,7 +373,7 @@ class FlaxEncoderDecoderMixin:
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
-    # @is_pt_flax_cross_test
+    @is_pt_flax_cross_test
     def test_pt_flax_equivalence(self):
 
         config_inputs_dict = self.prepare_config_and_inputs()
