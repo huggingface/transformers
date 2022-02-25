@@ -577,10 +577,6 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        # reshape last hidden states to (batch_size, height*width, hidden_size)
-        # batch_size = sequence_output.shape[0]
-        # sequence_output = sequence_output.reshape(batch_size, -1, self.config.hidden_sizes[-1])
-
         # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels) -> (batch_size, height*width, hidden_size)
         batch_size = sequence_output.shape[0]
         sequence_output = sequence_output.permute(0, 2, 3, 1)
