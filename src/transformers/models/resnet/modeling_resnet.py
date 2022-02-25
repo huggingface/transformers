@@ -491,12 +491,9 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
 
         if labels is not None:
             if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                self.config.problem_type = "multi_label_classification"
+                if self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
                     self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
             if self.config.problem_type == "single_label_classification":
                 criterion = CrossEntropyLoss()
                 loss = criterion(logits.view(-1, self.num_labels), labels.view(-1))
