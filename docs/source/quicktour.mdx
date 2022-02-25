@@ -80,7 +80,7 @@ The pipeline downloads and caches a default [pretrained model](https://huggingfa
 
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")
-[{"label": "POSITIVE", "score": 0.9998}]
+[{'label': 'POSITIVE', 'score': 0.9998}]
 ```
 
 For more than one sentence, pass a list of sentences to the [`pipeline`] which returns a list of dictionaries:
@@ -112,19 +112,21 @@ Next, load a dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co
 ```py
 >>> import datasets
 
->>> dataset = datasets.load_dataset("superb", name="asr", split="test")
+>>> dataset = datasets.load_dataset("superb", name="asr", split="test")  # doctest: +IGNORE_RESULT
 ```
 
-Now you can iterate over the dataset with the pipeline. `KeyDataset` retrieves the item in the dictionary returned by the dataset:
+You can pass a whole dataset pipeline:
 
 ```py
->>> from transformers.pipelines.pt_utils import KeyDataset
->>> from tqdm.auto import tqdm
-
->>> for out in tqdm(speech_recognizer(KeyDataset(dataset, "file"))):
-...     print(out)
-{"text": "HE HOPED THERE WOULD BE STEW FOR DINNER TURNIPS AND CARROTS AND BRUISED POTATOES AND FAT MUTTON PIECES TO BE LADLED OUT IN THICK PEPPERED FLOWER FAT AND SAUCE"}
+>>> files = dataset["file"]
+>>> speech_recognizer(files[:4])
+[{'text': 'HE HOPED THERE WOULD BE STEW FOR DINNER TURNIPS AND CARROTS AND BRUISED POTATOES AND FAT MUTTON PIECES TO BE LADLED OUT IN THICK PEPPERED FLOWER FAT AND SAUCE'},
+ {'text': 'STUFFERED INTO YOU HIS BELLY COUNSELLED HIM'},
+ {'text': 'AFTER EARLY NIGHTFALL THE YELLOW LAMPS WOULD LIGHT UP HERE AND THERE THE SQUALID QUARTER OF THE BROTHELS'},
+ {'text': 'HO BERTIE ANY GOOD IN YOUR MIND'}]
 ```
+
+For a larger dataset where the inputs are big (like in speech or vision), you will want to pass along a generator instead of a list that loads all the inputs in memory. See the [pipeline documentation](main_classes/pipeline) for more information.
 
 ### Use another model and tokenizer in the pipeline
 
@@ -141,7 +143,7 @@ Use the [`AutoModelForSequenceClassification`] and ['AutoTokenizer'] to load the
 
 >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-===PT-TF-SPLIT===
+>>> # ===PT-TF-SPLIT===
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 >>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
@@ -153,7 +155,7 @@ Then you can specify the model and tokenizer in the [`pipeline`], and apply the 
 ```py
 >>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
 >>> classifier("Nous sommes très heureux de vous présenter la bibliothèque 🤗 Transformers.")
-[{"label": "5 stars", "score": 0.7272651791572571}]
+[{'label': '5 stars', 'score': 0.7273}]
 ```
 
 If you can't find a model for your use-case, you will need to fine-tune a pretrained model on your data. Take a look at our [fine-tuning tutorial](./training) to learn how. Finally, after you've fine-tuned your pretrained model, please consider sharing it (see tutorial [here](./model_sharing)) with the community on the Model Hub to democratize NLP for everyone! 🤗
@@ -186,8 +188,9 @@ Pass your text to the tokenizer:
 ```py
 >>> encoding = tokenizer("We are very happy to show you the 🤗 Transformers library.")
 >>> print(encoding)
-{"input_ids": [101, 2057, 2024, 2200, 3407, 2000, 2265, 2017, 1996, 100, 19081, 3075, 1012, 102],
- "attention_mask": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
+{'input_ids': [101, 11312, 10320, 12495, 19308, 10114, 11391, 10855, 10103, 100, 58263, 13299, 119, 102],
+ 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
 The tokenizer will return a dictionary containing:
@@ -205,7 +208,7 @@ Just like the [`pipeline`], the tokenizer will accept a list of inputs. In addit
 ...     max_length=512,
 ...     return_tensors="pt",
 ... )
-===PT-TF-SPLIT===
+>>> # ===PT-TF-SPLIT===
 >>> tf_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
 ...     padding=True,
@@ -226,7 +229,7 @@ Read the [preprocessing](./preprocessing) tutorial for more details about tokeni
 
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
-===PT-TF-SPLIT===
+>>> # ===PT-TF-SPLIT===
 >>> from transformers import TFAutoModelForSequenceClassification
 
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
@@ -243,7 +246,7 @@ Now you can pass your preprocessed batch of inputs directly to the model. If you
 
 ```py
 >>> pt_outputs = pt_model(**pt_batch)
-===PT-TF-SPLIT===
+>>> # ===PT-TF-SPLIT===
 >>> tf_outputs = tf_model(tf_batch)
 ```
 
@@ -254,16 +257,17 @@ The model outputs the final activations in the `logits` attribute. Apply the sof
 
 >>> pt_predictions = nn.functional.softmax(pt_outputs.logits, dim=-1)
 >>> print(pt_predictions)
-tensor([[2.2043e-04, 9.9978e-01],
-        [5.3086e-01, 4.6914e-01]], grad_fn=<SoftmaxBackward>)
-===PT-TF-SPLIT===
+tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
+        [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
+
+>>> # ===PT-TF-SPLIT===
 >>> import tensorflow as tf
 
 >>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
 >>> print(tf_predictions)
 tf.Tensor(
-[[2.2043e-04 9.9978e-01]
- [5.3086e-01 4.6914e-01]], shape=(2, 2), dtype=float32)
+[[0.00206 0.00177 0.01155 0.21209 0.77253]
+ [0.20842 0.18262 0.19693 0.1755  0.23652]], shape=(2, 5), dtype=float32)
 ```
 
 <Tip>
@@ -288,11 +292,11 @@ Once your model is fine-tuned, you can save it with its tokenizer using [`PreTra
 
 ```py
 >>> pt_save_directory = "./pt_save_pretrained"
->>> tokenizer.save_pretrained(pt_save_directory)
+>>> tokenizer.save_pretrained(pt_save_directory)  # doctest: +IGNORE_RESULT
 >>> pt_model.save_pretrained(pt_save_directory)
-===PT-TF-SPLIT===
+>>> # ===PT-TF-SPLIT===
 >>> tf_save_directory = "./tf_save_pretrained"
->>> tokenizer.save_pretrained(tf_save_directory)
+>>> tokenizer.save_pretrained(tf_save_directory)  # doctest: +IGNORE_RESULT
 >>> tf_model.save_pretrained(tf_save_directory)
 ```
 
@@ -300,7 +304,7 @@ When you are ready to use the model again, reload it with [`PreTrainedModel.from
 
 ```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
-===PT-TF-SPLIT===
+>>> # ===PT-TF-SPLIT===
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
 ```
 
@@ -311,7 +315,7 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 
 >>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
-===PT-TF-SPLIT===
+>>> # ===PT-TF-SPLIT===
 >>> from transformers import TFAutoModel
 
 >>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
