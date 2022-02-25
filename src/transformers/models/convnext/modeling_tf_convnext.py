@@ -141,15 +141,9 @@ class TFConvNextLayer(tf.keras.layers.Layer):
         # Using `layers.Activation` instead of `tf.identity` to better control `training`
         # behaviour.
         self.drop_path = (
-            TFConvNextDropPath(
-                drop_path,
-                name="drop_path",
-            )
+            TFConvNextDropPath(drop_path, name="drop_path")
             if drop_path > 0.0
-            else tf.keras.layers.Activation(
-                "linear",
-                name="drop_path",
-            )
+            else tf.keras.layers.Activation("linear", name="drop_path")
         )
 
     def build(self, input_shape: tf.TensorShape):
@@ -275,10 +269,7 @@ class TFConvNextEncoder(tf.keras.layers.Layer):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return TFBaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-        )
+        return TFBaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
 @keras_serializable
