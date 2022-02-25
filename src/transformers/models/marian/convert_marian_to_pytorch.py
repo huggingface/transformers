@@ -58,7 +58,7 @@ def load_layers_(layer_lst: nn.ModuleList, opus_state: dict, converter, is_decod
     for i, layer in enumerate(layer_lst):
         layer_tag = f"decoder_l{i + 1}_" if is_decoder else f"encoder_l{i + 1}_"
         sd = convert_encoder_layer(opus_state, layer_tag, converter)
-        layer.load_state_dict(sd, strict=True)
+        layer.load_state_dict(sd, strict=False)
 
 
 def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
@@ -398,7 +398,7 @@ def check_equal(marian_cfg, k1, k2):
 
 def check_marian_cfg_assumptions(marian_cfg):
     assumed_settings = {
-        "tied-embeddings-all": True,
+        # "tied-embeddings-all": True,
         "layer-normalization": False,
         "right-left": False,
         "transformer-ffn-depth": 2,
@@ -417,9 +417,9 @@ def check_marian_cfg_assumptions(marian_cfg):
         actual = marian_cfg[k]
         if actual != v:
             raise ValueError(f"Unexpected config value for {k} expected {v} got {actual}")
-    check_equal(marian_cfg, "transformer-ffn-activation", "transformer-aan-activation")
-    check_equal(marian_cfg, "transformer-ffn-depth", "transformer-aan-depth")
-    check_equal(marian_cfg, "transformer-dim-ffn", "transformer-dim-aan")
+    # check_equal(marian_cfg, "transformer-ffn-activation", "transformer-aan-activation")
+    # check_equal(marian_cfg, "transformer-ffn-depth", "transformer-aan-depth")
+    # check_equal(marian_cfg, "transformer-dim-ffn", "transformer-dim-aan")
 
 
 BIAS_KEY = "decoder_ff_logit_out_b"
@@ -464,9 +464,20 @@ class OpusState:
         if "Wpos" in self.state_dict:
             raise ValueError("Wpos key in state dictionary")
         self.state_dict = dict(self.state_dict)
-        self.wemb, self.final_bias = add_emb_entries(self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
-        self.pad_token_id = self.wemb.shape[0] - 1
-        cfg["vocab_size"] = self.pad_token_id + 1
+        if cfg["tied-embeddings-src"]:
+            self.wemb, self.final_bias = add_emb_entries(self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
+            self.pad_token_id = self.wemb.shape[0] - 1
+            cfg["vocab_size"] = self.pad_token_id + 1
+        else:
+            self.wemb, _ = add_emb_entries(self.state_dict["encoder_Wemb"], self.state_dict[BIAS_KEY], 1)
+            self.dec_wemb, self.final_bias = add_emb_entries(
+                self.state_dict["decoder_Wemb"], self.state_dict[BIAS_KEY], 1
+            )
+            # still assuming that vocab size is same for encoder and decoder
+            self.pad_token_id = self.wemb.shape[0] - 1
+            cfg["src_vocab_size"] = self.pad_token_id + 1
+            cfg["tgt_vocab_size"] = self.pad_token_id + 1
+
         # self.state_dict['Wemb'].sha
         self.state_keys = list(self.state_dict.keys())
         if "Wtype" in self.state_dict:
@@ -475,14 +486,17 @@ class OpusState:
         self.source_dir = source_dir
         self.cfg = cfg
         hidden_size, intermediate_shape = self.state_dict["encoder_l1_ffn_W1"].shape
-        if hidden_size != 512 or cfg["dim-emb"] != 512:
-            raise ValueError(f"Hidden size {hidden_size} and configured size {cfg['dim_emb']} mismatched or not 512")
+        # if hidden_size != 512 or cfg["dim-emb"] != 512:
+        #     raise ValueError(f"Hidden size {hidden_size} and configured size {cfg['dim_emb']} mismatched or not 512")
 
         # Process decoder.yml
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
         check_marian_cfg_assumptions(cfg)
         self.hf_config = MarianConfig(
-            vocab_size=cfg["vocab_size"],
+            #             vocab_size=cfg["vocab_size"],
+            src_vocab_size=cfg["src_vocab_size"],
+            tgt_vocab_size=cfg["tgt_vocab_size"],
+            share_embeddings=cfg["tied-embeddings-src"],
             decoder_layers=cfg["dec-depth"],
             encoder_layers=cfg["enc-depth"],
             decoder_attention_heads=cfg["transformer-heads"],
@@ -525,7 +539,7 @@ class OpusState:
             if (
                 k.startswith("encoder_l")
                 or k.startswith("decoder_l")
-                or k in [CONFIG_KEY, "Wemb", "Wpos", "decoder_ff_logit_out_b"]
+                or k in [CONFIG_KEY, "Wemb", "encoder_Wemb", "decoder_Wemb", "Wpos", "decoder_ff_logit_out_b"]
             ):
                 continue
             else:
@@ -552,10 +566,18 @@ class OpusState:
         load_layers_(model.model.decoder.layers, state_dict, BART_CONVERTER, is_decoder=True)
 
         # handle tensors not associated with layers
-        wemb_tensor = nn.Parameter(torch.FloatTensor(self.wemb))
-        bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
-        model.model.shared.weight = wemb_tensor
-        model.model.encoder.embed_tokens = model.model.decoder.embed_tokens = model.model.shared
+        if self.cfg["tied-embeddings-src"]:
+            wemb_tensor = nn.Parameter(torch.FloatTensor(self.wemb))
+            bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
+            model.model.shared.weight = wemb_tensor
+            model.model.encoder.embed_tokens = model.model.decoder.embed_tokens = model.model.shared
+        else:
+            wemb_tensor = nn.Parameter(torch.FloatTensor(self.wemb))
+            model.model.encoder.embed_tokens.weight = wemb_tensor
+
+            decoder_wemb_tensor = nn.Parameter(torch.FloatTensor(self.dec_wemb))
+            bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
+            model.model.decoder.embed_tokens.weight = decoder_wemb_tensor
 
         model.final_logits_bias = bias_tensor
 
