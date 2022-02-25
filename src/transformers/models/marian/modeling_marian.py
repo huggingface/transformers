@@ -1090,14 +1090,14 @@ class MarianModel(MarianPreTrainedModel):
         super().__init__(config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
+        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
+        embed_tokens = self.shared if self.config.share_encoder_decoder_embeddings else self.shared.clone()
 
-        if config.share_encoder_decoder_embeddings:
-            self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
-        else:
+        self.encoder = MarianEncoder(config, embed_tokens)
+        self.decoder = MarianDecoder(config, embed_tokens)
+
+        if not config.share_encoder_decoder_embeddings:
             self.shared = None
-
-        self.encoder = MarianEncoder(config, self.shared)
-        self.decoder = MarianDecoder(config, self.shared)
 
         # Initialize weights and apply final processing
         self.post_init()
