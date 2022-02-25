@@ -73,14 +73,7 @@ class TFConvNextModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                self.num_channels,
-                self.image_size,
-                self.image_size,
-            ]
-        )
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
         if self.use_labels:
@@ -107,22 +100,14 @@ class TFConvNextModelTester:
         # expected last hidden states: B, C, H // 32, W // 32
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (
-                self.batch_size,
-                self.hidden_sizes[-1],
-                self.image_size // 32,
-                self.image_size // 32,
-            ),
+            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = TFConvNextForImageClassification(config)
         result = model(pixel_values, labels=labels, training=False)
-        self.parent.assertEqual(
-            result.logits.shape,
-            (self.batch_size, self.type_sequence_label_size),
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -138,14 +123,7 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            TFConvNextModel,
-            TFConvNextForImageClassification,
-        )
-        if is_tf_available()
-        else ()
-    )
+    all_model_classes = (TFConvNextModel, TFConvNextForImageClassification) if is_tf_available() else ()
 
     test_pruning = False
     test_onnx = False
@@ -202,16 +180,10 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
             # ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [
-                    self.model_tester.image_size // 4,
-                    self.model_tester.image_size // 4,
-                ],
+                [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
             )
 
-        (
-            config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
@@ -225,10 +197,7 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     # Since ConvNext does not have any attention we need to rewrite this test.
     def test_model_outputs_equivalence(self):
-        (
-            config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             tuple_output = model(tuple_inputs, return_dict=False, **additional_kwargs)
