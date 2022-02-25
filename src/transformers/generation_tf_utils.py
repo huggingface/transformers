@@ -2334,7 +2334,6 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
         # Remove all tokens with a probability less than the last token of the top-k
         indices_to_remove = logits < tf.math.top_k(logits, k=top_k)[0][..., -1, None]
         logits = set_tensor_by_indices_to_value(logits, indices_to_remove, filter_value)
-
     if top_p < 1.0:
         sorted_indices = tf.argsort(logits, direction="DESCENDING")
         sorted_logits = tf.gather(

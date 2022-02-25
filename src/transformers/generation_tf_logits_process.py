@@ -134,18 +134,10 @@ class TFTopKLogitsWarper(TFLogitsWarper):
         self.min_tokens_to_keep = min_tokens_to_keep
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
-        topk = min(max(self.top_k, self.min_tokens_to_keep), scores.shape[-1])  # Safety check
-        topk_next_scores, topk_indices = tf.math.top_k(scores, topk)
-
-        # converts the 2D matrix of per-row original indices of shape (batch_size, topk) to a 3D tensor of shape
-        # (batch_size, topk, 2) containing the original score coordinate, from which we can scatter. In other
-        # words, `scatter_indices[row, col, :]` is a tensor containing `[row, topk_indices[row, col]]`
-        scatter_rows = tf.tile(tf.expand_dims(tf.range(topk_indices.shape[0]), axis=-1), [1, topk_indices.shape[-1]])
-        scatter_indices = tf.stack((scatter_rows, topk_indices), axis=-1)
-        next_scores = tf.scatter_nd(scatter_indices, topk_next_scores, shape=scores.shape)
-
-        # replaces the 0's, the empty values from the scatter above, with `self.filter_value`
-        next_scores = tf.where(next_scores == 0.0, self.filter_value, next_scores)
+        top_k = min(max(self.top_k, self.min_tokens_to_keep), scores.shape[-1])  # Safety check
+        # Boolean mask containing all tokens with a probability less than the last token of the top-k
+        indices_to_remove = scores < tf.expand_dims(tf.math.top_k(scores, k=top_k)[0][..., -1], -1)
+        next_scores = tf.where(indices_to_remove, self.filter_value, scores)
         return next_scores
 
 
