@@ -1121,11 +1121,19 @@ class MarianModel(MarianPreTrainedModel):
             self.encoder.embed_tokens = value
 
     def get_decoder_input_embeddings(self):
-        # TODO: only call this if not shared otherwise raise
+        if self.config.share_encoder_decoder_embeddings:
+            raise ValueError(
+                "`get_decoder_input_embeddings` should not be called if `config.share_encoder_decoder_embeddings` "
+                "is `True`. Please use `get_input_embeddings` instead."
+            )
         return self.get_decoder().get_input_embeddings()
 
     def set_decoder_input_embeddings(self, value):
-        # TODO: ????
+        if self.config.share_encoder_decoder_embeddings:
+            raise ValueError(
+                "`set_decoder_input_embeddings` should not be called if `config.share_encoder_decoder_embeddings` "
+                "is `True`. Please use `set_input_embeddings` instead."
+            )
         self.decoder.embed_tokens = value
 
     def get_encoder(self):
@@ -1293,8 +1301,12 @@ class MarianMTModel(MarianPreTrainedModel):
         return self.get_input_embeddings()
 
     def resize_decoder_token_embeddings(self, new_num_tokens):
-        # TODO: only execute this if embeddings are not shared
-        # otherwise raise an error.
+        if self.config.share_encoder_decoder_embeddings:
+            raise ValueError(
+                "`resize_decoder_token_embeddings` should not be called if `config.share_encoder_decoder_embeddings` "
+                "is `True`. Please use `resize_token_embeddings` instead."
+            )
+
         old_embeddings = self.model.get_decoder_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
         self.model.set_decoder_input_embeddings(new_embeddings)
