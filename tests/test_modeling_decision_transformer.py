@@ -15,21 +15,16 @@
 """ Testing suite for the PyTorch DecisionTransformer model. """
 
 
-from os import stat
 import unittest
+from os import stat
 
 from tests.test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import DecisionTransformerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
-from .test_generation_utils import GenerationTesterMixin
-from transformers import DecisionTransformerConfig
+
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import (
-    ModelTesterMixin,
-    ids_tensor,
-    random_attention_mask,
-    floats_tensor,
-)
+from .test_generation_utils import GenerationTesterMixin
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -61,21 +56,13 @@ class DecisionTransformerModelTester:
         self.max_length = max_length
 
     def prepare_config_and_inputs(self):
-        states = floats_tensor(
-            (self.batch_size, self.seq_length, self.state_dim)
-        )
-        actions = floats_tensor(
-            (self.batch_size, self.seq_length, self.act_dim)
-        )
+        states = floats_tensor((self.batch_size, self.seq_length, self.state_dim))
+        actions = floats_tensor((self.batch_size, self.seq_length, self.act_dim))
         rewards = floats_tensor((self.batch_size, self.seq_length, 1))
         # dones = ids_tensor((self.batch_size, self.seq_length, 1), vocab_size=2)
         returns_to_go = floats_tensor((self.batch_size, self.seq_length, 1))
-        timesteps = ids_tensor(
-            (self.batch_size, self.seq_length), vocab_size=1000
-        )
-        attention_mask = random_attention_mask(
-            (self.batch_size, self.seq_length)
-        )
+        timesteps = ids_tensor((self.batch_size, self.seq_length), vocab_size=1000)
+        attention_mask = random_attention_mask((self.batch_size, self.seq_length))
 
         config = self.get_config()
 
@@ -112,9 +99,7 @@ class DecisionTransformerModelTester:
         model = DecisionTransformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            states, actions, rewards, returns_to_go, timesteps, attention_mask
-        )
+        result = model(states, actions, rewards, returns_to_go, timesteps, attention_mask)
 
         self.parent.assertEqual(result.state_preds.shape, states.shape)
         self.parent.assertEqual(result.action_preds.shape, actions.shape)
@@ -155,16 +140,12 @@ class DecisionTransformerModelTest(  # ModelTesterMixin is removed as this model
     GenerationTesterMixin, unittest.TestCase
 ):
 
-    all_model_classes = (
-        (DecisionTransformerModel,) if is_torch_available() else ()
-    )
+    all_model_classes = (DecisionTransformerModel,) if is_torch_available() else ()
     all_generative_model_classes = ()
 
     def setUp(self):
         self.model_tester = DecisionTransformerModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=DecisionTransformerConfig, hidden_size=37
-        )
+        self.config_tester = ConfigTester(self, config_class=DecisionTransformerConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -179,8 +160,6 @@ class DecisionTransformerModelTest(  # ModelTesterMixin is removed as this model
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[
-            :1
-        ]:
+        for model_name in DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = DecisionTransformerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

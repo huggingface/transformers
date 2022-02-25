@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DecisionTransformer model configuration """
+""" DecisionTransformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -31,8 +31,8 @@ class DecisionTransformerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DecisionTransformerModel`]. It is used to
     instantiate a DecisionTransformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the standard
-    DecisionTransformer architecture. Many of the config options are used to instatiate the GPT2 model that is
-    used as part of the architecture.
+    DecisionTransformer architecture. Many of the config options are used to instatiate the GPT2 model that is used as
+    part of the architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -202,6 +202,4 @@ class DecisionTransformerConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs
-        )
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
