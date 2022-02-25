@@ -475,8 +475,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -498,7 +497,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
-            elif self.config.problem_type == "single_label_classification":
+            if self.config.problem_type == "single_label_classification":
                 criterion = CrossEntropyLoss()
                 loss = criterion(logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
