@@ -199,9 +199,9 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
 
-            # ConvNext's feature maps are of shape (batch_size, height, width, num_channels) in TF
+            # ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
-                list(hidden_states[0].shape[1:-1]),
+                list(hidden_states[0].shape[-2:]),
                 [
                     self.model_tester.image_size // 4,
                     self.model_tester.image_size // 4,

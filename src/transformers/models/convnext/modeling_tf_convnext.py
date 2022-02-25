@@ -292,7 +292,9 @@ class TFConvNextMainLayer(tf.keras.layers.Layer):
         self.embeddings = TFConvNextEmbeddings(config, name="embeddings")
         self.encoder = TFConvNextEncoder(config, name="encoder")
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
-        self.pooler = tf.keras.layers.GlobalAvgPool2D() if add_pooling_layer else None
+        # We are setting the `data_format` like so because from here on we will revert to the
+        # NCHW output format
+        self.pooler = tf.keras.layers.GlobalAvgPool2D(data_format="channels_first") if add_pooling_layer else None
 
     def call(
         self,
@@ -333,7 +335,13 @@ class TFConvNextMainLayer(tf.keras.layers.Layer):
         )
 
         last_hidden_state = encoder_outputs[0]
+        # Change to NCHW output format have uniformity in the modules
+        last_hidden_state = tf.transpose(last_hidden_state, perm=(0, 3, 1, 2))
         pooled_output = self.layernorm(self.pooler(last_hidden_state))
+
+        # Change the other hidden state outputs to NCHW as well
+        if output_hidden_states:
+            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -341,7 +349,7 @@ class TFConvNextMainLayer(tf.keras.layers.Layer):
         return TFBaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
+            hidden_states=hidden_states if output_hidden_states else encoder_outputs.hidden_states,
         )
 
 
@@ -504,10 +512,10 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
 
         # converts back NHWC -> NCHW, to match PT's output
         if not return_dict:
-            return (tf.transpose(outputs[0], perm=(0, 3, 1, 2)),) + outputs[1:]
+            return (outputs[0],) + outputs[1:]
 
         return TFBaseModelOutputWithPooling(
-            last_hidden_state=tf.transpose(outputs.last_hidden_state, perm=(0, 3, 1, 2)),
+            last_hidden_state=outputs.last_hidden_state,
             pooler_output=outputs.pooler_output,
             hidden_states=outputs.hidden_states,
         )
