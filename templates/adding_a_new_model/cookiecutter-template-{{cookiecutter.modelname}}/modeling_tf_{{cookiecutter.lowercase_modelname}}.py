@@ -32,7 +32,6 @@ from ...file_utils import (
 )
 from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPastAndCrossAttentions,
-    TFBaseModelOutputWithPoolingAndCrossAttentions,
     TFCausalLMOutputWithCrossAttentions,
     TFMaskedLMOutput,
     TFMultipleChoiceModelOutput,
@@ -216,8 +215,8 @@ class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer)
         elif past_key_value is not None:
             key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
             value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
-            key_layer = tf.concatenate([past_key_value[0], key_layer], dim=2)
-            value_layer = tf.concatenate([past_key_value[1], value_layer], dim=2)
+            key_layer = tf.concat([past_key_value[0], key_layer], axis=2)
+            value_layer = tf.concat([past_key_value[1], value_layer], axis=2)
         else:
             key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
             value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
@@ -654,7 +653,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -734,6 +733,9 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
             extended_attention_mask = tf.reshape(
                 extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2])
             )
+            if inputs["past_key_values"][0] is not None:
+                # attention_mask needs to be sliced to the shape `[batch_size, 1, from_seq_length - cached_seq_length, to_seq_length]
+                extended_attention_mask = extended_attention_mask[:, :, -seq_length:, :]
         else:
             extended_attention_mask = tf.reshape(
                 inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
@@ -945,7 +947,7 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFBaseModelOutputWithPoolingAndCrossAttentions,
+        output_type=TFBaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
@@ -965,7 +967,7 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
         r"""
         encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1024,10 +1026,9 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
 
         return outputs
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
     def serving_output(
-        self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
-    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
+        self, output: TFBaseModelOutputWithPastAndCrossAttentions
+    ) -> TFBaseModelOutputWithPastAndCrossAttentions:
         output_cache = self.config.use_cache and self.config.is_decoder
         pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
@@ -1036,9 +1037,8 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
         if not (self.config.output_attentions and self.config.add_cross_attention):
             cross_attns = None
 
-        return TFBaseModelOutputWithPoolingAndCrossAttentions(
+        return TFBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
             past_key_values=pkv,
             hidden_states=hs,
             attentions=attns,
