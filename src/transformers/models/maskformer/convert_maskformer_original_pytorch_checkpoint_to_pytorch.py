@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import sys
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,25 +22,20 @@ from typing import Any, Dict, Iterator, List, Set, Tuple
 import torch
 import torchvision.transforms as T
 from PIL import Image
-from torch import Tensor
+from torch import Tensor, nn
 
-# The MaskFormer should be present in the following directory, or adapt this path to your needs.
-# import sys
-# sys.path.append("../")
 import requests
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import MetadataCatalog
 from detectron2.projects.deeplab import add_deeplab_config
-from MaskFormer.mask_former import add_mask_former_config
-from MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
 from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
 from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerConfig,
     MaskFormerForInstanceSegmentation,
     MaskFormerForInstanceSegmentationOutput,
     MaskFormerModel,
-    MaskFormerOutput,
+    MaskFormerModelOutput,
 )
 from transformers.utils import logging
 
@@ -183,7 +179,7 @@ class OriginalMaskFormerConfigToFeatureExtractorConverter:
 
 
 class OriginalMaskFormerCheckpoinToOursConverter:
-    def __init__(self, original_model: OriginalMaskFormer, config: MaskFormerConfig):
+    def __init__(self, original_model: nn.Module, config: MaskFormerConfig):
         self.original_model = original_model
         self.config = config
 
@@ -578,7 +574,7 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation):
 
         original_model_backbone_features = original_model.backbone(x.clone())
 
-        our_model_output: MaskFormerOutput = our_model.model(x.clone(), output_hidden_states=True)
+        our_model_output: MaskFormerModelOutput = our_model.model(x.clone(), output_hidden_states=True)
 
         for original_model_feature, our_model_feature in zip(
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
@@ -658,11 +654,24 @@ if __name__ == "__main__":
         type=Path,
         help="Path to the folder to output PyTorch models.",
     )
+    parser.add_argument(
+        "--maskformer_dir",
+        required=True,
+        type=Path,
+        help="A path to MaskFormer's original implementation directory. You can download from here: https://github.com/facebookresearch/MaskFormer",
+    )
+
     args = parser.parse_args()
 
     checkpoints_dir: Path = args.checkpoints_dir
     config_dir: Path = args.configs_dir
     save_directory: Path = args.pytorch_dump_folder_path
+    maskformer_dir: Path = args.maskformer_dir
+    # append the path to the parents to maskformer dir
+    sys.path.append(str(maskformer_dir.parent))
+    # and import what's needed
+    from MaskFormer.mask_former import add_mask_former_config
+    from MaskFormer.mask_former.mask_former_model import MaskFormer as OriginalMaskFormer
 
     if not save_directory.exists():
         save_directory.mkdir(parents=True)
@@ -707,13 +716,11 @@ if __name__ == "__main__":
 
         feature_extractor.push_to_hub(
             repo_path_or_name=save_directory / model_name,
-            organization="Francesco",
             commit_message="Add model",
             use_temp_dir=True,
         )
         mask_former_for_instance_segmentation.push_to_hub(
             repo_path_or_name=save_directory / model_name,
-            organization="Francesco",
             commit_message="Add model",
             use_temp_dir=True,
         )
