@@ -68,7 +68,7 @@ class CvtModelTester:
         layer_norm_eps=1e-12,
         is_training=True,
         use_labels=True,
-        num_labels=1000, #Check
+        num_labels=3, #Check
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -98,7 +98,6 @@ class CvtModelTester:
             labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = self.get_config()
-
         return config, pixel_values, labels
 
     def get_config(self):
@@ -123,7 +122,6 @@ class CvtModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         image_size = to_2tuple(self.image_size)
         height, width = image_size[0], image_size[1]
         for i in range(self.num_stages):
