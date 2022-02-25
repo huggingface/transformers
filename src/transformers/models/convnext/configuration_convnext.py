@@ -101,4 +101,3 @@ class ConvNextConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.image_size = image_size
-        self.output_attentions = None
