@@ -39,38 +39,57 @@ class CvtConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the Cvt model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~CvtModel`] or
-            [`~TFCvtModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimension of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        num_stages (`int`, *optional*, defaults to 3):
+            The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
+        patch_sizes (`List[int]`, *optional*, defaults to [7, 3, 3]):
+            The kernel size of each encoder's patch embedding.
+        patch_stride (`List[int]`, *optional*, defaults to [4, 2, 2]):
+            The stride size of each encoder's patch embedding.
+        patch_padding (`List[int]`, *optional*, defaults to [2, 1, 1]):
+            The padding size of each encoder's patch embedding. 
+        embed_dim (`List[int]`, *optional*, defaults to [64, 192, 384]):
+            Dimension of each of the encoder blocks.
+        num_attention_heads (`List[int]`, *optional*, defaults to [1, 3, 6]):
+            Number of attention heads for each attention layer in each block of the Transformer encoder.
+        depth (`List[int]`, *optional*, defaults to [1, 2, 10]):
+            The number of layers in each encoder block.
+        mlp_ratios (`List[float]`, *optional*, defaults to [4.0, 4.0, 4.0, 4.0]):
+            Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
+            encoder blocks.
+        attention_drop_rate (`List[float]`, *optional*, defaults to [0.0, 0.0, 0.0]):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`~CvtModel`] or
-            [`~TFCvtModel`].
+        drop_rate (`List[float]`, *optional*, defaults to [0.0, 0.0, 0.0]):
+            The dropout ratio for the patch embeddings probabilities.
+        drop_path_rate (`List[float]`, *optional*, defaults to [0.0, 0.0, 0.1]]):
+            The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
+        qkv_bias (`List[bool]`, *optional*, defaults to [True, True, True]]):
+            The bias bool for query, key and value in attentions
+        cls_token (`List[bool]`, *optional*, defaults to [False, False, True]]):
+            The bool for classification token
+        pos_embed (`List[bool]`, *optional*, defaults to [False, False, True]]):
+            The bool for position embeddings
+        cls_token (`List[bool]`, *optional*, defaults to [False, False, True]]):
+            The bool for cls_token
+        qkv_projection_method (`List[string]`, *optional*, defaults to 'dw_bn', 'dw_bn', 'dw_bn']]):
+            The projection method for query, key and value
+        kernel_qkv (`List[int]`, *optional*, defaults to [3, 3, 3]):
+            The kernel size for query, key and value in attention layer
+        padding_kv (`List[int]`, *optional*, defaults to [1, 1, 1]):
+            The padding size for key and value in attention layer
+        stride_kv (`List[int]`, *optional*, defaults to [2, 2, 2]):
+            The stride size for key and value in attention layer
+        padding_q (`List[int]`, *optional*, defaults to [1, 1, 1]):
+            The padding size for query in attention layer
+        stride_q (`List[int]`, *optional*, defaults to [1, 1, 1]):
+            The stride size for query in attention layer
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         Example:
 
     ```python
