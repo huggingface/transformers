@@ -165,10 +165,23 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                       np.array}` with optionally a `"stride": (left: int, right: int)` than can ask the pipeline to
                       treat the first `left` samples and last `right` samples to be ignored in decoding (but used at
                       inference to provide more context to the model). Only use `stride` with CTC models.
+            return_timestamps (*optional*, `str`):
+                Only available for pure CTC models. If set to `"char"`, the pipeline will return `timestamps` along the
+                text for every character in the text. For instance if you get `[{"text": "h", "timestamps": (0.5,0.6),
+                {"text": "i", "timestamps": (0.7, .9)}]`, then it means the model predicts that the letter "h" was
+                pronounced after `0.5` and before `0.6` seconds. If set to `"word"`, the pipeline will return
+                `timestamps` along the text for every word in the text. For instance if you get `[{"text": "hi ",
+                "timestamps": (0.5,0.9), {"text": "there", "timestamps": (1.0, .1.5)}]`, then it means the model
+                predicts that the word "hi" was pronounces before 0.5 and after 0.9 seconds.
 
         Return:
             `Dict`: A dictionary with the following keys:
-                - **text** (`str`) -- The recognized text.
+                - **text** (`str` ) -- The recognized text.
+                - **chunks** (*optional(, `List[Dict]`)
+                        When using `return_timestamps`, the `chunks` will become a list containing all the various text
+                        chunks identified by the model, *e.g.* `[{"text": "hi ", "timestamps": (0.5,0.9), {"text":
+                        "there", "timestamps": (1.0, 1.5)}]`. The original full text can roughly be recovered by doing
+                        `"".join(chunk["text"] for chunk in output["chunks"])`.
         """
         return super().__call__(inputs, **kwargs)
 
@@ -183,6 +196,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         postprocess_params = {}
         if "decoder_kwargs" in kwargs:
             postprocess_params["decoder_kwargs"] = kwargs["decoder_kwargs"]
+        if "return_timestamps" in kwargs:
+            postprocess_params["return_timestamps"] = kwargs["return_timestamps"]
 
         return preprocess_params, {}, postprocess_params
 
@@ -323,7 +338,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         extra = model_inputs
         return {"is_last": is_last, **out, **extra}
 
-    def postprocess(self, model_outputs, decoder_kwargs: Optional[Dict] = None):
+    def postprocess(self, model_outputs, decoder_kwargs: Optional[Dict] = None, return_timestamps=None):
+        # Optional return types
+        optional = {}
+
+        if return_timestamps and self.type != "ctc":
+            raise ValueError("We cannot return_timestamps yet on non-ctc models !")
+
         if self.type == "ctc_with_lm":
             final_logits = []
             for outputs in model_outputs:
@@ -349,6 +370,30 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             tokens = tokens.squeeze(0)
             text = self.tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
 
+            if return_timestamps:
+                if return_timestamps == "char":
+                    decoded = self.tokenizer.decode(
+                        tokens, skip_special_tokens=skip_special_tokens, output_char_offsets=True
+                    )
+                elif return_timestamps == "word":
+                    decoded = self.tokenizer.decode(
+                        tokens, skip_special_tokens=skip_special_tokens, output_word_offsets=True
+                    )
+                chunks = []
+                for item in decoded[f"{return_timestamps}_offsets"]:
+                    start = (
+                        item["start_offset"]
+                        * self.model.config.inputs_to_logits_ratio
+                        / self.feature_extractor.sampling_rate
+                    )
+                    stop = (
+                        item["end_offset"]
+                        * self.model.config.inputs_to_logits_ratio
+                        / self.feature_extractor.sampling_rate
+                    )
+                    chunks.append({"text": item[return_timestamps], "timestamp": (start, stop)})
+                optional["chunks"] = chunks
+
         extra = defaultdict(list)
         for output in model_outputs:
             output.pop("tokens", None)
@@ -357,4 +402,4 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 if k == "is_last":
                     continue
                 extra[k].append(v)
-        return {"text": text, **extra}
+        return {"text": text, **optional, **extra}
