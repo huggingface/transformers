@@ -16,13 +16,8 @@
 
 
 import inspect
-<<<<<<< HEAD
 import unittest
 from math import floor
-=======
-from math import floor
-import unittest
->>>>>>> 820959f61 (feature test)
 
 from transformers import CvtConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
