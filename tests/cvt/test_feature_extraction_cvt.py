@@ -40,13 +40,10 @@ class CvtFeatureExtractionTester(unittest.TestCase):
         parent,
         batch_size=7,
         num_channels=3,
-        image_size=18,
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=20,
-        do_center_crop=True,
-        crop_size=18,
+        size=30,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
@@ -55,13 +52,10 @@ class CvtFeatureExtractionTester(unittest.TestCase):
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
-        self.image_size = image_size
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -71,8 +65,6 @@ class CvtFeatureExtractionTester(unittest.TestCase):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
@@ -90,12 +82,12 @@ def prepare_semantic_single_inputs():
 
 
 def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
 
-    image1 = Image.open(ds[0]["file"])
-    map1 = Image.open(ds[1]["file"])
-    image2 = Image.open(ds[2]["file"])
-    map2 = Image.open(ds[3]["file"])
+    image1 = Image.open(dataset[0]["file"])
+    map1 = Image.open(dataset[1]["file"])
+    image2 = Image.open(dataset[2]["file"])
+    map2 = Image.open(dataset[3]["file"])
 
     return [image1, image2], [map1, map2]
 
@@ -117,11 +109,10 @@ class CvtFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
         self.assertTrue(hasattr(feature_extractor, "size"))
-        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
-        self.assertTrue(hasattr(feature_extractor, "center_crop"))
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
         self.assertTrue(hasattr(feature_extractor, "image_std"))
+        self.assertTrue(hasattr(feature_extractor, "reduce_labels"))
 
     def test_batch_feature(self):
         pass
@@ -141,8 +132,8 @@ class CvtFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
 
@@ -153,8 +144,8 @@ class CvtFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
 
@@ -173,8 +164,8 @@ class CvtFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
 
@@ -185,8 +176,8 @@ class CvtFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
 
@@ -205,8 +196,8 @@ class CvtFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
 
@@ -217,8 +208,8 @@ class CvtFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
 
@@ -239,16 +230,16 @@ class CvtFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
         self.assertEqual(
             encoding["labels"].shape,
             (
                 1,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -262,16 +253,16 @@ class CvtFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
         self.assertEqual(
             encoding["labels"].shape,
             (
                 self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -287,16 +278,16 @@ class CvtFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
         self.assertEqual(
             encoding["labels"].shape,
             (
                 1,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -312,16 +303,16 @@ class CvtFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 2,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
         self.assertEqual(
             encoding["labels"].shape,
             (
                 2,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
             ),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
