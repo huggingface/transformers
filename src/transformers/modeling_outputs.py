@@ -245,7 +245,7 @@ class BaseModelOutputWithPastAndCrossAttentions(ModelOutput):
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-@dataclass 
+@dataclass
 class DecisionTransformerOutput(ModelOutput):
     """
     Base class for model's outputs that also contains a pooling of the last hidden states. TODO
@@ -270,9 +270,12 @@ class DecisionTransformerOutput(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
-    state_preds : torch.FloatTensor = None
+
+    last_hidden_state: torch.FloatTensor = None
+    state_preds: torch.FloatTensor = None
     action_preds: torch.FloatTensor = None
     return_preds: torch.FloatTensor = None
+
 
 @dataclass
 class Seq2SeqModelOutput(ModelOutput):
