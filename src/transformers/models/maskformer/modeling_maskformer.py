@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Facebook AI Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms, Inc.s and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -325,7 +325,7 @@ def upsample_like(pixel_values: Tensor, like: Tensor, mode: str = "bilinear") ->
             The interpolation mode.
 
     Returns:
-        Tensor: The upsampled tensor
+        `torch.Tensor`: The upsampled tensor
     """
     _, _, height, width = like.shape
     upsampled = nn.functional.interpolate(pixel_values, size=(height, width), mode=mode, align_corners=False)

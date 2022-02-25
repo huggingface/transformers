@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Facebook AI Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms, Inc.and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,7 +36,8 @@ class MaskFormerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MaskFormerModel`]. It is used to instantiate a
     MaskFormer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    "Francesco/maskformer-swin-base-ade" architecture trained on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
+    "Francesco/maskformer-swin-base-ade" architecture trained on
+    [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -50,12 +51,13 @@ class MaskFormerConfig(PretrainedConfig):
         no_object_weight (`float`, *optional*, defaults to 0.1):
             Weight to apply to the null (no object) class.
         use_auxilary_loss (`bool`, *optional*, defaults to `False`):
-            If `true` [`MaskFormerOutput`] will contain.
+            If `true` [`MaskFormerOutput`] will contain the axusilary losses computed using the logits from each
+            decoder's stage.
         backbone_config (`Dict`, *optional*):
-            The configuration passed to the backbone, if unset, the configuration corresponding to `swin-base` will be
-            used.
+            The configuration passed to the backbone, if unset, the configuration corresponding to
+            `swin-base-patch4-window12-384` will be used.
         detr_config (`Dict`, *optional*):
-            The configuration passed to the Detr model, if unset the base config for `detr` will be used.
+            The configuration passed to the Detr model, if unset the base config for `detr-resnet-50` will be used.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         init_xavier_std (`float`, *optional*, defaults to 1):

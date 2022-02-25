@@ -478,7 +478,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 The overlap mask area threshold.
             is_thing_map (`Dict[int, bool]`, *optional*):
                 Dictionary mapping class indices to either `True` or `False`, depending on whether or not they are a
-                thing. If not set, defaults to the `is_thing_map` of ADE20K-150 panoptic.
+                thing. If not set, defaults to the `is_thing_map` of COCO panoptic.
 
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
@@ -490,6 +490,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         """
 
         if is_thing_map is None:
+            logger.warning("`is_thing_map` unset. Default to COCO.")
             # default to is_thing_map of COCO panoptic
             is_thing_map = {i: i <= 90 for i in range(201)}
         # class_queries_logitss has shape [BATCH, QUERIES, CLASSES + 1]
