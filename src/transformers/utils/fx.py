@@ -561,7 +561,7 @@ def symbolic_trace(
         model ([`PretrainedModel`]):
             The model to trace.
         input_names (`List[str]`, *optional*):
-            The names of the inputs of the traced model. If unset, model.dummy_inputs().keys() are used instead.
+            The names of the inputs of the traced model. If unset, model.dummy_inputs.keys() are used instead.
 
     Returns:
         `torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
