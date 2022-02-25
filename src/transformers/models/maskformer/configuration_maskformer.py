@@ -33,22 +33,22 @@ logger = logging.get_logger(__name__)
 
 class MaskFormerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MaskFormer`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`MaskFormerModel`]. It is used to instantiate a
     MaskFormer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    "Francesco/maskformer-swin-base-ade" architecture trained on ADE20k-150
+    "Francesco/maskformer-swin-base-ade" architecture trained on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-    Currently, maskformer supports only Swin backbone.
+    Currently, MaskFormer only supports the [Swin Transformer](swin) as backbone.
 
     Args:
         mask_feature_size (`int`, *optional*, defaults to 256):
-            The masks' features size, this value will also be used to specify the Feature Pyramid Network featuresc
+            The masks' features size, this value will also be used to specify the Feature Pyramid Network features'
             size.
         no_object_weight (`float`, *optional*, defaults to 0.1):
-            Weight to apply to the null class .
+            Weight to apply to the null (no object) class.
         use_auxilary_loss (`bool`, *optional*, defaults to `False`):
             If `true` [`MaskFormerOutput`] will contain.
         backbone_config (`Dict`, *optional*):
@@ -158,7 +158,7 @@ class MaskFormerConfig(PretrainedConfig):
                 backbone_config ([`PretrainedConfig`]):
                     The backbone configuration.
                 detr_config ([`DetrConfig`]):
-                    The transformer decoder configuration to use
+                    The transformer decoder configuration to use.
 
             Returns:
                 [`MaskFormerConfig`]: An instance of a configuration object
