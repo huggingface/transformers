@@ -1,6 +1,6 @@
 import torch
 from collections import OrderedDict
-from transformers import CvtConfig, CvtForImageClassification, CvtFeatureExtractor
+from transformers import CvtConfig, CvtForImageClassification
 
 def embeddings(idx):
     """
@@ -84,7 +84,7 @@ if __name__=="__main__":
     path = "new_hugging_face_model.bin"
     config = CvtConfig()
     model = CvtForImageClassification(config)
-    original_file = "C:\\Users\\AH87766\\Downloads\\CvT-13-224x224-IN-1k.pth"
+    original_file = "CvT-13-224x224-IN-1k.pth"
     original_weights = torch.load(original_file, map_location=torch.device("cpu"))
 
     hugging_face_weights = OrderedDict()
