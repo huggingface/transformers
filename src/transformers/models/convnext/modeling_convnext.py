@@ -582,8 +582,8 @@ class ConvNextUperHead(nn.Module):
         super().__init__()
 
         self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
-        self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
-        self.channels = config.hidden_size
+        self.in_channels = [config.hidden_sizes[-1]] * 4  # e.g. [768, 768, 768, 768]
+        self.channels = config.hidden_sizes[-1]
         self.align_corners = False
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
@@ -672,7 +672,7 @@ class ConvNextFCNHead(nn.Module):
 
     def __init__(self, config, in_index=2, kernel_size=3, dilation=1):
         super().__init__()
-        self.in_channels = config.hidden_size
+        self.in_channels = config.hidden_sizes[-1]
         self.channels = config.auxiliary_channels
         self.num_convs = config.auxiliary_num_convs
         self.concat_input = config.auxiliary_concat_input
@@ -727,13 +727,13 @@ class ConvNextForSemanticSegmentation(ConvNextPreTrainedModel):
 
         # FPNs
         self.fpn1 = nn.Sequential(
-            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
-            nn.BatchNorm2d(config.hidden_size),
+            nn.ConvTranspose2d(config.hidden_sizes[-1], config.hidden_sizes[-1], kernel_size=2, stride=2),
+            nn.BatchNorm2d(config.hidden_sizes[-1]),
             nn.GELU(),
-            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(config.hidden_sizes[-1], config.hidden_sizes[-1], kernel_size=2, stride=2),
         )
         self.fpn2 = nn.Sequential(
-            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(config.hidden_sizes[-1], config.hidden_sizes[-1], kernel_size=2, stride=2),
         )
         self.fpn3 = nn.Identity()
         self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)

@@ -58,6 +58,20 @@ class ConvNextConfig(PretrainedConfig):
             The initial value for the layer scale.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
+        out_indices (`List[int]`, *optional*, defaults to `[3, 5, 7, 11]`):
+            The indices of the output channels.
+        pool_scales (`List[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
+            The scales of the pooling layers.
+        use_auxiliary_head (`bool`, *optional*, defaults to `True`):
+            Whether to use the auxiliary head.
+        auxiliary_loss_weight (`float`, *optional*, defaults to 0.4):
+            The weight of the auxiliary loss.
+        auxiliary_channels (`int`, *optional*, defaults to 256):
+            The number of channels in the auxiliary head.
+        auxiliary_hidden_sizes (`List[int]`, *optional*, defaults to `[128, 128]`):
+            The dimensionality (hidden size) of the auxiliary head.
+        auxiliary_depths (`List[int]`, *optional*, defaults to `[3, 3]`):
+            The depth (number of blocks) of the auxiliary head.
 
     Example:
     ```python
@@ -85,6 +99,14 @@ class ConvNextConfig(PretrainedConfig):
         is_encoder_decoder=False,
         layer_scale_init_value=1e-6,
         drop_path_rate=0.0,
+        out_indices=[3, 5, 7, 11],
+        pool_scales=[1, 2, 3, 6],
+        use_auxiliary_head=True,
+        auxiliary_loss_weight=0.4,
+        auxiliary_channels=256,
+        auxiliary_num_convs=1,
+        auxiliary_concat_input=False,
+        semantic_loss_ignore_index=255,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -99,3 +121,13 @@ class ConvNextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
+        # decode head attributes (semantic segmentation)
+        self.out_indices = out_indices
+        self.pool_scales = pool_scales
+        # auxiliary head attributes (semantic segmentation)
+        self.use_auxiliary_head = use_auxiliary_head
+        self.auxiliary_loss_weight = auxiliary_loss_weight
+        self.auxiliary_channels = auxiliary_channels
+        self.auxiliary_num_convs = auxiliary_num_convs
+        self.auxiliary_concat_input = auxiliary_concat_input
+        self.semantic_loss_ignore_index = semantic_loss_ignore_index
