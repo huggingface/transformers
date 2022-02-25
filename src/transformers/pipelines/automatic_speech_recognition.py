@@ -167,7 +167,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                       inference to provide more context to the model). Only use `stride` with CTC models.
             return_timestamps (*optional*, `str`):
                 Only available for pure CTC models. If set to `"char"`, the pipeline will return `timestamps` along the
-                text for every character in the text. For instance if you get `[{"text": "H", "timestamps": (0.5,0.6),
+                text for every character in the text. For instance if you get `[{"text": "h", "timestamps": (0.5,0.6),
                 {"text": "i", "timestamps": (0.7, .9)}]`, then it means the model predicts that the letter "h" was pronounced
                 and the `0.5s and 0.6s` of the input audio If set to `"word"`, the pipeline will return `timestamps`
                 along the text for every word in the text. For instance if could get `[{"text": "Hi ", "timestamps":
