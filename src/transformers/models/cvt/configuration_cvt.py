@@ -92,7 +92,6 @@ class CvtConfig(PretrainedConfig):
     def __init__(
         self,
         image_size = 224,
-        num_labels = 1000,
         num_channels = 3,
         num_stages = 3,
         patch_sizes = [7, 3, 3],
@@ -120,7 +119,6 @@ class CvtConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.image_size = image_size
-        self.num_labels = num_labels
         self.num_channels = num_channels
         self.num_stages = num_stages
         self.patch_sizes = patch_sizes

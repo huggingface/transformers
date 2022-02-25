@@ -496,7 +496,7 @@ class CvtEncoder(nn.Module):
         
         self.patch_embeddings = nn.ModuleList(embeddings)
         self.cls_token = nn.Parameter(torch.zeros(1, 1, self.config.embed_dim[-1]))
-        trunc_normal_(self.cls_token, std=.02)
+        #trunc_normal_(self.cls_token, std=.02)
 
         blocks = []
         for i in range(config.num_stages):
