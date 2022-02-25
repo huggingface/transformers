@@ -510,7 +510,6 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
             training=inputs["training"],
         )
 
-        # converts back NHWC -> NCHW, to match PT's output
         if not return_dict:
             return (outputs[0],) + outputs[1:]
 
