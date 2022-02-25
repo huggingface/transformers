@@ -241,34 +241,71 @@ class Message:
         def per_model_sum(model_category_dict):
             return dicts_to_sum(model_category_dict["failed"].values())
 
-        failures = {k: per_model_sum(v) for k, v in self.model_results.items() if sum(per_model_sum(v).values())}
+        failures = {}
+        non_model_failures = {
+            k: per_model_sum(v) for k, v in self.model_results.items() if sum(per_model_sum(v).values())
+        }
+
+        for k, v in self.model_results.items():
+            if k in NON_MODEL_TEST_MODULES:
+                pass
+
+            if sum(per_model_sum(v).values()):
+                dict_failed = dict(v["failed"])
+                pytorch_specific_failures = dict_failed.pop("PyTorch")
+                tensorflow_specific_failures = dict_failed.pop("TensorFlow")
+                other_failures = dicts_to_sum(dict_failed.values())
+
+                failures[k] = {
+                    "PyTorch": pytorch_specific_failures,
+                    "TensorFlow": tensorflow_specific_failures,
+                    "other": other_failures,
+                }
 
         model_reports = []
         other_module_reports = []
-        for key, value in failures.items():
-            device_report = self.get_device_report(value)
 
-            if sum(value.values()):
-                if device_report:
-                    report = f"{device_report}{key}"
-                else:
-                    report = key
+        for key, value in non_model_failures.items():
+            if key in NON_MODEL_TEST_MODULES:
+                device_report = self.get_device_report(value)
 
-                if key in NON_MODEL_TEST_MODULES:
+                if sum(value.values()):
+                    if device_report:
+                        report = f"{device_report}{key}"
+                    else:
+                        report = key
+
                     other_module_reports.append(report)
-                else:
-                    model_reports.append(report)
 
-        header = "Single |  Multi | Category\n"
-        model_failures_report = header + "\n".join(sorted(model_reports, key=lambda s: s.split("] ")[-1]))
-        module_failures_report = header + "\n".join(sorted(other_module_reports, key=lambda s: s.split("] ")[-1]))
+        for key, value in failures.items():
+            device_report_values = [
+                value["PyTorch"]["single"],
+                value["PyTorch"]["multi"],
+                value["TensorFlow"]["single"],
+                value["TensorFlow"]["multi"],
+                sum(value["other"].values()),
+            ]
+
+            if sum(device_report_values):
+                device_report = " | ".join([str(x).rjust(9) for x in device_report_values]) + " | "
+                report = f"{device_report}{key}"
+
+                model_reports.append(report)
+
+        model_header = "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
+        sorted_model_reports = sorted(model_reports, key=lambda s: s.split("] ")[-1])
+        model_failures_report = model_header + "\n".join(sorted_model_reports)
+
+        module_header = "Single |  Multi | Category\n"
+        sorted_module_reports = sorted(other_module_reports, key=lambda s: s.split("] ")[-1])
+        module_failures_report = module_header + "\n".join(sorted_module_reports)
 
         report = ""
 
-        if len(model_failures_report):
+        if len(model_reports):
             report += f"These following model modules had failures:\n```\n{model_failures_report}\n```\n\n"
 
-        if len(module_failures_report):
+        if len(other_module_reports):
             report += f"The following non-model modules had failures:\n```\n{module_failures_report}\n```\n\n"
 
         return {"type": "section", "text": {"type": "mrkdwn", "text": report}}
