@@ -26,105 +26,29 @@ DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-# class DecisionTransformerConfig(GPT2Config):
-#     r"""
-#     This is the configuration class to store the configuration of a [`~DecisionTransformerModel`].
-#     It is used to instantiate an DecisionTransformer model according to the specified arguments, defining the model
-#     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-#     the DecisionTransformer [decision_transformer](https://huggingface.co/decision_transformer) architecture.
-
-#     Configuration objects inherit from  [`PretrainedConfig`] and can be used
-#     to control the model outputs. Read the documentation from  [`PretrainedConfig`]
-#     for more information.
-
-
-#     Args:
-#         vocab_size (`int`, *optional*, defaults to 30522):
-#             Vocabulary size of the DecisionTransformer model. Defines the number of different tokens that can be represented by the
-#             `inputs_ids` passed when calling [`~DecisionTransformerModel`] or
-#             [`~TFDecisionTransformerModel`].
-#         hidden_size (`int`, *optional*, defaults to 768):
-#             Dimension of the encoder layers and the pooler layer.
-#         num_hidden_layers (`int`, *optional*, defaults to 12):
-#             Number of hidden layers in the Transformer encoder.
-#         num_attention_heads (`int`, *optional*, defaults to 12):
-#             Number of attention heads for each attention layer in the Transformer encoder.
-#         intermediate_size (`int`, *optional*, defaults to 3072):
-#             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-#         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-#             The non-linear activation function (function or string) in the encoder and pooler.
-#             If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-#         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-#             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-#         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-#             The dropout ratio for the attention probabilities.
-#         max_position_embeddings (`int`, *optional*, defaults to 512):
-#             The maximum sequence length that this model might ever be used with.
-#             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-#         type_vocab_size (`int`, *optional*, defaults to 2):
-#             The vocabulary size of the `token_type_ids` passed when calling [`~DecisionTransformerModel`] or
-#             [`~TFDecisionTransformerModel`].
-#         initializer_range (`float`, *optional*, defaults to 0.02):
-#             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-#         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-#             The epsilon used by the layer normalization layers.
-#         use_cache (`bool`, *optional*, defaults to `True`):
-#             Whether or not the model should return the last key/values attentions (not used by all models). Only
-#             relevant if `config.is_decoder=True`.
-#         Example:
-
-#     ```python
-#     >>> from transformers import DecisionTransformerModel, DecisionTransformerConfig
-
-#     >>> # Initializing a DecisionTransformer decision_transformer style configuration
-#     >>> configuration = DecisionTransformerConfig()
-
-#     >>> # Initializing a model from the decision_transformer style configuration
-#     >>> model = DecisionTransformerModel(configuration)
-
-#     >>> # Accessing the model configuration
-#     >>> configuration = model.config
-#     ```
-# """
-#     model_type = "decision_transformer"
-    
-    
-#     def __init__(
-#         self,
-#         state_dim=128,
-#         act_dim=128,
-#         hidden_size=128,
-#         max_length=None,
-#         max_ep_len=4096,
-#         action_tanh=True,
-#         **kwargs):
-        
-        
-#         self.state_dim = state_dim
-#         self.act_dim = act_dim
-#         self.hidden_size = hidden_size
-#         self.max_length = max_length
-#         self.max_ep_len = max_ep_len
-        
-#         super().__init__(
-#             vocab_size=1,
-#             n_embd=hidden_size,
-#             **kwargs
-#         )
-
-
 class DecisionTransformerConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`GPT2Model`] or a [`TFGPT2Model`]. It is used to
-    instantiate a GPT-2 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GPT-2
-    [small](https://huggingface.co/gpt2) architecture.
+    This is the configuration class to store the configuration of a [`DecisionTransformerModel`]. It is used to
+    instantiate a DecisionTransformer model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the standard
+    DecisionTransformer architecture. Many of the config options are used to instatiate the GPT2 model that is
+    used as part of the architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
+        state_dim (`int`, *optional*, defaults to 17):
+            The state size for the RL environment
+        act_dim (`int`, *optional*, defaults to 4):
+            The size of the output action space
+        hidden_size (`int`, *optional*, defaults to 128):
+            The size of the hidden layers
+        max_ep_len (`int`, *optional*, defaults to 4096):
+            The maximum length of an episode in the environment
+        action_tanh (`bool`, *optional*, defaults to True):
+            Whether to use a tanh activation on action prediction
         vocab_size (`int`, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GPT2Model`] or [`TFGPT2Model`].
@@ -195,13 +119,13 @@ class DecisionTransformerConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import GPT2Model, GPT2Config
+    >>> from transformers import DecisionTransformerModel, DecisionTransformerConfig
 
     >>> # Initializing a DecisionTransformer configuration
-    >>> configuration = GPT2Config()
+    >>> configuration = DecisionTransformerConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = GPT2Model(configuration)
+    >>> model = DecisionTransformerConfig(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -210,7 +134,6 @@ class DecisionTransformerConfig(PretrainedConfig):
     model_type = "decision_transformer"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
-        "hidden_size": "n_embd",
         "max_position_embeddings": "n_positions",
         "num_attention_heads": "n_head",
         "num_hidden_layers": "n_layer",
@@ -221,7 +144,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         state_dim=17,
         act_dim=4,
         hidden_size=128,
-        max_length=None,
         max_ep_len=4096,
         action_tanh=True,
         vocab_size=1,
@@ -249,11 +171,10 @@ class DecisionTransformerConfig(PretrainedConfig):
         reorder_and_upcast_attn=False,
         **kwargs,
     ):
-        
+
         self.state_dim = state_dim
         self.act_dim = act_dim
         self.hidden_size = hidden_size
-        self.max_length = max_length
         self.max_ep_len = max_ep_len
         self.action_tanh = action_tanh
         self.vocab_size = vocab_size
@@ -281,5 +202,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-    
+        super().__init__(
+            bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs
+        )
