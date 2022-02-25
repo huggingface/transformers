@@ -180,7 +180,11 @@ Create a simple preprocessing function to create `pixel_values` from an image. T
 
 ```py
 >>> def process(examples):
-...     examples.update(feature_extractor(examples["image"],))
+...     examples.update(
+...         feature_extractor(
+...             examples["image"],
+...         )
+...     )
 ...     return examples
 ```
 
