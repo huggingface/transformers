@@ -50,6 +50,7 @@ This script is customized for tapex models, and can be easily adapted to other b
 (only some tweaks in the function `preprocess_tableqa_function`).
 
 Here is how to run the script on the WikiSQL:
+> The default hyper-parameter may allow you to reproduce our reported tapex-base results within the memory budget of 16GB and 1 GPU card. If you have more GPU cards, you could reduce `gradient_accumulation_steps` accordingly.
 
 ```bash
 export EXP_NAME=wikisql_tapex_base
@@ -60,10 +61,9 @@ python run_wikisql_with_tapex.py \
   --output_dir $EXP_NAME \
   --model_name_or_path microsoft/tapex-base \
   --overwrite_output_dir \
-  --per_device_train_batch_size 8 \
+  --per_device_train_batch_size 6 \
+  --gradient_accumulation_steps 8 \
   --per_device_eval_batch_size 16 \
-  --gradient_accumulation_steps 6 \
-  --num_train_epochs 100 \
   --warmup_ratio 0.1 \
   --logging_steps 10 \
   --learning_rate 3e-5 \
@@ -74,7 +74,7 @@ python run_wikisql_with_tapex.py \
   --num_beams 5 \
   --weight_decay 1e-2 \
   --label_smoothing_factor 0.1 \
-  --max_steps 10000
+  --max_steps 20000
 ```
 
 ## Table Fact Verification Tasks
@@ -90,6 +90,7 @@ The task of Table Fact Verification (TableFV) is to empower machines to justify 
 We provide a fine-tuning script of tapex for TableFV on the TabFact benchmark: [TabFact](https://github.com/wenhuchen/Table-Fact-Checking).
 
 Here is how to run the script on the TabFact:
+> The default hyper-parameter may allow you to reproduce our reported tapex-base results within the memory budget of 16GB and 1 GPU card. If you have more GPU cards, you could reduce `gradient_accumulation_steps` accordingly. Note that the `eval_accumulation_steps` is necessary, otherwise GPU memory leaks will occur during the evaluation.
 
 ```bash
 export EXP_NAME=tabfact_tapex_base
@@ -100,15 +101,29 @@ python run_tabfact_with_tapex.py \
   --output_dir $EXP_NAME \
   --model_name_or_path microsoft/tapex-base \
   --overwrite_output_dir \
-  --per_device_train_batch_size 4 \
-  --per_device_eval_batch_size 6 \
-  --gradient_accumulation_steps 12 \
-  --num_train_epochs 15 \
-  --warmup_ratio 0.1 \
+  --per_device_train_batch_size 3 \
+  --gradient_accumulation_steps 16 \
+  --per_device_eval_batch_size 12 \
+  --eval_accumulation_steps 6 \
+  --warm_steps 1000 \
   --logging_steps 10 \
   --learning_rate 3e-5 \
   --eval_steps 1000 \
   --save_steps 1000 \
   --evaluation_strategy steps \
-  --max_steps 20000
+  --weight_decay 1e-2 \
+  --max_steps 30000 \
+  --max_grad_norm 0.1
 ```
+
+## Reproduced Results
+
+We get the following results on the dev set of the benchmark with the previous commands:
+> ⚠️ It is worth noting that `tapex-large` cannot be successfully fine-tuned using this fine-tuning script now. We found there is a strange bug in `bart-large`, which also affects `tapex-large`. Hope it is solved in the near future.
+
+
+| Task | Model Size | Metric | Result |
+|:---:|:---:|:---:|:---:|
+| WikiSQL (Weak) | Base | Denotation Accuracy | 87.0 |
+| WikiTableQuestion | Base | Denotation Accuracy | 47.1 |
+| TabFact | Base | Accuracy | 78.4 |
