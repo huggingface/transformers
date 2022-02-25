@@ -69,7 +69,7 @@ OutputChecker = doctest.OutputChecker
 
 class CustomOutputChecker(OutputChecker):
     def check_output(self, want, got, optionflags):
-        if IGNORE_RESULT & optionflags:
+        if IGNORE_RESULT and optionflags:
             return True
         return OutputChecker.check_output(self, want, got, optionflags)
 
