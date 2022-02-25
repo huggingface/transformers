@@ -253,6 +253,12 @@ class TFRobertaModelTester:
 
         model = TFRobertaForCausalLM(config=config)
 
+        # special to `RobertaEmbeddings` in `Roberta`:
+        #   - its `padding_idx` and its effect on `position_ids`
+        #     (TFRobertaEmbeddings.create_position_ids_from_input_ids)
+        #   - `1` here is `TFRobertaEmbeddings.padding_idx`
+        input_ids = tf.where(input_ids == 1, 2, input_ids)
+
         # first forward pass
         outputs = model(input_ids, use_cache=True)
         outputs_use_cache_conf = model(input_ids)
@@ -296,6 +302,13 @@ class TFRobertaModelTester:
 
         model = TFRobertaForCausalLM(config=config)
 
+        # special to `RobertaEmbeddings` in `Roberta`:
+        #   - its `padding_idx` and its effect on `position_ids`
+        #     (TFRobertaEmbeddings.create_position_ids_from_input_ids)
+        #   - `1` here is `TFRobertaEmbeddings.padding_idx`
+        # avoid `padding_idx` in the past
+        input_ids = tf.where(input_ids == 1, 2, input_ids)
+
         # create attention mask
         half_seq_length = self.seq_length // 2
         attn_mask_begin = tf.ones((self.batch_size, half_seq_length), dtype=tf.int32)
@@ -318,6 +331,8 @@ class TFRobertaModelTester:
             tf.broadcast_to(tf.expand_dims(vector_condition, -1), (self.seq_length, self.batch_size))
         )
         input_ids = tf.where(condition, random_other_next_tokens, input_ids)
+        # avoid `padding_idx` in the past
+        input_ids = tf.where(input_ids == 1, 2, input_ids)
 
         # append to next input_ids and
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
@@ -356,6 +371,13 @@ class TFRobertaModelTester:
         config.is_decoder = True
 
         model = TFRobertaForCausalLM(config=config)
+
+        # special to `RobertaEmbeddings` in `Roberta`:
+        #   - its `padding_idx` and its effect on `position_ids`
+        #     (TFRobertaEmbeddings.create_position_ids_from_input_ids)
+        #   - `1` here is `TFRobertaEmbeddings.padding_idx`
+        # avoid `padding_idx` in the past
+        input_ids = tf.where(input_ids == 1, 2, input_ids)
 
         input_ids = input_ids[:1, :]
         input_mask = input_mask[:1, :]
@@ -410,6 +432,13 @@ class TFRobertaModelTester:
         config.add_cross_attention = True
 
         model = TFRobertaForCausalLM(config=config)
+
+        # special to `RobertaEmbeddings` in `Roberta`:
+        #   - its `padding_idx` and its effect on `position_ids`
+        #     (TFRobertaEmbeddings.create_position_ids_from_input_ids)
+        #   - `1` here is `TFRobertaEmbeddings.padding_idx`
+        # avoid `padding_idx` in the past
+        input_ids = tf.where(input_ids == 1, 2, input_ids)
 
         input_ids = input_ids[:1, :]
         input_mask = input_mask[:1, :]
