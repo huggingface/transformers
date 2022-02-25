@@ -70,7 +70,8 @@ into a single instance to both extract the input features and decode the predict
 >>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten") 
 >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
 
->>> # load image from the IAM dataset url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg" 
+>>> # load image from the IAM dataset 
+>>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg" 
 >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
 >>> pixel_values = processor(image, return_tensors="pt").pixel_values 

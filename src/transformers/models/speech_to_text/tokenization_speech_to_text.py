@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for Speech2Text."""
-
 import json
+import os
 from pathlib import Path
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -260,8 +260,12 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
 
         save_json(self.encoder, vocab_save_path)
 
-        if not spm_save_path.exists():
+        if os.path.abspath(self.spm_file) != os.path.abspath(spm_save_path) and os.path.isfile(self.spm_file):
             copyfile(self.spm_file, spm_save_path)
+        elif not os.path.isfile(self.spm_file):
+            with open(spm_save_path, "wb") as fi:
+                content_spiece_model = self.sp_model.serialized_model_proto()
+                fi.write(content_spiece_model)
 
         return (str(vocab_save_path), str(spm_save_path))
 

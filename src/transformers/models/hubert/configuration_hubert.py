@@ -14,6 +14,9 @@
 # limitations under the License.
 """ Hubert model configuration"""
 
+import functools
+import operator
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -248,3 +251,7 @@ class HubertConfig(PretrainedConfig):
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction
         self.ctc_zero_infinity = ctc_zero_infinity
+
+    @property
+    def inputs_to_logits_ratio(self):
+        return functools.reduce(operator.mul, self.conv_stride, 1)

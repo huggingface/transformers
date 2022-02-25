@@ -59,7 +59,7 @@ from .file_utils import (
     is_torchaudio_available,
     is_vision_available,
 )
-from .integrations import is_optuna_available, is_ray_available, is_sigopt_available
+from .integrations import is_optuna_available, is_ray_available, is_sigopt_available, is_wandb_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
@@ -590,6 +590,19 @@ def require_sigopt(test_case):
         return test_case
 
 
+def require_wandb(test_case):
+    """
+    Decorator marking a test that requires wandb.
+
+    These tests are skipped when wandb isn't installed.
+
+    """
+    if not is_wandb_available():
+        return unittest.skip("test requires wandb")(test_case)
+    else:
+        return test_case
+
+
 def require_soundfile(test_case):
     """
     Decorator marking a test that requires soundfile
@@ -676,6 +689,10 @@ def get_tests_dir(append_path=None):
     # this function caller's __file__
     caller__file__ = inspect.stack()[1][1]
     tests_dir = os.path.abspath(os.path.dirname(caller__file__))
+
+    while not tests_dir.endswith("tests"):
+        tests_dir = os.path.dirname(tests_dir)
+
     if append_path:
         return os.path.join(tests_dir, append_path)
     else:
@@ -1257,10 +1274,10 @@ def pytest_terminal_summary_main(tr, id):
     orig_tbstyle = config.option.tbstyle
     orig_reportchars = tr.reportchars
 
-    dir = "reports"
+    dir = f"reports/{id}"
     Path(dir).mkdir(parents=True, exist_ok=True)
     report_files = {
-        k: f"{dir}/{id}_{k}.txt"
+        k: f"{dir}/{k}.txt"
         for k in [
             "durations",
             "errors",

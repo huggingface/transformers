@@ -39,8 +39,8 @@ check how they look like before committing for instance). You don't have to comm
 
 ## Building the documentation
 
-Once you have setup the `doc-builder` and additional packages, you can generate the documentation by typing th
-folowwing command:
+Once you have setup the `doc-builder` and additional packages, you can generate the documentation by 
+typing the following command:
 
 ```bash
 doc-builder build transformers docs/source/ --build_dir ~/tmp/test-build
@@ -53,15 +53,14 @@ Markdown editor.
 ---
 **NOTE**
 
-It's not possible to see locally how the final documentation will look like for now. We are working on solutions to
-enable this, but any pre-visualiser of Markdown file should already give you a good idea of the result!
+It's not possible to see locally how the final documentation will look like for now. Once you have opened a PR, you
+will see a bot add a comment to a link where the documentation with your changes lives.
 
 ---
 
 ## Adding a new element to the navigation bar
 
-Accepted files are reStructuredText (.rst) and Markdown (.md or .mdx). We are progressively moving away from rst so you should
-create any new documentation file in the .mdx format. 
+Accepted files are Markdown (.md or .mdx).
 
 Create a file with its extension and put it in the source directory. You can then link it to the toc-tree by putting
 the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/master/docs/source/_toctree.yml) file.
@@ -92,17 +91,11 @@ Use the relative style to link to the new file so that the versioned docs contin
 For an example of a rich moved sections set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/master/docs/source/main_classes/trainer.mdx).
 
 
-## Preview the documentation in a pull request
-
-Coming soon!
-
 ## Writing Documentation - Specification
 
 The `huggingface/transformers` documentation follows the
 [Google documentation](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html) style for docstrings,
-although we can write them directly in Markdown. Parts of it are written in ReStructuredText
-([Sphinx simple documentation](https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html) but we are
-updating those.
+although we can write them directly in Markdown.
 
 ### Adding a new tutorial
 
@@ -134,6 +127,8 @@ When adding a new model:
     - PyTorch head models
     - TensorFlow base model
     - TensorFlow head models
+    - Flax base model
+    - Flax head models
 
 These classes should be added using our Markdown syntax. Usually as follows:
 
@@ -179,9 +174,9 @@ function to be in the main package.
 If you want to create a link to some internal class or function, you need to
 provide its path. For instance: \[\`file_utils.ModelOutput\`\]. This will be converted into a link with
 `file_utils.ModelOutput` in the description. To get rid of the path and only keep the name of the object you are
-linking to, add a ~: \[\`~file_utils.ModelOutput\`\] will generate a link with `ModelOutput` in the description.
+linking to in the description, add a ~: \[\`~file_utils.ModelOutput\`\] will generate a link with `ModelOutput` in the description.
 
-The same wroks for methods so you can either use \[\`XXXClass.method\`\] or \[~\`XXXClass.method\`\].
+The same works for methods so you can either use \[\`XXXClass.method\`\] or \[~\`XXXClass.method\`\].
 
 #### Defining arguments in a method
 
@@ -279,3 +274,113 @@ them by URL. We recommend putting them in the following dataset: [huggingface/do
 If an external contribution, feel free to add the images to your PR and ask a Hugging Face member to migrate your images
 to this dataset.
 
+## Styling the docstring
+
+We have an automatic script running with the `make style` comment that will make sure that:
+- the docstrings fully take advantage of the line width
+- all code examples are formatted using black, like the code of the Transformers library
+
+This script may have some weird failures if you made a syntax mistake or if you uncover a bug. Therefore, it's
+recommended to commit your changes before running `make style`, so you can revert the changes done by that script
+easily.
+
+# Testing documentation examples
+
+Good documentation oftens comes with an example of how a specific function or class should be used. 
+Each model class should contain at least one example showcasing
+how to use this model class in inference. *E.g.* the class [Wav2Vec2ForCTC](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2ForCTC) 
+includes an example of how to transcribe speech to text in the 
+[docstring of its forward function](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2ForCTC.forward).
+
+## Writing documenation examples
+
+The syntax for Example docstrings can look as follows:
+
+```
+    Example:
+
+    ```python
+    >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
+    >>> from datasets import load_dataset
+    >>> import torch
+
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+    >>> dataset = dataset.sort("id")
+    >>> sampling_rate = dataset.features["audio"].sampling_rate
+
+    >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+    >>> model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+
+    >>> # audio file is decoded on the fly
+    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+    >>> predicted_ids = torch.argmax(logits, dim=-1)
+
+    >>> # transcribe speech
+    >>> transcription = processor.batch_decode(predicted_ids)
+    >>> transcription[0]
+    'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'
+    ```
+```
+
+The docstring should give a minimal, clear example of how the respective model 
+is to be used in inference and also include the expected (ideally sensible)
+output.
+Often, readers will try out the example before even going through the function 
+or class definitions. Therefore it is of utmost importance that the example 
+works as expected.
+
+## Docstring testing
+
+To do so each example should be included in the doctests. 
+We use pytests' [doctest integration](https://docs.pytest.org/doctest.html) to verify that all of our examples run correctly. 
+For Transformers, the doctests are run on a daily basis via GitHub Actions as can be 
+seen [here](https://github.com/huggingface/transformers/actions/workflows/doctests.yml).
+
+To include your example in the daily doctests, you need add the filename that
+contains the example docstring to the [documentation_tests.txt](../utils/documentation_tests.txt).
+
+### For Python files
+
+You can run all the tests in the docstrings of a given file with the following command, here is how we test the modeling file of Wav2Vec2 for instance:
+
+```bash
+pytest --doctest-modules src/transformers/models/wav2vec2/modeling_wav2vec2.py -sv --doctest-continue-on-failure
+```
+
+If you want to isolate a specific docstring, just add `::` after the file name then type the whole path of the function/class/method whose docstring you want to test. For instance, here is how to just test the forward method of `Wav2Vec2ForCTC`:
+
+```bash
+pytest --doctest-modules src/transformers/models/wav2vec2/modeling_wav2vec2.py::transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC.forward -sv --doctest-continue-on-failure
+```
+
+### For Markdown files
+
+You will first need to run the following command (from the root of the repository) to prepare the doc file (doc-testing needs to add additional lines that we don't include in the doc source files):
+
+```bash
+python utils/prepare_for_doc_test.py src docs
+```
+
+Then you can test locally a given file with this command (here testing the quicktour):
+
+```bash
+pytest --doctest-modules docs/source/quicktour.mdx -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
+```
+
+Once you're done, you can run the following command (still from the root of the repository) to undo the changes made by the first command before committing:
+
+```bash
+python utils/prepare_for_doc_test.py src docs --remove_new_line
+```
+
+### Writing doctests
+
+Here are a few tips to help you debug the doctests and make them pass:
+
+- The outputs of the code need to match the expected output **exactly**, so make sure you have the same outputs. In particular doctest will see a difference between single quotes and double quotes, or a missing parenthesis. The only exceptions to that rule are:
+  * whitespace: one give whitespace (space, tabulation, new line) is equivalent to any number of whitespace, so you can add new lines where there are spaces to make your output more readable.
+  * numerical values: you should never put more than 4 or 5 digits to expected results as different setups or library versions might get you slightly different results. `doctest` is configure to ignore any difference lower than the precision to which you wrote (so 1e-4 if you write 4 digits).
+- Don't leave a block of code that is very long to execute. If you can't make it fast, you can either not use the doctest syntax on it (so that it's ignored), or if you want to use the doctest syntax to show the results, you can add a comment `# doctest: +SKIP` at the end of the lines of code too long to execute
+- Each line of code that produces a result needs to have that result written below. You can ignore an output if you don't want to show it in your code example by adding a comment ` # doctest: +IGNORE_RESULT` at the end of the line of code produing it.

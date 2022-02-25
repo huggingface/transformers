@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 FLAX_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("xglm", "FlaxXGLMModel"),
         ("blenderbot-small", "FlaxBlenderbotSmallModel"),
         ("pegasus", "FlaxPegasusModel"),
         ("vision-text-dual-encoder", "FlaxVisionTextDualEncoderModel"),
@@ -121,6 +122,7 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt2", "FlaxGPT2LMHeadModel"),
         ("gpt_neo", "FlaxGPTNeoForCausalLM"),
         ("gptj", "FlaxGPTJForCausalLM"),
+        ("xglm", "FlaxXGLMForCausalLM"),
     ]
 )
 

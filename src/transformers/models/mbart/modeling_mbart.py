@@ -152,7 +152,7 @@ class MBartAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1314,6 +1314,9 @@ class MBartForConditionalGeneration(MBartPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
             if decoder_input_ids is None:
                 decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
 
@@ -1662,7 +1665,7 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->MBart
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->MBart, facebook/bart-large->facebook/mbart-large-cc25
 class MBartForCausalLM(MBartPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
@@ -1784,8 +1787,8 @@ class MBartForCausalLM(MBartPreTrainedModel):
         ```python
         >>> from transformers import MBartTokenizer, MBartForCausalLM
 
-        >>> tokenizer = MBartTokenizer.from_pretrained("facebook/bart-large")
-        >>> model = MBartForCausalLM.from_pretrained("facebook/bart-large", add_cross_attention=False)
+        >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
+        >>> model = MBartForCausalLM.from_pretrained("facebook/mbart-large-cc25", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

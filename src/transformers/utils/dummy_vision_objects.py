@@ -31,6 +31,13 @@ class CLIPProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class ConvNextFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class DeiTFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -80,7 +87,28 @@ class PerceiverFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class PoolFormerFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class SegformerFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class ViltFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class ViltProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

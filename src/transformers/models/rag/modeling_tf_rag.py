@@ -293,7 +293,9 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
         >>> model.save_pretrained("./rag")
 
         >>> # load retriever
-        >>> retriever = RagRetriever.from_pretrained(PATH, index_name="exact", use_dummy_dataset=True)
+        >>> retriever = RagRetriever.from_pretrained(
+        ...     "facebook/rag-token-base", index_name="exact", use_dummy_dataset=True
+        ... )
         >>> # load fine-tuned model with retriever
         >>> model = TFRagModel.from_pretrained("./rag", retriever=retriever)
         ```"""
@@ -559,7 +561,7 @@ class TFRagModel(TFRagPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RagTokenizer, RagRetriever, RagModel
+        >>> from transformers import RagTokenizer, RagRetriever, TFRagModel
         >>> import torch
 
         >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-base")
@@ -939,6 +941,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         Example:
 
         ```python
+        >>> import tensorflow as tf
         >>> from transformers import RagTokenizer, RagRetriever, TFRagTokenForGeneration
 
         >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
@@ -1266,6 +1269,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         )
 
         if return_dict_in_generate:
+            # TODO(Patrick): `encoder_outputs`, `past` hack.
+            # Remove after cleaning encoder-decoder outputs
             if output_attentions:
                 model_kwargs["encoder_attentions"] = encoder_outputs.attentions
             if output_hidden_states:
@@ -1347,28 +1352,35 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 **model_kwargs,  # encoder_outputs is here as in Pytorch's version
             )
         else:
-            return self._generate_no_beam_search(
-                decoder_input_ids,
-                cur_len=cur_len,
-                max_length=max_length,
-                min_length=min_length,
-                do_sample=do_sample,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
+            pre_processor = self._get_logits_processor(
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
+                min_length=min_length,
+                eos_token_id=eos_token_id,
+            )
+            # TODO(Patrick) clean-up once generate is fully cleaned up
+            model_kwargs["attention_mask"] = context_attention_mask
+            # TODO(Patrick) remove once generate is fully cleaned up
+            model_kwargs.pop("output_hidden_states", None)
+            model_kwargs.pop("output_attentions", None)
+            model_kwargs.pop("output_scores", None)
+
+            # TODO(Patrick): `encoder_outputs`, `past` hack.
+            # Remove after cleaning encoder-decoder outputs
+            model_kwargs["past"] = encoder_outputs
+
+            return self.greedy_search(
+                input_ids=decoder_input_ids,
+                max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                batch_size=batch_size,
-                vocab_size=vocab_size,
-                attention_mask=context_attention_mask,
-                use_cache=use_cache,
-                forced_bos_token_id=None,
-                forced_eos_token_id=None,
+                logits_processor=pre_processor,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
-                **model_kwargs,  # encoder_outputs is here as in Pytorch's version
+                **model_kwargs,
             )
 
     def get_input_embeddings(self):
@@ -1415,12 +1427,12 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
         target = tf.concat([target[:, 1:], tf.fill([target.shape[0], 1], self.config.generator.pad_token_id)], axis=1)
         rag_logprobs = self.marginalize(seq_logits, doc_scores, n_docs)
-        loss = self.compute_loss(target, rag_logprobs, from_logits=True, reduce_loss=reduce_loss)
+        loss = self.hf_compute_loss(target, rag_logprobs, from_logits=True, reduce_loss=reduce_loss)
 
         return loss
 
     # Adopted modeling_tf_bart + add smooth_loss to match with pytorch version
-    def compute_loss(self, labels, y_pred, smooth_epsilon=0.0, from_logits=True, reduce_loss=False):
+    def hf_compute_loss(self, labels, y_pred, smooth_epsilon=0.0, from_logits=True, reduce_loss=False):
         """CrossEntropyLoss that ignores pad tokens"""
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True,
@@ -1554,7 +1566,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         ...     "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
         ... )
         >>> # initialize with RagRetriever to do everything in one forward call
-        >>> model = TFRagRagSequenceForGeneration.from_pretrained(
+        >>> model = TFRagSequenceForGeneration.from_pretrained(
         ...     "facebook/rag-sequence-nq", retriever=retriever, from_pt=True
         ... )
 

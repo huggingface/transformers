@@ -167,16 +167,16 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
             )
         else:
             bsz, seq_len = inputs_embeds.size()[:-1]
-            position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+            position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds, past_key_values_length)
 
         # expand embeddings if needed
-        max_pos = self.padding_idx + 1 + seq_len
+        max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
 
-    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
+    def create_position_ids_from_inputs_embeds(self, inputs_embeds, past_key_values_length):
         """
         We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
 
@@ -191,7 +191,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         position_ids = torch.arange(
             self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
         )
-        return position_ids.unsqueeze(0).expand(input_shape).contiguous()
+        return position_ids.unsqueeze(0).expand(input_shape).contiguous() + past_key_values_length
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->M2M100
@@ -217,7 +217,7 @@ class M2M100Attention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)

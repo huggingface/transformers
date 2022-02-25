@@ -668,8 +668,7 @@ class FlaxGPTJForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    The GPTJ Model transformer with a language modeling head on top (linear layer with weights tied to the input
-    embeddings).
+    The GPTJ Model transformer with a language modeling head on top.
     """,
     GPTJ_START_DOCSTRING,
 )

@@ -1060,6 +1060,7 @@ class FlaxBlenderbotSmallPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
         >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
@@ -1329,6 +1330,7 @@ class FlaxBlenderbotSmallForConditionalGeneration(FlaxBlenderbotSmallPreTrainedM
         Example:
 
         ```python
+        >>> import jax.numpy as jnp
         >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
         >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
