@@ -35,16 +35,8 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_decision_transformer"] = [
         "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "DecisionTransformerForCausalLM",
-        "DecisionTransformerForMaskedLM",
-        "DecisionTransformerForMultipleChoice",
-        "DecisionTransformerForQuestionAnswering",
-        "DecisionTransformerForSequenceClassification",
-        "DecisionTransformerForTokenClassification",
-        "DecisionTransformerLayer",
         "DecisionTransformerModel",
         "DecisionTransformerPreTrainedModel",
-        "load_tf_weights_in_decision_transformer",
     ]
 
 
@@ -53,24 +45,12 @@ if TYPE_CHECKING:
         DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DecisionTransformerConfig,
     )
-    from .tokenization_decision_transformer import DecisionTransformerTokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_decision_transformer_fast import DecisionTransformerTokenizerFast
 
     if is_torch_available():
         from .modeling_decision_transformer import (
             DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DecisionTransformerForCausalLM,
-            DecisionTransformerForMaskedLM,
-            DecisionTransformerForMultipleChoice,
-            DecisionTransformerForQuestionAnswering,
-            DecisionTransformerForSequenceClassification,
-            DecisionTransformerForTokenClassification,
-            DecisionTransformerLayer,
             DecisionTransformerModel,
             DecisionTransformerPreTrainedModel,
-            load_tf_weights_in_decision_transformer,
         )
 
 
