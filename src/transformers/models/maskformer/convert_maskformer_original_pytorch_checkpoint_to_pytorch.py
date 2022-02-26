@@ -178,7 +178,7 @@ class OriginalMaskFormerConfigToFeatureExtractorConverter:
         )
 
 
-class OriginalMaskFormerCheckpoinToOursConverter:
+class OriginalMaskFormerCheckpointToOursConverter:
     def __init__(self, original_model: nn.Module, config: MaskFormerConfig):
         self.original_model = original_model
         self.config = config
@@ -676,7 +676,7 @@ if __name__ == "__main__":
     if not save_directory.exists():
         save_directory.mkdir(parents=True)
 
-    for config_file, checkpoint_file in OriginalMaskFormerCheckpoinToOursConverter.using_dirs(
+    for config_file, checkpoint_file in OriginalMaskFormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
 
@@ -695,7 +695,7 @@ if __name__ == "__main__":
 
         mask_former = MaskFormerModel(config=config).eval()
 
-        converter = OriginalMaskFormerCheckpoinToOursConverter(original_model, config)
+        converter = OriginalMaskFormerCheckpointToOursConverter(original_model, config)
 
         maskformer = converter.convert(mask_former)
 

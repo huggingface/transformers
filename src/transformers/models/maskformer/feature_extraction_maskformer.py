@@ -38,7 +38,8 @@ logger = logging.get_logger(__name__)
 
 class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a MaskFormer feature extractor.
+    Constructs a MaskFormer feature extractor. The feature extractor can be used to prepare image(s) and optional
+    targets for the model.
 
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
@@ -55,8 +56,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
             set to `True`.
         size_divisibility (`int`, *optional*, defaults to 32):
-            Some backbones need images divisible by a certain number, if not passes it detauls to the value used in
-            swin.
+            Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
+            Swin Transformer.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
         image_mean (`int`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
@@ -64,6 +65,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         image_std (`int`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
             ImageNet std.
+        ignore_index (`int`, *optional*, default to 255):
+            Value of the index (label) to ignore.
+
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -77,6 +81,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         do_normalize=True,
         image_mean=None,
         image_std=None,
+        ignore_index=255,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -84,7 +89,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self.size = size
         self.max_size = max_size
         self.size_divisibility = size_divisibility
-        self.ignore_label = 255
+        self.ignore_index = ignore_index
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406]  # ImageNet mean
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]  # ImageNet std
@@ -152,17 +157,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 target["masks"] = interpolated_masks.numpy()
 
         return rescaled_image, target
-
-    def _normalize(self, image, mean, std, target=None):
-        """
-        Normalize the image with a certain mean and std.
-
-        If given, also normalize the target bounding boxes based on the size of the image.
-        """
-
-        image = self.normalize(image, mean=mean, std=std)
-
-        return image, target
 
     def __call__(
         self,
@@ -265,17 +259,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                     images[idx] = self._resize(image=image, target=None, size=self.size, max_size=self.max_size)[0]
 
         if self.do_normalize:
-            if annotations is not None:
-                for idx, (image, target) in enumerate(zip(images, annotations)):
-                    image, target = self._normalize(
-                        image=image, mean=self.image_mean, std=self.image_std, target=target
-                    )
-                    images[idx] = image
-                    annotations[idx] = target
-            else:
-                images = [
-                    self._normalize(image=image, mean=self.image_mean, std=self.image_std)[0] for image in images
-                ]
+            images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
         # NOTE I will be always forced to pad them them since they have to be stacked in the batch dim
         encoded_inputs = self.encode_inputs(
             images, annotations, pad_and_return_pixel_mask, return_tensors=return_tensors
@@ -315,6 +299,20 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             pixel_values_list (`List[torch.Tensor]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape `(channels, height,
                 width)`.
+
+            annotations (`Dict`, `List[Dict]`, *optional*):
+                The corresponding annotations as dictionary of numpy arrays with the following keys:
+                - **masks** (`np.ndarray`) The target mask of shape `(num_classes, height, width)`.
+                - **labels** (`np.ndarray`) The target labels of shape `(num_classes)`.
+
+            pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
+                Whether or not to pad images up to the largest image in a batch and create a pixel mask.
+
+                If left to the default, will return a pixel mask that is:
+
+                - 1 for pixels that are real (i.e. **not masked**),
+                - 0 for pixels that are padding (i.e. **masked**).
+
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
                 objects.
@@ -337,7 +335,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         pixel_mask = []
         mask_labels = []
         class_labels = []
-
         for idx, image in enumerate(pixel_values_list):
             # create padded image
             if pad_and_return_pixel_mask:
@@ -382,6 +379,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         Args:
             outputs ([`MaskFormerForInstanceSegmentationOutput`]):
                 The outputs from [`MaskFormerForInstanceSegmentation`].
+
+            target_size (`Tuple[int, int]`, *optional*):
+                If set, the `masks_queries_logits` will be resized to `target_size`.
 
         Returns:
             `torch.Tensor`:
@@ -475,14 +475,14 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             object_mask_threshold (`float`, *optional*, defaults to 0.8):
                 The object mask threshold.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
-                The overlap mask area threshold.
+                The overlap mask area threshold to use.
             is_thing_map (`Dict[int, bool]`, *optional*):
                 Dictionary mapping class indices to either `True` or `False`, depending on whether or not they are a
                 thing. If not set, defaults to the `is_thing_map` of COCO panoptic.
 
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
-            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represent a `segment_id`.
+            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`.
             - **segments** -- a dictionary with the following keys
                 - **id** -- an integer representing the `segment_id`.
                 - **category_id** -- an integer representing the segment's label.

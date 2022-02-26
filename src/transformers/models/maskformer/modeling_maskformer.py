@@ -77,8 +77,8 @@ class MaskFormerSwinModelOutputWithPooling(ModelOutput):
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):
             A tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to
-            `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward`
-            method.
+            `batch, channels, height, width`. Due to padding, their spatial size cannot be inferred before the
+            `forward` method.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -314,7 +314,7 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
 
 def upsample_like(pixel_values: Tensor, like: Tensor, mode: str = "bilinear") -> Tensor:
     """
-    An utility function that upsamples `pixel_values` to match the dimension of `like`
+    An utility function that upsamples `pixel_values` to match the dimension of `like`.
 
     Args:
         pixel_values (`torch.Tensor`):
@@ -369,7 +369,7 @@ def sigmoid_focal_loss(
 ) -> Tensor:
     r"""
     Focal loss proposed in [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002) originally used in
-    RetinaNet. The loss is computed as follows
+    RetinaNet. The loss is computed as follows:
 
     $$ \mathcal{L}_{\text{focal loss} = -(1 - p_t)^{\gamma}\log{(p_t)} $$
 
@@ -657,6 +657,7 @@ class MaskFormerSwinDropPath(nn.Module):
         return drop_path(input, self.drop_prob, self.training, self.scale_by_keep)
 
 
+# Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->MaskFormerSwin
 class MaskFormerSwinSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads):
         super().__init__()
@@ -698,7 +699,13 @@ class MaskFormerSwinSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=False,
+    ):
         batch_size, dim, num_channels = hidden_states.shape
         mixed_query_layer = self.query(hidden_states)
 
@@ -1061,7 +1068,6 @@ class MaskFormerSwinEncoder(nn.Module):
             hidden_states = layer_hidden_states
 
             if output_attentions:
-                # TODO no idea if that is correct
                 all_self_attentions = all_self_attentions + (layer_all_hidden_states[1],)
 
         if not return_dict:
@@ -1663,7 +1669,7 @@ class MaskFormerHungarianMatcher(nn.Module):
             assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
 
-        # TODO this is a little weird, they can be stacked in one tensor
+        # It could be stacked in one tensor
         matched_indices = [
             (torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices
         ]
@@ -1969,7 +1975,7 @@ class MaskFormerFPNLayer(nn.Module):
 class MaskFormerFPNModel(nn.Module):
     def __init__(self, in_features: int, lateral_widths: List[int], feature_size: int = 256):
         """
-        Feature Pyramid Network, given an input tensor and a set of features map of different feature/spatial size, it
+        Feature Pyramid Network, given an input tensor and a set of feature map of different feature/spatial size, it
         creates a list of feature maps with the same feature size.
 
         Args:
