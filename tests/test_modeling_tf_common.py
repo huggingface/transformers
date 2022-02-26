@@ -460,10 +460,22 @@ class TFModelTesterMixin:
                 if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
                     pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
 
+                # Output all for aggressive testing
+                output_kwargs = {"output_hidden_states": True}
+                # Pure convolutional models have no attention
+                # TODO: use a better and general criteria
+                if "TFConvNext" not in model_class.__name__:
+                    output_kwargs["output_attentions"] = True
+
+                tf_inputs_dict.update(output_kwargs)
+                pt_inputs_dict.update(output_kwargs)
+                tf_inputs_dict_maybe_with_labels.update(output_kwargs)
+                pt_inputs_dict_maybe_with_labels.update(output_kwargs)
+
                 # Original test: check without `labels`
                 with torch.no_grad():
-                    pto = pt_model(**pt_inputs_dict, output_hidden_states=True, output_attentions=True)
-                tfo = tf_model(tf_inputs_dict, output_hidden_states=True, output_attentions=True, training=False)
+                    pto = pt_model(**pt_inputs_dict)
+                tfo = tf_model(tf_inputs_dict)
 
                 tf_keys = [k for k, v in tfo.items() if v is not None]
                 pt_keys = [k for k, v in pto.items() if v is not None]
@@ -478,15 +490,8 @@ class TFModelTesterMixin:
                 if has_labels:
 
                     with torch.no_grad():
-                        pto = pt_model(
-                            **pt_inputs_dict_maybe_with_labels, output_hidden_states=True, output_attentions=True
-                        )
-                    tfo = tf_model(
-                        tf_inputs_dict_maybe_with_labels,
-                        output_hidden_states=True,
-                        output_attentions=True,
-                        training=False,
-                    )
+                        pto = pt_model(**pt_inputs_dict_maybe_with_labels)
+                    tfo = tf_model(tf_inputs_dict_maybe_with_labels)
 
                     # Some models' output class don't have `loss` attribute despite `labels` is used.
                     # TODO: identify which models
@@ -512,14 +517,14 @@ class TFModelTesterMixin:
                     pt_keys = [k for k, v in pto.items() if v is not None]
 
                     # TODO: remove these 2 conditions once the above TODOs (above loss) are implemented
-                    # (`TFTransfoXLLMHeadModel` has no `loss` while `TransfoXLLMHeadModel` return `losses`)
+                    # (Also, `TFTransfoXLLMHeadModel` has no `loss` while `TransfoXLLMHeadModel` return `losses`)
                     if tf_keys != pt_keys:
                         if model_class.__name__ not in [
                             "TFFlaubertWithLMHeadModel",
                             "TFFunnelForPreTraining",
                             "TFElectraForPreTraining",
                             "TFXLMWithLMHeadModel",
-                        ] + ["TransfoXLLMHeadModel"]:
+                        ] + ["TFTransfoXLLMHeadModel"]:
                             self.assertEqual(tf_keys, pt_keys)
 
                     # Since we deliberately make some tests pass above (regarding the `loss`), let's still try to test
