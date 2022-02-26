@@ -443,20 +443,14 @@ class TFModelTesterMixin:
             tf_inputs_dict_maybe_with_labels = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
             # Check we can load pt model in tf and vice-versa with model => model functions
-
             tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
             pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
 
             # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
-
             pt_model.eval()
 
             pt_inputs_dict = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
             pt_inputs_dict_maybe_with_labels = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict_maybe_with_labels)
-
-            # need to rename encoder-decoder "inputs" for PyTorch
-            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
-                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
 
             # Output all for aggressive testing
             output_kwargs = {"output_hidden_states": True}
