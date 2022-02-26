@@ -369,12 +369,20 @@ class TFModelTesterMixin:
             return pt_inputs_dict
 
         def check_outputs(tfo, pto, model_class, names):
+            """
+            Args:
+                model_class: The class of the model that is currently testing. For example, `TFBertModel`,
+                    TFBertForMaskedLM`, `TFBertForSequenceClassification`, etc. Currently unused, but it could make
+                    debugging easier and faster.
+
+                names: A string, or a list of strings. These specify what tfo/pto represent in the model outputs.
+                    Currently unused, but in the future, we could use this information to make the error message clearer
+                    by giving the name(s) of the output tensor(s) with large difference(s) between PT and TF.
+            """
 
             # Some big issue (`about past_key_values`) to solve (e.g. `TFPegasusForConditionalGeneration`)
             if names == "past_key_values":
                 return
-                # if type(tfo) == tuple and len(tfo) == 2 and isinstance(tfo[0], tf.Tensor) and type(tfo[1]) == tuple:
-                #     tfo = tfo[1]
 
             if type(tfo) == tuple:
                 self.assertEqual(type(pto), tuple)
@@ -432,9 +440,7 @@ class TFModelTesterMixin:
             pt_model = pt_model_class(config)
 
             tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            tf_inputs_dict_maybe_with_labels = self._prepare_for_class(
-                inputs_dict, model_class, return_labels=True
-            )
+            tf_inputs_dict_maybe_with_labels = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
             # Check we can load pt model in tf and vice-versa with model => model functions
 
