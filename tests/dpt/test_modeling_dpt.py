@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DPTForDepthEstimation, DPTModel, DPTForSemanticSegmentation
+    from transformers import DPTForDepthEstimation, DPTForSemanticSegmentation, DPTModel
     from transformers.models.dpt.modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 

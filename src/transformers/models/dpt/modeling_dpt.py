@@ -100,8 +100,38 @@ class DPTViTEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
+    def _resize_pos_embed(self, posemb, gs_h, gs_w, start_index=1):
+        posemb_tok, posemb_grid = (
+            posemb[:, : start_index],
+            posemb[0, start_index :],
+        )
+
+        gs_old = int(math.sqrt(len(posemb_grid)))
+
+        posemb_grid = posemb_grid.reshape(1, gs_old, gs_old, -1).permute(0, 3, 1, 2)
+        posemb_grid = nn.functional.interpolate(posemb_grid, size=(gs_h, gs_w), mode="bilinear")
+        posemb_grid = posemb_grid.permute(0, 2, 3, 1).reshape(1, gs_h * gs_w, -1)
+
+        posemb = torch.cat([posemb_tok, posemb_grid], dim=1)
+
+        return posemb
+    
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
+        
+        print("Cls token:", self.cls_token)
+        print("Patch embeddings", self.patch_embeddings.projection.weight)
+        print("Shape of position embeddings:", self.position_embeddings.data.shape)
+        print("First elements of pos embed:", self.position_embeddings[0,:3,:3])
+        
+        # possibly interpolate position encodings to handle varying image sizes
+        patch_size = self.config.patch_size
+        position_embeddings = self._resize_pos_embed(self.position_embeddings, height // patch_size, width // patch_size)
+
+        print("Patch size:", patch_size)
+
+        print("First elements of pos embed:", position_embeddings[0,:3,:3])
+        
         embeddings = self.patch_embeddings(pixel_values)
 
         batch_size, seq_len, _ = embeddings.size()
@@ -111,9 +141,12 @@ class DPTViTEmbeddings(nn.Module):
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
-        embeddings = embeddings + self.position_embeddings
+        embeddings = embeddings + position_embeddings
 
         embeddings = self.dropout(embeddings)
+
+        print("Embeddings:", embeddings.shape)
+        print("First elements:, ", embeddings[0, :3, :3])
 
         return embeddings
 
@@ -139,10 +172,6 @@ class PatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
-        if height != self.image_size[0] or width != self.image_size[1]:
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-            )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
 
@@ -441,13 +470,15 @@ class DPTReassembleBlocks(nn.Module):
         assert isinstance(inputs, list)
         out = []
 
-        patch_resolution = self.config.image_size // self.config.patch_size
+        # patch_resolution = self.config.image_size // self.config.patch_size
 
         for i, x in enumerate(inputs):
             # reshape to (B, C, H, W)
             x, cls_token = x[:, 1:], x[:, 0]
-            B, _, C = x.shape
-            x = x.reshape(B, patch_resolution, patch_resolution, C)
+            B, L, C = x.shape
+            print("Shape of x:", x.shape)
+            size = int(math.sqrt(L))
+            x = x.reshape(B, size, size, C)
             x = x.permute(0, 3, 1, 2).contiguous()
 
             feature_shape = x.shape
