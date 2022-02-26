@@ -18,14 +18,12 @@ Processor class for ViLT.
 
 from typing import List, Optional, Union
 
-from transformers import BertTokenizerFast
-
 from ...file_utils import TensorType
+from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from .feature_extraction_vilt import ViltFeatureExtractor
 
 
-class ViltProcessor:
+class ViltProcessor(ProcessorMixin):
     r"""
     Constructs a ViLT processor which wraps a BERT tokenizer and ViLT feature extractor into a single processor.
 
@@ -38,74 +36,12 @@ class ViltProcessor:
         tokenizer (`BertTokenizerFast`):
             An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
     """
+    feature_extractor_class = "ViltFeatureExtractor"
+    tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):
-        if not isinstance(feature_extractor, ViltFeatureExtractor):
-            raise ValueError(
-                f"`feature_extractor` has to be of type {ViltFeatureExtractor.__class__}, but is {type(feature_extractor)}"
-            )
-        if not isinstance(tokenizer, BertTokenizerFast):
-            raise ValueError(f"`tokenizer` has to be of type {BertTokenizerFast.__class__}, but is {type(tokenizer)}")
-
-        self.feature_extractor = feature_extractor
-        self.tokenizer = tokenizer
+        super().__init__(feature_extractor, tokenizer)
         self.current_processor = self.feature_extractor
-
-    def save_pretrained(self, save_directory):
-        """
-        Save a ViLT feature_extractor object and BERT tokenizer object to the directory `save_directory`, so that it
-        can be re-loaded using the [`~ViltProcessor.from_pretrained`] class method.
-
-        <Tip>
-
-        This class method is simply calling [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] and
-        [`~tokenization_utils_base.PreTrainedTokenizer.save_pretrained`]. Please refer to the docstrings of the methods
-        above for more information.
-
-        </Tip>
-
-        Args:
-            save_directory (`str` or `os.PathLike`):
-                Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
-                be created if it does not exist).
-        """
-
-        self.feature_extractor.save_pretrained(save_directory)
-        self.tokenizer.save_pretrained(save_directory)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        r"""
-        Instantiate a [`ViltProcessor`] from a pretrained ViLT processor.
-
-        <Tip>
-
-        This class method is simply calling ViltFeatureExtractor's
-        [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and BertTokenizerFast's
-        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Please refer to the docstrings of the methods
-        above for more information.
-
-        </Tip>
-
-        Args:
-            pretrained_model_name_or_path (`str` or `os.PathLike`):
-                This can be either:
-
-                - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
-                - a path to a *directory* containing a feature extractor file saved using the
-                  [`~SequenceFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
-                - a path or url to a saved feature extractor JSON *file*, e.g.,
-                  `./my_model_directory/preprocessor_config.json`.
-            **kwargs
-                Additional keyword arguments passed along to both [`SequenceFeatureExtractor`] and
-                [`PreTrainedTokenizer`]
-        """
-        feature_extractor = ViltFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     def __call__(
         self,

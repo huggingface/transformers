@@ -683,8 +683,7 @@ class GPTJModel(GPTJPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The GPT-J Model transformer with a language modeling head on top (linear layer with weights tied to the input
-    embeddings).
+    The GPT-J Model transformer with a language modeling head on top.
     """,
     GPTJ_START_DOCSTRING,
 )

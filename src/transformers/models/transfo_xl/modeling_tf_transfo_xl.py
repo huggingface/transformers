@@ -34,8 +34,8 @@ from ...modeling_tf_utils import (
     get_initializer,
     input_processing,
     keras_serializable,
-    shape_list,
 )
+from ...tf_utils import shape_list
 from ...utils import logging
 from .configuration_transfo_xl import TransfoXLConfig
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
@@ -149,7 +149,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
 
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layer_norm")
 
-        self.scale = 1 / (d_head ** 0.5)
+        self.scale = 1 / (d_head**0.5)
 
         self.pre_lnorm = pre_lnorm
 
@@ -350,7 +350,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
         self.div_val = div_val
         self.d_proj = d_proj
 
-        self.emb_scale = d_proj ** 0.5
+        self.emb_scale = d_proj**0.5
 
         self.cutoff_ends = [0] + self.cutoffs
 
@@ -362,7 +362,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
         else:
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
-                d_emb_i = d_embed // (div_val ** i)
+                d_emb_i = d_embed // (div_val**i)
                 self.emb_layers.append(
                     TFTransfoEmbeddings(
                         r_idx - l_idx,
@@ -374,7 +374,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         for i in range(len(self.cutoffs)):
-            d_emb_i = self.d_embed // (self.div_val ** i)
+            d_emb_i = self.d_embed // (self.div_val**i)
             self.emb_projs.append(
                 self.add_weight(
                     shape=(d_emb_i, self.d_proj),
@@ -597,14 +597,8 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         mlen = shape_list(inputs["mems"][0])[0] if inputs["mems"] is not None else 0
         klen = mlen + qlen
 
-        attn_mask = tf.ones([qlen, qlen])
-        mask_u = tf.linalg.band_part(attn_mask, 0, -1)
-        mask_dia = tf.linalg.band_part(attn_mask, 0, 0)
-        attn_mask_pad = tf.zeros([qlen, mlen])
-        dec_attn_mask = tf.concat([attn_mask_pad, mask_u - mask_dia], 1)
-        if self.same_length:
-            mask_l = tf.linalg.band_part(attn_mask, -1, 0)
-            dec_attn_mask = tf.concat([dec_attn_mask[:, :qlen] + mask_l - mask_dia, dec_attn_mask[:, qlen:]], 1)
+        # Compute decoder attention mask
+
         # ::: PyTorch masking code for reference :::
         # if self.same_length:
         #     all_ones = word_emb.new_ones((qlen, klen), dtype=torch.uint8)
@@ -618,6 +612,21 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         # else:
         #     dec_attn_mask = torch.triu(
         #         word_emb.new_ones((qlen, klen), dtype=torch.uint8), diagonal=1+mlen)[:,:,None]
+
+        # TensorFlow version
+        dec_attn_mask = 1 - tf.linalg.band_part(
+            tf.ones([qlen, klen], dtype=tf.int32), -1, mlen
+        )  # (q, q): diagonal with 1's
+        if self.same_length:
+            mask_len = klen - self.mem_len
+            if mask_len > 0:
+                mask_shift_len = qlen - mask_len
+            else:
+                mask_shift_len = qlen
+            if mask_shift_len >= 1:
+                dec_attn_mask += 1 - tf.linalg.band_part(tf.ones([qlen, klen], dtype=tf.int32), mask_shift_len - 1, -1)
+            else:
+                dec_attn_mask += tf.linalg.band_part(tf.ones([qlen, klen], dtype=tf.int32), -1, -mask_shift_len)
 
         hids = []
         attentions = [] if inputs["output_attentions"] else None
