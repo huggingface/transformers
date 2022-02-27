@@ -22,8 +22,8 @@ from transformers import DPTConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
-from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ..test_configuration_common import ConfigTester
+from ..test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -61,7 +61,6 @@ class DPTModelTester:
         initializer_range=0.02,
         num_labels=3,
         scope=None,
-        encoder_stride=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -80,7 +79,6 @@ class DPTModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
-        self.encoder_stride = encoder_stride
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -107,7 +105,6 @@ class DPTModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -356,8 +353,16 @@ def prepare_img():
 class DPTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return DPTFeatureExtractor.from_pretrained("google/dpt-base-patch16-224") if is_vision_available() else None
+        # TODO replace nielsr to appropriate organization
+        return DPTFeatureExtractor.from_pretrained("nielsr/dpt-large") if is_vision_available() else None
 
     @slow
-    def test_inference_image_classification_head(self):
+    def test_inference_semantic_segmentation(self):
+        model = DPTForSemanticSegmentation.from_pretrained("nielsr/dpt-large-ade").to(
+            torch_device
+        )
+
+        image = prepare_img()
+        
+        # TODO
         raise NotImplementedError("")
