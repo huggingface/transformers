@@ -35,20 +35,17 @@ if is_torch_available():
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
 
     if is_torch_available():
         from .modeling_glpn import (
             GLPN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GLPNForDepthEstimation,
             GLPNLayer,
             GLPNModel,
             GLPNPreTrainedModel,
-            GLPNForDepthEstimation,
         )
-
 
 
 else:

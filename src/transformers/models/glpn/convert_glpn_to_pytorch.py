@@ -20,16 +20,11 @@ import json
 from collections import OrderedDict
 from pathlib import Path
 
-import requests
+import torch
 from PIL import Image
 
-import torch
-
-from transformers import (
-    ViTFeatureExtractor,
-    GLPNConfig,
-    GLPNForDepthEstimation,
-)
+import requests
+from transformers import GLPNConfig, GLPNForDepthEstimation, ViTFeatureExtractor
 from transformers.utils import logging
 
 
@@ -103,9 +98,7 @@ def read_in_k_v(state_dict, config):
             state_dict[f"glpn.encoder.block.{i}.{j}.attention.self.value.weight"] = kv_weight[
                 config.hidden_sizes[i] :, :
             ]
-            state_dict[f"glpn.encoder.block.{i}.{j}.attention.self.value.bias"] = kv_bias[
-                config.hidden_sizes[i] :
-            ]
+            state_dict[f"glpn.encoder.block.{i}.{j}.attention.self.value.bias"] = kv_bias[config.hidden_sizes[i] :]
 
 
 # We will verify our results on a COCO image
@@ -158,10 +151,10 @@ def convert_glpn_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
     if push_to_hub:
         logger.info(f"Pushing model to the hub...")
         model.push_to_hub(
-        repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-        organization="nielsr",
-        commit_message="Add model",
-    )
+            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
+            organization="nielsr",
+            commit_message="Add model",
+        )
 
 
 if __name__ == "__main__":

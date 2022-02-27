@@ -529,23 +529,20 @@ class GLPNDecoder(nn.Module):
 
         in_channels = config.channels_in
         out_channels = config.channels_out
-        
-        self.bot_conv = nn.Conv2d(
-            in_channels=in_channels[0], out_channels=out_channels, kernel_size=1)
-        self.skip_conv1 = nn.Conv2d(
-            in_channels=in_channels[1], out_channels=out_channels, kernel_size=1)
-        self.skip_conv2 = nn.Conv2d(
-            in_channels=in_channels[2], out_channels=out_channels, kernel_size=1)
 
-        self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-        
+        self.bot_conv = nn.Conv2d(in_channels=in_channels[0], out_channels=out_channels, kernel_size=1)
+        self.skip_conv1 = nn.Conv2d(in_channels=in_channels[1], out_channels=out_channels, kernel_size=1)
+        self.skip_conv2 = nn.Conv2d(in_channels=in_channels[2], out_channels=out_channels, kernel_size=1)
+
+        self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
+
         self.fusion1 = GLPNSelectiveFeatureFusion(out_channels)
         self.fusion2 = GLPNSelectiveFeatureFusion(out_channels)
         self.fusion3 = GLPNSelectiveFeatureFusion(out_channels)
 
     def forward(self, encoder_hidden_states):
         x_1, x_2, x_3, x_4 = encoder_hidden_states
-        
+
         x_4_ = self.bot_conv(x_4)
         out = self.up(x_4_)
 
@@ -569,19 +566,18 @@ class GLPNSelectiveFeatureFusion(nn.Module):
         super().__init__()
 
         self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channels=int(in_channel*2),
-                      out_channels=in_channel, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(in_channels=int(in_channel * 2), out_channels=in_channel, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(in_channel),
-            nn.ReLU())
+            nn.ReLU(),
+        )
 
         self.conv2 = nn.Sequential(
-            nn.Conv2d(in_channels=in_channel, 
-                      out_channels=int(in_channel / 2), kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(in_channels=in_channel, out_channels=int(in_channel / 2), kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(int(in_channel / 2)),
-            nn.ReLU())
+            nn.ReLU(),
+        )
 
-        self.conv3 = nn.Conv2d(in_channels=int(in_channel / 2), 
-                               out_channels=2, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=int(in_channel / 2), out_channels=2, kernel_size=3, stride=1, padding=1)
 
         self.sigmoid = nn.Sigmoid()
 
@@ -592,8 +588,7 @@ class GLPNSelectiveFeatureFusion(nn.Module):
         x = self.conv3(x)
         attn = self.sigmoid(x)
 
-        out = x_local * attn[:, 0, :, :].unsqueeze(1) + \
-              x_global * attn[:, 1, :, :].unsqueeze(1)
+        out = x_local * attn[:, 0, :, :].unsqueeze(1) + x_global * attn[:, 1, :, :].unsqueeze(1)
 
         return out
 
@@ -610,7 +605,8 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         self.head = nn.Sequential(
             nn.Conv2d(config.channels_out, config.channels_out, kernel_size=3, stride=1, padding=1),
             nn.ReLU(inplace=False),
-            nn.Conv2d(config.channels_out, 1, kernel_size=3, stride=1, padding=1))
+            nn.Conv2d(config.channels_out, 1, kernel_size=3, stride=1, padding=1),
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -663,7 +659,9 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
 
         encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
-        logits = self.decoder(encoder_hidden_states)
+        out = self.decoder(encoder_hidden_states)
+        logits = self.head(out)
+        logits = torch.sigmoid(logits) * self.config.max_depth
 
         loss = None
         if labels is not None:

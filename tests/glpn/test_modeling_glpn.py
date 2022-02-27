@@ -29,12 +29,7 @@ from ..test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MODEL_MAPPING,
-        GLPNConfig,
-        GLPNForDepthEstimation,
-        GLPNModel,
-    )
+    from transformers import MODEL_MAPPING, GLPNConfig, GLPNForDepthEstimation, GLPNModel
     from transformers.models.glpn.modeling_glpn import GLPN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 

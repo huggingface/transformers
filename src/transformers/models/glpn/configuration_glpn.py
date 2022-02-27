@@ -79,6 +79,8 @@ class GLPNConfig(PretrainedConfig):
             The number of input channels in the decoder.
         channels_out (`int`, *optional*, defaults to 64):
             The number of output channels in the decoder.
+        max_depth (`int`, *optional*, defaults to 10):
+            The maximum depth of the decoder.
 
     Example:
 
@@ -119,6 +121,7 @@ class GLPNConfig(PretrainedConfig):
         is_encoder_decoder=False,
         channels_in=[512, 320, 128],
         channels_out=64,
+        max_depth=10,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -143,3 +146,4 @@ class GLPNConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.channels_in = channels_in
         self.channels_out = channels_out
+        self.max_depth = max_depth
