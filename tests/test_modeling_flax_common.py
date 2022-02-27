@@ -160,44 +160,44 @@ class FlaxModelTesterMixin:
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
+    def check_outputs(self, fxo, pto, model_class, names):
+        """
+        Args:
+            model_class: The class of the model that is currently testing. For example, ..., etc.
+            Currently unused, but it could make debugging easier and faster.
+
+            names: A string, or a list of strings. These specify what fxo/pto represent in the model outputs.
+                Currently unused, but in the future, we could use this information to make the error message clearer
+                by giving the name(s) of the output tensor(s) with large difference(s) between PT and Flax.
+        """
+        if type(fxo) == tuple:
+            self.assertEqual(type(pto), tuple)
+            self.assertEqual(len(fxo), len(pto))
+            if type(names) in [tuple, list]:
+                for fo, po, name in zip(fxo, pto, names):
+                    self.check_outputs(fo, po, model_class, names=name)
+            elif type(names) == str:
+                for idx, (fo, po) in enumerate(zip(fxo, pto)):
+                    self.check_outputs(fo, po, model_class, names=f"{names}_{idx}")
+        elif isinstance(fxo, jnp.ndarray):
+            self.assertTrue(isinstance(pto, torch.Tensor))
+
+            fxo = fxo.numpy()
+            pto = pto.numpy()
+
+            fx_nans = np.copy(np.isnan(fxo))
+            pt_nans = np.copy(np.isnan(pto))
+
+            pto[fx_nans] = 0
+            fxo[fx_nans] = 0
+            pto[pt_nans] = 0
+            fxo[pt_nans] = 0
+
+            max_diff = np.amax(np.abs(fxo - pto))
+            self.assertLessEqual(max_diff, 1e-5)
+
     @is_pt_flax_cross_test
     def test_equivalence_pt_to_flax(self):
-        def check_outputs(fxo, pto, model_class, names):
-            """
-            Args:
-                model_class: The class of the model that is currently testing. For example, ..., etc.
-                Currently unused, but it could make debugging easier and faster.
-
-                names: A string, or a list of strings. These specify what fxo/pto represent in the model outputs.
-                    Currently unused, but in the future, we could use this information to make the error message clearer
-                    by giving the name(s) of the output tensor(s) with large difference(s) between PT and Flax.
-            """
-
-            if type(fxo) == tuple:
-                self.assertEqual(type(pto), tuple)
-                self.assertEqual(len(fxo), len(pto))
-                if type(names) in [tuple, list]:
-                    for fo, po, name in zip(fxo, pto, names):
-                        check_outputs(fo, po, model_class, names=name)
-                elif type(names) == str:
-                    for idx, (fo, po) in enumerate(zip(fxo, pto)):
-                        check_outputs(fo, po, model_class, names=f"{names}_{idx}")
-            elif isinstance(fxo, jnp.ndarray):
-                self.assertTrue(isinstance(pto, torch.Tensor))
-
-                fxo = fxo.numpy()
-                pto = pto.numpy()
-
-                fx_nans = np.copy(np.isnan(fxo))
-                pt_nans = np.copy(np.isnan(pto))
-
-                pto[fx_nans] = 0
-                fxo[fx_nans] = 0
-                pto[pt_nans] = 0
-                fxo[pt_nans] = 0
-
-                max_diff = np.amax(np.abs(fxo - pto))
-                self.assertLessEqual(max_diff, 1e-5)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -231,7 +231,7 @@ class FlaxModelTesterMixin:
                 pt_keys = [k for k, v in pt_outputs.items() if v is not None]
 
                 self.assertEqual(fx_keys, pt_keys)
-                check_outputs(fx_outputs, pt_outputs, model_class, names=fx_keys)
+                self.check_outputs(fx_outputs, pt_outputs, model_class, names=fx_keys)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
@@ -243,7 +243,7 @@ class FlaxModelTesterMixin:
                 pt_keys = [k for k, v in pt_outputs.items() if v is not None]
 
                 self.assertEqual(fx_keys, pt_keys)
-                check_outputs(fx_outputs_loaded, pt_outputs, model_class, names=fx_keys)
+                self.check_outputs(fx_outputs_loaded, pt_outputs, model_class, names=fx_keys)
 
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
@@ -272,12 +272,13 @@ class FlaxModelTesterMixin:
 
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
-
                 fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
 
-                for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+                fx_keys = [k for k, v in fx_outputs.items() if v is not None]
+                pt_keys = [k for k, v in pt_outputs.items() if v is not None]
+
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_outputs(fx_outputs, pt_outputs, model_class, names=fx_keys)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
@@ -286,11 +287,11 @@ class FlaxModelTesterMixin:
                 with torch.no_grad():
                     pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
 
-                self.assertEqual(
-                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
-                )
-                for fx_output, pt_output in zip(fx_outputs, pt_outputs_loaded):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
+                fx_keys = [k for k, v in fx_outputs.items() if v is not None]
+                pt_keys = [k for k, v in pt_outputs_loaded.items() if v is not None]
+
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_outputs(fx_outputs, pt_outputs_loaded, model_class, names=fx_keys)
 
     def test_from_pretrained_save_pretrained(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
