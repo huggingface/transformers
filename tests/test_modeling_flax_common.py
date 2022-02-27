@@ -212,7 +212,10 @@ class FlaxModelTesterMixin:
                 pt_model_class = getattr(transformers, pt_model_class_name)
 
                 config.output_hidden_states = True
-                config.output_attentions = True
+                # Pure convolutional models have no attention
+                # TODO: use a better and general criteria
+                if "FlaxConvNext" not in model_class.__name__:
+                    config.output_attentions = True
 
                 pt_model = pt_model_class(config).eval()
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.
@@ -224,8 +227,8 @@ class FlaxModelTesterMixin:
                 fx_model.params = fx_state
 
                 with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs).to_tuple()
-                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
+                    pt_outputs = pt_model(**pt_inputs)
+                fx_outputs = fx_model(**prepared_inputs_dict)
 
                 fx_keys = [k for k, v in fx_outputs.items() if v is not None]
                 pt_keys = [k for k, v in pt_outputs.items() if v is not None]
@@ -237,7 +240,7 @@ class FlaxModelTesterMixin:
                     pt_model.save_pretrained(tmpdirname)
                     fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
 
-                fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict).to_tuple()
+                fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict)
 
                 fx_keys = [k for k, v in fx_outputs_loaded.items() if v is not None]
                 pt_keys = [k for k, v in pt_outputs.items() if v is not None]
@@ -259,6 +262,12 @@ class FlaxModelTesterMixin:
                 pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
                 pt_model_class = getattr(transformers, pt_model_class_name)
 
+                config.output_hidden_states = True
+                # Pure convolutional models have no attention
+                # TODO: use a better and general criteria
+                if "FlaxConvNext" not in model_class.__name__:
+                    config.output_attentions = True
+
                 pt_model = pt_model_class(config).eval()
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.
                 # So we disable `use_cache` here for PyTorch model.
@@ -271,8 +280,8 @@ class FlaxModelTesterMixin:
                 pt_model.tie_weights()
 
                 with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs).to_tuple()
-                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
+                    pt_outputs = pt_model(**pt_inputs)
+                fx_outputs = fx_model(**prepared_inputs_dict)
 
                 fx_keys = [k for k, v in fx_outputs.items() if v is not None]
                 pt_keys = [k for k, v in pt_outputs.items() if v is not None]
@@ -285,7 +294,7 @@ class FlaxModelTesterMixin:
                     pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
 
                 with torch.no_grad():
-                    pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
+                    pt_outputs_loaded = pt_model_loaded(**pt_inputs)
 
                 fx_keys = [k for k, v in fx_outputs.items() if v is not None]
                 pt_keys = [k for k, v in pt_outputs_loaded.items() if v is not None]
