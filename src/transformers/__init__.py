@@ -2295,6 +2295,7 @@ if is_flax_available():
             "FlaxRoFormerPreTrainedModel",
         ]
     )
+    _import_structure["models.speech_encoder_decoder"].append("FlaxSpeechEncoderDecoderModel")
     _import_structure["models.t5"].extend(["FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"])
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
@@ -4183,6 +4184,7 @@ if TYPE_CHECKING:
             FlaxRoFormerModel,
             FlaxRoFormerPreTrainedModel,
         )
+        from .models.speech_encoder_decoder import FlaxSpeechEncoderDecoderModel
         from .models.t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel

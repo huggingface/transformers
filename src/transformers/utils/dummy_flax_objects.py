@@ -879,6 +879,13 @@ class FlaxRoFormerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxSpeechEncoderDecoderModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxT5ForConditionalGeneration(metaclass=DummyObject):
     _backends = ["flax"]
 
