@@ -415,7 +415,6 @@ class GLPNEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerPreTrainedModel with Segformer->GLPN
 class GLPNPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -423,9 +422,10 @@ class GLPNPreTrainedModel(PreTrainedModel):
     """
 
     config_class = GLPNConfig
-    base_model_prefix = "segformer"
+    base_model_prefix = "glpn"
     main_input_name = "pixel_values"
 
+    # Copied from transformers.models.segformer.modeling_segformer.SegformerPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
