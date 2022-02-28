@@ -281,8 +281,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
                 <Tip>
 
-                Please take a look at the Example of [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to better
-                understand how to make use of `output_word_offsets`.
+                Please take a look at the Example of [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to
+                better understand how to make use of `output_word_offsets`.
                 [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.batch_decode`] works the same way with batched
                 output.
 
