@@ -348,7 +348,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 masks = annotation["masks"]
                 if pad_and_return_pixel_mask:
                     padded_masks = np.zeros((masks.shape[0], height, width), dtype=masks.dtype)
-                    padded_masks[:, : padded_masks.shape[1], : padded_masks.shape[2]] = np.copy(padded_masks)
+                    padded_masks[:, : masks.shape[1], : masks.shape[2]] = np.copy(masks)
                     masks = padded_masks
                 mask_labels.append(masks)
                 class_labels.append(annotation["labels"])

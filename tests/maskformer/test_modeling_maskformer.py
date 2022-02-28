@@ -216,7 +216,7 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ["Francesco/maskformer-swin-small-coco"]:
+        for model_name in ["facebook/maskformer-swin-small-coco"]:
             model = MaskFormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -305,7 +305,7 @@ def prepare_img():
 class MaskFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def model_checkpoints(self):
-        return "Francesco/maskformer-swin-small-coco"
+        return "facebook/maskformer-swin-small-coco"
 
     @cached_property
     def default_feature_extractor(self):

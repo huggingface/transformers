@@ -55,7 +55,7 @@ _CHECKPOINT_FOR_DOC = "facebook/maskformer-swin-base-ade"
 _FEAT_EXTRACTOR_FOR_DOC = "MaskFormerFeatureExtractor"
 
 MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Francesco/maskformer-swin-base-ade",
+    "facebook/maskformer-swin-base-ade",
     # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
 ]
 
@@ -2475,9 +2475,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
 
         class_queries_logits, masks_queries_logits, auxilary_logits = self.get_logits(outputs)
 
-        we_have_labels = mask_labels is not None and class_labels is not None
-
-        if we_have_labels:
+        if mask_labels is not None and class_labels is not None:
             loss_dict: Dict[str, Tensor] = self.get_loss_dict(
                 masks_queries_logits, class_queries_logits, mask_labels, class_labels, auxilary_logits
             )
