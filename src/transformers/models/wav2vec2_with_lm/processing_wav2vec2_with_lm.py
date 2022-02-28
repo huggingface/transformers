@@ -283,7 +283,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
                 Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
                 understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works the same way with batched output.
+                [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.batch_decode`] works the same way with batched
+                output.
 
                 </Tip>
 
@@ -391,9 +392,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
                 <Tip>
 
-                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
-                understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works the same way with batched output.
+                Please take a look at the example of [`~models.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to
+                better understand how to make use of `output_word_offsets`.
 
                 </Tip>
 
