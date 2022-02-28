@@ -380,7 +380,7 @@ class TFModelTesterMixin:
                     by giving the name(s) of the output tensor(s) with large difference(s) between PT and TF.
             """
 
-            # Some big issue (`about past_key_values`) to solve (e.g. `TFPegasusForConditionalGeneration`)
+            # Some issue (`about past_key_values`) to solve (e.g. `TFPegasusForConditionalGeneration`) in a separate PR.
             if names == "past_key_values":
                 return
 
@@ -413,6 +413,13 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # Output all for aggressive testing
+            config.output_hidden_states = True
+            # Pure convolutional models have no attention
+            # TODO: use a better and general criteria
+            if "TFConvNext" not in model_class.__name__:
+                config.output_attentions = True
 
             # TODO: remove this block once the large negative value for attention masks is fixed.
             for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
@@ -452,17 +459,10 @@ class TFModelTesterMixin:
             pt_inputs_dict = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
             pt_inputs_dict_maybe_with_labels = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict_maybe_with_labels)
 
-            # Output all for aggressive testing
-            output_kwargs = {"output_hidden_states": True}
-            # Pure convolutional models have no attention
-            # TODO: use a better and general criteria
-            if "TFConvNext" not in model_class.__name__:
-                output_kwargs["output_attentions"] = True
-
             # Original test: check without `labels`
             with torch.no_grad():
-                pto = pt_model(**pt_inputs_dict, **output_kwargs)
-            tfo = tf_model(tf_inputs_dict, **output_kwargs)
+                pto = pt_model(**pt_inputs_dict)
+            tfo = tf_model(tf_inputs_dict)
 
             tf_keys = [k for k, v in tfo.items() if v is not None]
             pt_keys = [k for k, v in pto.items() if v is not None]
@@ -477,8 +477,8 @@ class TFModelTesterMixin:
             if has_labels:
 
                 with torch.no_grad():
-                    pto = pt_model(**pt_inputs_dict_maybe_with_labels, **output_kwargs)
-                tfo = tf_model(tf_inputs_dict_maybe_with_labels, **output_kwargs)
+                    pto = pt_model(**pt_inputs_dict_maybe_with_labels)
+                tfo = tf_model(tf_inputs_dict_maybe_with_labels)
 
                 # Some models' output class don't have `loss` attribute despite `labels` is used.
                 # TODO: identify which models
