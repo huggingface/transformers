@@ -347,7 +347,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         items, skip_special_tokens=skip_special_tokens, output_word_offsets=True
                     )
                 chunks = []
-                for i, item in enumerate(decoded[f"{return_timestamps}_offsets"]):
+                for item in decoded[f"{return_timestamps}_offsets"]:
                     start = (
                         item["start_offset"]
                         * self.model.config.inputs_to_logits_ratio
