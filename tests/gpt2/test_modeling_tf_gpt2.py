@@ -494,8 +494,8 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
         expected_output_string = [
-            'Today is a beautiful day and this makes finding holiday travel easier for you to do other project\nOh',
-            'Yesterday was an enjoyable but especially great note though it certainly upset many Democrats who say',
+            "Today is a beautiful day and this makes finding holiday travel easier for you to do other project\nOh",
+            "Yesterday was an enjoyable but especially great note though it certainly upset many Democrats who say",
         ]
         self.assertListEqual(output_strings, expected_output_string)
 
