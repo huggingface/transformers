@@ -94,7 +94,7 @@ jobs:
           pip install --upgrade pip
           pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
           pip install Cython
-          git clone https://github.com/kpu/kenlm/ && cd kenlm/python && cython -3 --cplus kenlm.pyx && pip install -e .
+          git clone https://github.com/kpu/kenlm/ && cd kenlm/python && cython -3 --cplus kenlm.pyx && cd .. && pip install -e .
 
       - name: Launcher docker
         uses: actions/checkout@v2
