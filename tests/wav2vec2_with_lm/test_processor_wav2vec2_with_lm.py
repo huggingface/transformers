@@ -440,52 +440,18 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         start_times = [round(x, 2) for x in self.get_from_offsets(word_time_stamps, "start_time")]
         end_times = [round(x, 2) for x in self.get_from_offsets(word_time_stamps, "end_time")]
 
+        # fmt: off
         self.assertListEqual(
             start_times,
             [
-                1.42,
-                1.64,
-                2.12,
-                2.26,
-                2.54,
-                3.0,
-                3.24,
-                3.6,
-                3.8,
-                4.1,
-                4.26,
-                4.94,
-                5.28,
-                5.66,
-                5.78,
-                5.94,
-                6.32,
-                6.54,
-                6.66,
+                1.42, 1.64, 2.12, 2.26, 2.54, 3.0, 3.24, 3.6, 3.8, 4.1, 4.26, 4.94, 5.28, 5.66, 5.78, 5.94, 6.32, 6.54, 6.66,
             ],
         )
 
         self.assertListEqual(
             end_times,
             [
-                1.54,
-                1.88,
-                2.14,
-                2.46,
-                2.9,
-                3.18,
-                3.54,
-                3.72,
-                4.02,
-                4.18,
-                4.76,
-                5.16,
-                5.56,
-                5.7,
-                5.86,
-                6.2,
-                6.38,
-                6.62,
-                6.94,
+                1.54, 1.88, 2.14, 2.46, 2.9, 3.18, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94,
             ],
         )
+        # fmt: on
