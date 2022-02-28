@@ -61,14 +61,14 @@ python run_wikisql_with_tapex.py \
   --output_dir $EXP_NAME \
   --model_name_or_path microsoft/tapex-base \
   --overwrite_output_dir \
-  --per_device_train_batch_size 6 \
+  --per_device_train_batch_size 4 \
   --gradient_accumulation_steps 8 \
-  --per_device_eval_batch_size 16 \
-  --warmup_ratio 0.1 \
-  --logging_steps 10 \
+  --per_device_eval_batch_size 4 \
   --learning_rate 3e-5 \
+  --logging_steps 10 \
   --eval_steps 1000 \
   --save_steps 1000 \
+  --warmup_steps 1000 \
   --evaluation_strategy steps \
   --predict_with_generate \
   --num_beams 5 \
@@ -124,6 +124,6 @@ We get the following results on the dev set of the benchmark with the previous c
 
 | Task | Model Size | Metric | Result |
 |:---:|:---:|:---:|:---:|
-| WikiSQL (Weak) | Base | Denotation Accuracy | 87.0 |
+| WikiSQL (Weak) | Base | Denotation Accuracy | 88.1 |
 | WikiTableQuestion | Base | Denotation Accuracy | 47.1 |
 | TabFact | Base | Accuracy | 78.4 |

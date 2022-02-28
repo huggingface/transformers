@@ -404,11 +404,6 @@ def main():
         tables = [pd.DataFrame.from_records(example_table["rows"],
                                             columns=example_table["header"])
                   for example_table in example_tables]
-        # lowercase table
-        for table in tables:
-            table.columns = table.columns.str.lower()
-            for column in table.columns:
-                table[column] = table[column].str.lower()
 
         # using tapas utils to obtain wikisql answer
         answers = []
@@ -435,7 +430,7 @@ def main():
                                      truncation=True)
 
         with tokenizer.as_target_tokenizer():
-            labels = tokenizer(answer=[", ".join(answer).lower() for answer in answers],
+            labels = tokenizer(answer=[", ".join(answer) for answer in answers],
                                max_length=max_target_length,
                                padding=padding,
                                truncation=True)
@@ -530,7 +525,6 @@ def main():
 
         # define example evaluation
         def evaluate_example(_predict_str: str, _ground_str: str):
-            print("Prediction : {}\tGround : {}".format(_predict_str, _ground_str))
             _predict_spans = _predict_str.split(delimiter)
             _ground_spans = _ground_str.split(delimiter)
             _predict_values = defaultdict(lambda: 0)
