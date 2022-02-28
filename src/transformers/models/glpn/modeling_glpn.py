@@ -57,17 +57,14 @@ GLPN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
+# Copied from transformers.models.segformer.modeling_segformer.to_2tuple
 def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
     return (x, x)
 
 
-# Stochastic depth implementation
-# Taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
+# Copied from transformers.models.segformer.modeling_segformer.drop_path
 def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
@@ -86,7 +83,8 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-class DropPath(nn.Module):
+# Copied from transformers.models.segformer.modeling_segformer.SegformerDropPath
+class GLPNDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob=None):
@@ -97,6 +95,7 @@ class DropPath(nn.Module):
         return drop_path(x, self.drop_prob, self.training)
 
 
+# Copied from transformers.models.segformer.modeling_segformer.SegformerOverlapPatchEmbeddings
 class GLPNOverlapPatchEmbeddings(nn.Module):
     """Construct the patch embeddings from an image."""
 
@@ -124,6 +123,7 @@ class GLPNOverlapPatchEmbeddings(nn.Module):
         return x, height, width
 
 
+# Copied from transformers.models.segformer.modeling_segformer.SegformerEfficientSelfAttention
 class GLPNEfficientSelfAttention(nn.Module):
     def __init__(self, config, hidden_size, num_attention_heads, sr_ratio):
         super().__init__()
@@ -197,6 +197,7 @@ class GLPNEfficientSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.segformer.modeling_segformer.SegformerSelfOutput
 class GLPNSelfOutput(nn.Module):
     def __init__(self, config, hidden_size):
         super().__init__()
@@ -209,6 +210,7 @@ class GLPNSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.segformer.modeling_segformer.SegformerAttention with Segformer->GLPN
 class GLPNAttention(nn.Module):
     def __init__(self, config, hidden_size, num_attention_heads, sr_ratio):
         super().__init__()
@@ -244,6 +246,7 @@ class GLPNAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.segformer.modeling_segformer.SegformerDWConv
 class GLPNDWConv(nn.Module):
     def __init__(self, dim=768):
         super().__init__()
@@ -258,6 +261,7 @@ class GLPNDWConv(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.segformer.modeling_segformer.SegformerMixFFN with Segformer->GLPN
 class GLPNMixFFN(nn.Module):
     def __init__(self, config, in_features, hidden_features=None, out_features=None):
         super().__init__()
@@ -281,6 +285,7 @@ class GLPNMixFFN(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.segformer.modeling_segformer.SegformerLayer with Segformer->GLPN
 class GLPNLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
@@ -290,7 +295,7 @@ class GLPNLayer(nn.Module):
         self.attention = GLPNAttention(
             config, hidden_size=hidden_size, num_attention_heads=num_attention_heads, sr_ratio=sr_ratio
         )
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = GLPNDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.layer_norm_2 = nn.LayerNorm(hidden_size)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
         self.mlp = GLPNMixFFN(config, in_features=hidden_size, hidden_features=mlp_hidden_size)
@@ -396,7 +401,7 @@ class GLPNEncoder(nn.Module):
                     all_self_attentions = all_self_attentions + (layer_outputs[1],)
             # third, apply layer norm
             hidden_states = norm_layer(hidden_states)
-            # fourth, reshape back to (batch_size, num_channels, height, width)
+            # fourth, optionally reshape back to (batch_size, num_channels, height, width)
             hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -410,6 +415,7 @@ class GLPNEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.segformer.modeling_segformer.SegformerPreTrainedModel with Segformer->GLPN
 class GLPNPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -417,7 +423,7 @@ class GLPNPreTrainedModel(PreTrainedModel):
     """
 
     config_class = GLPNConfig
-    base_model_prefix = "glpn"
+    base_model_prefix = "segformer"
     main_input_name = "pixel_values"
 
     def _init_weights(self, module):
@@ -471,6 +477,7 @@ GLPN_INPUTS_DOCSTRING = r"""
     GLPN_START_DOCSTRING,
 )
 class GLPNModel(GLPNPreTrainedModel):
+    # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.__init__ with Segformer->GLPN
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -498,6 +505,7 @@ class GLPNModel(GLPNPreTrainedModel):
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
+    # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.forward
     def forward(self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
