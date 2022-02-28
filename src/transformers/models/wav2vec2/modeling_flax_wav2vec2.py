@@ -1012,6 +1012,26 @@ class FlaxWav2Vec2Module(nn.Module):
 
         return input_lengths
 
+    def _get_feature_vector_attention_mask(
+        self, feature_vector_length: int, attention_mask: jnp.ndarray, add_adapter=None
+    ):
+
+        # Effectively attention_mask.sum(-1), but not inplace to be able to run
+        # on inference mode.
+        non_padded_lengths = attention_mask.cumsum(axis=-1)[:, -1]
+
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
+
+        batch_size = attention_mask.shape[0]
+
+        attention_mask = jnp.zeros((batch_size, feature_vector_length), dtype=attention_mask.dtype)
+        # these two operations makes sure that all values before the output lengths idxs are attended to
+        attention_mask = attention_mask.at[(jnp.arange(attention_mask.shape[0]), output_lengths - 1)].set(1)
+        attention_mask = jnp.flip(jnp.flip(attention_mask, axis=-1).cumsum(axis=-1), axis=-1)
+
+        attention_mask = jnp.array(attention_mask, dtype=bool)
+        return attention_mask
+
 
 @add_start_docstrings(
     "The bare Wav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.",
