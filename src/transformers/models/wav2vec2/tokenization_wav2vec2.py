@@ -97,6 +97,8 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
                 Whether or not to print more information and warnings.
 """
 
+ListOfDict = List[Dict[str, Union[float, str]]]
+
 
 @dataclass
 class Wav2Vec2CTCTokenizerOutput(ModelOutput):
@@ -106,18 +108,18 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
     Args:
         text (list of `str` or `str`):
             Decoded logits in text from. Usually the speech transcription.
-        char_offsets (`Dict[str, Union[int, str]]` or `Dict[str, Union[int, str]]`):
+        char_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
             Offsets of the decoded characters. In combination with sampling rate and model downsampling rate char
             offsets can be used to compute time stamps for each charater. Total logit score of the beam associated with
             produced text.
-        word_offsets (`Dict[str, Union[int, str]]` or `Dict[str, Union[int, str]]`):
+        word_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
             Offsets of the decoded words. In combination with sampling rate and model downsampling rate word offsets
             can be used to compute time stamps for each word.
     """
 
     text: Union[List[str], str]
-    char_offsets: List[Dict[str, Union[float, str]]] = None
-    word_offsets: List[Dict[str, Union[float, str]]] = None
+    char_offsets: Union[List[ListOfDict], ListOfDict] = None
+    word_offsets: Union[List[ListOfDict], ListOfDict] = None
 
 
 class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
@@ -421,18 +423,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the tokenization spaces.
-            output_char_offsets (`bool`, *optional*, defaults to `False`):
-                Whether or not to output character offsets. Character offsets can be used in combination with the
-                sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
-
-                <Tip>
-
-                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
-                understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works the same way with batched output.
-
-                </Tip>
-
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
@@ -441,7 +431,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
                 Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
                 understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works the same way with batched output.
+                [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.batch_decode`] works the same way with batched
+                output.
 
                 </Tip>
 
@@ -451,7 +442,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         Returns:
             `List[str]` or [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`]: The list of decoded
             sentences. Will be a [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`] when
-            `output_char_offsets == True` or `output_word_offsets == True`.
+            `output_word_offsets == True`.
         """
         batch_decoded = [
             self.decode(
@@ -494,25 +485,14 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the tokenization spaces.
-            output_char_offsets (`bool`, *optional*, defaults to `False`):
-                Whether or not to output character offsets. Character offsets can be used in combination with the
-                sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
-
-                <Tip>
-
-                Please take a look at the example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
-                understand how to make use of `output_word_offsets`.
-
-                </Tip>
-
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
 
                 <Tip>
 
-                Please take a look at the example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
-                understand how to make use of `output_word_offsets`.
+                Please take a look at the example of [`~models.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to
+                better understand how to make use of `output_word_offsets`.
 
                 </Tip>
 
@@ -522,7 +502,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         Returns:
             `str` or [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`]: The list of decoded
             sentences. Will be a [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`] when
-            `output_char_offsets == True` or `output_word_offsets == True`.
+            `output_word_offsets == True`.
 
         Example:
 
@@ -546,11 +526,11 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         >>> # forward sample through model to get greedily predicted transcription ids
         >>> input_values = feature_extractor(sample["audio"]["array"], return_tensors="pt").input_values
-        >>> logits = model(input_values).logits[0]
-        >>> pred_ids = torch.argmax(logits, axis=-1)
+        >>> with torch.no_grad():
+        ...     logits = model(input_values).logits[0].cpu().numpy()
 
         >>> # retrieve word stamps (analogous commands for `output_char_offsets`)
-        >>> outputs = tokenizer.decode(pred_ids, output_word_offsets=True)
+        >>> outputs = tokenizer.decode(logits, output_word_offsets=True)
         >>> # compute `time_offset` in seconds as product of downsampling ratio and sampling_rate
         >>> time_offset = model.config.inputs_to_logits_ratio / feature_extractor.sampling_rate
 
