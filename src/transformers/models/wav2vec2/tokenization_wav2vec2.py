@@ -258,6 +258,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
         """
+        if len(tokens) == 0:
+            return {"text": "", "char_offsets": [], "word_offsets": []}
         # group same tokens into non-repeating tokens in CTC style decoding
         if group_tokens:
             chars, char_repetitions = zip(*((token, len(list(group_iter))) for token, group_iter in groupby(tokens)))
@@ -324,28 +326,33 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         offsets: Dict[str, Union[str, float]], word_delimiter_char: str = " "
     ) -> Dict[str, Union[str, float]]:
         word_offsets = []
-        final_offset_idx = len(offsets) - 1
 
+        last_state = "SPACE"
+        word = ""
+        start_offset = 0
+        end_offset = 0
         for i, offset in enumerate(offsets):
-            # define previous, next and current char
             char = offset["char"]
-            prev_char = offsets[i - 1]["char"] if i > 0 else None
-            next_char = offsets[i + 1]["char"] if i < final_offset_idx else None
+            state = "SPACE" if char == word_delimiter_char else "WORD"
 
-            # derive whether word begins, ends and whether current char is in word
-            word_begin = (i == 0 and char != word_delimiter_char) or (prev_char == word_delimiter_char)
-            word_end = (i == final_offset_idx and char != word_delimiter_char) or (next_char == word_delimiter_char)
-            char_is_in_word = char != word_delimiter_char
+            if state == last_state:
+                # If we are in the same state as before, we simply repeat what we've done before
+                end_offset = offset["end_offset"]
+                word += char
+            else:
+                # Switching state
+                if state == "SPACE":
+                    # Finishing a word
+                    word_offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
+                else:
+                    # Starting a new word
+                    start_offset = offset["start_offset"]
+                    end_offset = offset["end_offset"]
+                    word = char
 
-            if word_begin:
-                word_offset = {"word": "", "start_offset": offset["start_offset"]}
-
-            if word_end:
-                word_offset["end_offset"] = offset["end_offset"]
-                word_offsets.append(word_offset)
-
-            if char_is_in_word:
-                word_offset["word"] += offset["char"]
+            last_state = state
+        if state == "WORD":
+            word_offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
 
         return word_offsets
 
