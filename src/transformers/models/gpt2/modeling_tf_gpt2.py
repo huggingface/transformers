@@ -863,8 +863,11 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         # Does one step of generation with the initial input_ids
         # All steps after this one will have constant size input_ids
         batch_size, seq_length = input_ids.shape
-
-        outputs = self(input_ids, attention_mask=attention_mask, use_cache=True)
+        if attention_mask is None:
+            outputs = self(input_ids, use_cache=True)
+        else:
+            position_ids = tf.math.cumsum(attention_mask, axis=1, exclusive=True)
+            outputs = self(input_ids, attention_mask=attention_mask, position_ids=position_ids, use_cache=True)
         logits = outputs.logits[:, -1:]
         past_key_values = outputs.past_key_values
         padding_values = np.zeros((5, 2), dtype=np.int32)
@@ -882,7 +885,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         attention_mask = tf.concat([attention_mask,
                                     tf.zeros((batch_size, max_length-seq_length-1), dtype=attention_mask.dtype),
                                     tf.ones((batch_size, 1), dtype=attention_mask.dtype)], axis=1)
-        position_ids = tf.math.cumsum(attention_mask, axis=1, exclusive=False)[:, -1]
+
 
         return {
             "past_key_values": past_key_values,

@@ -2229,7 +2229,7 @@ class TFGenerationMixin:
 
         def greedy_search_body_fn(generated, finished_sequences, attention_mask, next_tokens, past, current_pos):
             """state update fn."""
-            position_ids = tf.broadcast_to(current_pos + seq_length - 1, (batch_size, 1))
+            position_ids = tf.reduce_sum(attention_mask, axis=1, keepdims=True) - 1
             model_outputs = self(input_ids=next_tokens, past=past,
                                  attention_mask=attention_mask, position_ids=position_ids)
             logits = model_outputs.logits[:, -1:]
