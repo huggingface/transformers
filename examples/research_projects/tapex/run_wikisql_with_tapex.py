@@ -73,16 +73,14 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="nielsr/tapex-large",
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
     tokenizer_name: Optional[str] = field(
-        default="facebook/bart-large",
-        metadata={"help": "Pretrained tokenizer name or path if not the same as model_name. "
-                          "By default we use BART-large tokenizer for TAPEX-large."}
+        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name. "
+                                        "By default we use BART-large tokenizer for TAPEX-large."}
     )
     cache_dir: Optional[str] = field(
         default=None,
@@ -333,7 +331,7 @@ def main():
 
     # load tapex tokenizer
     tokenizer = TapexTokenizer.from_pretrained(
-        model_args.tokenizer_name,
+        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,

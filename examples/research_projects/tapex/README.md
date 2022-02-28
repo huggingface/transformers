@@ -77,6 +77,23 @@ python run_wikisql_with_tapex.py \
   --max_steps 20000
 ```
 
+### How to Evaluate TAPEX Fine-tuned Models on TableQA
+
+We provide fine-tuned model weights to reproduce our results. You can evaluate them using the following command:
+> You can also replace `microsoft/tapex-base-finetuned-wikisql` with your local directory to evaluate your fine-tuned models
+
+```bash
+export EXP_NAME=wikisql_tapex_base_eval
+
+python run_wikisql_with_tapex.py \
+  --do_eval \
+  --model_name_or_path microsoft/tapex-base-finetuned-wikisql \
+  --output_dir $EXP_NAME \
+  --per_device_eval_batch_size 4 \
+  --predict_with_generate \
+  --num_beams 5
+```
+
 ## Table Fact Verification Tasks
 
 ### What is Table Fact Verification
@@ -116,6 +133,22 @@ python run_tabfact_with_tapex.py \
   --max_grad_norm 0.1
 ```
 
+### How to Evaluate TAPEX Fine-tuned Models on TableFV
+
+We provide fine-tuned model weights to reproduce our results. You can evaluate them using the following command:
+> You can also replace `microsoft/tapex-base-finetuned-tabfact` with your local directory to evaluate your fine-tuned models
+
+```bash
+export EXP_NAME=tabfact_tapex_base_eval
+
+python run_tabfact_with_tapex.py \
+  --do_eval \
+  --model_name_or_path microsoft/tapex-base-finetuned-tabfact \
+  --output_dir $EXP_NAME \
+  --per_device_eval_batch_size 12 \
+  --eval_accumulation_steps 6
+```
+
 ## Reproduced Results
 
 We get the following results on the dev set of the benchmark with the previous commands:
@@ -126,4 +159,4 @@ We get the following results on the dev set of the benchmark with the previous c
 |:---:|:---:|:---:|:---:|
 | WikiSQL (Weak) | Base | Denotation Accuracy | 88.1 |
 | WikiTableQuestion | Base | Denotation Accuracy | 47.1 |
-| TabFact | Base | Accuracy | 78.4 |
+| TabFact | Base | Accuracy | 78.7 |
