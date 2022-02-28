@@ -423,6 +423,18 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the tokenization spaces.
+            output_char_offsets (`bool`, *optional*, defaults to `False`):
+                Whether or not to output character offsets. Character offsets can be used in combination with the
+                sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
+
+                <Tip>
+
+                Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                understand how to make use of `output_word_offsets`.
+                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works the same way with batched output.
+
+                </Tip>
+
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
@@ -431,8 +443,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
                 Please take a look at the Example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
                 understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.batch_decode`] works the same way with batched
-                output.
+                [`~model.wav2vec2.tokenization_wav2vec2.batch_decode`] works the same way with batched output.
 
                 </Tip>
 
@@ -442,7 +453,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         Returns:
             `List[str]` or [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`]: The list of decoded
             sentences. Will be a [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`] when
-            `output_word_offsets == True`.
+            `output_char_offsets == True` or `output_word_offsets == True`.
         """
         batch_decoded = [
             self.decode(
@@ -485,14 +496,25 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the tokenization spaces.
+            output_char_offsets (`bool`, *optional*, defaults to `False`):
+                Whether or not to output character offsets. Character offsets can be used in combination with the
+                sampling rate and model downsampling rate to compute the time-stamps of transcribed characters.
+
+                <Tip>
+
+                Please take a look at the example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                understand how to make use of `output_word_offsets`.
+
+                </Tip>
+
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
 
                 <Tip>
 
-                Please take a look at the example of [`~models.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to
-                better understand how to make use of `output_word_offsets`.
+                Please take a look at the example of [`~models.wav2vec2.tokenization_wav2vec2.decode`] to better
+                understand how to make use of `output_word_offsets`.
 
                 </Tip>
 
@@ -502,7 +524,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         Returns:
             `str` or [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`]: The list of decoded
             sentences. Will be a [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`] when
-            `output_word_offsets == True`.
+            `output_char_offsets == True` or `output_word_offsets == True`.
 
         Example:
 
@@ -526,11 +548,11 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         >>> # forward sample through model to get greedily predicted transcription ids
         >>> input_values = feature_extractor(sample["audio"]["array"], return_tensors="pt").input_values
-        >>> with torch.no_grad():
-        ...     logits = model(input_values).logits[0].cpu().numpy()
+        >>> logits = model(input_values).logits[0]
+        >>> pred_ids = torch.argmax(logits, axis=-1)
 
         >>> # retrieve word stamps (analogous commands for `output_char_offsets`)
-        >>> outputs = tokenizer.decode(logits, output_word_offsets=True)
+        >>> outputs = tokenizer.decode(pred_ids, output_word_offsets=True)
         >>> # compute `time_offset` in seconds as product of downsampling ratio and sampling_rate
         >>> time_offset = model.config.inputs_to_logits_ratio / feature_extractor.sampling_rate
 
