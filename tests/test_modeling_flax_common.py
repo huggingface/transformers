@@ -198,11 +198,20 @@ class FlaxModelTesterMixin:
 
     @is_pt_flax_cross_test
     def test_equivalence_pt_to_flax(self):
-
+        # It might be better to put this inside the for loop below (because we modify the config there).
+        # But logically, it is fine.
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
+
+                # Output all for aggressive testing
+                config.output_hidden_states = True
+                # Pure convolutional models have no attention
+                # TODO: use a better and general criteria
+                if "FlaxConvNext" not in model_class.__name__:
+                    config.output_attentions = True
+
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
@@ -210,12 +219,6 @@ class FlaxModelTesterMixin:
                 # load corresponding PyTorch class
                 pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
                 pt_model_class = getattr(transformers, pt_model_class_name)
-
-                config.output_hidden_states = True
-                # Pure convolutional models have no attention
-                # TODO: use a better and general criteria
-                if "FlaxConvNext" not in model_class.__name__:
-                    config.output_attentions = True
 
                 pt_model = pt_model_class(config).eval()
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.
@@ -254,6 +257,14 @@ class FlaxModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
+
+                # Output all for aggressive testing
+                config.output_hidden_states = True
+                # Pure convolutional models have no attention
+                # TODO: use a better and general criteria
+                if "FlaxConvNext" not in model_class.__name__:
+                    config.output_attentions = True
+
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
@@ -261,12 +272,6 @@ class FlaxModelTesterMixin:
                 # load corresponding PyTorch class
                 pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
                 pt_model_class = getattr(transformers, pt_model_class_name)
-
-                config.output_hidden_states = True
-                # Pure convolutional models have no attention
-                # TODO: use a better and general criteria
-                if "FlaxConvNext" not in model_class.__name__:
-                    config.output_attentions = True
 
                 pt_model = pt_model_class(config).eval()
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.
