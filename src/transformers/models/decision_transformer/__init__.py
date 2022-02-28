@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -26,11 +26,7 @@ _import_structure = {
         "DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DecisionTransformerConfig",
     ],
-    "tokenization_decision_transformer": ["DecisionTransformerTokenizer"],
 }
-
-if is_tokenizers_available():
-    _import_structure["tokenization_decision_transformer_fast"] = ["DecisionTransformerTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_decision_transformer"] = [
