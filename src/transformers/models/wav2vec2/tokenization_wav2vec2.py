@@ -336,7 +336,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             state = "SPACE" if char == word_delimiter_char else "WORD"
 
             if state == last_state:
-                # Same state, just extend the thing
+                # If we are in the same state as before, we simply repeat what we've done before
                 end_offset = offset["end_offset"]
                 word += char
             else:
