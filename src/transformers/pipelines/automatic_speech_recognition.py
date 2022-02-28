@@ -288,6 +288,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             attention_mask = model_inputs.pop("attention_mask", None)
             outputs = self.model(input_values=input_values, attention_mask=attention_mask)
             logits = outputs.logits
+
             if self.type == "ctc_with_lm":
                 out = {"logits": logits}
             else:

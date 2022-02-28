@@ -684,15 +684,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
         # 0 effective ids Just take the middle one
         output = speech_recognizer({"raw": waveform, "stride": (5000, 5000), "sampling_rate": 16_000})
-        self.assertEqual(output, {"text": "B"})
+        self.assertEqual(output, {"text": ""})
 
         # Only 1 arange.
         output = speech_recognizer({"raw": waveform, "stride": (0, 9000), "sampling_rate": 16_000})
-        self.assertEqual(output, {"text": "O"})
+        self.assertEqual(output, {"text": "OB"})
 
         # 2nd arange
         output = speech_recognizer({"raw": waveform, "stride": (1000, 8000), "sampling_rate": 16_000})
-        self.assertEqual(output, {"text": "B XB"})
+        self.assertEqual(output, {"text": "XB"})
 
 
 def require_ffmpeg(test_case):

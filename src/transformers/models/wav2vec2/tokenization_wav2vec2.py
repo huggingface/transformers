@@ -258,6 +258,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
         """
+        if len(tokens) == 0:
+            return {"text": "", "char_offsets": [], "word_offsets": []}
         # group same tokens into non-repeating tokens in CTC style decoding
         if group_tokens:
             chars, char_repetitions = zip(*((token, len(list(group_iter))) for token, group_iter in groupby(tokens)))
@@ -330,7 +332,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         start_offset = 0
         end_offset = 0
         for i, offset in enumerate(offsets):
-            # define previous, next and current char
             char = offset["char"]
             state = "SPACE" if char == word_delimiter_char else "WORD"
 
