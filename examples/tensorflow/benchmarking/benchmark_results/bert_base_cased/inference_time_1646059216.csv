@@ -1,0 +1,5 @@
+model,batch_size,sequence_length,result
+bert-base-cased,8,8,0.0071
+bert-base-cased,8,32,0.0143
+bert-base-cased,8,128,0.0461
+bert-base-cased,8,512,0.1933

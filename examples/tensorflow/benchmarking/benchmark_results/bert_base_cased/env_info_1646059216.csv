@@ -1,0 +1,22 @@
+transformers_version,4.17.0.dev0
+framework,TensorFlow
+eager_mode,False
+use_xla,False
+framework_version,2.8.0
+python_version,3.8.10
+system,Linux
+cpu,x86_64
+architecture,64bit
+date,2022-02-28
+time,14:41:37.729207
+fp16,False
+use_multiprocessing,True
+only_pretrain_model,False
+cpu_ram_mb,30088
+use_gpu,True
+num_gpus,1
+gpu,Tesla P100-PCIE-16GB
+gpu_ram_mb,16280
+gpu_power_watts,250.0
+gpu_performance_state,0
+use_tpu,False

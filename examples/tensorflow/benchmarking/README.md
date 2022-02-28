@@ -22,5 +22,7 @@ If you would like to list benchmark results on your favorite models of the [mode
 
 | Benchmark description | Results | Environment info |      Author      |
 |:----------|:-------------|:-------------|------:|
-| PyTorch Benchmark on inference for `bert-base-cased` |[memory](https://github.com/patrickvonplaten/files_to_link_to/blob/master/bert_benchmark/inference_memory.csv) | [env](https://github.com/patrickvonplaten/files_to_link_to/blob/master/bert_benchmark/env.csv) | [Partick von Platen](https://github.com/patrickvonplaten) | 
-| PyTorch Benchmark on inference for `bert-base-cased` |[time](https://github.com/patrickvonplaten/files_to_link_to/blob/master/bert_benchmark/inference_time.csv) | [env](https://github.com/patrickvonplaten/files_to_link_to/blob/master/bert_benchmark/env.csv) | [Partick von Platen](https://github.com/patrickvonplaten) | 
+| TF Benchmark on inference for `bert-base-cased` |[memory](benchmark_results/bert_base_cased/inference_memory_1646059216.csv) | [env](benchmark_results/bert_base_cased/env_info_1646059216.csv) | [Joao Gante](https://github.com/gante) |
+| TF Benchmark on inference for `bert-base-cased` |[time](benchmark_results/bert_base_cased/inference_time_1646059216.csv) | [env](benchmark_results/bert_base_cased/env_info_1646059216.csv) | [Joao Gante](https://github.com/gante) |
+| TF Benchmark on inference for `bert-base-cased` (with XLA compilation) |[memory](benchmark_results/bert_base_cased_xla/inference_memory_1646059639.csv) | [env](benchmark_results/bert_base_cased_xla/env_info_1646059639.csv) | [Joao Gante](https://github.com/gante) |
+| TF Benchmark on inference for `bert-base-cased` (with XLA compilation) |[time](benchmark_results/bert_base_cased_xla/inference_time_1646059639.csv) | [env](benchmark_results/bert_base_cased_xla/env_info_1646059639.csv) | [Joao Gante](https://github.com/gante) |
