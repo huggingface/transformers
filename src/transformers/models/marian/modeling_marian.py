@@ -28,8 +28,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
-    add_end_docstrings,
-    add_start_docstrings,
+    add_end_docstrings, add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
@@ -1091,13 +1090,16 @@ class MarianModel(MarianPreTrainedModel):
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
-        embed_tokens = self.shared if self.config.share_encoder_decoder_embeddings else self.shared.clone()
-
-        self.encoder = MarianEncoder(config, embed_tokens)
-        self.decoder = MarianDecoder(config, embed_tokens)
-
-        if not config.share_encoder_decoder_embeddings:
+        
+        if self.config.share_encoder_decoder_embeddings:
+            encoder_embed_tokens = decoder_embed_tokens = self.shared
+        else:
+            encoder_embed_tokens = copy.deepcopy(self.shared)
+            decoder_embed_tokens = copy.deepcopy(self.shared)
             self.shared = None
+        
+        self.encoder = MarianEncoder(config, encoder_embed_tokens)
+        self.decoder = MarianDecoder(config, decoder_embed_tokens)
 
         # Initialize weights and apply final processing
         self.post_init()
