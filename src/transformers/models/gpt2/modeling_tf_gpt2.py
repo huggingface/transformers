@@ -859,13 +859,13 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
 
         return {"input_ids": inputs, "past": past, "use_cache": kwargs["use_cache"]}
 
-    def new_prepare_inputs_for_generation(self, input_ids, max_length):
-        # initializing the cache
+    def new_prepare_inputs_for_generation(self, input_ids, attention_mask, max_length):
+        # Does one step of generation with the initial input_ids
+        # All steps after this one will have constant size input_ids
         batch_size, seq_length = input_ids.shape
 
-        outputs = self(input_ids, use_cache=True)
+        outputs = self(input_ids, attention_mask=attention_mask, use_cache=True)
         logits = outputs.logits[:, -1:]
-        next_tokens = tf.argmax(logits, axis=-1, output_type=tf.int32)
         past_key_values = outputs.past_key_values
         padding_values = np.zeros((5, 2), dtype=np.int32)
         padding_values[3, 1] = max_length - past_key_values[0].shape[3] - 1
@@ -876,16 +876,20 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         past_key_values = tuple(past_key_values)
         generated = tf.TensorArray(element_shape=(batch_size, 1), dtype=tf.int32, dynamic_size=False,
                                    size=max_length - seq_length, clear_after_read=False)
-        generated = generated.write(0, next_tokens)
-        attention_mask = np.ones((batch_size, max_length), dtype=np.int64)
-        attention_mask[:, seq_length:-1] = 0
-        attention_mask = tf.constant(attention_mask)
+        if attention_mask is None:
+            attention_mask = tf.ones((batch_size, seq_length), dtype=tf.int32)
+        # Zeros for the currently-unfilled locations in the past tensor, ones for the actual input_ids
+        attention_mask = tf.concat([attention_mask,
+                                    tf.zeros((batch_size, max_length-seq_length-1), dtype=attention_mask.dtype),
+                                    tf.ones((batch_size, 1), dtype=attention_mask.dtype)], axis=1)
+        position_ids = tf.math.cumsum(attention_mask, axis=1, exclusive=False)[:, -1]
 
         return {
             "past_key_values": past_key_values,
             "generated": generated,
-            "next_tokens": next_tokens,
-            "attention_mask": attention_mask
+            "next_logits": logits,
+            "attention_mask": attention_mask,
+            "position_ids": position_ids
         }
 
     def update_cache_for_generation(self, past, update_loc):

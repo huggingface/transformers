@@ -1999,6 +1999,7 @@ class TFGenerationMixin:
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
+        attention_mask: Optional[tf.Tensor] = None,
         return_dict_in_generate: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[TFGreedySearchOutput, tf.Tensor]:
@@ -2111,7 +2112,8 @@ class TFGenerationMixin:
             # 3) Only returning the token IDs, nothing else like attentions/past
             # Notes: new_prepare_inputs_for_generation should return constant-size arrays
             max_length = self.config.max_length if max_length is None else max_length
-            return self.xla_greedy_generate(input_ids, max_length=max_length)
+            return self.xla_greedy_generate(input_ids, max_length=max_length,
+                                            attention_mask=attention_mask, eos_token_id=eos_token_id)
 
         while cur_len < max_length:
             # TODO(Patrick): remove following line by cleaning up `prepare_inputs_for_generation`
@@ -2205,40 +2207,44 @@ class TFGenerationMixin:
             return input_ids
 
     @tf.function(jit_compile=True)
-    def xla_greedy_generate(self, input_ids, max_length):
-        model_inputs = self.new_prepare_inputs_for_generation(input_ids, max_length=max_length)
+    def xla_greedy_generate(self, input_ids, attention_mask, max_length, eos_token_id):
+        model_inputs = self.new_prepare_inputs_for_generation(input_ids, attention_mask, max_length=max_length)
         past = model_inputs["past_key_values"]
         generated = model_inputs["generated"]
-        next_tokens = model_inputs["next_tokens"]
+        next_logits = model_inputs["next_logits"]
         attention_mask = model_inputs["attention_mask"]
         attention_mask_slice_start_base = tf.constant([0, 1], dtype=tf.int32)
         batch_size, seq_length = input_ids.shape
-        attention_mask_update_slice = tf.ones((batch_size, 1), dtype=tf.int64)
+        attention_mask_update_slice = tf.ones((batch_size, 1), dtype=attention_mask.dtype)
+        finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
+        next_tokens = tf.argmax(next_logits, axis=-1, output_type=tf.int32)
+        generated.write(0, next_tokens)
 
-        ptr = tf.ones(shape=(1,), dtype=tf.int32)
+        current_pos = tf.ones(shape=(1,), dtype=tf.int32)
         max_tokens_to_generate = max_length - seq_length
 
-        def greedy_search_cond_fn(input_ids, attention_mask, next_tokens, past, ptr):
+        def greedy_search_cond_fn(generated, finished_sequences, attention_mask, next_tokens, past, current_pos):
             """state termination condition fn."""
-            return ptr < max_tokens_to_generate
+            return ~tf.reduce_all(finished_sequences)
 
-        def greedy_search_body_fn(generated, attention_mask, next_tokens, past, ptr):
+        def greedy_search_body_fn(generated, finished_sequences, attention_mask, next_tokens, past, current_pos):
             """state update fn."""
-            position_ids = tf.broadcast_to(ptr + seq_length - 1, (batch_size, 1))
+            position_ids = tf.broadcast_to(current_pos + seq_length - 1, (batch_size, 1))
             model_outputs = self(input_ids=next_tokens, past=past,
                                  attention_mask=attention_mask, position_ids=position_ids)
             logits = model_outputs.logits[:, -1:]
             next_tokens = tf.argmax(logits, axis=-1, output_type=tf.int32)
+            finished_sequences = finished_sequences | (next_tokens[:, 0] == eos_token_id)
             past = model_outputs.past_key_values
-            new_past_index = ptr + seq_length - 1
+            new_past_index = current_pos + seq_length - 1
             past = self.update_cache_for_generation(past, new_past_index)
-            generated = generated.write(ptr[0], next_tokens)
+            generated = generated.write(current_pos[0], next_tokens)
             update_start = attention_mask_slice_start_base * new_past_index
             attention_mask = dynamic_update_slice(attention_mask, attention_mask_update_slice, update_start)
-            ptr += 1
-            return generated, attention_mask, next_tokens, past, ptr
+            current_pos += 1
+            return generated, finished_sequences, attention_mask, next_tokens, past, current_pos
 
-        generated, _, _, _, _ = tf.while_loop(greedy_search_cond_fn, greedy_search_body_fn, (generated, attention_mask, next_tokens, past, ptr))
+        generated, _, _, _, _, _ = tf.while_loop(greedy_search_cond_fn, greedy_search_body_fn, (generated, finished_sequences, attention_mask, next_tokens, past, current_pos), maximum_iterations=max_tokens_to_generate-1)
 
         output = tf.transpose(tf.reshape(generated.concat(), (-1, batch_size)))
 
