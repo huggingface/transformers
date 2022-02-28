@@ -1,7 +1,11 @@
 from transformers import GLPNConfig, GLPNForDepthEstimation
+import torch
 
+config = GLPNConfig(hidden_sizes=[64, 128, 320, 512], decoder_hidden_size=768, depths=[3, 8, 27, 3])
+model = GLPNForDepthEstimation(config)
 
-model = GLPNForDepthEstimation(GLPNConfig())
+pixel_values = torch.randn(1, 3, 224, 224)
 
-for name, param in model.named_parameters():
-    print(name, param.shape)
+outputs = model(pixel_values)
+
+print("Shape of logits:", outputs.logits.shape)

@@ -16,7 +16,6 @@
 
 
 import argparse
-import json
 from collections import OrderedDict
 from pathlib import Path
 
@@ -149,7 +148,7 @@ def convert_glpn_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
 
     # finally, push to hub if required
     if push_to_hub:
-        logger.info(f"Pushing model to the hub...")
+        logger.info("Pushing model to the hub...")
         model.push_to_hub(
             repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
             organization="nielsr",

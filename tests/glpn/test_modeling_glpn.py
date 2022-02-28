@@ -36,8 +36,6 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import GLPNFeatureExtractor
-
 
 class GLPNConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
@@ -122,9 +120,9 @@ class GLPNModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.hidden_sizes[-1], expected_height, expected_width)
         )
 
-    def create_and_check_for_image_segmentation(self, config, pixel_values, labels):
+    def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
-        model = GLPNForSemanticSegmentation(config)
+        model = GLPNForDepthEstimation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
