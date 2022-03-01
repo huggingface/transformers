@@ -6,6 +6,7 @@ from ..models.albert import AlbertOnnxConfig
 from ..models.bart import BartOnnxConfig
 from ..models.bert import BertOnnxConfig
 from ..models.blenderbot import BlenderbotOnnxConfig
+from ..models.blenderbot_small import BlenderbotSmallOnnxConfig
 from ..models.camembert import CamembertOnnxConfig
 from ..models.distilbert import DistilBertOnnxConfig
 from ..models.electra import ElectraOnnxConfig
@@ -251,6 +252,17 @@ class FeaturesManager:
             "sequence-classification",
             "question-answering",
             onnx_config_cls=BlenderbotOnnxConfig,
+        ),
+        "blenderbot-small": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            "sequence-classification",
+            "question-answering",
+            onnx_config_cls=BlenderbotSmallOnnxConfig,
         ),
     }
 
