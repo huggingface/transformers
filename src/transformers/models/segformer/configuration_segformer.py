@@ -14,6 +14,8 @@
 # limitations under the License.
 """ SegFormer model configuration"""
 
+import warnings
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +26,11 @@ SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "nvidia/segformer-b0-finetuned-ade-512-512": "https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512/resolve/main/config.json",
     # See all SegFormer models at https://huggingface.co/models?filter=segformer
 }
+
+DEPRECATION_WARNING = (
+    "Segformer's backbone now reshapes the last stage by default to (B, C, H, W). No need to pass "
+    "`reshape_last_stage=True` anymore when fine-tuning for semantic segmentation."
+)
 
 
 class SegformerConfig(PretrainedConfig):
@@ -123,6 +130,9 @@ class SegformerConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(**kwargs)
+
+        if "reshape_last_stage" in kwargs:
+            warnings.warn(DEPRECATION_WARNING, FutureWarning)
 
         self.image_size = image_size
         self.num_channels = num_channels
