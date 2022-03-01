@@ -97,6 +97,8 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
                 Whether or not to print more information and warnings.
 """
 
+ListOfDict = List[Dict[str, Union[int, str]]]
+
 
 @dataclass
 class Wav2Vec2CTCTokenizerOutput(ModelOutput):
@@ -106,18 +108,18 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
     Args:
         text (list of `str` or `str`):
             Decoded logits in text from. Usually the speech transcription.
-        char_offsets (`Dict[str, Union[int, str]]` or `Dict[str, Union[int, str]]`):
+        char_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
             Offsets of the decoded characters. In combination with sampling rate and model downsampling rate char
             offsets can be used to compute time stamps for each charater. Total logit score of the beam associated with
             produced text.
-        word_offsets (`Dict[str, Union[int, str]]` or `Dict[str, Union[int, str]]`):
+        word_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
             Offsets of the decoded words. In combination with sampling rate and model downsampling rate word offsets
             can be used to compute time stamps for each word.
     """
 
     text: Union[List[str], str]
-    char_offsets: List[Dict[str, Union[float, str]]] = None
-    word_offsets: List[Dict[str, Union[float, str]]] = None
+    char_offsets: Union[List[ListOfDict], ListOfDict] = None
+    word_offsets: Union[List[ListOfDict], ListOfDict] = None
 
 
 class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):

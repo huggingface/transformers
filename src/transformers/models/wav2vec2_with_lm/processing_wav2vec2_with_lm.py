@@ -19,7 +19,7 @@ import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from multiprocessing import get_context
-from typing import TYPE_CHECKING, Iterable, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
@@ -34,23 +34,30 @@ if TYPE_CHECKING:
     from ...tokenization_utils import PreTrainedTokenizerBase
 
 
+ListOfDict = List[Dict[str, Union[int, str]]]
+
+
 @dataclass
 class Wav2Vec2DecoderWithLMOutput(ModelOutput):
     """
     Output type of [`Wav2Vec2DecoderWithLM`], with transcription.
 
     Args:
-        text (list of `str`):
+        text (list of `str` or `str`):
             Decoded logits in text from. Usually the speech transcription.
-        logit_score (list of `float`):
+        logit_score (list of `float` or `float`):
             Total logit score of the beam associated with produced text.
         lm_score (list of `float`):
             Fused lm_score of the beam associated with produced text.
+        word_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
+            Offsets of the decoded words. In combination with sampling rate and model downsampling rate word offsets
+            can be used to compute time stamps for each word.
     """
 
     text: Union[List[str], str]
     logit_score: Union[List[float], float] = None
     lm_score: Union[List[float], float] = None
+    word_offsets: Union[List[ListOfDict], ListOfDict] = None
 
 
 class Wav2Vec2ProcessorWithLM(ProcessorMixin):
@@ -232,6 +239,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         beta: Optional[float] = None,
         unk_score_offset: Optional[float] = None,
         lm_score_boundary: Optional[bool] = None,
+        output_word_offsets: bool = False,
     ):
         """
         Batch decode output logits to audio transcription with language model support.
@@ -267,6 +275,18 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
                 Amount of log score offset for unknown tokens
             lm_score_boundary (`bool`, *optional*):
                 Whether to have kenlm respect boundaries when scoring
+            output_word_offsets (`bool`, *optional*, defaults to `False`):
+                Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
+                and model downsampling rate to compute the time-stamps of transcribed words.
+
+                <Tip>
+
+                Please take a look at the Example of [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to
+                better understand how to make use of `output_word_offsets`.
+                [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.batch_decode`] works the same way with batched
+                output.
+
+                </Tip>
 
         Returns:
             [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`] or `tuple`.
@@ -310,13 +330,18 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         pool.close()
 
         # extract text and scores
-        batch_texts, logit_scores, lm_scores = [], [], []
+        batch_texts, logit_scores, lm_scores, word_offsets = [], [], [], []
         for d in decoded_beams:
             batch_texts.append(d[0][0])
             logit_scores.append(d[0][-2])
             lm_scores.append(d[0][-1])
-        # more output features will be added in the future
-        return Wav2Vec2DecoderWithLMOutput(text=batch_texts, logit_score=logit_scores, lm_score=lm_scores)
+            word_offsets.append([{"word": t[0], "start_offset": t[1][0], "end_offset": t[1][1]} for t in d[0][1]])
+
+        word_offsets = word_offsets if output_word_offsets else None
+
+        return Wav2Vec2DecoderWithLMOutput(
+            text=batch_texts, logit_score=logit_scores, lm_score=lm_scores, word_offsets=word_offsets
+        )
 
     def decode(
         self,
@@ -330,6 +355,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         beta: Optional[float] = None,
         unk_score_offset: Optional[float] = None,
         lm_score_boundary: Optional[bool] = None,
+        output_word_offsets: bool = False,
     ):
         """
         Decode output logits to audio transcription with language model support.
@@ -357,11 +383,65 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
                 Amount of log score offset for unknown tokens
             lm_score_boundary (`bool`, *optional*):
                 Whether to have kenlm respect boundaries when scoring
+            output_word_offsets (`bool`, *optional*, defaults to `False`):
+                Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
+                and model downsampling rate to compute the time-stamps of transcribed words.
+
+                <Tip>
+
+                Please take a look at the example of [`~models.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to
+                better understand how to make use of `output_word_offsets`.
+
+                </Tip>
 
         Returns:
             [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`] or `tuple`.
 
-        """
+        Example:
+
+        ```python
+        >>> # Let's see how to retrieve time steps for a model
+        >>> from transformers import AutoTokenizer, AutoFeatureExtractor, AutoModelForCTC
+        >>> from datasets import load_dataset
+        >>> import datasets
+        >>> import torch
+
+        >>> # import model, feature extractor, tokenizer
+        >>> model = AutoModelForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
+        >>> processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
+
+        >>> # load first sample of English common_voice
+        >>> dataset = load_dataset("common_voice", "en", split="train", streaming=True)
+        >>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+        >>> dataset_iter = iter(dataset)
+        >>> sample = next(dataset_iter)
+
+        >>> # forward sample through model to get greedily predicted transcription ids
+        >>> input_values = feature_extractor(sample["audio"]["array"], return_tensors="pt").input_values
+        >>> with torch.no_grad():
+        ...     logits = model(input_values).logits[0].cpu().numpy()
+
+        >>> # retrieve word stamps (analogous commands for `output_char_offsets`)
+        >>> outputs = tokenizer.decode(logits, output_word_offsets=True)
+        >>> # compute `time_offset` in seconds as product of downsampling ratio and sampling_rate
+        >>> time_offset = model.config.inputs_to_logits_ratio / feature_extractor.sampling_rate
+
+        >>> word_offsets = [
+        ...     {
+        ...         "word": d["word"],
+        ...         "start_time": d["start_offset"] * time_offset,
+        ...         "end_time": d["end_offset"] * time_offset,
+        ...     }
+        ...     for d in outputs.word_offsets
+        ... ]
+        >>> # compare word offsets with audio `common_voice_en_100038.mp3` online on the dataset viewer:
+        >>> # https://huggingface.co/datasets/common_voice/viewer/en/train
+        >>> word_offset
+        >>> # [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES',
+        >>> # 'start_time': 1.64, 'end_time': 1.88}, {'word': 'A',
+        >>> # 'start_time': 2.12, 'end_time': 2.14}, {'word': 'MILE', 'start_time': 2.26, 'end_time': 2.46}, ...
+        ```"""
+
         from pyctcdecode.constants import (
             DEFAULT_BEAM_WIDTH,
             DEFAULT_HOTWORD_WEIGHT,
@@ -390,9 +470,19 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             hotword_weight=hotword_weight,
         )
 
+        word_offsets = None
+        if output_word_offsets:
+            word_offsets = [
+                {"word": word, "start_offset": start_offset, "end_offset": end_offset}
+                for word, (start_offset, end_offset) in decoded_beams[0][2]
+            ]
+
         # more output features will be added in the future
         return Wav2Vec2DecoderWithLMOutput(
-            text=decoded_beams[0][0], logit_score=decoded_beams[0][-2], lm_score=decoded_beams[0][-1]
+            text=decoded_beams[0][0],
+            logit_score=decoded_beams[0][-2],
+            lm_score=decoded_beams[0][-1],
+            word_offsets=word_offsets,
         )
 
     @contextmanager
