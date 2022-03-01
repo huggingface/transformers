@@ -13,7 +13,7 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime]
 
 RUN python3 -m pip install --no-cache-dir -U torch tensorflow
 RUN python3 -m pip uninstall -y flax jax
-RUN python3 -m pip install --no-cache-dir torch-scatter -f https://data.pyg.org/whl/torch-$(python3 -c "from torch import version; print(version.__version__.split('+')[0])")+cpu.html
+RUN python3 -m pip install --no-cache-dir torch-scatter -f https://data.pyg.org/whl/torch-$(python3 -c "from torch import version; print(version.__version__.split('+')[0])")+cu102.html
 RUN python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git pytesseract https://github.com/kpu/kenlm/archive/master.zip
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
