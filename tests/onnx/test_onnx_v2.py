@@ -190,6 +190,8 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("mbart", "sshleifer/tiny-mbart"),
     ("t5", "t5-small"),
     ("marian", "Helsinki-NLP/opus-mt-en-de"),
+    ("blenderbot-small", "facebook/blenderbot_small-90M"),
+    ("blenderbot", "facebook/blenderbot-400M-distill"),
 }
 
 TENSORFLOW_EXPORT_DEFAULT_MODELS = {
@@ -213,6 +215,8 @@ TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("mbart", "sshleifer/tiny-mbart"),
     ("t5", "t5-small"),
     ("marian", "Helsinki-NLP/opus-mt-en-de"),
+    ("blenderbot-small", "facebook/blenderbot_small-90M"),
+    ("blenderbot", "facebook/blenderbot-400M-distill"),
 }
 
 
