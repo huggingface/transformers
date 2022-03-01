@@ -43,10 +43,6 @@ class ResNetConfig(PretrainedConfig):
             Dimensionality (hidden size) of the embeddings + at each stage.
         depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
             Depth (number of blocks) for each stage.
-        embeddings_type (`str`, *optional*, defaults to `"classic"`):
-            The embedding layer to use, either `"classic"` or `"3x3"`. If `"classic"`, the original resnet embedding, a
-            single aggressive `7x7` convolution, is applied. If `"3x3"`, three `3x3` are applied instead resulting in
-            the `D` variant.
         layer_type (`str`, *optional*, defaults to `"bottleneck"`):
             The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or
             `"bottleneck"` (used for larger models like resnet-50 and above).
@@ -74,7 +70,6 @@ class ResNetConfig(PretrainedConfig):
         num_channels=3,
         hidden_sizes=[64, 256, 512, 1024, 2048],
         depths=[3, 4, 6, 3],
-        embeddings_type="classic",
         layer_type="bottleneck",
         hidden_act="relu",
         downsample_in_first_stage=False,
@@ -86,6 +81,5 @@ class ResNetConfig(PretrainedConfig):
         self.hidden_sizes = hidden_sizes
         self.depths = depths
         self.layer_type = layer_type
-        self.embeddings_type = embeddings_type
         self.hidden_act = hidden_act
         self.downsample_in_first_stage = downsample_in_first_stage
