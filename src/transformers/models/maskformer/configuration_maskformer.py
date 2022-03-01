@@ -71,7 +71,8 @@ class MaskFormerConfig(PretrainedConfig):
             The weight for the mask loss.
 
     Raises:
-        `ValueError`: Raised if the backbone model type selected is not in `["swin"]` or the decoder model type selected is not in `["detr"]`
+        `ValueError`: Raised if the backbone model type selected is not in `["swin"]` or the decoder model type
+        selected is not in `["detr"]`
 
     Examples:
 
