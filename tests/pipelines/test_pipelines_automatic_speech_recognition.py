@@ -191,7 +191,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         speech_recognizer.type = "ctc_with_lm"
         # Simple test with CTC with LM, chunking + timestamps
         output = speech_recognizer(filename, chunk_length_s=2.0, return_timestamps="word")
-        print(output)
         self.assertEqual(
             output,
             {
