@@ -476,7 +476,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         word_offsets = None
         if output_word_offsets:
             word_offsets = [
-                {"word": word, "start_offset": start_offset, "end_offset": end_offset} for word, (start_offset, end_offset) in decoded_beams[0][2]
+                {"word": word, "start_offset": start_offset, "end_offset": end_offset}
+                for word, (start_offset, end_offset) in decoded_beams[0][2]
             ]
 
         # more output features will be added in the future
