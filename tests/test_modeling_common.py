@@ -1873,7 +1873,10 @@ class ModelTesterMixin:
         ]
 
         for model_class in self.all_model_classes:
-            if model_class not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+            if model_class not in [
+                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
+                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+            ]:
                 continue
 
             for problem_type in problem_types:
