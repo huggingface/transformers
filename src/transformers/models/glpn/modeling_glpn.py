@@ -21,7 +21,6 @@ import math
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -535,12 +534,11 @@ class GLPNDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        in_channels = config.channels_in
-        out_channels = config.channels_out
+        out_channels = config.hidden_sizes[0]
 
-        self.bot_conv = nn.Conv2d(in_channels=in_channels[0], out_channels=out_channels, kernel_size=1)
-        self.skip_conv1 = nn.Conv2d(in_channels=in_channels[1], out_channels=out_channels, kernel_size=1)
-        self.skip_conv2 = nn.Conv2d(in_channels=in_channels[2], out_channels=out_channels, kernel_size=1)
+        self.bot_conv = nn.Conv2d(in_channels=config.hidden_sizes[-1], out_channels=out_channels, kernel_size=1)
+        self.skip_conv1 = nn.Conv2d(in_channels=config.hidden_sizes[-2], out_channels=out_channels, kernel_size=1)
+        self.skip_conv2 = nn.Conv2d(in_channels=config.hidden_sizes[-3], out_channels=out_channels, kernel_size=1)
 
         self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
 
@@ -601,6 +599,19 @@ class GLPNSelectiveFeatureFusion(nn.Module):
         return out
 
 
+class SiLogLoss(nn.Module):
+    def __init__(self, lambd=0.5):
+        super().__init__()
+        self.lambd = lambd
+
+    def forward(self, pred, target):
+        valid_mask = (target > 0).detach()
+        diff_log = torch.log(target[valid_mask]) - torch.log(pred[valid_mask])
+        loss = torch.sqrt(torch.pow(diff_log, 2).mean() - self.lambd * torch.pow(diff_log.mean(), 2))
+
+        return loss
+
+
 @add_start_docstrings(
     """GLPN Model transformer with a lightweight decode head on top e.g. for KITTI, NYUv2.""",
     GLPN_START_DOCSTRING,
@@ -610,10 +621,11 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         super().__init__(config)
         self.glpn = GLPNModel(config)
         self.decoder = GLPNDecoder(config)
+        out_channels = config.hidden_sizes[0]
         self.head = nn.Sequential(
-            nn.Conv2d(config.channels_out, config.channels_out, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1),
             nn.ReLU(inplace=False),
-            nn.Conv2d(config.channels_out, 1, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(out_channels, 1, kernel_size=3, stride=1, padding=1),
         )
 
         # Initialize weights and apply final processing
@@ -670,18 +682,12 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         out = self.decoder(encoder_hidden_states)
         logits = self.head(out)
         logits = torch.sigmoid(logits) * self.config.max_depth
+        logits = logits.squeeze(dim=1)
 
         loss = None
         if labels is not None:
-            if self.config.num_labels == 1:
-                raise ValueError("The number of labels should be greater than one")
-            else:
-                # upsample logits to the images' original size
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                )
-                loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
-                loss = loss_fct(upsampled_logits, labels)
+            loss_fct = SiLogLoss()
+            loss = loss_fct(logits, labels)
 
         if not return_dict:
             if output_hidden_states:

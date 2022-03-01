@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -126,13 +126,9 @@ class GLPNModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 4, self.image_size // 4)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.image_size, self.image_size))
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 4, self.image_size // 4)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.image_size, self.image_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -169,9 +165,9 @@ class GLPNModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_image_segmentation(self):
+    def test_for_depth_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_segmentation(*config_and_inputs)
+        self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
 
     @unittest.skip("GLPN does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -308,9 +304,9 @@ class GLPNModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             if model_class in get_values(MODEL_MAPPING):
                 continue
-            # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
+            # TODO: remove the following 3 lines once we have a MODEL_FOR_DEPTH_ESTIMATION_MAPPING
             # this can then be incorporated into _prepare_for_class in test_modeling_common.py
-            if model_class.__name__ == "GLPNForSemanticSegmentation":
+            if model_class.__name__ == "GLPNForDepthEstimation":
                 batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
                 inputs_dict["labels"] = torch.zeros(
                     [self.model_tester.batch_size, height, width], device=torch_device

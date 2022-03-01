@@ -75,10 +75,6 @@ class GLPNConfig(PretrainedConfig):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        channels_in (`List[int]`, *optional*, defaults to [512, 320, 128]):
-            The number of input channels in the decoder.
-        channels_out (`int`, *optional*, defaults to 64):
-            The number of output channels in the decoder.
         max_depth (`int`, *optional*, defaults to 10):
             The maximum depth of the decoder.
 
@@ -119,8 +115,6 @@ class GLPNConfig(PretrainedConfig):
         drop_path_rate=0.1,
         layer_norm_eps=1e-6,
         is_encoder_decoder=False,
-        channels_in=[512, 320, 128],
-        channels_out=64,
         max_depth=10,
         **kwargs
     ):
@@ -144,6 +138,4 @@ class GLPNConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
-        self.channels_in = channels_in
-        self.channels_out = channels_out
         self.max_depth = max_depth
