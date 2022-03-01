@@ -35,6 +35,8 @@
 - sections:
   - local: create_a_model
     title: Create a custom model
+  - local: multilingual
+    title: Inference for multilingual models
   - local: examples
     title: Examples
   - local: troubleshooting
