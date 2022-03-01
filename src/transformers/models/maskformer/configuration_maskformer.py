@@ -72,7 +72,7 @@ class MaskFormerConfig(PretrainedConfig):
 
     Raises:
         `ValueError`: Raised if the backbone model type selected is not in `["swin"]` or the decoder model type
-        selected is not in `["detr]`.
+        selected is not in `["detr"]`.
 
     Examples:
 
