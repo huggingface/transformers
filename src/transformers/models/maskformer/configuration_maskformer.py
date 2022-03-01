@@ -51,7 +51,7 @@ class MaskFormerConfig(PretrainedConfig):
         no_object_weight (`float`, *optional*, defaults to 0.1):
             Weight to apply to the null (no object) class.
         use_auxiliary_loss(`bool`, *optional*, defaults to `False`):
-            If `true` [`MaskFormerForInstanceSegmentationOutput`] will contain the auxilary losses computed using the
+            If `True` [`MaskFormerForInstanceSegmentationOutput`] will contain the auxilary losses computed using the
             logits from each decoder's stage.
         backbone_config (`Dict`, *optional*):
             The configuration passed to the backbone, if unset, the configuration corresponding to
@@ -69,8 +69,6 @@ class MaskFormerConfig(PretrainedConfig):
             The weight for the cross entropy loss.
         mask_weight (`float`, *optional*, defaults to 20.0):
             The weight for the mask loss.
-        num_labels (`int`, *optional*, defaults to 150):
-            The number of labels.
 
     Raises:
         `ValueError`: Raised if the backbone model type selected is not in `["swin"]` or the decoder model type
@@ -110,7 +108,6 @@ class MaskFormerConfig(PretrainedConfig):
         dice_weight: float = 1.0,
         cross_entropy_weight: float = 1.0,
         mask_weight: float = 20.0,
-        num_labels: int = 150,
         **kwargs,
     ):
         if backbone_config is None:
@@ -161,7 +158,7 @@ class MaskFormerConfig(PretrainedConfig):
 
         self.num_attention_heads = self.decoder_config.encoder_attention_heads
         self.num_hidden_layers = self.decoder_config.num_hidden_layers
-        super().__init__(num_labels=num_labels, **kwargs)
+        super().__init__(**kwargs)
 
     @classmethod
     def from_backbone_and_decoder_configs(
