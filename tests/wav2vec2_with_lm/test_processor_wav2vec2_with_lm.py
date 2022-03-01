@@ -410,7 +410,6 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
         model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
-        # feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
 
         # compare to filename `common_voice_en_100038.mp3` of dataset viewer on https://huggingface.co/datasets/common_voice/viewer/en/train
         input_values = processor(sample["audio"]["array"], return_tensors="pt").input_values

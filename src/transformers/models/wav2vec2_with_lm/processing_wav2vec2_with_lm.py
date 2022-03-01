@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from ...tokenization_utils import PreTrainedTokenizerBase
 
 
-ListOfDict = List[Dict[str, Union[float, str]]]
+ListOfDict = List[Dict[str, Union[int, str]]]
 
 
 @dataclass
@@ -340,10 +340,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         word_offsets = word_offsets if output_word_offsets else None
 
         return Wav2Vec2DecoderWithLMOutput(
-            text=batch_texts,
-            logit_score=logit_scores,
-            lm_score=lm_scores,
-            word_offsets=word_offsets,
+            text=batch_texts, logit_score=logit_scores, lm_score=lm_scores, word_offsets=word_offsets
         )
 
     def decode(

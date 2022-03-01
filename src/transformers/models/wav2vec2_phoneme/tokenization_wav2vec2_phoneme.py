@@ -66,7 +66,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/wav2vec2-lv-60-espeak-cv-ft": sys.maxsize}
 
 
-ListOfDict = List[Dict[str, Union[float, str]]]
+ListOfDict = List[Dict[str, Union[int, str]]]
 
 
 @dataclass

@@ -97,7 +97,7 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
                 Whether or not to print more information and warnings.
 """
 
-ListOfDict = List[Dict[str, Union[float, str]]]
+ListOfDict = List[Dict[str, Union[int, str]]]
 
 
 @dataclass
