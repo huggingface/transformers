@@ -417,7 +417,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
     def remove_low_and_no_objects(self, masks, scores, labels, object_mask_threshold, num_labels):
         """
         Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores`
-        and `labels`
+        and `labels`.
 
         Args:
             masks (`torch.Tensor`):
