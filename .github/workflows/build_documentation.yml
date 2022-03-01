@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/setup-node@v2
         with:
-          node-version: '14'
+          node-version: '16'
 
       - uses: actions/checkout@v2
         with:
