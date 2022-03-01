@@ -121,6 +121,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("unispeech-sat", "UniSpeechSatConfig"),
         ("unispeech", "UniSpeechConfig"),
         ("wavlm", "WavLMConfig"),
+        ("data2vec-audio", "Data2VecAudioConfig"),
+        ("data2vec-text", "Data2VecTextConfig"),
     ]
 )
 
@@ -177,6 +179,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("xlm", "XLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("roberta", "ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("data2vec-text", "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("data2vec-audio", "DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("distilbert", "DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("camembert", "CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -321,10 +325,14 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xlsr_wav2vec2", "XLSR-Wav2Vec2"),
         ("mluke", "mLUKE"),
         ("layoutxlm", "LayoutXLM"),
+        ("data2vec-audio", "Data2VecAudio"),
+        ("data2vec-text", "Data2VecText"),
     ]
 )
 
-SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict([("openai-gpt", "openai")])
+SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
+    [("openai-gpt", "openai"), ("data2vec-audio", "data2vec"), ("data2vec-text", "data2vec")]
+)
 
 
 def model_type_to_module_name(key):

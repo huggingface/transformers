@@ -18,6 +18,7 @@ import inspect
 import os
 import re
 import warnings
+from collections import OrderedDict
 from difflib import get_close_matches
 from pathlib import Path
 
@@ -169,6 +170,16 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFWav2Vec2ForCTC",
     "TFHubertForCTC",
 ]
+
+# Update this list for models that have multiple model types for the same
+# model doc
+MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
+    [
+        ("data2vec-text", "data2vec"),
+        ("data2vec-audio", "data2vec"),
+    ]
+)
+
 
 # This is to make sure the transformers module imported is the one in the repo.
 spec = importlib.util.spec_from_file_location(
@@ -641,6 +652,7 @@ def check_model_type_doc_match():
     model_docs = [m.stem for m in model_doc_folder.glob("*.mdx")]
 
     model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
+    model_types = [MODEL_TYPE_TO_DOC_MAPPING[m] if m in MODEL_TYPE_TO_DOC_MAPPING else m for m in model_types]
 
     errors = []
     for m in model_docs:
