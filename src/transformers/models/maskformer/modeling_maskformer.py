@@ -2397,7 +2397,9 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             masks_queries_logits = binaries_masks[-1]
             # go til [:-1] because the last one is always used
             for aux_binary_masks, aux_classes in zip(binaries_masks[:-1], classes[:-1]):
-                auxiliary_logits.append({"masks_queries_logits": aux_binary_masks, "class_queries_logits": aux_classes})
+                auxiliary_logits.append(
+                    {"masks_queries_logits": aux_binary_masks, "class_queries_logits": aux_classes}
+                )
 
         else:
             transformer_decoder_hidden_states = outputs.transformer_decoder_last_hidden_state
