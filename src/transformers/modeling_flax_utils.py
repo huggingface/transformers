@@ -114,7 +114,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         # randomly initialized parameters
         random_params = self.init_weights(self.key, input_shape)
-        self.foo = "foo"
 
         # save required_params as set
         self._required_params = set(flatten_dict(unfreeze(random_params)).keys())
