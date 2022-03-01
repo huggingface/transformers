@@ -23,6 +23,7 @@ import linecache
 import os
 import platform
 import sys
+import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict, namedtuple
 from datetime import datetime
@@ -616,6 +617,13 @@ class Benchmark(ABC):
             }
         else:
             self.config_dict = {model_name: config for model_name, config in zip(self.args.model_names, configs)}
+
+        warnings.warn(
+            f"The class {self.__class__} is deprecated. Hugging Face Benchmarking utils"
+            " are deprecated in general and it is advised to use external Benchmarking libraries "
+            " to benchmark Transformer models.",
+            FutureWarning,
+        )
 
         if self.args.memory and os.getenv("TRANSFORMERS_USE_MULTIPROCESSING") == 0:
             logger.warning(
