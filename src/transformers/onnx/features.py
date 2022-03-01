@@ -249,8 +249,6 @@ class FeaturesManager:
             "causal-lm-with-past",
             "seq2seq-lm",
             "seq2seq-lm-with-past",
-            "sequence-classification",
-            "question-answering",
             onnx_config_cls=BlenderbotOnnxConfig,
         ),
         "blenderbot-small": supported_features_mapping(
@@ -260,8 +258,6 @@ class FeaturesManager:
             "causal-lm-with-past",
             "seq2seq-lm",
             "seq2seq-lm-with-past",
-            "sequence-classification",
-            "question-answering",
             onnx_config_cls=BlenderbotSmallOnnxConfig,
         ),
     }
