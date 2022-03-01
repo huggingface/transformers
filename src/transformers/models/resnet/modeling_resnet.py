@@ -15,7 +15,7 @@
 """ PyTorch ResNet model."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
