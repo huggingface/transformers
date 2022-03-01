@@ -137,7 +137,7 @@ class MaskFormerConfig(PretrainedConfig):
             decoder_type = decoder_config.pop("model_type")
             if decoder_type not in self.decoders_supported:
                 raise ValueError(
-                    f"Transformer Decoder {decoder_type} not supported, please use one of {','.join(self.transformers_decoder_supported)}"
+                    f"Transformer Decoder {decoder_type} not supported, please use one of {','.join(self.decoders_supported)}"
                 )
             decoder_config = AutoConfig.for_model(decoder_type, **decoder_config)
 
