@@ -92,11 +92,12 @@ class ModuleTransfer:
 
 def convert_weight_and_push(name: str, config: ResNetConfig, save_directory: Path):
     print(f"Converting {name}...")
-    from_model = timm.create_model(name, pretrained=True)
-    our_model = ResNetForImageClassification(config)
-    module_transfer = ModuleTransfer(src=from_model, dest=our_model)
-    x = torch.randn((1, 3, 224, 224))
-    module_transfer(x)
+    with torch.no_grad():
+        from_model = timm.create_model(name, pretrained=True).eval()
+        our_model = ResNetForImageClassification(config).eval()
+        module_transfer = ModuleTransfer(src=from_model, dest=our_model)
+        x = torch.randn((1, 3, 224, 224))
+        module_transfer(x)
 
     assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
 
