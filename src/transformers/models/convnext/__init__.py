@@ -32,6 +32,7 @@ if is_torch_available():
     _import_structure["modeling_convnext"] = [
         "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ConvNextForImageClassification",
+        "ConvNextForSemanticSegmentation",
         "ConvNextModel",
         "ConvNextPreTrainedModel",
     ]
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
         from .modeling_convnext import (
             CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvNextForImageClassification,
+            ConvNextForSemanticSegmentation,
             ConvNextModel,
             ConvNextPreTrainedModel,
         )

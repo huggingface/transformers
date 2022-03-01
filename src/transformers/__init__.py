@@ -856,6 +856,7 @@ if is_torch_available():
         [
             "CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ConvNextForImageClassification",
+            "ConvNextForSemanticSegmentation",
             "ConvNextModel",
             "ConvNextPreTrainedModel",
         ]
@@ -2999,6 +3000,7 @@ if TYPE_CHECKING:
         from .models.convnext import (
             CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvNextForImageClassification,
+            ConvNextForSemanticSegmentation,
             ConvNextModel,
             ConvNextPreTrainedModel,
         )

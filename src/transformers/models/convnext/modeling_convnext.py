@@ -28,6 +28,7 @@ from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
+    replace_return_docstrings,
     add_start_docstrings_to_model_forward,
 )
 
@@ -760,7 +761,7 @@ class ConvNextForSemanticSegmentation(ConvNextPreTrainedModel):
         return loss
 
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(output_type=SemanticSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=SemanticSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
