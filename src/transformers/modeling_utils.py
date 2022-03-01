@@ -237,9 +237,9 @@ class ModuleUtilsMixin:
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
 
         if self.dtype == torch.float16:
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -float("inf")
         elif self.dtype in [torch.bfloat16, torch.float32]:
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -float("inf")
         else:
             raise ValueError(
                 f"{self.dtype} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`"
