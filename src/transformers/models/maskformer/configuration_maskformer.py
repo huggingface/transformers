@@ -24,7 +24,7 @@ from ..swin import SwinConfig
 
 
 MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/maskformer-swin-base-ade": "https://huggingface.co/facebook/maskformer-swin-base-ade/blob/main/config.json"
+    "Francesco/maskformer-swin-base-ade": "https://huggingface.co/facebook/maskformer-swin-base-ade/blob/main/config.json"
     # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
 }
 
@@ -50,13 +50,13 @@ class MaskFormerConfig(PretrainedConfig):
             size.
         no_object_weight (`float`, *optional*, defaults to 0.1):
             Weight to apply to the null (no object) class.
-        use_auxilary_loss (`bool`, *optional*, defaults to `False`):
+        use_auxiliary_loss(`bool`, *optional*, defaults to `False`):
             If `true` [`MaskFormerForInstanceSegmentationOutput`] will contain the auxilary losses computed using the
             logits from each decoder's stage.
         backbone_config (`Dict`, *optional*):
             The configuration passed to the backbone, if unset, the configuration corresponding to
             `swin-base-patch4-window12-384` will be used.
-        transformer_decoder_config (`Dict`, *optional*):
+        decoder_config (`Dict`, *optional*):
             The configuration passed to the transformer decoder model, if unset the base config for `detr-resnet-50`
             will be used.
         init_std (`float`, *optional*, defaults to 0.02):
@@ -73,7 +73,8 @@ class MaskFormerConfig(PretrainedConfig):
             The number of labels.
 
     Raises:
-        `ValueError`: Raised if the backbone model type selected is not in `["swin"]`
+        `ValueError`: Raised if the backbone model type selected is not in `["swin"]` or the decoder model type
+        selected is not in `["detr]`.
 
     Examples:
 
@@ -94,16 +95,16 @@ class MaskFormerConfig(PretrainedConfig):
     model_type = "maskformer"
     attribute_map = {"hidden_size": "mask_feature_size"}
     backbones_supported = ["swin"]
-    transformer_decoders_supported = ["detr"]
+    decoders_supported = ["detr"]
 
     def __init__(
         self,
         fpn_feature_size: int = 256,
         mask_feature_size: int = 256,
         no_object_weight: float = 0.1,
-        use_auxilary_loss: bool = False,
+        use_auxiliary_loss: bool = False,
         backbone_config: Optional[Dict] = None,
-        transformer_decoder_config: Optional[Dict] = None,
+        decoder_config: Optional[Dict] = None,
         init_std: float = 0.02,
         init_xavier_std: float = 1.0,
         dice_weight: float = 1.0,
@@ -132,18 +133,19 @@ class MaskFormerConfig(PretrainedConfig):
                 )
             backbone_config = AutoConfig.for_model(backbone_model_type, **backbone_config)
 
-        if transformer_decoder_config is None:
-            transformer_decoder_config = DetrConfig()
+        if decoder_config is None:
+            # fall back to https://huggingface.co/facebook/detr-resnet-50
+            decoder_config = DetrConfig()
         else:
-            transformer_decoder_type = transformer_decoder_config.pop("model_type")
-            if transformer_decoder_type not in self.transformer_decoders_supported:
+            decoder_type = decoder_config.pop("model_type")
+            if decoder_type not in self.decoders_supported:
                 raise ValueError(
-                    f"Transformer Decoder {transformer_decoder_type} not supported, please use one of {','.join(self.transformers_decoder_supported)}"
+                    f"Transformer Decoder {decoder_type} not supported, please use one of {','.join(self.transformers_decoder_supported)}"
                 )
-            transformer_decoder_config = AutoConfig.for_model(transformer_decoder_type, **transformer_decoder_config)
+            decoder_config = AutoConfig.for_model(decoder_type, **decoder_config)
 
         self.backbone_config = backbone_config
-        self.transformer_decoder_config = transformer_decoder_config
+        self.decoder_config = decoder_config
         # main feature dimension for the model
         self.fpn_feature_size = fpn_feature_size
         self.mask_feature_size = mask_feature_size
@@ -154,16 +156,16 @@ class MaskFormerConfig(PretrainedConfig):
         self.cross_entropy_weight = cross_entropy_weight
         self.dice_weight = dice_weight
         self.mask_weight = mask_weight
-        self.use_auxilary_loss = use_auxilary_loss
+        self.use_auxiliary_loss = use_auxiliary_loss
         self.no_object_weight = no_object_weight
 
-        self.num_attention_heads = self.transformer_decoder_config.encoder_attention_heads
-        self.num_hidden_layers = self.transformer_decoder_config.num_hidden_layers
+        self.num_attention_heads = self.decoder_config.encoder_attention_heads
+        self.num_hidden_layers = self.decoder_config.num_hidden_layers
         super().__init__(num_labels=num_labels, **kwargs)
 
     @classmethod
-    def from_backbone_and_detr_configs(
-        cls, backbone_config: PretrainedConfig, transformer_decoder_config: PretrainedConfig, **kwargs
+    def from_backbone_and_decoder_configs(
+        cls, backbone_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
     ):
         """Instantiate a [`MaskFormerConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
         configuration.
@@ -171,7 +173,7 @@ class MaskFormerConfig(PretrainedConfig):
             Args:
                 backbone_config ([`PretrainedConfig`]):
                     The backbone configuration.
-                transformer_decoder_config ([`PretrainedConfig`]):
+                decoder_config ([`PretrainedConfig`]):
                     The transformer decoder configuration to use.
 
             Returns:
@@ -179,7 +181,7 @@ class MaskFormerConfig(PretrainedConfig):
         """
         return cls(
             backbone_config=backbone_config.to_dict(),
-            transformer_decoder_config=transformer_decoder_config.to_dict(),
+            decoder_config=decoder_config.to_dict(),
             **kwargs,
         )
 
@@ -192,6 +194,6 @@ class MaskFormerConfig(PretrainedConfig):
         """
         output = copy.deepcopy(self.__dict__)
         output["backbone_config"] = self.backbone_config.to_dict()
-        output["transformer_decoder_config"] = self.transformer_decoder_config.to_dict()
+        output["decoder_config"] = self.decoder_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output

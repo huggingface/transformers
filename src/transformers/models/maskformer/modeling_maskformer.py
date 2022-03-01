@@ -55,7 +55,7 @@ _CHECKPOINT_FOR_DOC = "facebook/maskformer-swin-base-ade"
 _FEAT_EXTRACTOR_FOR_DOC = "MaskFormerFeatureExtractor"
 
 MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/maskformer-swin-base-ade",
+    "Francesco/maskformer-swin-base-ade",
     # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
 ]
 
@@ -230,7 +230,7 @@ class MaskFormerModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the pixel
             decoder model at the output of each stage.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        transformer_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
             transformer decoder at the output of each stage.
@@ -285,7 +285,7 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the pixel
             decoder model at the output of each stage.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        transformer_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
             transformer decoder at the output of each stage.
@@ -1837,7 +1837,7 @@ class MaskFormerLoss(nn.Module):
             class_labels (`torch.Tensor`):
                 A tensor of shape `batch_size, num_classes`
             auxilary_predictions (`Dict[str, torch.Tensor]`, *optional*):
-                if `use_auxilary_loss` was set to `true` in [`MaskFormerConfig`], then it contains the logits from the
+                if `use_auxiliary_loss` was set to `true` in [`MaskFormerConfig`], then it contains the logits from the
                 inner layers of the Detr's Decoder.
 
         Returns:
@@ -1846,7 +1846,7 @@ class MaskFormerLoss(nn.Module):
             - **loss_mask** -- The loss computed using sigmoid focal loss on the predicted and ground truth masks.
             - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
               masks.
-            if `use_auxilary_loss` was set to `true` in [`MaskFormerConfig`], the dictionary contains addional losses
+            if `use_auxiliary_loss` was set to `true` in [`MaskFormerConfig`], the dictionary contains addional losses
             for each auxilary predictions.
         """
 
@@ -2137,12 +2137,12 @@ class MaskFormerTransformerModule(nn.Module):
 
     def __init__(self, in_features: int, config: MaskFormerConfig):
         super().__init__()
-        hidden_size = config.transformer_decoder_config.hidden_size
+        hidden_size = config.decoder_config.hidden_size
         should_project = in_features != hidden_size
         self.position_embedder = MaskFormerSinePositionEmbedding(num_pos_feats=hidden_size // 2, normalize=True)
-        self.queries_embedder = nn.Embedding(config.transformer_decoder_config.num_queries, hidden_size)
+        self.queries_embedder = nn.Embedding(config.decoder_config.num_queries, hidden_size)
         self.input_projection = nn.Conv2d(in_features, hidden_size, kernel_size=1) if should_project else None
-        self.transformer_decoder = DetrDecoder(config=config.transformer_decoder_config)
+        self.decoder = DetrDecoder(config=config.decoder_config)
 
     def forward(
         self, image_features: Tensor, output_hidden_states: bool = False, output_attentions: bool = False
@@ -2160,7 +2160,7 @@ class MaskFormerTransformerModule(nn.Module):
         image_features = image_features.view(batch_size, num_channels, height * width).permute(0, 2, 1)
         position_embeddings = position_embeddings.view(batch_size, num_channels, height * width).permute(0, 2, 1)
 
-        transformer_decoder_output: DetrDecoderOutput = self.transformer_decoder(
+        decoder_output: DetrDecoderOutput = self.decoder(
             inputs_embeds=inputs_embeds,
             attention_mask=None,
             encoder_hidden_states=image_features,
@@ -2171,7 +2171,7 @@ class MaskFormerTransformerModule(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=None,
         )
-        return transformer_decoder_output
+        return decoder_output
 
 
 MASKFORMER_START_DOCSTRING = r"""
@@ -2337,7 +2337,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
         self.model = MaskFormerModel(config)
-        hidden_size: int = config.transformer_decoder_config.hidden_size
+        hidden_size = config.decoder_config.hidden_size
         # + 1 because we add the "null" class
         self.class_predictor = nn.Linear(hidden_size, config.num_labels + 1)
         self.mask_embedder = MaskformerMLPPredictionHead(hidden_size, hidden_size, config.mask_feature_size)
@@ -2386,7 +2386,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         # get the auxilary predictions (one for each decoder's layer)
         auxilary_logits: List[str, Tensor] = []
         # This code is a little bit cumbersome, an improvement can be to return a list of predictions. If we have auxilary loss then we are going to return more than one element in the list
-        if self.config.use_auxilary_loss:
+        if self.config.use_auxiliary_loss:
             stacked_decoder_outputs = torch.stack(outputs.transformer_decoder_hidden_states)
             classes = self.class_predictor(stacked_decoder_outputs)
             class_queries_logits = classes[-1]

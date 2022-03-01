@@ -136,7 +136,7 @@ class OriginalMaskFormerConfigToOursConverter:
             dice_weight=mask_former.DICE_WEIGHT,
             ce_weight=1.0,
             mask_weight=mask_former.MASK_WEIGHT,
-            transformer_decoder_config=dict(
+            decoder_config=dict(
                 model_type="detr",
                 max_position_embeddings=1024,
                 encoder_layers=6,
@@ -379,12 +379,12 @@ class OriginalMaskFormerCheckpointToOursConverter:
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     def rename_keys_in_detr_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
-        dst_prefix: str = "transformer_module.transformer_decoder"
+        dst_prefix: str = "transformer_module.decoder"
         src_prefix: str = "sem_seg_head.predictor.transformer.decoder"
         # not sure why we are not popping direcetly here!
         # here we list all keys to be renamed (original name on the left, our name on the right)
         rename_keys = []
-        for i in range(self.config.transformer_decoder_config.decoder_layers):
+        for i in range(self.config.decoder_config.decoder_layers):
             # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms
             rename_keys.append(
                 (
@@ -436,9 +436,9 @@ class OriginalMaskFormerCheckpointToOursConverter:
         return rename_keys
 
     def replace_q_k_v_in_detr_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
-        dst_prefix: str = "transformer_module.transformer_decoder"
+        dst_prefix: str = "transformer_module.decoder"
         src_prefix: str = "sem_seg_head.predictor.transformer.decoder"
-        for i in range(self.config.transformer_decoder_config.decoder_layers):
+        for i in range(self.config.decoder_config.decoder_layers):
             # read in weights + bias of input projection layer of self-attention
             in_proj_weight = src_state_dict.pop(f"{src_prefix}.layers.{i}.self_attn.in_proj_weight")
             in_proj_bias = src_state_dict.pop(f"{src_prefix}.layers.{i}.self_attn.in_proj_bias")
@@ -463,7 +463,7 @@ class OriginalMaskFormerCheckpointToOursConverter:
             dst_state_dict[f"{dst_prefix}.layers.{i}.encoder_attn.v_proj.bias"] = in_proj_bias_cross_attn[-256:]
 
     def replace_detr_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
-        dst_prefix: str = "transformer_module.transformer_decoder"
+        dst_prefix: str = "transformer_module.decoder"
         src_prefix: str = "sem_seg_head.predictor.transformer.decoder"
         renamed_keys = self.rename_keys_in_detr_decoder(dst_state_dict, src_state_dict)
         # add more

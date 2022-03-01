@@ -46,7 +46,7 @@ class MaskFormerModelTester:
         parent,
         batch_size=2,
         is_training=True,
-        use_auxilary_loss=False,
+        use_auxiliary_loss=False,
         num_queries=100,
         num_channels=3,
         min_size=384,
@@ -57,7 +57,7 @@ class MaskFormerModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.is_training = is_training
-        self.use_auxilary_loss = use_auxilary_loss
+        self.use_auxiliary_loss = use_auxiliary_loss
         self.num_queries = num_queries
         self.num_channels = num_channels
         self.min_size = min_size
@@ -98,7 +98,7 @@ class MaskFormerModelTester:
 
         self.parent.assertTrue(len(encoder_hidden_states), len(config.backbone_config.depths))
         self.parent.assertTrue(len(pixel_decoder_hidden_states), len(config.backbone_config.depths))
-        self.parent.assertTrue(len(transformer_decoder_hidden_states), config.detr_config.decoder_layers)
+        self.parent.assertTrue(len(transformer_decoder_hidden_states), config.decoder_config.decoder_layers)
 
     def create_and_check_maskformer_model(self, config, pixel_values, pixel_mask, output_hidden_states=False):
         with torch.no_grad():
@@ -216,7 +216,7 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ["facebook/maskformer-swin-small-coco"]:
+        for model_name in ["Francesco/maskformer-swin-small-coco"]:
             model = MaskFormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -305,7 +305,7 @@ def prepare_img():
 class MaskFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def model_checkpoints(self):
-        return "facebook/maskformer-swin-small-coco"
+        return "Francesco/maskformer-swin-small-coco"
 
     @cached_property
     def default_feature_extractor(self):
