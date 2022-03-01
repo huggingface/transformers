@@ -89,7 +89,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-gpu
           build-args: |
-            REF=docker-image-pt-tf
+            REF=master
           push: true
           tags: huggingface/transformers-pytorch-gpu
 
@@ -116,6 +116,6 @@ jobs:
         with:
           context: ./docker/transformers-tensorflow-gpu
           build-args: |
-            REF=docker-image-pt-tf
+            REF=master
           push: true
           tags: huggingface/transformers-tensorflow-gpu
