@@ -137,35 +137,6 @@ class ResNetEmbeddings(nn.Sequential):
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
 
-class ResNetEmbeddings3x3(nn.Sequential):
-    """
-    Modified ResNet Embedddings (stem) proposed in [Bag of Tricks for Image Classification with Convolutional Neural
-    Networks](https://arxiv.org/pdf/1812.01187.pdf) The observation is that the computational cost of a convolution is
-    quadratic to the kernel width or height. A `7x7` convolution is `5.4` times more expensive than a `3x3`
-    convolution. So this tweak replacing the `7x7` convolution in the input stem with three conservative `3x3`
-    convolution. Using this layer without changing anything else will result in ResNet version C.
-    """
-
-    def __init__(
-        self, num_channels: int, out_channels: int, hidden_channels: List[int] = None, activation: str = "relu"
-    ):
-        super().__init__()
-        if hidden_channels is None:
-            # default to stemD in the paper
-            hidden_channels = [32, 32]
-
-        hidden_channels = hidden_channels + [out_channels]
-
-        self.embedder = nn.Sequential(
-            ResNetConvLayer(num_channels, hidden_channels[0], kernel_size=3, stride=2, activation=activation),
-            *[
-                ResNetConvLayer(in_channels, out_channels, kernel_size=3, activation=activation)
-                for in_channels, out_channels in zip(hidden_channels, hidden_channels[1:])
-            ],
-        )
-        self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-
-
 class ResNetShortCut(nn.Sequential):
     def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
         super().__init__()
@@ -399,8 +370,7 @@ class ResNetModel(ResNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        embeddings = ResNetEmbeddings3x3 if config.embeddings_type == "3x3d" else ResNetEmbeddings
-        self.embedder = embeddings(config.num_channels, config.hidden_sizes[0], config.hidden_act)
+        self.embedder = ResNetEmbeddings(config.num_channels, config.hidden_sizes[0], config.hidden_act)
         self.encoder = ResNetEncoder(config)
         self.pooler = nn.AdaptiveAvgPool2d((1, 1))
         # Initialize weights and apply final processing
