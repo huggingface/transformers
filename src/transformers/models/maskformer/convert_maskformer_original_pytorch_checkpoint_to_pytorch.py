@@ -136,25 +136,26 @@ class OriginalMaskFormerConfigToOursConverter:
             dice_weight=mask_former.DICE_WEIGHT,
             ce_weight=1.0,
             mask_weight=mask_former.MASK_WEIGHT,
-            detr_config=dict(
-                detr_max_position_embeddings=1024,
-                detr_encoder_layers=6,
-                detr_encoder_ffn_dim=2048,
-                detr_encoder_attention_heads=8,
-                detr_decoder_layers=mask_former.DEC_LAYERS,
-                detr_decoder_ffn_dim=mask_former.DIM_FEEDFORWARD,
-                detr_decoder_attention_heads=mask_former.NHEADS,
-                detr_encoder_layerdrop=0.0,
-                detr_decoder_layerdrop=0.0,
-                detr_d_model=mask_former.HIDDEN_DIM,
-                detr_dropout=mask_former.DROPOUT,
-                detr_attention_dropout=0.0,
-                detr_activation_dropout=0.0,
-                detr_init_std=0.02,
-                detr_init_xavier_std=1.0,
-                detr_scale_embedding=False,
-                detr_auxiliary_loss=False,
-                detr_dilation=False,
+            transformer_decoder_config=dict(
+                model_type="detr",
+                max_position_embeddings=1024,
+                encoder_layers=6,
+                encoder_ffn_dim=2048,
+                encoder_attention_heads=8,
+                decoder_layers=mask_former.DEC_LAYERS,
+                decoder_ffn_dim=mask_former.DIM_FEEDFORWARD,
+                decoder_attention_heads=mask_former.NHEADS,
+                encoder_layerdrop=0.0,
+                decoder_layerdrop=0.0,
+                d_model=mask_former.HIDDEN_DIM,
+                dropout=mask_former.DROPOUT,
+                attention_dropout=0.0,
+                activation_dropout=0.0,
+                init_std=0.02,
+                init_xavier_std=1.0,
+                scale_embedding=False,
+                auxiliary_loss=False,
+                dilation=False,
                 # default pretrained config values
             ),
             id2label=id2label,
@@ -383,7 +384,7 @@ class OriginalMaskFormerCheckpointToOursConverter:
         # not sure why we are not popping direcetly here!
         # here we list all keys to be renamed (original name on the left, our name on the right)
         rename_keys = []
-        for i in range(self.config.detr_config.decoder_layers):
+        for i in range(self.config.transformer_decoder_config.decoder_layers):
             # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms
             rename_keys.append(
                 (
@@ -437,7 +438,7 @@ class OriginalMaskFormerCheckpointToOursConverter:
     def replace_q_k_v_in_detr_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "transformer_module.transformer_decoder"
         src_prefix: str = "sem_seg_head.predictor.transformer.decoder"
-        for i in range(self.config.detr_config.decoder_layers):
+        for i in range(self.config.transformer_decoder_config.decoder_layers):
             # read in weights + bias of input projection layer of self-attention
             in_proj_weight = src_state_dict.pop(f"{src_prefix}.layers.{i}.self_attn.in_proj_weight")
             in_proj_bias = src_state_dict.pop(f"{src_prefix}.layers.{i}.self_attn.in_proj_bias")
