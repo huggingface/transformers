@@ -13,17 +13,19 @@
 # limitations under the License.
 
 import dataclasses
-from inspect import isclass
 import json
 import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, ArgumentTypeError
 from copy import copy
 from enum import Enum
+from inspect import isclass
 from pathlib import Path
-from typing import Any, Iterable, Dict, NewType, Optional, Tuple, Union, get_type_hints
+from typing import Any, Dict, Iterable, NewType, Optional, Tuple, Union, get_type_hints
+
 
 DataClass = NewType("DataClass", Any)
 DataClassType = NewType("DataClassType", Any)
+
 
 # From https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
 def string_to_bool(v):
@@ -37,6 +39,7 @@ def string_to_bool(v):
         raise ArgumentTypeError(
             f"Truthy value expected: got {v} but expected one of yes/no, true/false, t/f, y/n, 1/0 (case insensitive)."
         )
+
 
 class HfArgumentParser(ArgumentParser):
     """
@@ -77,8 +80,10 @@ class HfArgumentParser(ArgumentParser):
         # field.metadata is not used at all by Data Classes,
         # it is provided as a third-party extension mechanism.
         if isinstance(field.type, str):
-            raise RuntimeError("Unresolved type detected, which should have been done with the help of "
-                               "`typing.get_type_hints` method by default")
+            raise RuntimeError(
+                "Unresolved type detected, which should have been done with the help of "
+                "`typing.get_type_hints` method by default"
+            )
 
         # remove `NoneType` in Union except for `Union[bool, NoneType]`
         origin_type: type = getattr(field.type, "__origin__", field.type)
@@ -86,7 +91,9 @@ class HfArgumentParser(ArgumentParser):
             if len(field.type.__args__) != 2 and type(None) not in field.type.__args__:
                 raise ValueError("Only `Union[X, NoneType]` (i.e., `Optional[X]`) is allowed for `Union`")
             if bool not in field.type.__args__:
-                field.type = next(filter(lambda t: t is not type(None), field.type.__args__))
+                field.type = next(
+                    filter(lambda t: not isinstance(None, getattr(t, "__origin__", t)), field.type.__args__)
+                )
                 origin_type = getattr(field.type, "__origin__", field.type)
 
         # A variable to store kwargs for a boolean field, if needed
@@ -152,9 +159,11 @@ class HfArgumentParser(ArgumentParser):
         try:
             type_hints: Dict[str, type] = get_type_hints(dtype)
         except NameError:
-            raise RuntimeError(f"Type resolution failed for f{dtype}. Try declaring the class in global scope or "
-                               f"removing line of `from __future__ import annotations` which opts in Postponed "
-                               f"Evaluation of Annotations (PEP 563)")
+            raise RuntimeError(
+                f"Type resolution failed for f{dtype}. Try declaring the class in global scope or "
+                f"removing line of `from __future__ import annotations` which opts in Postponed "
+                f"Evaluation of Annotations (PEP 563)"
+            )
 
         for field in dataclasses.fields(dtype):
             if not field.init:
@@ -163,7 +172,7 @@ class HfArgumentParser(ArgumentParser):
             self._parse_dataclass_field(parser, field)
 
     def parse_args_into_dataclasses(
-            self, args=None, return_remaining_strings=False, look_for_args_file=True, args_filename=None
+        self, args=None, return_remaining_strings=False, look_for_args_file=True, args_filename=None
     ) -> Tuple[DataClass, ...]:
         """
         Parse command-line args into instances of the specified dataclass types.

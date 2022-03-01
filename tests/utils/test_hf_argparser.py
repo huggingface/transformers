@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import annotations
-
 import argparse
 import unittest
 from argparse import Namespace
@@ -82,16 +80,16 @@ class ListExample:
 
 @dataclass
 class RequiredExample:
-    required_list: List[int] = field()
-    required_str: str = field()
-    required_enum: BasicEnum = field()
+    required_list: "List[int]" = field()
+    required_str: "str" = field()
+    required_enum: "BasicEnum" = field()
 
     def __post_init__(self):
         self.required_enum = BasicEnum(self.required_enum)
 
 
 class HfArgumentParserTest(unittest.TestCase):
-    def argparsersEqual(self, a: argparse.ArgumentParser, b: argparse.ArgumentParser) -> bool:
+    def argparsersEqual(self, a: argparse.ArgumentParser, b: argparse.ArgumentParser):
         """
         Small helper to check pseudo-equality of parsed arguments on `ArgumentParser` instances.
         """
