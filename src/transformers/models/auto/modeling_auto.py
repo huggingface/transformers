@@ -83,6 +83,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bart", "BartModel"),
         ("longformer", "LongformerModel"),
         ("roberta", "RobertaModel"),
+        ("data2vec-text", "Data2VecTextModel"),
+        ("data2vec-audio", "Data2VecAudioModel"),
         ("layoutlm", "LayoutLMModel"),
         ("squeezebert", "SqueezeBertModel"),
         ("bert", "BertModel"),
@@ -133,6 +135,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("fsmt", "FSMTForConditionalGeneration"),
         ("longformer", "LongformerForMaskedLM"),
         ("roberta", "RobertaForMaskedLM"),
+        ("data2vec-text", "Data2VecTextForMaskedLM"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("bert", "BertForPreTraining"),
         ("big_bird", "BigBirdForPreTraining"),
@@ -191,6 +194,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("bart", "BartForConditionalGeneration"),
         ("longformer", "LongformerForMaskedLM"),
         ("roberta", "RobertaForMaskedLM"),
+        ("data2vec-text", "Data2VecTextForMaskedLM"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("bert", "BertForMaskedLM"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
@@ -251,6 +255,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BlenderbotSmallForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
         ("speech_to_text_2", "Speech2Text2ForCausalLM"),
+        ("data2vec-text", "Data2VecTextForCausalLM"),
     ]
 )
 
@@ -337,6 +342,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("longformer", "LongformerForMaskedLM"),
         ("roberta", "RobertaForMaskedLM"),
+        ("data2vec-text", "Data2VecTextForMaskedLM"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("bert", "BertForMaskedLM"),
         ("megatron-bert", "MegatronBertForMaskedLM"),
@@ -417,6 +423,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("bart", "BartForSequenceClassification"),
         ("longformer", "LongformerForSequenceClassification"),
         ("roberta", "RobertaForSequenceClassification"),
+        ("data2vec-text", "Data2VecTextForSequenceClassification"),
         ("squeezebert", "SqueezeBertForSequenceClassification"),
         ("layoutlm", "LayoutLMForSequenceClassification"),
         ("bert", "BertForSequenceClassification"),
@@ -482,6 +489,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "DebertaV2ForQuestionAnswering"),
         ("ibert", "IBertForQuestionAnswering"),
         ("splinter", "SplinterForQuestionAnswering"),
+        ("data2vec-text", "Data2VecTextForQuestionAnswering"),
     ]
 )
 
@@ -527,6 +535,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "DebertaV2ForTokenClassification"),
         ("gpt2", "GPT2ForTokenClassification"),
         ("ibert", "IBertForTokenClassification"),
+        ("data2vec-text", "Data2VecTextForTokenClassification"),
     ]
 )
 
@@ -548,6 +557,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForMultipleChoice"),
         ("longformer", "LongformerForMultipleChoice"),
         ("roberta", "RobertaForMultipleChoice"),
+        ("data2vec-text", "Data2VecTextForMultipleChoice"),
         ("squeezebert", "SqueezeBertForMultipleChoice"),
         ("bert", "BertForMultipleChoice"),
         ("distilbert", "DistilBertForMultipleChoice"),
@@ -583,6 +593,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("sew", "SEWForSequenceClassification"),
         ("sew-d", "SEWDForSequenceClassification"),
         ("wavlm", "WavLMForSequenceClassification"),
+        ("data2vec-audio", "Data2VecAudioForSequenceClassification"),
     ]
 )
 
@@ -596,6 +607,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("sew", "SEWForCTC"),
         ("sew-d", "SEWDForCTC"),
         ("wavlm", "WavLMForCTC"),
+        ("data2vec-audio", "Data2VecAudioForCTC"),
     ]
 )
 
@@ -605,6 +617,7 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2ForAudioFrameClassification"),
         ("unispeech-sat", "UniSpeechSatForAudioFrameClassification"),
         ("wavlm", "WavLMForAudioFrameClassification"),
+        ("data2vec-audio", "Data2VecAudioForAudioFrameClassification"),
     ]
 )
 
@@ -614,6 +627,7 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2ForXVector"),
         ("unispeech-sat", "UniSpeechSatForXVector"),
         ("wavlm", "WavLMForXVector"),
+        ("data2vec-audio", "Data2VecAudioForXVector"),
     ]
 )
 

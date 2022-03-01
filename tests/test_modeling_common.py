@@ -69,6 +69,7 @@ if is_torch_available():
     from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MODEL_FOR_AUDIO_XVECTOR_MAPPING,
         MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
@@ -137,6 +138,8 @@ class ModelTesterMixin:
                 else v
                 for k, v in inputs_dict.items()
             }
+        elif model_class in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING):
+            inputs_dict.pop("attention_mask")
 
         if return_labels:
             if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
@@ -171,6 +174,7 @@ class ModelTesterMixin:
                 inputs_dict["bool_masked_pos"] = torch.zeros(
                     (self.model_tester.batch_size, num_patches**2), dtype=torch.long, device=torch_device
                 )
+
         return inputs_dict
 
     def test_save_load(self):
@@ -371,7 +375,6 @@ class ModelTesterMixin:
 
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
             model = model_class(config)
             model.to(torch_device)
