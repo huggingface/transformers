@@ -1106,6 +1106,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
         deterministic=True,
         output_attentions=None,
         output_hidden_states=None,
+        freeze_feature_encoder=False,
         return_dict=None,
     ):
         outputs = self.wav2vec2(
@@ -1115,6 +1116,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            freeze_feature_encoder=freeze_feature_encoder,
             return_dict=return_dict,
         )
 
@@ -1237,6 +1239,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
         deterministic: bool = True,
         output_attentions=None,
         output_hidden_states=None,
+        freeze_feature_enocder=False,
         return_dict=None,
     ):
         r"""
@@ -1257,6 +1260,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
             output_hidden_states=output_hidden_states,
             mask_time_indices=mask_time_indices,
             deterministic=deterministic,
+            freeze_feature_encoder=freeze_feature_enocder,
             return_dict=return_dict,
         )
 
@@ -1315,6 +1319,7 @@ class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
         train: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        freeze_feature_encoder: bool = False,
         return_dict: Optional[bool] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1347,6 +1352,7 @@ class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
             not train,
             output_attentions,
             output_hidden_states,
+            freeze_feature_encoder,
             return_dict,
             rngs=rngs,
         )
