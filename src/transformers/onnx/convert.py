@@ -117,7 +117,7 @@ def export_pytorch(
 
             # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
             # so we check the torch version for backwards compatibility
-            if parse(torch.__version__) <= parse("1.9.99"):
+            if parse(torch.__version__) < parse("1.10"):
                 # export can work with named args but the dict containing named args
                 # has to be the last element of the args tuple.
                 try:
