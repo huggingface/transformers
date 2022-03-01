@@ -301,7 +301,7 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     class_queries_logits: torch.FloatTensor = None
     masks_queries_logits: torch.FloatTensor = None
-    auxilary_logits: torch.FloatTensor = None
+    auxiliary_logits: torch.FloatTensor = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     pixel_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
     transformer_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
@@ -1822,7 +1822,7 @@ class MaskFormerLoss(nn.Module):
         class_queries_logits: torch.Tensor,
         mask_labels: torch.Tensor,
         class_labels: torch.Tensor,
-        auxilary_predictions: Optional[Dict[str, torch.Tensor]] = None,
+        auxiliary_predictions: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, Tensor]:
         """
         This performs the loss computation.
@@ -1836,7 +1836,7 @@ class MaskFormerLoss(nn.Module):
                 A tensor of shape `batch_size, num_classes, height, width`
             class_labels (`torch.Tensor`):
                 A tensor of shape `batch_size, num_classes`
-            auxilary_predictions (`Dict[str, torch.Tensor]`, *optional*):
+            auxiliary_predictions (`Dict[str, torch.Tensor]`, *optional*):
                 if `use_auxiliary_loss` was set to `true` in [`MaskFormerConfig`], then it contains the logits from the
                 inner layers of the Detr's Decoder.
 
@@ -1847,7 +1847,7 @@ class MaskFormerLoss(nn.Module):
             - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
               masks.
             if `use_auxiliary_loss` was set to `true` in [`MaskFormerConfig`], the dictionary contains addional losses
-            for each auxilary predictions.
+            for each auxiliary predictions.
         """
 
         # Retrieve the matching between the outputs of the last layer and the labels
@@ -1863,8 +1863,8 @@ class MaskFormerLoss(nn.Module):
         }
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
-        if auxilary_predictions is not None:
-            for idx, aux_outputs in enumerate(auxilary_predictions):
+        if auxiliary_predictions is not None:
+            for idx, aux_outputs in enumerate(auxiliary_predictions):
                 masks_queries_logits = aux_outputs["masks_queries_logits"]
                 class_queries_logits = aux_outputs["class_queries_logits"]
                 loss_dict = self.forward(masks_queries_logits, class_queries_logits, mask_labels, class_labels)
@@ -2367,10 +2367,10 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         class_queries_logits: Tensor,
         mask_labels: Tensor,
         class_labels: Tensor,
-        auxilary_logits: Dict[str, Tensor],
+        auxiliary_logits: Dict[str, Tensor],
     ) -> Dict[str, Tensor]:
         loss_dict: Dict[str, Tensor] = self.criterion(
-            masks_queries_logits, class_queries_logits, mask_labels, class_labels, auxilary_logits
+            masks_queries_logits, class_queries_logits, mask_labels, class_labels, auxiliary_logits
         )
         # weight each loss by `self.weight_dict[<LOSS_NAME>]`
         weighted_loss_dict: Dict[str, Tensor] = {
@@ -2383,9 +2383,9 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
 
     def get_logits(self, outputs: MaskFormerModelOutput) -> Tuple[Tensor, Tensor, Dict[str, Tensor]]:
         pixel_embeddings = outputs.pixel_decoder_last_hidden_state
-        # get the auxilary predictions (one for each decoder's layer)
-        auxilary_logits: List[str, Tensor] = []
-        # This code is a little bit cumbersome, an improvement can be to return a list of predictions. If we have auxilary loss then we are going to return more than one element in the list
+        # get the auxiliary predictions (one for each decoder's layer)
+        auxiliary_logits: List[str, Tensor] = []
+        # This code is a little bit cumbersome, an improvement can be to return a list of predictions. If we have auxiliary loss then we are going to return more than one element in the list
         if self.config.use_auxiliary_loss:
             stacked_decoder_outputs = torch.stack(outputs.transformer_decoder_hidden_states)
             classes = self.class_predictor(stacked_decoder_outputs)
@@ -2397,7 +2397,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             masks_queries_logits = binaries_masks[-1]
             # go til [:-1] because the last one is always used
             for aux_binary_masks, aux_classes in zip(binaries_masks[:-1], classes[:-1]):
-                auxilary_logits.append({"masks_queries_logits": aux_binary_masks, "class_queries_logits": aux_classes})
+                auxiliary_logits.append({"masks_queries_logits": aux_binary_masks, "class_queries_logits": aux_classes})
 
         else:
             transformer_decoder_hidden_states = outputs.transformer_decoder_last_hidden_state
@@ -2408,7 +2408,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             # sum up over the channels
             masks_queries_logits = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
 
-        return class_queries_logits, masks_queries_logits, auxilary_logits
+        return class_queries_logits, masks_queries_logits, auxiliary_logits
 
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MaskFormerForInstanceSegmentationOutput, config_class=_CONFIG_FOR_DOC)
@@ -2471,13 +2471,13 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             output_attentions=output_attentions,
         )
 
-        loss, loss_dict, auxilary_logits = None, None, None
+        loss, loss_dict, auxiliary_logits = None, None, None
 
-        class_queries_logits, masks_queries_logits, auxilary_logits = self.get_logits(outputs)
+        class_queries_logits, masks_queries_logits, auxiliary_logits = self.get_logits(outputs)
 
         if mask_labels is not None and class_labels is not None:
             loss_dict: Dict[str, Tensor] = self.get_loss_dict(
-                masks_queries_logits, class_queries_logits, mask_labels, class_labels, auxilary_logits
+                masks_queries_logits, class_queries_logits, mask_labels, class_labels, auxiliary_logits
             )
             loss = self.get_loss(loss_dict)
 
@@ -2486,7 +2486,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             **outputs,
             class_queries_logits=class_queries_logits,
             masks_queries_logits=masks_queries_logits,
-            auxilary_logits=auxilary_logits,
+            auxiliary_logits=auxiliary_logits,
         )
 
         if not return_dict:
