@@ -39,6 +39,7 @@ from transformers.testing_utils import (
     require_tf,
     require_tf2onnx,
     slow,
+    torch_device,
 )
 from transformers.utils import logging
 
@@ -397,7 +398,7 @@ class TFModelTesterMixin:
                 self.assertTrue(isinstance(pto, torch.Tensor))
 
                 tfo = tfo.numpy()
-                pto = pto.numpy()
+                pto = pto.detach().to("cpu").numpy()
 
                 tf_nans = np.copy(np.isnan(tfo))
                 pt_nans = np.copy(np.isnan(pto))
@@ -453,11 +454,23 @@ class TFModelTesterMixin:
             tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
             pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
 
+            # send pytorch model to the correct device
+            pt_model.to(torch_device)
+
             # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
             pt_model.eval()
 
             pt_inputs_dict = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
             pt_inputs_dict_maybe_with_labels = prepare_pt_inputs_from_tf_inputs(tf_inputs_dict_maybe_with_labels)
+
+            # send pytorch inputs to the correct device
+            pt_inputs_dict = {
+                k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs_dict.items()
+            }
+            pt_inputs_dict_maybe_with_labels = {
+                k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v
+                for k, v in pt_inputs_dict_maybe_with_labels.items()
+            }
 
             # Original test: check without `labels`
             with torch.no_grad():
@@ -541,7 +554,7 @@ class TFModelTesterMixin:
                     # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
                     # Change it here to a scalar to match PyTorch models' loss
                     tf_loss = tf.math.reduce_mean(tf_loss).numpy()
-                    pt_loss = pt_loss.numpy()
+                    pt_loss = pt_loss.detach().to("cpu").numpy()
 
                     tf_nans = np.copy(np.isnan(tf_loss))
                     pt_nans = np.copy(np.isnan(pt_loss))
