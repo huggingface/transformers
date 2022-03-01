@@ -37,8 +37,6 @@ class ResNetConfig(PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_size (`int`, optional, defaults to 4):
-            Patch size to use in the patch embedding layer.
         hidden_sizes (`List[int]`, *optional*, defaults to `[64, 256, 512, 1024, 2048]`):
             Dimensionality (hidden size) of the embeddings + at each stage.
         depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):

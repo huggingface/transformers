@@ -14,8 +14,7 @@
 # limitations under the License.
 """ PyTorch ResNet model."""
 
-from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 import torch.utils.checkpoint
@@ -23,11 +22,11 @@ from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...modeling_outputs import (
+    BaseModelOutputWithNoAttention,
+    BaseModelOutputWithNoAttentionAndWithPooling,
+    ImageClassificationModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -54,66 +53,6 @@ RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-@dataclass
-class ResNetEncoderOutput(ModelOutput):
-    """
-    Class for [`ResNetEncoder`]'s outputs, with potential hidden states (feature maps).
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Last hidden states (final feature map) of the last stage of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class ResNetModelOutput(ModelOutput):
-    """
-    Class for [`ResNetModel`]'s outputs, with potential hidden states (feature maps).
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Last hidden states (final feature map) of the last stage of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, config.dim[-1])`):
-            Global average pooling of the last feature map followed by a layernorm.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class ResNetClassifierOutput(ModelOutput):
-    """
-    Class for [`ResNetForImageClassification`]'s outputs, with potential hidden states (feature maps).
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
 class ResNetConvLayer(nn.Sequential):
     def __init__(
         self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
@@ -138,6 +77,11 @@ class ResNetEmbeddings(nn.Sequential):
 
 
 class ResNetShortCut(nn.Sequential):
+    """
+    ResNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
+    downsample the input using `stride=2`.
+    """
+
     def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
@@ -293,7 +237,7 @@ class ResNetEncoder(nn.Module):
 
     def forward(
         self, hidden_states: Tensor, output_hidden_states: bool = False, return_dict: bool = True
-    ) -> ResNetEncoderOutput:
+    ) -> BaseModelOutputWithNoAttention:
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.stages):
@@ -308,7 +252,7 @@ class ResNetEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return ResNetEncoderOutput(
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
         )
@@ -380,14 +324,14 @@ class ResNetModel(ResNetPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=ResNetModelOutput,
+        output_type=BaseModelOutputWithNoAttentionAndWithPooling,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
-    ):
+    ) -> BaseModelOutputWithNoAttentionAndWithPooling:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -406,7 +350,7 @@ class ResNetModel(ResNetPreTrainedModel):
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
-        return ResNetModelOutput(
+        return BaseModelOutputWithNoAttentionAndWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
@@ -437,11 +381,17 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ResNetClassifierOutput,
+        output_type=ImageClassificationModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
-    def forward(self, pixel_values=None, labels=None, output_hidden_states=None, return_dict=None):
+    def forward(
+        self,
+        pixel_values: Tensor = None,
+        labels: Tensor = None,
+        output_hidden_states: bool = None,
+        return_dict: bool = None,
+    ) -> ImageClassificationModelOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -449,9 +399,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs: ResNetModelOutput = self.resnet(
-            pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict
-        )
+        outputs = self.resnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
@@ -482,6 +430,6 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
 
         if not return_dict:
             output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            return (loss,) + output if loss is not None else output
 
-        return ResNetClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassificationModelOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
