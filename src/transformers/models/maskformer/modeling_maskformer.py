@@ -2301,6 +2301,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
 
         if pixel_mask is None:
             pixel_mask = torch.ones((batch_size, height, width), device=pixel_values.device)
+
         pixel_level_module_output: MaskFormerPixelLevelModuleOutput = self.pixel_level_module(
             pixel_values, output_hidden_states
         )
@@ -2387,11 +2388,11 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         auxiliary_logits: List[str, Tensor] = []
         # This code is a little bit cumbersome, an improvement can be to return a list of predictions. If we have auxiliary loss then we are going to return more than one element in the list
         if self.config.use_auxiliary_loss:
-            stacked_decoder_outputs = torch.stack(outputs.transformer_decoder_hidden_states)
-            classes = self.class_predictor(stacked_decoder_outputs)
+            stacked_transformer_decoder_outputs = torch.stack(outputs.transformer_decoder_hidden_states)
+            classes = self.class_predictor(stacked_transformer_decoder_outputs)
             class_queries_logits = classes[-1]
             # get the masks
-            mask_embeddings = self.mask_embedder(stacked_decoder_outputs)
+            mask_embeddings = self.mask_embedder(stacked_transformer_decoder_outputs)
             # sum up over the channels for each embedding
             binaries_masks = torch.einsum("lbqc,   bchw -> lbqhw", mask_embeddings, pixel_embeddings)
             masks_queries_logits = binaries_masks[-1]
