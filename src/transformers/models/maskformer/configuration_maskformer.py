@@ -24,7 +24,7 @@ from ..swin import SwinConfig
 
 
 MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Francesco/maskformer-swin-base-ade": "https://huggingface.co/facebook/maskformer-swin-base-ade/blob/main/config.json"
+    "facebook/maskformer-swin-base-ade": "https://huggingface.co/facebook/maskformer-swin-base-ade/blob/main/config.json"
     # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
 }
 

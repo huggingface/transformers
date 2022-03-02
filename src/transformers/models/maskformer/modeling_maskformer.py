@@ -55,7 +55,7 @@ _CHECKPOINT_FOR_DOC = "facebook/maskformer-swin-base-ade"
 _FEAT_EXTRACTOR_FOR_DOC = "MaskFormerFeatureExtractor"
 
 MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Francesco/maskformer-swin-base-ade",
+    "facebook/maskformer-swin-base-ade",
     # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
 ]
 
