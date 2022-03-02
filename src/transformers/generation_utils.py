@@ -556,8 +556,8 @@ class GenerationMixin:
         input_ids: torch.LongTensor,
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
-        attention_mask: torch.LongTensor = None,
-        encoder_outputs: ModelOutput = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[ModelOutput] = None,
         **model_kwargs,
     ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
         expanded_return_idx = (
@@ -617,11 +617,11 @@ class GenerationMixin:
 
     def _get_logits_warper(
         self,
-        top_k: int = None,
-        top_p: float = None,
-        typical_p: float = None,
-        temperature: float = None,
-        num_beams: int = None,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        typical_p: Optional[float] = None,
+        temperature: Optional[float] = None,
+        num_beams: Optional[int] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsWarper`] instances

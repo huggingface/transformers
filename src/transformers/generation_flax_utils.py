@@ -326,7 +326,7 @@ class FlaxGenerationMixin:
             raise NotImplementedError("`Beam sampling is currently not implemented.")
 
     def _get_logits_warper(
-        self, top_k: int = None, top_p: float = None, temperature: float = None
+        self, top_k: Optional[int] = None, top_p: Optional[float] = None, temperature: Optional[float] = None
     ) -> FlaxLogitsProcessorList:
         """
         This class returns a [`FlaxLogitsProcessorList`] list object that contains all relevant [`FlaxLogitsWarper`]
