@@ -36,11 +36,11 @@ jobs:
           ls
           git status
           if [[ `git status --porcelain` ]]; then
-            echo "Branch was already deleted, nothing to do."
-          else
             git add .
             git commit -m "Closed PR ${GITHUB_REF##*/}"
             git push origin main
+          else
+            echo "Branch was already deleted, nothing to do."
           fi
         shell: bash
 
