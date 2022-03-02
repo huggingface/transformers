@@ -10,8 +10,8 @@ concurrency:
 jobs:
   build_and_package:
     runs-on: ubuntu-latest
-    container:
-      image: huggingface/transformers-doc-builder
+#    container:
+#      image: huggingface/transformers-doc-builder
     defaults:
       run:
         shell: bash -l {0}
