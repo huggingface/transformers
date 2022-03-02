@@ -18,6 +18,7 @@ import subprocess
 from os.path import dirname
 
 from parameterized import parameterized
+from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
@@ -29,11 +30,13 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_utils import set_seed
 
-from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
-
 
 if is_torch_available():
-    from tests.trainer.test_trainer import RegressionModelConfig, RegressionPreTrainedModel, get_regression_trainer  # noqa
+    from tests.trainer.test_trainer import (  # noqa
+        RegressionModelConfig,
+        RegressionPreTrainedModel,
+        get_regression_trainer,
+    )
 
 
 set_seed(42)
