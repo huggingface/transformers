@@ -98,19 +98,17 @@ jobs:
           cd doc-build-dev && git pull
           cd ../doc-builder
           doc-builder build transformers ../transformers/docs/source --build_dir ../doc-build-dev --notebook_dir ../notebooks/transformers_doc --clean --version pr_$PR_NUMBER --html
-          cd ../doc-build-dev
-          git status
-          if [[ `-n $(git status -s)` ]]; then 
-            cd  git stash && git pull && git stash apply
-          else
-            echo "No diff in the documentation."
-          fi
-          cd ..
 
       - name: Push to repositories
         run: |
           cd doc-build-dev
           ls
-          git add .
-          git commit -m "Updated with commit ${{ github.sha }} See: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
-          git push origin main
+          git status --porcelain
+          if [[ `git status --porcelain` ]]; then
+            git stash && git pull && git stash apply
+            git add .
+            git commit -m "Updated with commit ${{ github.sha }} See: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
+            git push origin main
+          else
+            echo "No diff in the documentation."
+          fi
