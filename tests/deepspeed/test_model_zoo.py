@@ -100,8 +100,8 @@ def get_launcher(distributed=False):
 
 def make_task_cmds():
     data_dir_samples = f"{FIXTURE_DIRECTORY}/tests_samples"
-    data_dir_wmt = f"{FIXTURE_DIRECTORY}/wmt_en_ro"
-    data_dir_xsum = f"{FIXTURE_DIRECTORY}/xsum"
+    data_dir_wmt = f"{data_dir_samples}/wmt_en_ro"
+    data_dir_xsum = f"{data_dir_samples}/xsum"
     args_main = """
         --do_train
         --max_train_samples 4
