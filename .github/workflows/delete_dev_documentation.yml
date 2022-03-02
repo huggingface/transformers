@@ -7,7 +7,7 @@ on:
 
 jobs:
   build_and_package:
-    runs-on: [self-hosted, doc-builder]
+    runs-on: ubuntu-latest
     container:
       image: huggingface/doc-builder-transformers
       options: "-v /home/github_actions:/mnt"
