@@ -34,6 +34,7 @@ jobs:
           ls transformers
           rm -rf transformers/pr_$PR_NUMBER
           ls transformers
+          git status
           git add .
           git commit -m "Closed PR ${GITHUB_REF##*/}"
           git push origin main
