@@ -385,8 +385,8 @@ class TFModelTesterMixin:
             if names == "past_key_values":
                 return
 
-            if type(tfo) == tuple:
-                self.assertEqual(type(pto), tuple)
+            if type(tfo) in [tuple, list]:
+                self.assertEqual(type(tfo), type(pto))
                 self.assertEqual(len(tfo), len(pto))
                 if type(names) in [tuple, list]:
                     for to, po, name in zip(tfo, pto, names):
@@ -442,7 +442,7 @@ class TFModelTesterMixin:
             pt_keys = [k for k, v in pto.items() if v is not None]
 
             self.assertEqual(tf_keys, pt_keys)
-            check_outputs(tfo.to_tuple(), pto.to_tuple(), model_class, names=tf_keys)
+            check_outputs(tfo, pto, model_class, names=tf_keys)
 
             # check the case where `labels` is passed
             has_labels = any(
