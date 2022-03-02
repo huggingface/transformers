@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    cvt,
     albert,
     auto,
     bart,
@@ -42,6 +41,7 @@ from . import (
     cpm,
     ctrl,
     data2vec,
+    cvt,
     deberta,
     deberta_v2,
     decision_transformer,
