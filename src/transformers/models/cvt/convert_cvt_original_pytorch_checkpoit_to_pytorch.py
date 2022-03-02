@@ -281,12 +281,10 @@ if __name__ == "__main__":
     model.push_to_hub(
                 repo_path_or_name="anugunj/testcvtmodel",
                 commit_message="Add model",
-                use_temp_dir=True,
             )
     config.push_to_hub(
             repo_path_or_name="anugunj/testcvtmodel",
                 commit_message="Add config",
-                use_temp_dir=True,
     )
 
     # we can use the convnext one
@@ -296,4 +294,5 @@ if __name__ == "__main__":
         repo_path_or_name="anugunj/testcvtmodel",
         commit_message="Add feature extractor",
         use_temp_dir=True,
+        use_auth_token='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'
     )
