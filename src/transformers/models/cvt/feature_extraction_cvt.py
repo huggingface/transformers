@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,8 +22,8 @@ from PIL import Image
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     ImageFeatureExtractionMixin,
     ImageInput,
     is_torch_tensor,
@@ -43,20 +43,23 @@ class CvtFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the input to a certain `size`.
-        size (`int` or `Tuple(int)`, *optional*, defaults to 224):
-            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize` is
-            set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
+            Whether to resize (and optionally center crop) the input to a certain `size`.
+        size (`int`, *optional*, defaults to 224):
+            Resize the input to the given size. If 384 or larger, the image is resized to (`size`, `size`). Else, the
+            smaller edge of the image will be matched to int(`size`/ `crop_pct`), after which the image is cropped to
+            `size`. Only has an effect if `do_resize` is set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
             if `do_resize` is set to `True`.
+        crop_pct (`float`, *optional*):
+            The percentage of the image to crop. If `None`, then a cropping percentage of 224 / 256 is used. Only has
+            an effect if `do_resize` is set to `True` and `size` < 384.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
-        image_mean (`List[int]`, defaults to `[0.5, 0.5, 0.5]`):
+        image_mean (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (`List[int]`, defaults to `[0.5, 0.5, 0.5]`):
+        image_std (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
@@ -66,7 +69,8 @@ class CvtFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self,
         do_resize=True,
         size=224,
-        resample=Image.BILINEAR,
+        resample=Image.BICUBIC,
+        crop_pct=None,
         do_normalize=True,
         image_mean=None,
         image_std=None,
@@ -76,9 +80,10 @@ class CvtFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
+        self.crop_pct = crop_pct
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
@@ -137,9 +142,22 @@ class CvtFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if not is_batched:
             images = [images]
 
-        # transformations (resizing + normalization)
+        # transformations (resizing and optional center cropping + normalization)
         if self.do_resize and self.size is not None:
-            images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
+            if self.size >= 384:
+                # warping (no cropping) when evaluated at 384 or larger
+                images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
+            else:
+                if self.crop_pct is None:
+                    self.crop_pct = 224 / 256
+                size = int(self.size / self.crop_pct)
+                # to maintain same ratio w.r.t. 224 images
+                images = [
+                    self.resize(image=image, size=size, default_to_square=False, resample=self.resample)
+                    for image in images
+                ]
+                images = [self.center_crop(image=image, size=self.size) for image in images]
+
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
