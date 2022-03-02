@@ -411,48 +411,7 @@ class TFModelTesterMixin:
                 max_diff = np.amax(np.abs(tfo - pto))
                 self.assertLessEqual(max_diff, 1e-5)
 
-        for model_class in self.all_model_classes:
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            # Output all for aggressive testing
-            config.output_hidden_states = True
-            # Pure convolutional models have no attention
-            # TODO: use a better and general criteria
-            if "TFConvNext" not in model_class.__name__:
-                config.output_attentions = True
-
-            # TODO: remove this block once the large negative value for attention masks is fixed.
-            for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
-                if k in inputs_dict:
-                    attention_mask = inputs_dict[k]
-                    # (make sure no all 0s attention masks - to avoid failure at this moment)
-                    attention_mask = tf.ones_like(attention_mask, dtype=tf.int32)
-                    # (make the first sequence with all 0s attention mask -> to demonstrate the issue)
-                    # (this will fail for `TFWav2Vec2Model`)
-                    # attention_mask = tf.concat(
-                    #     [
-                    #         tf.zeros_like(attention_mask[:1], dtype=tf.int32),
-                    #         tf.cast(attention_mask[1:], dtype=tf.int32)
-                    #     ],
-                    #     axis=0
-                    # )
-                    inputs_dict[k] = attention_mask
-
-            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
-            pt_model_class = getattr(transformers, pt_model_class_name)
-
-            config.output_hidden_states = True
-
-            tf_model = model_class(config)
-            pt_model = pt_model_class(config)
-
-            tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            tf_inputs_dict_maybe_with_labels = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-
-            # Check we can load pt model in tf and vice-versa with model => model functions
-            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
-            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
+        def check_pt_tf_models(tf_model, pt_model):
 
             # send pytorch model to the correct device
             pt_model.to(torch_device)
@@ -564,6 +523,63 @@ class TFModelTesterMixin:
                     if not tf_nans:
                         max_diff = np.amax(np.abs(tf_loss - pt_loss))
                         self.assertLessEqual(max_diff, 1e-5)
+
+        for model_class in self.all_model_classes:
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # Output all for aggressive testing
+            config.output_hidden_states = True
+            # Pure convolutional models have no attention
+            # TODO: use a better and general criteria
+            if "TFConvNext" not in model_class.__name__:
+                config.output_attentions = True
+
+            # TODO: remove this block once the large negative value for attention masks is fixed.
+            for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
+                if k in inputs_dict:
+                    attention_mask = inputs_dict[k]
+                    # (make sure no all 0s attention masks - to avoid failure at this moment)
+                    attention_mask = tf.ones_like(attention_mask, dtype=tf.int32)
+                    # (make the first sequence with all 0s attention mask -> to demonstrate the issue)
+                    # (this will fail for `TFWav2Vec2Model`)
+                    # attention_mask = tf.concat(
+                    #     [
+                    #         tf.zeros_like(attention_mask[:1], dtype=tf.int32),
+                    #         tf.cast(attention_mask[1:], dtype=tf.int32)
+                    #     ],
+                    #     axis=0
+                    # )
+                    inputs_dict[k] = attention_mask
+
+            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
+            pt_model_class = getattr(transformers, pt_model_class_name)
+
+            config.output_hidden_states = True
+
+            tf_model = model_class(config)
+            pt_model = pt_model_class(config)
+
+            tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            tf_inputs_dict_maybe_with_labels = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            # Check we can load pt model in tf and vice-versa with model => model functions
+            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
+            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
+
+            check_pt_tf_models(tf_model, pt_model)
+
+            # Check we can load pt model in tf and vice-versa with checkpoint => model functions
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
+                torch.save(pt_model.state_dict(), pt_checkpoint_path)
+                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(tf_model, pt_checkpoint_path)
+
+                tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
+                tf_model.save_weights(tf_checkpoint_path)
+                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
+
+            check_pt_tf_models(tf_model, pt_model)
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
