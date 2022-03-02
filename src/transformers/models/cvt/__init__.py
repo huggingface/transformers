@@ -38,9 +38,6 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
 
-    if is_vision_available():
-        from .feature_extraction_cvt import CvtFeatureExtractor
-
     if is_torch_available():
         from .modeling_cvt import (
             CVT_PRETRAINED_MODEL_ARCHIVE_LIST,

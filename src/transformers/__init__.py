@@ -538,7 +538,6 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
-    _import_structure["models.cvt"].append("CvtFeatureExtractor")
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.clip"].append("CLIPProcessor")
@@ -2926,7 +2925,6 @@ if TYPE_CHECKING:
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
-        from .models.cvt import CvtFeatureExtractor
         from .models.clip import CLIPFeatureExtractor, CLIPProcessor
         from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor

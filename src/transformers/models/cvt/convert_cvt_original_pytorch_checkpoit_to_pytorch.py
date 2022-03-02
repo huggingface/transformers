@@ -1,6 +1,8 @@
 import torch
 from collections import OrderedDict
-from transformers import CvtConfig, CvtForImageClassification
+from transformers import CvtConfig, CvtForImageClassification, AutoFeatureExtractor
+import json
+from huggingface_hub import cached_download, hf_hub_url
 
 def embeddings(idx):
     """
@@ -82,7 +84,21 @@ def final():
 
 if __name__=="__main__":
     path = "new_hugging_face_model.bin"
-    config = CvtConfig()
+
+    # get imagenet labels
+    filename = "imagenet-1k-id2label.json"
+    num_labels = 1000
+    expected_shape = (1, num_labels)
+
+    repo_id = "datasets/huggingface/label-files"
+    num_labels = num_labels
+    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+
+    id2label = id2label
+    label2id = {v: k for k, v in id2label.items()}
+
+    config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
     model = CvtForImageClassification(config)
     original_file = "CvT-13-224x224-IN-1k.pth"
     original_weights = torch.load(original_file, map_location=torch.device("cpu"))
@@ -103,6 +119,15 @@ if __name__=="__main__":
     
     model.load_state_dict(hugging_face_weights)
     torch.save(model.state_dict(), path)
+
+    # we can use the convnext one
+    feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
+    # push it to the hub
+    # feature_extractor.push_to_hub(
+    #     repo_path_or_name=save_directory / checkpoint_name,
+    #     commit_message="Add feature extractor",
+    #     use_temp_dir=True,
+    # )
 
     
     
