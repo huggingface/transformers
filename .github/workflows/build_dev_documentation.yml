@@ -98,7 +98,6 @@ jobs:
           cd doc-build-dev && git pull
           cd ../doc-builder
           doc-builder build transformers ../transformers/docs/source --build_dir ../doc-build-dev --notebook_dir ../notebooks/transformers_doc --clean --version pr_$PR_NUMBER --html
-          cd ../doc-build-dev && git stash && git pull && git stash apply && cd ..
 
       - name: Push to repositories
         run: |
