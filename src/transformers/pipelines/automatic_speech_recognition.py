@@ -366,16 +366,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 offsets = char_offsets
             chunks = []
             for item in offsets:
-                start = (
-                    item["start_offset"]
-                    * self.model.config.inputs_to_logits_ratio
-                    / self.feature_extractor.sampling_rate
-                )
-                stop = (
-                    item["end_offset"]
-                    * self.model.config.inputs_to_logits_ratio
-                    / self.feature_extractor.sampling_rate
-                )
+                start = item["start_offset"] * self.model.config.inputs_to_logits_ratio
+                start /= self.feature_extractor.sampling_rate
+
+                stop = item["end_offset"] * self.model.config.inputs_to_logits_ratio
+                stop /= self.feature_extractor.sampling_rate
+
                 chunks.append({"text": item[return_timestamps], "timestamp": (start, stop)})
             optional["chunks"] = chunks
 
