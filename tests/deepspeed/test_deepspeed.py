@@ -39,11 +39,11 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_utils import get_last_checkpoint, set_seed
 
-from ..trainer.test_trainer import TrainerIntegrationCommon  # noqa
+from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 
 
 if is_torch_available():
-    from ..trainer.test_trainer import RegressionModelConfig, RegressionPreTrainedModel, get_regression_trainer  # noqa
+    from tests.trainer.test_trainer import RegressionModelConfig, RegressionPreTrainedModel, get_regression_trainer  # noqa
 
 
 set_seed(42)
