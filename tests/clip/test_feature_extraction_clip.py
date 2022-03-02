@@ -49,6 +49,7 @@ class CLIPFeatureExtractionTester(unittest.TestCase):
         do_normalize=True,
         image_mean=[0.48145466, 0.4578275, 0.40821073],
         image_std=[0.26862954, 0.26130258, 0.27577711],
+        do_convert_rgb=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -63,6 +64,7 @@ class CLIPFeatureExtractionTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.do_convert_rgb = do_convert_rgb
 
     def prepare_feat_extract_dict(self):
         return {
@@ -73,6 +75,7 @@ class CLIPFeatureExtractionTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
+            "do_convert_rgb": self.do_convert_rgb,
         }
 
     def prepare_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -128,6 +131,7 @@ class CLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
         self.assertTrue(hasattr(feature_extractor, "image_std"))
+        self.assertTrue(hasattr(feature_extractor, "do_convert_rgb"))
 
     def test_batch_feature(self):
         pass
@@ -223,6 +227,67 @@ class CLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+
+
+@require_torch
+@require_vision
+class CLIPFeatureExtractionTestFourChannels(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
+    feature_extraction_class = CLIPFeatureExtractor if is_vision_available() else None
+
+    def setUp(self):
+        self.feature_extract_tester = CLIPFeatureExtractionTester(self, num_channels=4)
+        self.expected_encoded_image_num_channels = 3
+
+    @property
+    def feat_extract_dict(self):
+        return self.feature_extract_tester.prepare_feat_extract_dict()
+
+    def test_feat_extract_properties(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        self.assertTrue(hasattr(feature_extractor, "do_resize"))
+        self.assertTrue(hasattr(feature_extractor, "size"))
+        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
+        self.assertTrue(hasattr(feature_extractor, "center_crop"))
+        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
+        self.assertTrue(hasattr(feature_extractor, "image_mean"))
+        self.assertTrue(hasattr(feature_extractor, "image_std"))
+        self.assertTrue(hasattr(feature_extractor, "do_convert_rgb"))
+
+    def test_batch_feature(self):
+        pass
+
+    def test_call_pil_four_channels(self):
+        # Initialize feature_extractor
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        # create random PIL images
+        image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False)
+        for image in image_inputs:
+            self.assertIsInstance(image, Image.Image)
+
+        # Test not batched input
+        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                1,
+                self.expected_encoded_image_num_channels,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
+            ),
+        )
+
+        # Test batched
+        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.expected_encoded_image_num_channels,
                 self.feature_extract_tester.crop_size,
                 self.feature_extract_tester.crop_size,
             ),
