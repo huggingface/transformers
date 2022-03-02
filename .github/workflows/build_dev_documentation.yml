@@ -13,6 +13,7 @@ jobs:
     container:
       image: huggingface/transformers-doc-builder
     env:
+      COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
       PR_NUMBER: ${{ github.event.number }}
       EVENT_CONTEXT: ${{ toJSON(github.event) }}
 
@@ -73,23 +74,23 @@ jobs:
           message: 'The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_${{ env.PR_NUMBER }}). All of your documentation changes will be reflected on that endpoint.'
           GITHUB_TOKEN: ${{ env.WRITE }}
 
-      - name: Find Comment
-        if: github.event.action == 'reopened'
-        uses: peter-evans/find-comment@v1
-        id: fc
-        with:
-          issue-number: ${{ env.PR_NUMBER }}
-          comment-author: HuggingFaceDocBuilder
+#      - name: Find Comment
+#        if: github.event.action == 'reopened'
+#        uses: peter-evans/find-comment@v1
+#        id: fc
+#        with:
+#          issue-number: ${{ env.PR_NUMBER }}
+#          comment-author: HuggingFaceDocBuilder
 
-      - name: Update comment
-        if: github.event.action == 'reopened'
-        uses: peter-evans/create-or-update-comment@v1
-        with:
-          comment-id: ${{ steps.fc.outputs.comment-id }}
-          token: ${{ env.WRITE }}
-          edit-mode: replace
-          body: |
-            The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_${{ env.PR_NUMBER }}). All of your documentation changes will be reflected on that endpoint.
+#      - name: Update comment
+#        if: github.event.action == 'reopened'
+#        uses: peter-evans/create-or-update-comment@v1
+#        with:
+#          comment-id: ${{ steps.fc.outputs.comment-id }}
+#          token: ${{ env.WRITE }}
+#          edit-mode: replace
+#          body: |
+#            The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_${{ env.PR_NUMBER }}). All of your documentation changes will be reflected on that endpoint.
 
       - name: Make documentation
         env:
@@ -103,6 +104,14 @@ jobs:
         run: |
           cd doc-build-dev
           ls
-          git add .
-          git commit -m "Updated with commit ${{ github.sha }} See: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
-          git push origin main
+          git status
+
+          if [[ `git status --porcelain` ]]; then
+            git add .
+            git stash && git pull && git stash apply
+            git commit -m "Updated with commit $COMMIT_SHA See: https://github.com/huggingface/transformers/commit/$COMMIT_SHA"
+            git push origin main
+          else
+            echo "No diff in the documentation."
+          fi
+        shell: bash
