@@ -311,6 +311,9 @@ class TFVisionEncoderDecoderMixin:
         if "labels" in pt_inputs:
             pt_inputs["labels"] = pt_inputs["labels"].type(torch.LongTensor)
 
+        # send pytorch inputs to the correct device
+        pt_inputs = {k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()}
+
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs).to_tuple()
 
