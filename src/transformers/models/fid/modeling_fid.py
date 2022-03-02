@@ -34,7 +34,7 @@ from .retrieval_fid import FiDRetriever
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FiDConfig"
-BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+FID_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/fid-nq-base",
     "facebook/fid-nq-large",
     "facebook/fid-tqa-base",
@@ -43,7 +43,6 @@ BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-# Copied from transformers.models.rag.modeling_rag.RetrievAugLMMarginOutput with rag->fid
 class FiDModelOutput(ModelOutput):
     """
     Base class for retriever augmented marginalized models outputs.
@@ -141,7 +140,7 @@ class FiDModelOutput(ModelOutput):
 class FiDPreTrainedModel(PreTrainedModel):
     r"""
     FID models were released with the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP
-    Tasks](https://arxiv.org/abs/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
+    Tasks](https://arxiv.org/abs/2007.01282) by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
 
     FID is a retriever augmented model and encapsulate three components: a question encoder, a dataset retriever and a
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
