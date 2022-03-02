@@ -230,6 +230,8 @@
       title: LXMERT
     - local: model_doc/marian
       title: MarianMT
+    - local: model_doc/maskformer
+      title: MaskFormer
     - local: model_doc/m2m_100
       title: M2M100
     - local: model_doc/mbart
