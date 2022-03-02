@@ -353,7 +353,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                     word = char
 
             last_state = state
-        if state == "WORD":
+        if last_state == "WORD":
             word_offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
 
         return word_offsets
