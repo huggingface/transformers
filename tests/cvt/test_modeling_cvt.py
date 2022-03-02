@@ -68,7 +68,7 @@ class CvtModelTester:
         layer_norm_eps=1e-12,
         is_training=True,
         use_labels=True,
-        num_labels=3,  # Check
+        num_labels=2,  # Check
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -329,11 +329,11 @@ def prepare_img():
 class CvtModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return CvtFeatureExtractor.from_pretrained("anugunj/testcvtmodel") if is_vision_available() else None
+        return CvtFeatureExtractor.from_pretrained("anugunj/cvt-13-224x224-1k") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = CvtForImageClassification.from_pretrained("anugunj/testcvtmodel").to(torch_device)
+        model = CvtForImageClassification.from_pretrained("anugunj/cvt-13-224x224-1k").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
