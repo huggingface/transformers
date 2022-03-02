@@ -384,7 +384,7 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True, truncation=True)
+        inputs = processor(input_speech, return_tensors="np", padding=True)
 
         input_values = inputs.input_values
         attention_mask = inputs.attention_mask
