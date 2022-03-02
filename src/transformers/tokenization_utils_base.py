@@ -503,7 +503,7 @@ class BatchEncoding(UserDict):
                 the sequence.
 
         Returns:
-            [`~tokenization_utils_base.CharSpan`]: Span of characters in the original string.
+            [`~tokenization_utils_base.CharSpan`]: Span of characters in the original string, or None, if the token (e.g. <s>, </s>) doesn't correspond to any chars in the origin string. 
         """
 
         if not self._encodings:
