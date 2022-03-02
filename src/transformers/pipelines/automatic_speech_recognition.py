@@ -313,8 +313,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         # Optional return types
         optional = {}
 
-        if return_timestamps and self.type != "ctc":
+        if return_timestamps and self.type == "seq2seq":
             raise ValueError("We cannot return_timestamps yet on non-ctc models !")
+        if return_timestamps == "char" and self.type == "ctc_with_lm":
+            raise ValueError("CTC with LM cannot return `char` timestamps, only `words`")
 
         final_items = []
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
@@ -335,34 +337,43 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if self.type == "ctc_with_lm":
             if decoder_kwargs is None:
                 decoder_kwargs = {}
-            text = self.decoder.decode_beams(items, **decoder_kwargs)[0][0]
+            beams = self.decoder.decode_beams(items, **decoder_kwargs)
+            text = beams[0][0]
+            if return_timestamps:
+                # Simply cast from pyctcdecode format to wav2vec2 format to leverage
+                # pre-existing code later
+                chunk_offset = beams[0][2]
+                word_offsets = []
+                for word, (start_offset, end_offset) in chunk_offset:
+                    word_offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
 
         else:
             skip_special_tokens = self.type != "ctc"
             text = self.tokenizer.decode(items, skip_special_tokens=skip_special_tokens)
             if return_timestamps:
-                if return_timestamps == "char":
-                    decoded = self.tokenizer.decode(
-                        items, skip_special_tokens=skip_special_tokens, output_char_offsets=True
+                char_offsets = self.tokenizer.decode(
+                    items, skip_special_tokens=skip_special_tokens, output_char_offsets=True
+                )["char_offsets"]
+                if return_timestamps == "word":
+                    word_offsets = self.tokenizer._get_word_offsets(
+                        char_offsets, self.tokenizer.replace_word_delimiter_char
                     )
-                elif return_timestamps == "word":
-                    decoded = self.tokenizer.decode(
-                        items, skip_special_tokens=skip_special_tokens, output_word_offsets=True
-                    )
-                chunks = []
-                for item in decoded[f"{return_timestamps}_offsets"]:
-                    start = (
-                        item["start_offset"]
-                        * self.model.config.inputs_to_logits_ratio
-                        / self.feature_extractor.sampling_rate
-                    )
-                    stop = (
-                        item["end_offset"]
-                        * self.model.config.inputs_to_logits_ratio
-                        / self.feature_extractor.sampling_rate
-                    )
-                    chunks.append({"text": item[return_timestamps], "timestamp": (start, stop)})
-                optional["chunks"] = chunks
+
+        if return_timestamps:
+            if return_timestamps == "word":
+                offsets = word_offsets
+            else:
+                offsets = char_offsets
+            chunks = []
+            for item in offsets:
+                start = item["start_offset"] * self.model.config.inputs_to_logits_ratio
+                start /= self.feature_extractor.sampling_rate
+
+                stop = item["end_offset"] * self.model.config.inputs_to_logits_ratio
+                stop /= self.feature_extractor.sampling_rate
+
+                chunks.append({"text": item[return_timestamps], "timestamp": (start, stop)})
+            optional["chunks"] = chunks
 
         extra = defaultdict(list)
         for output in model_outputs:
