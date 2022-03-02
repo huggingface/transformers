@@ -10,9 +10,6 @@ concurrency:
 jobs:
   build_and_package:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
     container:
       image: huggingface/transformers-doc-builder
     env:
@@ -108,13 +105,13 @@ jobs:
           cd doc-build-dev
           ls
           git status --porcelain
-          if [[ `git status --porcelain` ]]; then
+          if [[ `git status -uno --porcelain` ]]; then
             echo "ye"
           else
             echo "no"
           fi
 
-          if [[ `git status --porcelain` ]]; then
+          if [[ `git status -uno --porcelain` ]]; then
             git stash && git pull && git stash apply
             git add .
             git commit -m "Updated with commit ${{ github.sha }} See: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
@@ -122,3 +119,4 @@ jobs:
           else
             echo "No diff in the documentation."
           fi
+        shell: bash
