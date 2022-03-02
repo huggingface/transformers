@@ -347,6 +347,6 @@ class CvtModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([1.5788, 1.1755, -0.0690]).to(torch_device)
+        expected_slice = torch.tensor([0.9285, 0.9015, -0.3150]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

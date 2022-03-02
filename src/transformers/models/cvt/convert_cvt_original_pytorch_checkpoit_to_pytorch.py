@@ -44,177 +44,177 @@ def attention(idx, cnt):
     attention_weights = []
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_query.convolution.weight",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_query.conv_projection.conv.weight",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_q.conv.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_query.batch_norm.weight",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_query.conv_projection.norm.weight",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_q.bn.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_query.batch_norm.bias",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_query.conv_projection.norm.bias",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_q.bn.bias",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_query.batch_norm.running_mean",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_query.conv_projection.norm.running_mean",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_q.bn.running_mean",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_query.batch_norm.running_var",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_query.conv_projection.norm.running_var",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_q.bn.running_var",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_query.batch_norm.num_batches_tracked",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_query.conv_projection.norm.num_batches_tracked",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_q.bn.num_batches_tracked",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_key.convolution.weight",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_key.conv_projection.conv.weight",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_k.conv.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_key.batch_norm.weight",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_key.conv_projection.norm.weight",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_k.bn.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_key.batch_norm.bias",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_key.conv_projection.norm.bias",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_k.bn.bias",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_key.batch_norm.running_mean",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_key.conv_projection.norm.running_mean",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_k.bn.running_mean",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_key.batch_norm.running_var",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_key.conv_projection.norm.running_var",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_k.bn.running_var",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_key.batch_norm.num_batches_tracked",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_key.conv_projection.norm.num_batches_tracked",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_k.bn.num_batches_tracked",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_value.convolution.weight",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_value.conv_projection.conv.weight",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_v.conv.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_value.batch_norm.weight",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_value.conv_projection.norm.weight",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_v.bn.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_value.batch_norm.bias",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_value.conv_projection.norm.bias",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_v.bn.bias",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_value.batch_norm.running_mean",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_value.conv_projection.norm.running_mean",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_v.bn.running_mean",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_value.batch_norm.running_var",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_value.conv_projection.norm.running_var",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_v.bn.running_var",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.conv_projection_value.batch_norm.num_batches_tracked",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.conv_projection_value.conv_projection.norm.num_batches_tracked",
             f"stage{idx}.blocks.{cnt}.attn.conv_proj_v.bn.num_batches_tracked",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.projection_query.weight",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.projection_query.weight",
             f"stage{idx}.blocks.{cnt}.attn.proj_q.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.projection_query.bias",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.projection_query.bias",
             f"stage{idx}.blocks.{cnt}.attn.proj_q.bias",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.projection_key.weight",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.projection_key.weight",
             f"stage{idx}.blocks.{cnt}.attn.proj_k.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.projection_key.bias",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.projection_key.bias",
             f"stage{idx}.blocks.{cnt}.attn.proj_k.bias",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.projection_value.weight",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.projection_value.weight",
             f"stage{idx}.blocks.{cnt}.attn.proj_v.weight",
         )
     )
     attention_weights.append(
         (
-            f"cvt.encoder.block.{idx}.{cnt}.attention.attention.projection_value.bias",
+            f"cvt.encoder.stages.{idx}.{cnt}.attention.attention.projection_value.bias",
             f"stage{idx}.blocks.{cnt}.attn.proj_v.bias",
         )
     )
     attention_weights.append(
-        (f"cvt.encoder.block.{idx}.{cnt}.attention.output.dense.weight", f"stage{idx}.blocks.{cnt}.attn.proj.weight")
+        (f"cvt.encoder.stages.{idx}.{cnt}.attention.output.dense.weight", f"stage{idx}.blocks.{cnt}.attn.proj.weight")
     )
     attention_weights.append(
-        (f"cvt.encoder.block.{idx}.{cnt}.attention.output.dense.bias", f"stage{idx}.blocks.{cnt}.attn.proj.bias")
+        (f"cvt.encoder.stages.{idx}.{cnt}.attention.output.dense.bias", f"stage{idx}.blocks.{cnt}.attn.proj.bias")
     )
     attention_weights.append(
-        (f"cvt.encoder.block.{idx}.{cnt}.intermediate.dense.weight", f"stage{idx}.blocks.{cnt}.mlp.fc1.weight")
+        (f"cvt.encoder.stages.{idx}.{cnt}.intermediate.dense.weight", f"stage{idx}.blocks.{cnt}.mlp.fc1.weight")
     )
     attention_weights.append(
-        (f"cvt.encoder.block.{idx}.{cnt}.intermediate.dense.bias", f"stage{idx}.blocks.{cnt}.mlp.fc1.bias")
+        (f"cvt.encoder.stages.{idx}.{cnt}.intermediate.dense.bias", f"stage{idx}.blocks.{cnt}.mlp.fc1.bias")
     )
     attention_weights.append(
-        (f"cvt.encoder.block.{idx}.{cnt}.output.dense.weight", f"stage{idx}.blocks.{cnt}.mlp.fc2.weight")
+        (f"cvt.encoder.stages.{idx}.{cnt}.output.dense.weight", f"stage{idx}.blocks.{cnt}.mlp.fc2.weight")
     )
     attention_weights.append(
-        (f"cvt.encoder.block.{idx}.{cnt}.output.dense.bias", f"stage{idx}.blocks.{cnt}.mlp.fc2.bias")
+        (f"cvt.encoder.stages.{idx}.{cnt}.output.dense.bias", f"stage{idx}.blocks.{cnt}.mlp.fc2.bias")
     )
     attention_weights.append(
-        (f"cvt.encoder.block.{idx}.{cnt}.layernorm_before.weight", f"stage{idx}.blocks.{cnt}.norm1.weight")
+        (f"cvt.encoder.stages.{idx}.{cnt}.layernorm_before.weight", f"stage{idx}.blocks.{cnt}.norm1.weight")
     )
     attention_weights.append(
-        (f"cvt.encoder.block.{idx}.{cnt}.layernorm_before.bias", f"stage{idx}.blocks.{cnt}.norm1.bias")
+        (f"cvt.encoder.stages.{idx}.{cnt}.layernorm_before.bias", f"stage{idx}.blocks.{cnt}.norm1.bias")
     )
     attention_weights.append(
-        (f"cvt.encoder.block.{idx}.{cnt}.layernorm_after.weight", f"stage{idx}.blocks.{cnt}.norm2.weight")
+        (f"cvt.encoder.stages.{idx}.{cnt}.layernorm_after.weight", f"stage{idx}.blocks.{cnt}.norm2.weight")
     )
     attention_weights.append(
-        (f"cvt.encoder.block.{idx}.{cnt}.layernorm_after.bias", f"stage{idx}.blocks.{cnt}.norm2.bias")
+        (f"cvt.encoder.stages.{idx}.{cnt}.layernorm_after.bias", f"stage{idx}.blocks.{cnt}.norm2.bias")
     )
     return attention_weights
 
@@ -241,7 +241,7 @@ def final():
 
 
 if __name__ == "__main__":
-    path = "new_hugging_face_model.bin"
+    path = "C:\\Users\\AH87766\\Downloads\\pytorch_model.bin"
 
     # get imagenet labels
     filename = "imagenet-1k-id2label.json"
@@ -258,7 +258,7 @@ if __name__ == "__main__":
 
     config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
     model = CvtForImageClassification(config)
-    original_file = "CvT-13-224x224-IN-1k.pth"
+    original_file = "C:\\Users\\AH87766\\Downloads\\CvT-13-224x224-IN-1k.pth"
     original_weights = torch.load(original_file, map_location=torch.device("cpu"))
 
     hugging_face_weights = OrderedDict()
@@ -278,11 +278,22 @@ if __name__ == "__main__":
     model.load_state_dict(hugging_face_weights)
     torch.save(model.state_dict(), path)
 
+    model.push_to_hub(
+                repo_path_or_name="anugunj/testcvtmodel",
+                commit_message="Add model",
+                use_temp_dir=True,
+            )
+    config.push_to_hub(
+            repo_path_or_name="anugunj/testcvtmodel",
+                commit_message="Add config",
+                use_temp_dir=True,
+    )
+
     # we can use the convnext one
     feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
     # push it to the hub
-    # feature_extractor.push_to_hub(
-    #     repo_path_or_name=save_directory / checkpoint_name,
-    #     commit_message="Add feature extractor",
-    #     use_temp_dir=True,
-    # )
+    feature_extractor.push_to_hub(
+        repo_path_or_name="anugunj/testcvtmodel",
+        commit_message="Add feature extractor",
+        use_temp_dir=True,
+    )
