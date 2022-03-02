@@ -488,9 +488,12 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
             "top_k": 500,
             "top_p": 0.9,
         }
-        tf.random.set_seed(42)  # deterministic sampling sequence -> deterministic generation
 
-        output_ids = model.generate(input_ids, **generation_kwargs)
+        # forces the generation to happen on CPU, to avoid GPU-related quirks
+        with tf.device(":/CPU:0"):
+            tf.random.set_seed(42)  # deterministic sampling sequence -> deterministic generation
+            output_ids = model.generate(input_ids, **generation_kwargs)
+
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
         expected_output_string = [

@@ -947,7 +947,7 @@ class TFModelTesterMixin:
 
             if config.bos_token_id is None:
                 # if bos token id is not defined model needs input_ids
-                with self.assertRaises(AssertionError):
+                with self.assertRaises(ValueError):
                     model.generate(do_sample=True, max_length=5)
                 # num_return_sequences = 1
                 self._check_generated_ids(model.generate(input_ids, do_sample=True))

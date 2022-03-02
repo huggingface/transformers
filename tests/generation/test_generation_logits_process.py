@@ -51,7 +51,7 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = torch.ones((batch_size, length), device=torch_device, dtype=torch.float) / length
         return scores
 
-    def test_min_lenght_dist_processor(self):
+    def test_min_length_dist_processor(self):
         vocab_size = 20
         batch_size = 4
         eos_token_id = 0

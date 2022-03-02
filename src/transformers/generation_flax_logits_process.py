@@ -94,7 +94,7 @@ class FlaxLogitsProcessorList(list):
 
 class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
     r"""
-    [`LogitsWarper`] for temperature (exponential scaling output probability distribution).
+    [`FlaxLogitsWarper`] for temperature (exponential scaling output probability distribution).
 
     Args:
         temperature (`float`):
@@ -114,7 +114,7 @@ class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
 
 class FlaxTopPLogitsWarper(FlaxLogitsWarper):
     """
-    [`LogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
+    [`FlaxLogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
 
     Args:
         top_p (`float`):
@@ -155,7 +155,7 @@ class FlaxTopPLogitsWarper(FlaxLogitsWarper):
 
 class FlaxTopKLogitsWarper(FlaxLogitsWarper):
     r"""
-    [`LogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
+    [`FlaxLogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
 
     Args:
         top_k (`int`):
