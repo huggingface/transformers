@@ -442,7 +442,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
 
     @slow
-    def test_lm_generate_distilgpt2_batch_special(self):
+    def test_lm_generate_greedy_distilgpt2_batch_special(self):
         model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
         tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
 
@@ -465,6 +465,37 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         expected_output_string = [
             "Today is a beautiful day and I am so happy to be able take part in this amazing event.",
             "Yesterday was a very busy day for the first time since I started writing this post",
+        ]
+        self.assertListEqual(output_strings, expected_output_string)
+
+    @slow
+    def test_lm_generate_sample_distilgpt2_batch_special(self):
+        model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
+
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        sentences = ["Today is a beautiful day and", "Yesterday was"]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+
+        generation_kwargs = {
+            "do_sample": True,
+            "bad_words_ids": [tokenizer("is").input_ids, tokenizer("angry about").input_ids],
+            "no_repeat_ngram_size": 2,
+            "repetition_penalty": 1.3,
+            "temperature": 1.5,
+            "top_k": 500,
+            "top_p": 0.9,
+        }
+        tf.random.set_seed(42)  # deterministic sampling sequence -> deterministic generation
+
+        output_ids = model.generate(input_ids, **generation_kwargs)
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+        expected_output_string = [
+            "Today is a beautiful day and this makes finding holiday travel easier for you to do other project\nOh",
+            "Yesterday was an enjoyable but especially great note though it certainly upset many Democrats who say",
         ]
         self.assertListEqual(output_strings, expected_output_string)
 
