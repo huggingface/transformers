@@ -152,5 +152,5 @@ class SegformerConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.decoder_hidden_size = decoder_hidden_size
-        self.reshape_last_stage = kwargs["reshape_last_stage"] if "reshape_last_stage" in kwargs else True
+        self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
