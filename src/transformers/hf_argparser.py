@@ -72,9 +72,6 @@ class HfArgumentParser(ArgumentParser):
 
     @staticmethod
     def _parse_dataclass_field(parser: ArgumentParser, field: dataclasses.Field):
-        """
-        Get list of argument actions (parameter list and dict) to be added to the parser for a field.
-        """
         field_name = f"--{field.name}"
         kwargs = field.metadata.copy()
         # field.metadata is not used at all by Data Classes,
@@ -122,8 +119,6 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["nargs"] = "?"
                 # This is the value that will get picked if we do --field_name (without value)
                 kwargs["const"] = True
-        # This will raise `TypeError` in Python 3.6, because `origin_type` is not a class,
-        # e.g., `List[int].__origin__` is `List` in Python 3.6, but is `list` in later versions.
         elif isclass(origin_type) and issubclass(origin_type, list):
             kwargs["type"] = field.type.__args__[0]
             kwargs["nargs"] = "+"
@@ -145,7 +140,6 @@ class HfArgumentParser(ArgumentParser):
         # Order is important for arguments with the same destination!
         # We use a copy of earlier kwargs because the original kwargs have changed a lot before reaching down
         # here and we do not need those changes/additional keys.
-
         if field.default is True and (field.type is bool or field.type is Optional[bool]):
             bool_kwargs["default"] = False
             parser.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **bool_kwargs)
