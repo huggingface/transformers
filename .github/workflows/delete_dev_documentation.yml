@@ -42,7 +42,7 @@ jobs:
           git push origin main
 
       - name: Find Comment
-        if: ${{ always() }}
+        if: github.event.action == 'closed'
         uses: peter-evans/find-comment@v1
         id: fc
         with:
@@ -50,7 +50,7 @@ jobs:
           comment-author: HuggingFaceDocBuilder
 
       - name: Update comment
-        if: ${{ always() }}
+        if: github.event.action == 'closed'
         uses: peter-evans/create-or-update-comment@v1
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
