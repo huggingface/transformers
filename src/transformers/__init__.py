@@ -116,7 +116,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
     "models": [],
     # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
@@ -173,6 +172,7 @@ _import_structure = {
     "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.data2vec": ["DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecAudioConfig", "Data2VecTextConfig"],
+    "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
@@ -644,14 +644,6 @@ if is_torch_available():
 
     # PyTorch models structure
 
-    _import_structure["models.cvt"].extend(
-        [
-            "CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CvtForImageClassification",
-            "CvtModel",
-            "CvtPreTrainedModel",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -893,6 +885,14 @@ if is_torch_available():
             "Data2VecTextForTokenClassification",
             "Data2VecTextModel",
             "Data2VecTextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.cvt"].extend(
+        [
+            "CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CvtForImageClassification",
+            "CvtModel",
+            "CvtPreTrainedModel",
         ]
     )
     _import_structure["models.deberta"].extend(
@@ -2520,7 +2520,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2568,6 +2567,7 @@ if TYPE_CHECKING:
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.data2vec import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig, Data2VecTextConfig
+    from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
     from .models.decision_transformer import (
@@ -2924,12 +2924,6 @@ if TYPE_CHECKING:
 
     if is_torch_available():
 
-        from .models.cvt import (
-            CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CvtForImageClassification,
-            CvtModel,
-            CvtPreTrainedModel,
-        )
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -3184,6 +3178,12 @@ if TYPE_CHECKING:
             Data2VecTextForTokenClassification,
             Data2VecTextModel,
             Data2VecTextPreTrainedModel,
+        )
+        from .models.cvt import (
+            CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CvtForImageClassification,
+            CvtModel,
+            CvtPreTrainedModel,
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,

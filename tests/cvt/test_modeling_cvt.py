@@ -16,8 +16,8 @@
 
 
 import inspect
-from math import floor
 import unittest
+from math import floor
 
 from transformers import CvtConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
@@ -40,6 +40,7 @@ if is_vision_available():
 
     from transformers import CvtFeatureExtractor
 
+
 class CvtConfigTester(ConfigTester):
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
@@ -47,28 +48,29 @@ class CvtConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_heads"))
         self.parent.assertTrue(hasattr(config, "num_stages"))
 
+
 class CvtModelTester:
     def __init__(
         self,
         parent,
-        batch_size = 13,
-        image_size = 64,
-        num_channels = 3,
-        num_stages = 3,
-        embed_dim = [64, 192, 384],
-        num_heads = [1, 3, 6],
-        depth = [1, 2, 10],
-        patch_sizes = [7, 3, 3],
-        patch_stride = [4, 2, 2],
-        patch_padding = [2, 1, 1],
-        stride_kv = [2, 2, 2],
-        cls_token = [False, False, True],
-        attention_drop_rate = [0.0, 0.0, 0.0],
+        batch_size=13,
+        image_size=64,
+        num_channels=3,
+        num_stages=3,
+        embed_dim=[64, 192, 384],
+        num_heads=[1, 3, 6],
+        depth=[1, 2, 10],
+        patch_sizes=[7, 3, 3],
+        patch_stride=[4, 2, 2],
+        patch_padding=[2, 1, 1],
+        stride_kv=[2, 2, 2],
+        cls_token=[False, False, True],
+        attention_drop_rate=[0.0, 0.0, 0.0],
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         is_training=True,
         use_labels=True,
-        num_labels=3, #Check
+        num_labels=3,  # Check
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -125,8 +127,8 @@ class CvtModelTester:
         image_size = to_2tuple(self.image_size)
         height, width = image_size[0], image_size[1]
         for i in range(self.num_stages):
-            height = floor(((height + 2*self.patch_padding[i] - self.patch_sizes[i])/self.patch_stride[i]) + 1)
-            width = floor(((width + 2*self.patch_padding[i] - self.patch_sizes[i])/self.patch_stride[i]) + 1)
+            height = floor(((height + 2 * self.patch_padding[i] - self.patch_sizes[i]) / self.patch_stride[i]) + 1)
+            width = floor(((width + 2 * self.patch_padding[i] - self.patch_sizes[i]) / self.patch_stride[i]) + 1)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dim[-1], height, width))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -230,7 +232,7 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(attentions), expected_num_attentions)
 
             # verify the first attentions (first block, first layer)
-            
+
             expected_seq_len = (self.model_tester.image_size // 4) ** 2
             expected_reduced_seq_len = (self.model_tester.image_size // (4 * self.model_tester.stride_kv[0])) ** 2
             self.assertListEqual(

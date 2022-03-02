@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Cvt model configuration """
+""" Cvt model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -28,14 +28,13 @@ CVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CvtConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~CvtModel`].
-    It is used to instantiate an Cvt model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the Cvt [msft/cvt](https://huggingface.co/msft/cvt) architecture.
+    This is the configuration class to store the configuration of a [`~CvtModel`]. It is used to instantiate an Cvt
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Cvt [msft/cvt](https://huggingface.co/msft/cvt)
+    architecture.
 
-    Configuration objects inherit from  [`PretrainedConfig`] and can be used
-    to control the model outputs. Read the documentation from  [`PretrainedConfig`]
-    for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -50,7 +49,7 @@ class CvtConfig(PretrainedConfig):
         patch_stride (`List[int]`, *optional*, defaults to [4, 2, 2]):
             The stride size of each encoder's patch embedding.
         patch_padding (`List[int]`, *optional*, defaults to [2, 1, 1]):
-            The padding size of each encoder's patch embedding. 
+            The padding size of each encoder's patch embedding.
         embed_dim (`List[int]`, *optional*, defaults to [64, 192, 384]):
             Dimension of each of the encoder blocks.
         num_attention_heads (`List[int]`, *optional*, defaults to [1, 3, 6]):
@@ -103,35 +102,33 @@ class CvtConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "cvt"
-    
 
     def __init__(
         self,
-        image_size = 224,
-        num_channels = 3,
-        num_stages = 3,
-        patch_sizes = [7, 3, 3],
-        patch_stride = [4, 2, 2],
-        patch_padding = [2, 1, 1],
-        embed_dim = [64, 192, 384],
-        num_heads = [1, 3, 6],
-        depth = [1, 2, 10],
-        mlp_ratio = [4.0, 4.0, 4.0],
-        attention_drop_rate = [0.0, 0.0, 0.0],
-        drop_rate = [0.0, 0.0, 0.0],
-        drop_path_rate = [0.0, 0.0, 0.1],
-        qkv_bias = [True, True, True],
-        cls_token = [False, False, True],
-        pos_embed = [False, False, False],
-        qkv_projection_method = ['dw_bn', 'dw_bn', 'dw_bn'],
-        kernel_qkv = [3, 3, 3],
-        padding_kv = [1, 1, 1],
-        stride_kv = [2, 2, 2],
-        padding_q = [1, 1, 1],
-        stride_q = [1, 1, 1],
+        image_size=224,
+        num_channels=3,
+        num_stages=3,
+        patch_sizes=[7, 3, 3],
+        patch_stride=[4, 2, 2],
+        patch_padding=[2, 1, 1],
+        embed_dim=[64, 192, 384],
+        num_heads=[1, 3, 6],
+        depth=[1, 2, 10],
+        mlp_ratio=[4.0, 4.0, 4.0],
+        attention_drop_rate=[0.0, 0.0, 0.0],
+        drop_rate=[0.0, 0.0, 0.0],
+        drop_path_rate=[0.0, 0.0, 0.1],
+        qkv_bias=[True, True, True],
+        cls_token=[False, False, True],
+        pos_embed=[False, False, False],
+        qkv_projection_method=["dw_bn", "dw_bn", "dw_bn"],
+        kernel_qkv=[3, 3, 3],
+        padding_kv=[1, 1, 1],
+        stride_kv=[2, 2, 2],
+        padding_q=[1, 1, 1],
+        stride_q=[1, 1, 1],
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         **kwargs
@@ -161,5 +158,3 @@ class CvtConfig(PretrainedConfig):
         self.stride_q = stride_q
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-
-    
