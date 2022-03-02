@@ -102,8 +102,8 @@ class DPTViTEmbeddings(nn.Module):
 
     def _resize_pos_embed(self, posemb, gs_h, gs_w, start_index=1):
         posemb_tok, posemb_grid = (
-            posemb[:, : start_index],
-            posemb[0, start_index :],
+            posemb[:, :start_index],
+            posemb[0, start_index:],
         )
 
         gs_old = int(math.sqrt(len(posemb_grid)))
@@ -115,23 +115,16 @@ class DPTViTEmbeddings(nn.Module):
         posemb = torch.cat([posemb_tok, posemb_grid], dim=1)
 
         return posemb
-    
+
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
-        
-        print("Cls token:", self.cls_token)
-        print("Patch embeddings", self.patch_embeddings.projection.weight)
-        print("Shape of position embeddings:", self.position_embeddings.data.shape)
-        print("First elements of pos embed:", self.position_embeddings[0,:3,:3])
-        
+
         # possibly interpolate position encodings to handle varying image sizes
         patch_size = self.config.patch_size
-        position_embeddings = self._resize_pos_embed(self.position_embeddings, height // patch_size, width // patch_size)
+        position_embeddings = self._resize_pos_embed(
+            self.position_embeddings, height // patch_size, width // patch_size
+        )
 
-        print("Patch size:", patch_size)
-
-        print("First elements of pos embed:", position_embeddings[0,:3,:3])
-        
         embeddings = self.patch_embeddings(pixel_values)
 
         batch_size, seq_len, _ = embeddings.size()
@@ -144,9 +137,6 @@ class DPTViTEmbeddings(nn.Module):
         embeddings = embeddings + position_embeddings
 
         embeddings = self.dropout(embeddings)
-
-        print("Embeddings:", embeddings.shape)
-        print("First elements:, ", embeddings[0, :3, :3])
 
         return embeddings
 
@@ -470,13 +460,10 @@ class DPTReassembleBlocks(nn.Module):
         assert isinstance(inputs, list)
         out = []
 
-        # patch_resolution = self.config.image_size // self.config.patch_size
-
         for i, x in enumerate(inputs):
             # reshape to (B, C, H, W)
             x, cls_token = x[:, 1:], x[:, 0]
             B, L, C = x.shape
-            print("Shape of x:", x.shape)
             size = int(math.sqrt(L))
             x = x.reshape(B, size, size, C)
             x = x.permute(0, 3, 1, 2).contiguous()
@@ -514,12 +501,6 @@ class DPTPreActResidualConvUnit(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        #          in_channels,
-        #  act_cfg,
-        #  norm_cfg,
-        #  stride=1,
-        #  dilation=1,
-        #  init_cfg=None):
 
         self.use_batch_norm = config.use_batch_norm
         self.act1 = nn.ReLU()
@@ -550,22 +531,16 @@ class DPTPreActResidualConvUnit(nn.Module):
         inputs_ = inputs.clone()
         x = self.act1(inputs)
 
-        print("Output after first relu:", x[0, :3, :3, :3])
-
         x = self.conv1(x)
 
         if self.use_batch_norm:
             x = self.batch_norm1(x)
-
-        print("Output after first relu + conv:", x[0, :3, :3, :3])
 
         x = self.act2(x)
         x = self.conv2(x)
 
         if self.use_batch_norm:
             x = self.batch_norm2(x)
-
-        print("Output after 2 convs and 2 relu's:", x[0, :3, :3, :3])
 
         return x + inputs_
 
@@ -582,7 +557,6 @@ class DPTFeatureFusionBlock(nn.Module):
     """
 
     def __init__(self, config, expand=False, align_corners=True):
-        # in_channels, act_cfg, norm_cfg, expand=False, align_corners=True, init_cfg=None):
         super().__init__()
 
         self.expand = expand
@@ -601,7 +575,6 @@ class DPTFeatureFusionBlock(nn.Module):
 
     def forward(self, *inputs):
         x = inputs[0]
-        print("First elements of x before res conv unit 1:", x[0, :3, :3, :3])
         if len(inputs) == 2:
             if x.shape != inputs[1].shape:
                 res = nn.functional.interpolate(
@@ -611,18 +584,9 @@ class DPTFeatureFusionBlock(nn.Module):
                 res = inputs[1]
             x = x + self.res_conv_unit1(res)
 
-        print("First elements of x before res conv unit 2:", x[0, :3, :3, :3])
         x = self.res_conv_unit2(x)
-
-        print("First elements of x after res conv unit 2:", x[0, :3, :3, :3])
-
         x = nn.functional.interpolate(x, scale_factor=2, mode="bilinear", align_corners=self.align_corners)
-
-        print("First elements of x after interpolation:", x[0, :3, :3, :3])
-
         x = self.project(x)
-
-        print("First elements of x after projection:", x[0, :3, :3, :3])
 
         return x
 
@@ -702,7 +666,6 @@ class DPTModel(DPTPreTrainedModel):
         self.embeddings = DPTViTEmbeddings(config)
         self.encoder = DPTViTEncoder(config)
 
-        # self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = DPTViTPooler(config) if add_pooling_layer else None
 
         # postprocessing
@@ -784,34 +747,15 @@ class DPTModel(DPTPreTrainedModel):
         # note that the encoder_hidden_states also include the initial embeddings
         features = [feature for idx, feature in enumerate(encoder_hidden_states[1:]) if idx in self.config.out_indices]
 
-        print("ViT features:")
-        for idx, tensor in enumerate(features):
-            print(tensor.shape)
-            print(f"Layer {idx+1}:", tensor[0, :3, :3])
-
         # postprocess features
         features = self.reassemble_blocks(features)
 
-        print("After postprocessing:")
-        for idx, tensor in enumerate(features):
-            print(tensor.shape)
-            print(f"Layer {idx+1}:", tensor[0, :3, :3, :3])
-
         features = [self.convs[i](feature) for i, feature in enumerate(features)]
-
-        print("After convs:")
-        for idx, tensor in enumerate(features):
-            print(tensor.shape)
-            print(f"Layer {idx+1}:", tensor[0, :3, :3, :3])
 
         # fusion
         out = self.fusion_blocks[0](features[-1])
-        print("First elements after first fusion:", out[0, :3, :3, :3])
         for i in range(1, len(self.fusion_blocks)):
             out = self.fusion_blocks[i](out, features[-(i + 1)])
-
-        print("Shape after fusion:", out.shape)
-        print("First elements after fusion:", out[0, :3, :3, :3])
 
         if not return_dict:
             return (out,) + encoder_outputs[1:]
@@ -950,8 +894,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         logits = self.head(outputs.last_hidden_state)
         logits = logits.squeeze(dim=1)
 
-        print("First elements of logits:", logits[0, :3, :3])
-
         loss = None
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
@@ -1052,8 +994,6 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         )
 
         logits = self.head(outputs.last_hidden_state)
-
-        print("First elements of logits:", logits[0, :3, :3])
 
         loss = None
         if labels is not None:

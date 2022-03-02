@@ -358,11 +358,9 @@ class DPTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = DPTForSemanticSegmentation.from_pretrained("nielsr/dpt-large-ade").to(
-            torch_device
-        )
+        model = DPTForSemanticSegmentation.from_pretrained("nielsr/dpt-large-ade").to(torch_device)
 
         image = prepare_img()
-        
+
         # TODO
         raise NotImplementedError("")
