@@ -258,7 +258,7 @@ if __name__ == "__main__":
 
     config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
     model = CvtForImageClassification(config)
-    original_file = "C:\\Users\\AH87766\\Downloads\\CvT-13-224x224-IN-1k.pth"
+    original_file = "C:\\Users\\AH87766\\Downloads\\cvtmodels\\CvT-13-384x384-IN-1k.pth"
     original_weights = torch.load(original_file, map_location=torch.device("cpu"))
 
     hugging_face_weights = OrderedDict()
@@ -278,21 +278,21 @@ if __name__ == "__main__":
     model.load_state_dict(hugging_face_weights)
     torch.save(model.state_dict(), path)
 
-    model.push_to_hub(
-                repo_path_or_name="anugunj/testcvtmodel",
-                commit_message="Add model",
-            )
-    config.push_to_hub(
-            repo_path_or_name="anugunj/testcvtmodel",
-                commit_message="Add config",
-    )
+    # model.push_to_hub(
+    #             repo_path_or_name="anugunj/testcvtmodel",
+    #             commit_message="Add model",
+    #         )
+    # config.push_to_hub(
+    #         repo_path_or_name="anugunj/testcvtmodel",
+    #             commit_message="Add config",
+    # )
 
-    # we can use the convnext one
-    feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
-    # push it to the hub
-    feature_extractor.push_to_hub(
-        repo_path_or_name="anugunj/testcvtmodel",
-        commit_message="Add feature extractor",
-        use_temp_dir=True,
-        use_auth_token='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'
-    )
+    # # we can use the convnext one
+    # feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
+    # # push it to the hub
+    # feature_extractor.push_to_hub(
+    #     repo_path_or_name="anugunj/testcvtmodel",
+    #     commit_message="Add feature extractor",
+    #     use_temp_dir=True,
+    #     use_auth_token='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'
+    # )
