@@ -45,7 +45,7 @@ _FEAT_EXTRACTOR_FOR_DOC = "SegformerFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "nvidia/mit-b0"
-_EXPECTED_OUTPUT_SHAPE = [1, 256, 256]
+_EXPECTED_OUTPUT_SHAPE = [1, 256, 16, 16]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
