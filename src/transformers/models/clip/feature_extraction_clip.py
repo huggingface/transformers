@@ -153,6 +153,8 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
         if self.do_center_crop and self.crop_size is not None:
             images = [self.center_crop(image, self.crop_size) for image in images]
+        if self.do_convert_rgb:
+            images = [self.convert_rgb(image) for image in images]
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
