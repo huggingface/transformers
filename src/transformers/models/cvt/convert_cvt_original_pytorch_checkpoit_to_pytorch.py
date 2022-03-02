@@ -1,3 +1,22 @@
+# coding=utf-8
+# Copyright 2022 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Convert Cvt checkpoints from the original repository.
+
+URL: https://github.com/microsoft/CvT"""
+
+
 import json
 from collections import OrderedDict
 
@@ -240,8 +259,6 @@ def final():
     return head
 
 # Download the weights from zoo: https://1drv.ms/u/s!AhIXJn_J-blW9RzF3rMW7SsLHa8h?e=blQ0Al
-# Repo Link: https://github.com/microsoft/CvT
-
 
 if __name__ == "__main__":
     path = "pytorch_model.bin" # save new weights file name
@@ -261,11 +278,13 @@ if __name__ == "__main__":
 
     config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
     model = CvtForImageClassification(config)
+
     original_file = "CvT-13-384x384-IN-1k.pth" #load the original weights
     original_weights = torch.load(original_file, map_location=torch.device("cpu"))
 
     hugging_face_weights = OrderedDict()
     list_of_state_dict = cls_token()
+    
     for i in range(config.num_stages):
         list_of_state_dict = list_of_state_dict + embeddings(i)
 
@@ -281,21 +300,8 @@ if __name__ == "__main__":
     model.load_state_dict(hugging_face_weights)
     torch.save(model.state_dict(), path)
 
-    # model.push_to_hub(
-    #             repo_path_or_name="anugunj/testcvtmodel",
-    #             commit_message="Add model",
-    #         )
-    # config.push_to_hub(
-    #         repo_path_or_name="anugunj/testcvtmodel",
-    #             commit_message="Add config",
-    # )
-
-    # # we can use the convnext one
-    # feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
-    # # push it to the hub
-    # feature_extractor.push_to_hub(
-    #     repo_path_or_name="anugunj/testcvtmodel",
-    #     commit_message="Add feature extractor",
-    #     use_temp_dir=True,
-    #     use_auth_token='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'
-    # )
+    model.push_to_hub(
+                repo_path_or_name="Repo name to push",
+                commit_message="Add model",
+            )
+    
