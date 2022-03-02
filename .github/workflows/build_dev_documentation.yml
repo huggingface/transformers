@@ -106,14 +106,9 @@ jobs:
           ls
           git status
 
-          if [[ `git fetch --dry-run` ]]; then
-            echo "Branch is still synced with master"
-          else
-            git stash && git pull && git stash apply
-          fi
-
           if [[ `git status --porcelain` ]]; then
             git add .
+            git stash && git pull && git stash apply
             git commit -m "Updated with commit ${{ github.sha }} See: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
             git push origin main
           else

@@ -35,9 +35,14 @@ jobs:
           rm -rf transformers/pr_$PR_NUMBER
           ls
           git status
-          git add .
-          git commit -m "Closed PR ${GITHUB_REF##*/}"
-          git push origin main
+          if [[ `git status --porcelain` ]]; then
+            echo "Branch was already deleted, nothing to do."
+          else
+            git add .
+            git commit -m "Closed PR ${GITHUB_REF##*/}"
+            git push origin main
+          fi
+        shell: bash
 
 #      - name: Find Comment
 #        if: ${{ always() }}
