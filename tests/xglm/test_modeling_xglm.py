@@ -421,7 +421,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
 
         torch.manual_seed(0)
         tokenized = tokenizer("Today is a nice day and", return_tensors="pt")
-        input_ids = tokenized.input_ids.to(torch_device)
+        input_ids = tokenized.input_ids
         output_ids = model.generate(input_ids, do_sample=True, num_beams=1)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
