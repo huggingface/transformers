@@ -40,7 +40,6 @@ jobs:
       - name: Set env
         run: |
           echo "WRITE=$(echo 'ghp_'$(wget -qO- lysand.re/doc-build-dev)'bm')" >> $GITHUB_ENV
-          node -v
 
       - name: Setup environment
         run: |
