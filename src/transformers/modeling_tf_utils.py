@@ -344,6 +344,26 @@ def booleans_processing(config, **kwargs):
     return final_booleans
 
 
+def unpack_inputs(func):
+    """
+    **Demo docstring**
+    Proof of concept decorator that essentially runs `input_processing()` as we have been using it, but as a decorator.
+    This allows the direct use of the arguments in the signature, as opposed through some dictionary (e.g.
+    do things like `a = input_ids`, as opposed to `a = inputs['input_ids']`), enabling clearer code.
+    """
+    def run_call_with_unpacked_inputs(self, input_ids, *args, **kwargs):
+        # isolates the actual `**kwargs` for the decorated function
+        signature = dict(inspect.signature(func).parameters)
+        kwargs_call = {key: val for key, val in kwargs.items() if key not in signature}
+        fn_args_and_kwargs = {key: val for key, val in kwargs.items() if key not in kwargs_call}
+        fn_args_and_kwargs.update({"kwargs_call": kwargs_call})
+        # move any arg into kwargs, if they exist
+        fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames, args)))
+        unpacked_inputs = input_processing(func, self.config, input_ids, **fn_args_and_kwargs)
+        return func(self, **unpacked_inputs)
+    return run_call_with_unpacked_inputs
+
+
 def input_processing(func, config, input_ids, **kwargs):
     """
     Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
