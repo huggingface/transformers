@@ -56,7 +56,7 @@ class BertModelWithPabee(BertModel):
     the self-attention layers, following the architecture described in `Attention is all you need`_ by Ashish Vaswani,
     Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the
+    To behave as a decoder the model needs to be initialized with the
     :obj:`is_decoder` argument of the configuration set to :obj:`True`; an
     :obj:`encoder_hidden_states` is expected as an input to the forward pass.
 
