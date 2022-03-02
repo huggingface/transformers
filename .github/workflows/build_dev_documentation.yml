@@ -105,6 +105,12 @@ jobs:
           ls
           git status --porcelain
           if [[ `git status --porcelain` ]]; then
+            echo "ye"
+          else
+            echo "no"
+          fi
+
+          if [[ `git status --porcelain` ]]; then
             git stash && git pull && git stash apply
             git add .
             git commit -m "Updated with commit ${{ github.sha }} See: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
