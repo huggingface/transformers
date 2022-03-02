@@ -410,6 +410,8 @@ class TFModelTesterMixin:
 
                 max_diff = np.amax(np.abs(tfo - pto))
                 self.assertLessEqual(max_diff, 1e-5)
+            else:
+                raise ValueError(f"`tfo` should be a `tuple` or an instance of `tf.Tensor`. Got {type(tfo)} instead.")
 
         def check_pt_tf_models(tf_model, pt_model):
 
@@ -440,7 +442,7 @@ class TFModelTesterMixin:
             pt_keys = [k for k, v in pto.items() if v is not None]
 
             self.assertEqual(tf_keys, pt_keys)
-            check_outputs(tfo, pto, model_class, names=tf_keys)
+            check_outputs(tfo.to_tuple(), pto.to_tuple(), model_class, names=tf_keys)
 
             # check the case where `labels` is passed
             has_labels = any(
