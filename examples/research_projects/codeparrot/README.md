@@ -58,8 +58,8 @@ During preprocessing the dataset is downloaded and stored locally as well as cac
 ## Tokenizer
 Before training a new model for code we create a new tokenizer that is efficient at code tokenization. To train the tokenizer you can run the following command: 
 ```bash
-python scripts/bpe_training.py
-    --base_tokenizer gpt2
+python scripts/bpe_training.py \
+    --base_tokenizer gpt2 \
     --dataset_name lvwerra/codeparrot-clean-train
 ```
 
@@ -111,6 +111,31 @@ Recall that you can see the full set of possible options with descriptions (for 
 
 ```bash
 python scripts/codeparrot_training.py --help
+```
+
+If you would like to train the model offline, you can download the dataset locally:
+
+```bash
+git lfs install
+git clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-train
+git clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-valid
+```
+
+And then point the datasets loader to those directories:
+
+```bash
+accelerate launch scripts/codeparrot_training.py \
+--model_ckpt lvwerra/codeparrot-small \
+--dataset_name_train /path/to/codeparrot-clean-train \
+--dataset_name_valid /path/to/codeparrot-clean-valid \
+--train_batch_size 12 \
+--valid_batch_size 12 \
+--learning_rate 5e-4 \
+--num_warmup_steps 2000 \
+--gradient_accumulation 1 \
+--gradient_checkpointing False \
+--max_train_steps 150000 \
+--save_checkpoint_steps 15000
 ```
 
 ## Evaluation
