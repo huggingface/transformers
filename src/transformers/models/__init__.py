@@ -50,6 +50,7 @@ from . import (
     dpr,
     electra,
     encoder_decoder,
+    fid,
     flaubert,
     fnet,
     fsmt,

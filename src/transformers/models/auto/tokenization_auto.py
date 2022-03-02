@@ -151,6 +151,7 @@ else:
             ("deberta", ("DebertaTokenizer", "DebertaTokenizerFast" if is_tokenizers_available() else None)),
             ("deberta-v2", ("DebertaV2Tokenizer" if is_sentencepiece_available() else None, None)),
             ("rag", ("RagTokenizer", None)),
+            ("fid", ("RagTokenizer", None)),
             ("xlm-prophetnet", ("XLMProphetNetTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
