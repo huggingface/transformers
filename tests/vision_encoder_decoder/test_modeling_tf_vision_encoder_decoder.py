@@ -344,7 +344,7 @@ class TFVisionEncoderDecoderMixin:
         self.assertEqual(len(tf_outputs_loaded), len(pt_outputs), "Output lengths differ between TF and PyTorch")
 
         for tf_output_loaded, pt_output in zip(tf_outputs_loaded, pt_outputs):
-            self.assert_almost_equals(tf_output_loaded.numpy(), pt_output.numpy(), 1e-3)
+            self.assert_almost_equals(tf_output_loaded.numpy(), pt_output.detach().to("cpu").numpy(), 1e-3)
 
     def check_equivalence_pt_to_tf(self, config, decoder_config, inputs_dict):
 
