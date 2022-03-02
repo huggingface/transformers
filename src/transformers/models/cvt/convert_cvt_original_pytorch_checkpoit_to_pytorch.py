@@ -239,9 +239,12 @@ def final():
     head.append(("classifier.bias", "head.bias"))
     return head
 
+# Download the weights from zoo: https://1drv.ms/u/s!AhIXJn_J-blW9RzF3rMW7SsLHa8h?e=blQ0Al
+# Repo Link: https://github.com/microsoft/CvT
+
 
 if __name__ == "__main__":
-    path = "C:\\Users\\AH87766\\Downloads\\pytorch_model.bin"
+    path = "pytorch_model.bin" # save new weights file name
 
     # get imagenet labels
     filename = "imagenet-1k-id2label.json"
@@ -258,7 +261,7 @@ if __name__ == "__main__":
 
     config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)
     model = CvtForImageClassification(config)
-    original_file = "C:\\Users\\AH87766\\Downloads\\cvtmodels\\CvT-13-384x384-IN-1k.pth"
+    original_file = "CvT-13-384x384-IN-1k.pth" #load the original weights
     original_weights = torch.load(original_file, map_location=torch.device("cpu"))
 
     hugging_face_weights = OrderedDict()
