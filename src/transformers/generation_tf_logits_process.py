@@ -143,7 +143,7 @@ class TFTopKLogitsWarper(TFLogitsWarper):
 
 class TFTopPLogitsWarper(TFLogitsWarper):
     """
-    [`TFLogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
+    [`TFLogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to <= prob_cut_off.
 
     Args:
         top_p (`float`):
