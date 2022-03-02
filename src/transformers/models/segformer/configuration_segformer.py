@@ -14,6 +14,8 @@
 # limitations under the License.
 """ SegFormer model configuration"""
 
+import warnings
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -24,6 +26,11 @@ SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "nvidia/segformer-b0-finetuned-ade-512-512": "https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512/resolve/main/config.json",
     # See all SegFormer models at https://huggingface.co/models?filter=segformer
 }
+
+DEPRECATION_WARNING = (
+    "Segformer's backbone now reshapes the last stage by default to (B, C, H, W). No need to pass "
+    "`reshape_last_stage=True` anymore when fine-tuning for semantic segmentation."
+)
 
 
 class SegformerConfig(PretrainedConfig):
@@ -78,9 +85,6 @@ class SegformerConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         decoder_hidden_size (`int`, *optional*, defaults to 256):
             The dimension of the all-MLP decode head.
-        reshape_last_stage (`bool`, *optional*, defaults to `True`):
-            Whether to reshape the features of the last stage back to `(batch_size, num_channels, height, width)`. Only
-            required for the semantic segmentation model.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
 
@@ -122,11 +126,13 @@ class SegformerConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         decoder_hidden_size=256,
         is_encoder_decoder=False,
-        reshape_last_stage=True,
         semantic_loss_ignore_index=255,
         **kwargs
     ):
         super().__init__(**kwargs)
+
+        if "reshape_last_stage" in kwargs:
+            warnings.warn(DEPRECATION_WARNING, FutureWarning)
 
         self.image_size = image_size
         self.num_channels = num_channels
@@ -147,5 +153,4 @@ class SegformerConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.decoder_hidden_size = decoder_hidden_size
-        self.reshape_last_stage = reshape_last_stage
         self.semantic_loss_ignore_index = semantic_loss_ignore_index

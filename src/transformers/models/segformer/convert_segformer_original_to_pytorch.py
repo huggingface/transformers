@@ -206,11 +206,7 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     read_in_k_v(state_dict, config)
 
     # create HuggingFace model and load state dict
-    if encoder_only:
-        config.reshape_last_stage = False
-        model = SegformerForImageClassification(config)
-    else:
-        model = SegformerForSemanticSegmentation(config)
+    model = SegformerForImageClassification(config) if encoder_only else SegformerForSemanticSegmentation(config)
     model.load_state_dict(state_dict)
     model.eval()
 
