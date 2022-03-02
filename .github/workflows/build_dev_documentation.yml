@@ -13,6 +13,7 @@ jobs:
     container:
       image: huggingface/transformers-doc-builder
     env:
+      COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
       PR_NUMBER: ${{ github.event.number }}
       EVENT_CONTEXT: ${{ toJSON(github.event) }}
 
@@ -109,7 +110,7 @@ jobs:
           if [[ `git status --porcelain` ]]; then
             git add .
             git stash && git pull && git stash apply
-            git commit -m "Updated with commit ${{ github.sha }} See: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
+            git commit -m "Updated with commit $COMMIT_SHA See: https://github.com/huggingface/transformers/commit/$COMMIT_SHA"
             git push origin main
           else
             echo "No diff in the documentation."

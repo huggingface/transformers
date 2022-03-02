@@ -37,7 +37,7 @@ jobs:
           git status
           if [[ `git status --porcelain` ]]; then
             git add .
-            git commit -m "Closed PR ${GITHUB_REF##*/}"
+            git commit -m "Closed PR $PR_NUMBER"
             git push origin main
           else
             echo "Branch was already deleted, nothing to do."
