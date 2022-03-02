@@ -104,15 +104,15 @@ jobs:
         run: |
           cd doc-build-dev
           ls
-          git status --porcelain
-          if [[ `git status -uno --porcelain` ]]; then
-            echo "ye"
+          git status
+
+          if [[ `git fetch --dry-run` ]]; then
+            echo "Branch is still synced with master"
           else
-            echo "no"
+            git stash && git pull && git stash apply
           fi
 
-          if [[ `git status -uno --porcelain` ]]; then
-            git stash && git pull && git stash apply
+          if [[ `git status --porcelain` ]]; then
             git add .
             git commit -m "Updated with commit ${{ github.sha }} See: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
             git push origin main

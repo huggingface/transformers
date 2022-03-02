@@ -10,9 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: huggingface/transformers-doc-builder
-    defaults:
-      run:
-        shell: bash -l {0}
+
     env:
       PR_NUMBER: ${{ github.event.number }}
 
@@ -34,9 +32,8 @@ jobs:
       - name: Push to repositories
         run: |
           cd doc-build-dev
-          ls transformers
           rm -rf transformers/pr_$PR_NUMBER
-          ls transformers
+          ls
           git status
           git add .
           git commit -m "Closed PR ${GITHUB_REF##*/}"
