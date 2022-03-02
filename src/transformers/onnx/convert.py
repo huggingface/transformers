@@ -117,21 +117,34 @@ def export_pytorch(
 
             # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
             # so we check the torch version for backwards compatibility
-            if parse(torch.__version__) <= parse("1.10.99"):
+            if parse(torch.__version__) < parse("1.10"):
                 # export can work with named args but the dict containing named args
                 # has to be the last element of the args tuple.
-                onnx_export(
-                    model,
-                    (model_inputs,),
-                    f=output.as_posix(),
-                    input_names=list(config.inputs.keys()),
-                    output_names=onnx_outputs,
-                    dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
-                    do_constant_folding=True,
-                    use_external_data_format=config.use_external_data_format(model.num_parameters()),
-                    enable_onnx_checker=True,
-                    opset_version=opset,
-                )
+                try:
+                    onnx_export(
+                        model,
+                        (model_inputs,),
+                        f=output.as_posix(),
+                        input_names=list(config.inputs.keys()),
+                        output_names=onnx_outputs,
+                        dynamic_axes={
+                            name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())
+                        },
+                        do_constant_folding=True,
+                        use_external_data_format=config.use_external_data_format(model.num_parameters()),
+                        enable_onnx_checker=True,
+                        opset_version=opset,
+                    )
+                except RuntimeError as err:
+                    message = str(err)
+                    if (
+                        message
+                        == "Exporting model exceed maximum protobuf size of 2GB. Please call torch.onnx.export without setting use_external_data_format parameter."
+                    ):
+                        message = "Exporting model exceed maximum protobuf size of 2GB. Please call torch.onnx.export without setting use_external_data_format parameter or try with torch 1.10+."
+                        raise RuntimeError(message)
+                    else:
+                        raise err
             else:
                 onnx_export(
                     model,
