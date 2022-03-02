@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("maskformer", "MaskFormerModel"),
         ("poolformer", "PoolFormerModel"),
         ("convnext", "ConvNextModel"),
         ("yoso", "YosoModel"),

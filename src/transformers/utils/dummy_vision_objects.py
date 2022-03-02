@@ -80,6 +80,13 @@ class LayoutXLMProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class MaskFormerFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class PerceiverFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
