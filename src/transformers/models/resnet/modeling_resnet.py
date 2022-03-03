@@ -126,12 +126,10 @@ class ResNetBasicLayer(nn.Module):
 
 class ResNetBottleNeckLayer(nn.Module):
     """
-
     A classic ResNet's bottleneck layer composed by a three `3x3` convolutions.
 
     The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
     convolution faster. The last `1x1` convolution remap the reduced features to `out_channels`.
-
 
     Args:
         in_channels (`int`):
@@ -215,7 +213,7 @@ class ResNetEncoder(nn.Module):
     def __init__(self, config: ResNetConfig):
         super().__init__()
         self.stages = nn.ModuleList([])
-        # the first block doesn't downsample
+        # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
         self.stages.append(
             ResNetStage(
                 config.embedding_size,
