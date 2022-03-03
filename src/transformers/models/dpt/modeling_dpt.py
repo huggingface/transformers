@@ -666,23 +666,8 @@ class DPTModel(DPTPreTrainedModel):
         self.embeddings = DPTViTEmbeddings(config)
         self.encoder = DPTViTEncoder(config)
 
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = DPTViTPooler(config) if add_pooling_layer else None
-
-        # postprocessing
-        self.reassemble_blocks = DPTReassembleBlocks(config)
-        self.post_process_channels = [
-            channel * math.pow(2, i) if config.expand_channels else channel
-            for i, channel in enumerate(config.post_process_channels)
-        ]
-        self.convs = nn.ModuleList()
-        for channel in self.post_process_channels:
-            self.convs.append(nn.Conv2d(channel, config.channels, kernel_size=3, padding=1, bias=False))
-
-        # fusion
-        self.fusion_blocks = nn.ModuleList()
-        for _ in range(len(self.convs)):
-            self.fusion_blocks.append(DPTFeatureFusionBlock(config))
-        self.fusion_blocks[0].res_conv_unit1 = None  # not sure why this is done in mmseg
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -709,7 +694,7 @@ class DPTModel(DPTPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values=None,
+        pixel_values,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -720,9 +705,6 @@ class DPTModel(DPTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -741,28 +723,16 @@ class DPTModel(DPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        encoder_hidden_states = encoder_outputs.hidden_states if return_dict else encoder_outputs[2]
-
-        # only keep certain features based on config.out_indices
-        # note that the encoder_hidden_states also include the initial embeddings
-        features = [feature for idx, feature in enumerate(encoder_hidden_states[1:]) if idx in self.config.out_indices]
-
-        # postprocess features
-        features = self.reassemble_blocks(features)
-
-        features = [self.convs[i](feature) for i, feature in enumerate(features)]
-
-        # fusion
-        out = self.fusion_blocks[0](features[-1])
-        for i in range(1, len(self.fusion_blocks)):
-            out = self.fusion_blocks[i](out, features[-(i + 1)])
+        sequence_output = encoder_outputs[0]
+        sequence_output = self.layernorm(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (out,) + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
-            last_hidden_state=out,
-            pooler_output=None,
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -781,6 +751,54 @@ class DPTViTPooler(nn.Module):
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
+
+
+class DPTNeck(nn.Module):
+    """
+    DPTNeck, which includes:
+
+    * DPTReassembleBlocks
+    * FeatureFusionBlocks.
+
+    Args:
+        config (dict): config dict.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        # postprocessing
+        self.reassemble_blocks = DPTReassembleBlocks(config)
+        self.post_process_channels = [
+            channel * math.pow(2, i) if config.expand_channels else channel
+            for i, channel in enumerate(config.post_process_channels)
+        ]
+        self.convs = nn.ModuleList()
+        for channel in self.post_process_channels:
+            self.convs.append(nn.Conv2d(channel, config.channels, kernel_size=3, padding=1, bias=False))
+
+        # fusion
+        self.fusion_blocks = nn.ModuleList()
+        for _ in range(len(self.convs)):
+            self.fusion_blocks.append(DPTFeatureFusionBlock(config))
+        self.fusion_blocks[0].res_conv_unit1 = None  # not sure why this is done in mmseg
+
+    def forward(self, encoder_hidden_states):
+        # TODO: only keep certain features based on config.out_indices
+        # note that the encoder_hidden_states also include the initial embeddings
+        features = [feature for idx, feature in enumerate(encoder_hidden_states[1:]) if idx in self.config.out_indices]
+
+        # postprocess features
+        features = self.reassemble_blocks(features)
+
+        features = [self.convs[i](feature) for i, feature in enumerate(features)]
+
+        # fusion
+        out = self.fusion_blocks[0](features[-1])
+        for i in range(1, len(self.fusion_blocks)):
+            out = self.fusion_blocks[i](out, features[-(i + 1)])
+
+        return out
 
 
 class DPTInterpolate(nn.Module):
@@ -817,6 +835,27 @@ class DPTInterpolate(nn.Module):
         return x
 
 
+class DPTDepthEstimationHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        features = config.channels
+        self.head = nn.Sequential(
+            nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
+            DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
+            nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(True),
+            nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
+            nn.ReLU(True),
+            nn.Identity(),
+        )
+
+    def forward(self, hidden_states):
+        logits = self.head(hidden_states)
+
+        return logits
+
+
 @add_start_docstrings(
     """
     DPT Model with a depth estimation head on top (consisting of 3 convolutional layers) e.g. for KITTI, NYUv2.
@@ -829,17 +868,11 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         self.dpt = DPTModel(config, add_pooling_layer=False)
 
+        # Neck
+        self.neck = DPTNeck(config)
+
         # Depth estimation head
-        features = config.channels
-        self.head = nn.Sequential(
-            nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
-            DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(True),
-            nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
-            nn.ReLU(True),
-            nn.Identity(),
-        )
+        self.head = DPTDepthEstimationHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -848,7 +881,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values=None,
+        pixel_values,
         head_mask=None,
         labels=None,
         output_attentions=None,
@@ -891,7 +924,10 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        logits = self.head(outputs.last_hidden_state)
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        hidden_states = self.neck(encoder_hidden_states)
+
+        logits = self.head(hidden_states)
         logits = logits.squeeze(dim=1)
 
         loss = None
@@ -910,6 +946,53 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         )
 
 
+class DPTSemanticSegmentationHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        features = config.channels
+        self.head = nn.Sequential(
+            nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(features),
+            nn.ReLU(True),
+            nn.Dropout(0.1, False),
+            nn.Conv2d(features, self.num_labels, kernel_size=1),
+            DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
+        )
+
+    def forward(self, hidden_states):
+        logits = self.head(hidden_states)
+
+        return logits
+
+
+class DPTAuxiliaryHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        features = config.channels
+        self.head = nn.Sequential(
+            nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(features),
+            nn.ReLU(True),
+            nn.Dropout(0.1, False),
+            nn.Conv2d(features, self.num_labels, kernel_size=1),
+            DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
+        )
+        self.auxhead = nn.Sequential(
+            nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(features),
+            nn.ReLU(True),
+            nn.Dropout(0.1, False),
+            nn.Conv2d(features, self.num_labels, kernel_size=1),
+        )
+
+    def forward(self, hidden_states):
+        logits = self.head(hidden_states)
+
+        return logits
+
+
 @add_start_docstrings(
     """
     DPT Model with a semantic segmentation head on top e.g. for ADE20k, CityScapes.
@@ -924,23 +1007,8 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         self.dpt = DPTModel(config, add_pooling_layer=False)
 
         # Segmentation head + auxiliary head
-        features = config.channels
-        self.head = nn.Sequential(
-            nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(features),
-            nn.ReLU(True),
-            nn.Dropout(0.1, False),
-            nn.Conv2d(features, self.num_labels, kernel_size=1),
-            DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
-        )
-
-        self.auxlayer = nn.Sequential(
-            nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(features),
-            nn.ReLU(True),
-            nn.Dropout(0.1, False),
-            nn.Conv2d(features, self.num_labels, kernel_size=1),
-        )
+        self.head = DPTSemanticSegmentationHead(config)
+        self.auxlayer = DPTAuxiliaryHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -993,7 +1061,10 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        logits = self.head(outputs.last_hidden_state)
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        hidden_states = self.neck(encoder_hidden_states)
+
+        logits = self.head(hidden_states)
 
         loss = None
         if labels is not None:
