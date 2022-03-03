@@ -1161,14 +1161,21 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         Example:
 
         ```python
-         >>> import torch >>> from transformers import Speech2TextModel, Speech2TextFeatureExtractor >>> from datasets
-        import load_dataset >>> model = Speech2TextModel.from_pretrained("facebook/s2t-small-librispeech-asr") >>>
-        feature_extractor = Speech2TextFeatureExtractor.from_pretrained("facebook/s2t-small-librispeech-asr") >>> ds =
-        load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation") >>> input_features =
-        feature_extractor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"],
-        return_tensors="pt").input_features >>> decoder_input_ids = torch.tensor([[1, 1]]) *
-        model.config.decoder_start_token_id >>> last_hidden_state = model(input_features,
-        decoder_input_ids=decoder_input_ids).last_hidden_state >>> list(last_hidden_state.shape) [1, 2, 256] """
+         >>> import torch
+         >>> from transformers import Speech2TextModel, Speech2TextFeatureExtractor
+         >>> from datasets import load_dataset
+
+         >>> model = Speech2TextModel.from_pretrained("facebook/s2t-small-librispeech-asr")
+         >>> feature_extractor = Speech2TextFeatureExtractor.from_pretrained("facebook/s2t-small-librispeech-asr")
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+         >>> input_features = feature_extractor(
+         ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
+         >>> ).input_features
+         >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
+         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
+         >>> list(last_hidden_state.shape)
+         [1, 2, 256]
+         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1303,6 +1310,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         Returns:
 
         Example:
+
         ```python
         >>> import torch
         >>> from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
