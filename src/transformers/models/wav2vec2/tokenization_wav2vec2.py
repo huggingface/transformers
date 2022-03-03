@@ -566,17 +566,15 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         >>> word_offsets = [
         ...     {
         ...         "word": d["word"],
-        ...         "start_time": d["start_offset"] * time_offset,
-        ...         "end_time": d["end_offset"] * time_offset,
+        ...         "start_time": round(d["start_offset"] * time_offset, 2),
+        ...         "end_time": round(d["end_offset"] * time_offset, 2),
         ...     }
         ...     for d in outputs.word_offsets
         ... ]
         >>> # compare word offsets with audio `common_voice_en_100038.mp3` online on the dataset viewer:
         >>> # https://huggingface.co/datasets/common_voice/viewer/en/train
-        >>> word_offset
-        >>> # [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES',
-        >>> # 'start_time': 1.64, 'end_time': 1.90}, {'word': 'MILISANDRA',
-        >>> # 'start_time': 2.26, 'end_time': 2.9}, {'word': 'LOOK', 'start_time': 3.0, 'end_time': 3.16}, ...
+        >>> word_offsets[:3]
+        [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES', 'start_time': 1.64, 'end_time': 1.9}, {'word': 'MILISANDRA', 'start_time': 2.26, 'end_time': 2.9}]
         ```"""
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)

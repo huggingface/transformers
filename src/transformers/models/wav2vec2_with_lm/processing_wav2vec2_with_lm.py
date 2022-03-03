@@ -401,7 +401,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         ```python
         >>> # Let's see how to retrieve time steps for a model
-        >>> from transformers import AutoTokenizer, AutoFeatureExtractor, AutoModelForCTC
+        >>> from transformers import AutoTokenizer, AutoProcessor, AutoModelForCTC
         >>> from datasets import load_dataset
         >>> import datasets
         >>> import torch
@@ -417,29 +417,27 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         >>> sample = next(dataset_iter)
 
         >>> # forward sample through model to get greedily predicted transcription ids
-        >>> input_values = feature_extractor(sample["audio"]["array"], return_tensors="pt").input_values
+        >>> input_values = processor(sample["audio"]["array"], return_tensors="pt").input_values
         >>> with torch.no_grad():
         ...     logits = model(input_values).logits[0].cpu().numpy()
 
         >>> # retrieve word stamps (analogous commands for `output_char_offsets`)
-        >>> outputs = tokenizer.decode(logits, output_word_offsets=True)
+        >>> outputs = processor.decode(logits, output_word_offsets=True)
         >>> # compute `time_offset` in seconds as product of downsampling ratio and sampling_rate
-        >>> time_offset = model.config.inputs_to_logits_ratio / feature_extractor.sampling_rate
+        >>> time_offset = model.config.inputs_to_logits_ratio / processor.feature_extractor.sampling_rate
 
         >>> word_offsets = [
         ...     {
         ...         "word": d["word"],
-        ...         "start_time": d["start_offset"] * time_offset,
-        ...         "end_time": d["end_offset"] * time_offset,
+        ...         "start_time": round(d["start_offset"] * time_offset, 2),
+        ...         "end_time": round(d["end_offset"] * time_offset, 2),
         ...     }
         ...     for d in outputs.word_offsets
         ... ]
         >>> # compare word offsets with audio `common_voice_en_100038.mp3` online on the dataset viewer:
         >>> # https://huggingface.co/datasets/common_voice/viewer/en/train
-        >>> word_offset
-        >>> # [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES',
-        >>> # 'start_time': 1.64, 'end_time': 1.88}, {'word': 'A',
-        >>> # 'start_time': 2.12, 'end_time': 2.14}, {'word': 'MILE', 'start_time': 2.26, 'end_time': 2.46}, ...
+        >>> word_offsets[:4]
+        [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES', 'start_time': 1.64, 'end_time': 1.88}, {'word': 'A', 'start_time': 2.12, 'end_time': 2.14}, {'word': 'MILE', 'start_time': 2.26, 'end_time': 2.46}]
         ```"""
 
         from pyctcdecode.constants import (
