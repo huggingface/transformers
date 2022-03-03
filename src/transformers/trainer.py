@@ -16,7 +16,6 @@
 The Trainer class, to easily train a 🤗 Transformers from scratch or finetune it on a new task.
 """
 
-import collections
 import contextlib
 import inspect
 import math
@@ -54,7 +53,7 @@ import numpy as np
 import torch
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
+from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from huggingface_hub import Repository
@@ -126,6 +125,7 @@ from .trainer_utils import (
     default_hp_space,
     denumpify_detensorize,
     get_last_checkpoint,
+    has_length,
     number_of_arguments,
     set_seed,
     speed_metrics,
@@ -429,7 +429,7 @@ class Trainer:
         if args.max_steps > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
 
-        if train_dataset is not None and not isinstance(train_dataset, collections.abc.Sized) and args.max_steps <= 0:
+        if train_dataset is not None and not has_length(train_dataset) and args.max_steps <= 0:
             raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
 
         if (
@@ -585,7 +585,7 @@ class Trainer:
             return dataset.remove_columns(ignored_columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
-        if not isinstance(self.train_dataset, collections.abc.Sized):
+        if not has_length(self.train_dataset):
             return None
 
         generator = None
@@ -952,7 +952,7 @@ class Trainer:
 
         for key, value in params.items():
             if not hasattr(self.args, key):
-                logger.warn(
+                logger.warning(
                     f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
                 )
                 continue
@@ -971,7 +971,7 @@ class Trainer:
             # Rebuild the deepspeed config to reflect the updated training parameters
             from transformers.deepspeed import HfDeepSpeedConfig
 
-            self.args.hf_deepspeed_config = HfDeepSpeedConfig(self.args)
+            self.args.hf_deepspeed_config = HfDeepSpeedConfig(self.args.deepspeed)
 
     def _report_to_hp_search(
         self, trial: Union["optuna.Trial", Dict[str, Any]], epoch: int, metrics: Dict[str, float]
@@ -1165,7 +1165,7 @@ class Trainer:
                 config = PretrainedConfig.from_json_file(os.path.join(resume_from_checkpoint, CONFIG_NAME))
                 checkpoint_version = config.transformers_version
                 if checkpoint_version is not None and checkpoint_version != __version__:
-                    logger.warn(
+                    logger.warning(
                         f"You are resuming training from a checkpoint trained with {checkpoint_version} of "
                         f"Transformers but your current version is {__version__}. This is not recommended and could "
                         "yield to errors or unwanted behaviors."
@@ -1190,7 +1190,7 @@ class Trainer:
             self.model_wrapped = self.model
 
         # Keeping track whether we can can len() on the dataset or not
-        train_dataset_is_sized = isinstance(self.train_dataset, collections.abc.Sized)
+        train_dataset_is_sized = has_length(self.train_dataset)
 
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
@@ -1233,7 +1233,9 @@ class Trainer:
             else:
                 debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
 
-        delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
+        delay_optimizer_creation = (
+            self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE or is_sagemaker_mp_enabled()
+        )
         if args.deepspeed:
             deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
                 self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
@@ -1534,7 +1536,7 @@ class Trainer:
                     # If the model is on the GPU, it still works!
                     self._load_state_dict_in_model(state_dict)
             else:
-                logger.warn(
+                logger.warning(
                     f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
                     "on multiple nodes, you should activate `--save_on_each_node`."
                 )
@@ -1567,9 +1569,11 @@ class Trainer:
             ):
                 self.model.tie_weights()
             else:
-                logger.warn(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
+                logger.warning(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
         if len(load_result.unexpected_keys) != 0:
-            logger.warn(f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}.")
+            logger.warning(
+                f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}."
+            )
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, ignore_keys_for_eval):
         if self.control.should_log:
@@ -1636,7 +1640,7 @@ class Trainer:
                 try:
                     torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
                 except Exception as e:
-                    logger.infor(
+                    logger.info(
                         f"Didn't manage to set back the RNG states of the GPU because of the following error:\n {e}"
                         "\nThis won't yield the same results as if the training had not been interrupted."
                     )
@@ -1688,8 +1692,8 @@ class Trainer:
                 xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
-            if smp.dp_rank() == 0:
-                # Consolidate the state dict on all processed of dp_rank 0
+            if smp.rdp_rank() == 0:
+                # Consolidate the state dict on all processed of rdp_rank 0
                 opt_state_dict = self.optimizer.state_dict()
                 # Save it and the scheduler on the main process
                 if self.args.should_save:
@@ -2383,7 +2387,7 @@ class Trainer:
         batch_size = dataloader.batch_size
 
         logger.info(f"***** Running {description} *****")
-        if isinstance(dataloader.dataset, collections.abc.Sized):
+        if has_length(dataloader.dataset):
             logger.info(f"  Num examples = {self.num_examples(dataloader)}")
         else:
             logger.info("  Num examples: Unknown")
@@ -2478,7 +2482,7 @@ class Trainer:
             all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
 
         # Number of samples
-        if not isinstance(eval_dataset, IterableDataset):
+        if has_length(eval_dataset):
             num_samples = len(eval_dataset)
         # The instance check is weird and does not actually check for the type, but whether the dataset has the right
         # methods. Therefore we need to make sure it also has the attribute.
@@ -2872,7 +2876,7 @@ class Trainer:
         """
         args = self.args
 
-        if not isinstance(dataloader.dataset, collections.abc.Sized):
+        if not has_length(dataloader.dataset):
             raise ValueError("dataset must implement __len__")
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
 

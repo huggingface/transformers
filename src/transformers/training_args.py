@@ -1126,7 +1126,7 @@ class TrainingArguments:
         if is_torch_tpu_available():
             return xm.xrt_world_size()
         elif is_sagemaker_mp_enabled():
-            return smp.dp_size()
+            return smp.dp_size() if not smp.state.cfg.prescaled_batch else smp.rdp_size()
         elif is_sagemaker_dp_enabled():
             return sm_dist.get_world_size()
         elif self.local_rank != -1:
@@ -1142,7 +1142,7 @@ class TrainingArguments:
         if is_torch_tpu_available():
             return xm.get_ordinal()
         elif is_sagemaker_mp_enabled():
-            return smp.dp_rank()
+            return smp.dp_rank() if not smp.state.cfg.prescaled_batch else smp.rdp_rank()
         elif is_sagemaker_dp_enabled():
             return sm_dist.get_rank()
         elif self.local_rank != -1:
@@ -1244,12 +1244,14 @@ class TrainingArguments:
 
         """
         if is_torch_available() and self.world_size > 1:
+            main_process_desc = "main process"
             if local:
                 is_main_process = self.local_process_index == 0
                 main_process_desc = "main local process"
+            elif is_sagemaker_mp_enabled():
+                is_main_process = smp.rank() == 0
             else:
                 is_main_process = self.process_index == 0
-                main_process_desc = "main process"
 
             try:
                 if not is_main_process:

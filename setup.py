@@ -93,7 +93,7 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow",
-    "black==21.4b0",
+    "black~=22.0",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.2",
     "dataclasses",
@@ -105,6 +105,7 @@ _deps = [
     "filelock",
     "flake8>=3.8.3",
     "flax>=0.3.5",
+    "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "huggingface-hub>=0.1.0,<1.0",
@@ -149,7 +150,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.10.1,!=0.11.3",
+    "tokenizers>=0.11.1,!=0.11.3",
     "torch>=1.0",
     "torchaudio",
     "pyctcdecode>=0.3.0",
@@ -166,7 +167,7 @@ _deps = [
 # packaging: "packaging"
 #
 # some of the values are versioned whereas others aren't.
-deps = {b: a for a, b in (re.findall(r"^(([^!=<>]+)(?:[!=<>].*)?$)", x)[0] for x in _deps)}
+deps = {b: a for a, b in (re.findall(r"^(([^!=<>~]+)(?:[!=<>~].*)?$)", x)[0] for x in _deps)}
 
 # since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
 # anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
@@ -242,6 +243,7 @@ else:
     extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
 
 extras["tokenizers"] = deps_list("tokenizers")
+extras["ftfy"] = deps_list("ftfy")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["onnx"] = deps_list("onnxconverter-common", "tf2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
@@ -307,6 +309,36 @@ extras["docs_specific"] = []
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]
 
+extras["dev-torch"] = (
+    extras['testing']
+    + extras['torch']
+    + extras["sentencepiece"]
+    + extras["tokenizers"]
+    + extras["torch-speech"]
+    + extras["vision"]
+    + extras["integrations"]
+    + extras["timm"]
+    + extras["codecarbon"]
+    + extras["quality"]
+    + extras["ja"]
+    + extras["docs_specific"]
+    + extras["sklearn"]
+    + extras["modelcreation"]
+    + extras["onnxruntime"]
+)
+extras["dev-tensorflow"] = (
+        extras['testing']
+        + extras['tf']
+        + extras["sentencepiece"]
+        + extras["tokenizers"]
+        + extras["vision"]
+        + extras["quality"]
+        + extras["docs_specific"]
+        + extras["sklearn"]
+        + extras["modelcreation"]
+        + extras["onnx"]
+        + extras["tf-speech"]
+)
 extras["dev"] = (
     extras["all"]
     + extras["testing"]

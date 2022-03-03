@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ from dataclasses import dataclass
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -31,7 +31,13 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    MaskedLMOutput,
+    SemanticSegmentationModelOutput,
+    SequenceClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_beit import BeitConfig
@@ -851,14 +857,26 @@ class BeitForImageClassification(BeitPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
@@ -1132,7 +1150,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         return loss
 
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=SemanticSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -1164,7 +1182,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> # logits are of shape (batch_size, num_labels, height/4, width/4)
+        >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1197,6 +1215,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
             features[i] = ops[i](features[i])
 
         logits = self.decode_head(features)
+
         auxiliary_logits = None
         if self.auxiliary_head is not None:
             auxiliary_logits = self.auxiliary_head(features)
@@ -1215,7 +1234,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
                 output = (logits,) + outputs[3:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return SemanticSegmentationModelOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states if output_hidden_states else None,

@@ -16,6 +16,7 @@
 
 import inspect
 import warnings
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -29,19 +30,17 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
-from ...modeling_tf_utils import (
-    TFPreTrainedModel,
-    booleans_processing,
-    get_initializer,
-    keras_serializable,
-    shape_list,
-)
+from ...modeling_tf_utils import TFPreTrainedModel, booleans_processing, get_initializer, keras_serializable
+from ...tf_utils import shape_list
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
 
 
 logger = logging.get_logger(__name__)
+
+
+_HIDDEN_STATES_START_POSITION = 2
 
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
@@ -56,6 +55,35 @@ TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 LARGE_NEGATIVE = -1e8
+
+
+@dataclass
+class TFWav2Vec2BaseModelOutput(ModelOutput):
+    """
+    Output type of [`TFWav2Vec2BaseModelOutput`], with potential hidden states and attentions.
+
+    Args:
+        last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        extract_features (`tf.Tensor` of shape `(batch_size, sequence_length, conv_dim[-1])`):
+            Sequence of extracted feature vectors of the last convolutional layer of the model.
+        hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    last_hidden_state: tf.Tensor = None
+    extract_features: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 def input_values_processing(func, config, input_values, **kwargs):
@@ -707,10 +735,10 @@ class TFWav2Vec2FeatureProjection(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=config.feat_proj_dropout)
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.projection(hidden_states)
+        norm_hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.projection(norm_hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
-        return hidden_states
+        return hidden_states, norm_hidden_states
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with TFBart->TFWav2Vec2
@@ -732,8 +760,12 @@ class TFWav2Vec2Attention(tf.keras.layers.Layer):
         self.num_heads = num_heads
         self.dropout = tf.keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
@@ -1222,19 +1254,20 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
             kwargs_call=kwargs,
         )
 
-        hidden_states = self.feature_extractor(
+        extract_features = self.feature_extractor(
             tf.cast(inputs["input_values"], tf.float32), training=inputs["training"]
         )
+        # extract_features = tf.transpose(extract_features, perm=(0, 2, 1))
 
         if inputs["attention_mask"] is not None:
             # compute real output lengths according to convolution formula
             output_lengths = self._get_feat_extract_output_lengths(tf.reduce_sum(inputs["attention_mask"], -1))
 
             attention_mask = tf.sequence_mask(
-                output_lengths, maxlen=shape_list(hidden_states)[1], dtype=hidden_states.dtype
+                output_lengths, maxlen=shape_list(extract_features)[1], dtype=extract_features.dtype
             )
 
-        hidden_states = self.feature_projection(hidden_states, training=inputs["training"])
+        hidden_states, extract_features = self.feature_projection(extract_features, training=inputs["training"])
 
         mask_time_indices = kwargs.get("mask_time_indices", None)
         if inputs["training"]:
@@ -1251,10 +1284,11 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
         hidden_states = encoder_outputs[0]
 
         if not inputs["return_dict"]:
-            return (hidden_states,) + encoder_outputs[1:]
+            return (hidden_states, extract_features) + encoder_outputs[1:]
 
-        return TFBaseModelOutput(
+        return TFWav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
+            extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -1279,6 +1313,13 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
             "attention_mask": tf.cast(tf.not_equal(input_values, pad_token), tf.float32),
         }
         return dummy_inputs
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        logger.warning(
+            f"\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. If you wish "
+            "to train/fine-tine this model, you need a GPU or a TPU"
+        )
 
     @tf.function
     def serving(self, inputs):
@@ -1475,7 +1516,12 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+        return TFWav2Vec2BaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            extract_features=output.extract_features,
+            hidden_states=hs,
+            attentions=attns,
+        )
 
 
 @add_start_docstrings(
@@ -1635,7 +1681,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             loss = None
 
         if not inputs["return_dict"]:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
             return ((loss,) + output) if loss is not None else output
 
         return TFCausalLMOutput(

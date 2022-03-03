@@ -50,8 +50,8 @@ from ...modeling_tf_utils import (
     get_initializer,
     input_processing,
     keras_serializable,
-    shape_list,
 )
+from ...tf_utils import shape_list
 from ...utils import logging
 from .configuration_electra import ElectraConfig
 
@@ -140,8 +140,8 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
         elif past_key_value is not None:
             key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
             value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
-            key_layer = tf.concatenate([past_key_value[0], key_layer], dim=2)
-            value_layer = tf.concatenate([past_key_value[1], value_layer], dim=2)
+            key_layer = tf.concat([past_key_value[0], key_layer], axis=2)
+            value_layer = tf.concat([past_key_value[1], value_layer], axis=2)
         else:
             key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
             value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
@@ -673,6 +673,8 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
             extended_attention_mask = tf.reshape(
                 extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2])
             )
+            if past_key_values_length > 0:
+                extended_attention_mask = extended_attention_mask[:, :, -seq_length:, :]
         else:
             extended_attention_mask = tf.reshape(
                 attention_mask, (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
@@ -1508,14 +1510,14 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             else None
         )
         outputs = self.electra(
-            flat_input_ids,
-            flat_attention_mask,
-            flat_token_type_ids,
-            flat_position_ids,
-            inputs["head_mask"],
-            flat_inputs_embeds,
-            inputs["output_attentions"],
-            inputs["output_hidden_states"],
+            input_ids=flat_input_ids,
+            attention_mask=flat_attention_mask,
+            token_type_ids=flat_token_type_ids,
+            position_ids=flat_position_ids,
+            head_mask=inputs["head_mask"],
+            inputs_embeds=flat_inputs_embeds,
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )

@@ -393,7 +393,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import FlaxVisionEncoderDecoderModel
+        >>> from transformers import ViTFeatureExtractor, FlaxVisionEncoderDecoderModel
         >>> from PIL import Image
         >>> import requests
 
@@ -403,7 +403,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained("vit", "gpt2")
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "google/vit-base-patch16-224-in21k", "gpt2"
+        ... )
 
         >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
         >>> encoder_outputs = model.encode(pixel_values)
@@ -469,7 +471,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import FlaxVisionEncoderDecoderModel
+        >>> from transformers import ViTFeatureExtractor, FlaxVisionEncoderDecoderModel
         >>> import jax.numpy as jnp
         >>> from PIL import Image
         >>> import requests
@@ -480,7 +482,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained("vit", "gpt2")
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "google/vit-base-patch16-224-in21k", "gpt2"
+        ... )
 
         >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
         >>> encoder_outputs = model.encode(pixel_values)
@@ -610,7 +614,9 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> tokenizer_output = GPT2Tokenizer.from_pretrained("gpt2")
 
         >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
-        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained("vit", "gpt2")
+        >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "google/vit-base-patch16-224-in21k", "gpt2"
+        ... )
 
         >>> pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
 

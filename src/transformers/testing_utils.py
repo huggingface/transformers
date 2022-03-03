@@ -689,6 +689,10 @@ def get_tests_dir(append_path=None):
     # this function caller's __file__
     caller__file__ = inspect.stack()[1][1]
     tests_dir = os.path.abspath(os.path.dirname(caller__file__))
+
+    while not tests_dir.endswith("tests"):
+        tests_dir = os.path.dirname(tests_dir)
+
     if append_path:
         return os.path.join(tests_dir, append_path)
     else:
@@ -1270,10 +1274,10 @@ def pytest_terminal_summary_main(tr, id):
     orig_tbstyle = config.option.tbstyle
     orig_reportchars = tr.reportchars
 
-    dir = "reports"
+    dir = f"reports/{id}"
     Path(dir).mkdir(parents=True, exist_ok=True)
     report_files = {
-        k: f"{dir}/{id}_{k}.txt"
+        k: f"{dir}/{k}.txt"
         for k in [
             "durations",
             "errors",

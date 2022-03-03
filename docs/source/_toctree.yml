@@ -33,12 +33,32 @@
     title: Multi-lingual models
   title: Tutorials
 - sections:
+  - local: create_a_model
+    title: Create a custom model
+  - local: multilingual
+    title: Inference for multilingual models
   - local: examples
     title: Examples
   - local: troubleshooting
     title: Troubleshooting
   - local: custom_datasets
     title: Fine-tuning with custom datasets
+  - sections:
+    - local: tasks/sequence_classification
+      title: Text classification
+    - local: tasks/token_classification
+      title: Token classification
+    - local: tasks/question_answering
+      title: Question answering
+    - local: tasks/language_modeling
+      title: Language modeling
+    - local: tasks/translation
+      title: Translation
+    - local: tasks/summarization
+      title: Summarization
+    - local: tasks/multiple_choice
+      title: Multiple choice
+    title: Fine-tune for downstream tasks
   - local: notebooks
     title: "🤗 Transformers Notebooks"
   - local: sagemaker
@@ -71,7 +91,7 @@
     title: Sharing custom models
   - local: pr_checks
     title: Checks on a Pull Request
-  title: Advanced guides
+  title: How-to guides
 - sections:
   - local: bertology
     title: BERTology
@@ -150,6 +170,8 @@
       title: CamemBERT
     - local: model_doc/canine
       title: CANINE
+    - local: model_doc/convnext
+      title: ConvNeXT
     - local: model_doc/clip
       title: CLIP
     - local: model_doc/convbert
@@ -158,6 +180,8 @@
       title: CPM
     - local: model_doc/ctrl
       title: CTRL
+    - local: model_doc/data2vec
+      title: Data2Vec
     - local: model_doc/deberta
       title: DeBERTa
     - local: model_doc/deberta-v2
@@ -206,6 +230,8 @@
       title: LXMERT
     - local: model_doc/marian
       title: MarianMT
+    - local: model_doc/maskformer
+      title: MaskFormer
     - local: model_doc/m2m_100
       title: M2M100
     - local: model_doc/mbart
@@ -242,6 +268,10 @@
       title: Pegasus
     - local: model_doc/phobert
       title: PhoBERT
+    - local: model_doc/plbart
+      title: PLBart
+    - local: model_doc/poolformer
+      title: PoolFormer
     - local: model_doc/prophetnet
       title: ProphetNet
     - local: model_doc/qdqbert
