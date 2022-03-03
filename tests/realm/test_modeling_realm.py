@@ -345,7 +345,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
             self.model_tester.create_and_check_embedder(*config_and_inputs)
             self.model_tester.create_and_check_encoder(*config_and_inputs)
 
-    def test_retriever(self):
+    def test_scorer(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_scorer(*config_and_inputs)
 
@@ -407,6 +407,13 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         inputs = self._prepare_for_class(inputs_dict, RealmForOpenQA)
         loss = model(**inputs).reader_output.loss
         loss.backward()
+
+        # Test model.block_embedding_to
+        device = torch.device("cpu")
+        model.block_embedding_to(device)
+        loss = model(**inputs).reader_output.loss
+        loss.backward()
+        self.assertEqual(model.block_emb.device.type, device.type)
 
     @slow
     def test_embedder_from_pretrained(self):
@@ -506,10 +513,15 @@ class RealmModelIntegrationTest(unittest.TestCase):
 
         concat_input_ids = torch.arange(10).view((2, 5))
         concat_token_type_ids = torch.tensor([[0, 0, 1, 1, 1], [0, 0, 1, 1, 1]], dtype=torch.int64)
+        concat_block_mask = torch.tensor([[0, 0, 1, 1, 0], [0, 0, 1, 1, 0]], dtype=torch.int64)
         relevance_score = torch.tensor([0.3, 0.7], dtype=torch.float32)
 
         output = model(
-            concat_input_ids, token_type_ids=concat_token_type_ids, relevance_score=relevance_score, return_dict=True
+            concat_input_ids,
+            token_type_ids=concat_token_type_ids,
+            relevance_score=relevance_score,
+            block_mask=concat_block_mask,
+            return_dict=True,
         )
 
         block_idx_expected_shape = torch.Size(())

@@ -20,9 +20,9 @@ from typing import Optional, Union
 import numpy as np
 
 from huggingface_hub import hf_hub_download
+from transformers import AutoTokenizer
 
 from ...utils import logging
-from .tokenization_realm import RealmTokenizer
 
 
 _REALM_BLOCK_RECORDS_FILENAME = "block_records.npy"
@@ -97,7 +97,9 @@ class RealmRetriever:
             text.append(question)
             text_pair.append(retrieved_block.decode())
 
-        concat_inputs = self.tokenizer(text, text_pair, padding=True, truncation=True, max_length=max_length)
+        concat_inputs = self.tokenizer(
+            text, text_pair, padding=True, truncation=True, return_special_tokens_mask=True, max_length=max_length
+        )
         concat_inputs_tensors = concat_inputs.convert_to_tensors(return_tensors)
 
         if answer_ids is not None:
@@ -115,7 +117,7 @@ class RealmRetriever:
             )
         block_records = np.load(block_records_path, allow_pickle=True)
 
-        tokenizer = RealmTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
 
         return cls(block_records, tokenizer)
 
@@ -133,13 +135,15 @@ class RealmRetriever:
         max_answers = 0
 
         for input_id in concat_inputs.input_ids:
+            input_id_list = input_id.tolist()
+            # Check answers between two [SEP] tokens
+            first_sep_idx = input_id_list.index(self.tokenizer.sep_token_id)
+            second_sep_idx = first_sep_idx + 1 + input_id_list[first_sep_idx + 1 :].index(self.tokenizer.sep_token_id)
+
             start_pos.append([])
             end_pos.append([])
-            input_id_list = input_id.tolist()
-            # Checking answers after the [SEP] token
-            sep_idx = input_id_list.index(self.tokenizer.sep_token_id)
             for answer in answer_ids:
-                for idx in range(sep_idx, len(input_id)):
+                for idx in range(first_sep_idx + 1, second_sep_idx):
                     if answer[0] == input_id_list[idx]:
                         if input_id_list[idx : idx + len(answer)] == answer:
                             start_pos[-1].append(idx)
@@ -158,5 +162,4 @@ class RealmRetriever:
                 padded = [-1] * (max_answers - len(start_pos_))
                 start_pos_ += padded
                 end_pos_ += padded
-
         return has_answers, start_pos, end_pos
