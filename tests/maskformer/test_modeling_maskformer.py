@@ -161,6 +161,7 @@ class MaskFormerModelTester:
 
 
 @require_torch
+@slow
 class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (MaskFormerModel, MaskFormerForInstanceSegmentation) if is_torch_available() else ()
