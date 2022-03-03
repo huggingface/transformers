@@ -13,3 +13,12 @@ src/transformers/models/speech_encoder_decoder/modeling_speech_enocder_decoder.p
 src/transformers/models/data2vec/modeling_data2vec_audio.py
 docs/source/quicktour.mdx
 docs/source/task_summary.mdx
+src/transformers/models/vit/modeling_vit.py
+src/transformers/models/beit/modeling_beit.py
+src/transformers/models/deit/modeling_deit.py
+src/transformers/models/swin/modeling_swin.py
+src/transformers/models/convnext/modeling_convnext.py
+src/transformers/models/poolformer/modeling_poolformer.py
+src/transformers/models/vit_mae/modeling_vit_mae.py
+src/transformers/models/segformer/modeling_segformer.py
+
