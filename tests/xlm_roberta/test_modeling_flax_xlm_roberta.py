@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import is_flax_available
+from transformers import AutoTokenizer, is_flax_available
 from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
 
 
@@ -32,8 +32,9 @@ class FlaxXLMRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_flax_xlm_roberta_base(self):
         model = FlaxXLMRobertaModel.from_pretrained("xlm-roberta-base")
-        input_ids = jnp.array([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
-        # The dog is cute and lives in the garden house
+        tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
+        text = "The dog is cute and lives in the garden house"
+        input_ids = jnp.array([tokenizer.encode(text)])
 
         expected_output_shape = (1, 12, 768)  # batch_size, sequence_length, embedding_vector_dim
         expected_output_values_last_dim = jnp.array(
