@@ -1160,7 +1160,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
 
         Example:
 
-        ```python
+         ```python
          >>> import torch
          >>> from transformers import Speech2TextModel, Speech2TextFeatureExtractor
          >>> from datasets import load_dataset
