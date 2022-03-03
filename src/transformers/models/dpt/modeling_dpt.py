@@ -22,6 +22,7 @@ https://github.com/open-mmlab/mmsegmentation/blob/master/mmseg/models/decode_hea
 
 import collections.abc
 import math
+from typing import List
 
 import torch
 import torch.utils.checkpoint
@@ -767,6 +768,8 @@ class DPTNeck(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        self.config = config
+
         # postprocessing
         self.reassemble_blocks = DPTReassembleBlocks(config)
         self.post_process_channels = [
@@ -783,8 +786,9 @@ class DPTNeck(nn.Module):
             self.fusion_blocks.append(DPTFeatureFusionBlock(config))
         self.fusion_blocks[0].res_conv_unit1 = None  # not sure why this is done in mmseg
 
-    def forward(self, encoder_hidden_states):
-        # TODO: only keep certain features based on config.out_indices
+    def forward(self, encoder_hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
+        # TODO: possibly move
+        # only keep certain features based on config.out_indices
         # note that the encoder_hidden_states also include the initial embeddings
         features = [feature for idx, feature in enumerate(encoder_hidden_states[1:]) if idx in self.config.out_indices]
 
@@ -836,6 +840,12 @@ class DPTInterpolate(nn.Module):
 
 
 class DPTDepthEstimationHead(nn.Module):
+    """
+    Output head head consisting of 3 convolutional layers. It progressively halves the feature dimension and
+    upsamples the predictions to the input resolution after the first convolutional layer (details can be found
+    in the paper's supplementary material).
+    """
+
     def __init__(self, config):
         super().__init__()
 
@@ -850,7 +860,7 @@ class DPTDepthEstimationHead(nn.Module):
             nn.Identity(),
         )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         logits = self.head(hidden_states)
 
         return logits

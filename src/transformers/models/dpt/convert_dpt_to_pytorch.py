@@ -62,8 +62,6 @@ def get_dpt_config(checkpoint_url):
 
 def remove_ignore_keys_(state_dict):
     ignore_keys = [
-        "pretrained.model.norm.weight",
-        "pretrained.model.norm.bias",
         "pretrained.model.head.weight",
         "pretrained.model.head.bias",
     ]
@@ -102,7 +100,7 @@ def rename_key(name):
     if "scratch.output_conv" in name:
         name = name.replace("scratch.output_conv", "head")
     if "scratch" in name:
-        name = name.replace("scratch", "dpt")
+        name = name.replace("scratch", "neck")
     if "layer1_rn" in name:
         name = name.replace("layer1_rn", "convs.0")
     if "layer2_rn" in name:
@@ -112,7 +110,7 @@ def rename_key(name):
     if "layer4_rn" in name:
         name = name.replace("layer4_rn", "convs.3")
     if "refinenet" in name:
-        layer_idx = int(name[len("dpt.refinenet") : len("dpt.refinenet") + 1])
+        layer_idx = int(name[len("neck.refinenet") : len("neck.refinenet") + 1])
         # tricky here: we need to map 4 to 0, 3 to 1, 2 to 2 and 1 to 3
         name = name.replace(f"refinenet{layer_idx}", f"fusion_blocks.{abs(layer_idx-4)}")
     if "out_conv" in name:
@@ -121,34 +119,38 @@ def rename_key(name):
         name = name.replace("resConfUnit1", "res_conv_unit1")
     if "resConfUnit2" in name:
         name = name.replace("resConfUnit2", "res_conv_unit2")
+    # readout blocks
+    if "pretrained.act_postprocess1.0.project.0" in name:
+        name = name.replace("pretrained.act_postprocess1.0.project.0", "neck.reassemble_blocks.readout_projects.0.0")
+    if "pretrained.act_postprocess2.0.project.0" in name:
+        name = name.replace("pretrained.act_postprocess2.0.project.0", "neck.reassemble_blocks.readout_projects.1.0")
+    if "pretrained.act_postprocess3.0.project.0" in name:
+        name = name.replace("pretrained.act_postprocess3.0.project.0", "neck.reassemble_blocks.readout_projects.2.0")
+    if "pretrained.act_postprocess4.0.project.0" in name:
+        name = name.replace("pretrained.act_postprocess4.0.project.0", "neck.reassemble_blocks.readout_projects.3.0")
+    # resize blocks
+    if "pretrained.act_postprocess1.3" in name:
+        name = name.replace("pretrained.act_postprocess1.3", "neck.reassemble_blocks.projects.0")
+    if "pretrained.act_postprocess1.4" in name:
+        name = name.replace("pretrained.act_postprocess1.4", "neck.reassemble_blocks.resize_layers.0")
+    if "pretrained.act_postprocess2.3" in name:
+        name = name.replace("pretrained.act_postprocess2.3", "neck.reassemble_blocks.projects.1")
+    if "pretrained.act_postprocess2.4" in name:
+        name = name.replace("pretrained.act_postprocess2.4", "neck.reassemble_blocks.resize_layers.1")
+    if "pretrained.act_postprocess3.3" in name:
+        name = name.replace("pretrained.act_postprocess3.3", "neck.reassemble_blocks.projects.2")
+    if "pretrained.act_postprocess4.3" in name:
+        name = name.replace("pretrained.act_postprocess4.3", "neck.reassemble_blocks.projects.3")
+    if "pretrained.act_postprocess4.4" in name:
+        name = name.replace("pretrained.act_postprocess4.4", "neck.reassemble_blocks.resize_layers.3")
     if "pretrained" in name:
         name = name.replace("pretrained", "dpt")
-    # readout blocks
-    if "act_postprocess1.0.project.0" in name:
-        name = name.replace("act_postprocess1.0.project.0", "reassemble_blocks.readout_projects.0.0")
-    if "act_postprocess2.0.project.0" in name:
-        name = name.replace("act_postprocess2.0.project.0", "reassemble_blocks.readout_projects.1.0")
-    if "act_postprocess3.0.project.0" in name:
-        name = name.replace("act_postprocess3.0.project.0", "reassemble_blocks.readout_projects.2.0")
-    if "act_postprocess4.0.project.0" in name:
-        name = name.replace("act_postprocess4.0.project.0", "reassemble_blocks.readout_projects.3.0")
-    # resize blocks
-    if "act_postprocess1.3" in name:
-        name = name.replace("act_postprocess1.3", "reassemble_blocks.projects.0")
-    if "act_postprocess1.4" in name:
-        name = name.replace("act_postprocess1.4", "reassemble_blocks.resize_layers.0")
-    if "act_postprocess2.3" in name:
-        name = name.replace("act_postprocess2.3", "reassemble_blocks.projects.1")
-    if "act_postprocess2.4" in name:
-        name = name.replace("act_postprocess2.4", "reassemble_blocks.resize_layers.1")
-    if "act_postprocess3.3" in name:
-        name = name.replace("act_postprocess3.3", "reassemble_blocks.projects.2")
-    if "act_postprocess4.3" in name:
-        name = name.replace("act_postprocess4.3", "reassemble_blocks.projects.3")
-    if "act_postprocess4.4" in name:
-        name = name.replace("act_postprocess4.4", "reassemble_blocks.resize_layers.3")
     if "bn" in name:
         name = name.replace("bn", "batch_norm")
+    if "head" in name:
+        name = name.replace("head", "head.head")
+    if "encoder.norm" in name:
+        name = name.replace("encoder.norm", "layernorm")
 
     return name
 

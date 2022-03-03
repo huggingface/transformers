@@ -12,9 +12,6 @@ config.num_attention_heads = 16
 
 model = DPTForDepthEstimation(config)
 
-for name, param in model.named_parameters():
-    print(name, param.shape)
-
 pixel_values = torch.randn((1, 3, 384, 384))
 
 outputs = model(pixel_values)
