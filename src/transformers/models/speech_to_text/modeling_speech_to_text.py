@@ -24,12 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -44,8 +39,6 @@ from .configuration_speech_to_text import Speech2TextConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Speech2TextConfig"
-_TOKENIZER_FOR_DOC = "Speech2TextTokenizer"
-_CHECKPOINT_FOR_DOC = "facebook/s2t-small-librispeech-asr"
 
 
 SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -780,7 +773,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
             attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
             padding_mask = attention_mask.ne(1).long()
         else:
-            padding_mask = torch.zeros_like(inputs_embeds, dtype=torch.long)
+            padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
 
         embed_pos = self.embed_positions(padding_mask)
 
@@ -1144,12 +1137,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_features=None,
@@ -1167,6 +1155,28 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+
+        Example:
+
+         ```python
+         >>> import torch
+         >>> from transformers import Speech2TextModel, Speech2TextFeatureExtractor
+         >>> from datasets import load_dataset
+
+         >>> model = Speech2TextModel.from_pretrained("facebook/s2t-small-librispeech-asr")
+         >>> feature_extractor = Speech2TextFeatureExtractor.from_pretrained("facebook/s2t-small-librispeech-asr")
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+         >>> input_features = feature_extractor(
+         ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
+         >>> ).input_features
+         >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
+         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
+         >>> list(last_hidden_state.shape)
+         [1, 2, 256]
+         ```"""
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1305,27 +1315,22 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         >>> import torch
         >>> from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
         >>> from datasets import load_dataset
-        >>> import soundfile as sf
 
         >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
         >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
 
-        >>> def map_to_array(batch):
-        ...     speech, _ = sf.read(batch["file"])
-        ...     batch["speech"] = speech
-        ...     return batch
-
-
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.map(map_to_array)
 
         >>> input_features = processor(
-        ...     ds["speech"][0], sampling_rate=16000, return_tensors="pt"
-        >>> ).input_features  # Batch size 1
+        ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
+        >>> ).input_features
+
         >>> generated_ids = model.generate(inputs=input_features)
 
-        >>> transcription = processor.batch_decode(generated_ids)
+        >>> transcription = processor.batch_decode(generated_ids)[0]
+        >>> transcription
+        'mister quilter is the apostle of the middle classes and we are glad to welcome his gospel'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

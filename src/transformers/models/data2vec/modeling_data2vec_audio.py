@@ -55,21 +55,21 @@ _EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
 
 # CTC docstring
 _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
-_CTC_EXPECTED_LOSS = 53.48
+_CTC_EXPECTED_LOSS = 66.95
 
 # Audio class docstring
 _FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-_SEQ_CLASS_CHECKPOINT = "superb/data2vec-audio-base-superb-ks"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
-_SEQ_CLASS_EXPECTED_LOSS = 6.54
+_SEQ_CLASS_CHECKPOINT = "hf-internal-testing/tiny-random-data2vec-seq-class"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
+_SEQ_CLASS_EXPECTED_LOSS = 0.69
 
 # Frame class docstring
-_FRAME_CLASS_CHECKPOINT = "anton-l/data2vec-audio-base-superb-sd"
-_FRAME_EXPECTED_OUTPUT = [0, 0]
+_FRAME_CLASS_CHECKPOINT = "hf-internal-testing/tiny-random-data2vec-audio-frame"
+_FRAME_EXPECTED_OUTPUT = [1, 1]
 
 # Speaker Verification docstring
-_XVECTOR_CHECKPOINT = "anton-l/data2vec-audio-base-superb-sv"
-_XVECTOR_EXPECTED_OUTPUT = 0.98
+_XVECTOR_CHECKPOINT = "hf-internal-testing/tiny-random-data2vec-xvector"
+_XVECTOR_EXPECTED_OUTPUT = 1.0
 
 
 DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST = [
