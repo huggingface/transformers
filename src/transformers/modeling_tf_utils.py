@@ -351,6 +351,7 @@ def unpack_inputs(func):
     dictionary (e.g. do things like `a = input_ids`, as opposed to `a = inputs['input_ids']`), enabling clearer code.
     """
 
+    @functools.wraps(func)
     def run_call_with_unpacked_inputs(self, input_ids, *args, **kwargs):
         # isolates the actual `**kwargs` for the decorated function
         signature = dict(inspect.signature(func).parameters)

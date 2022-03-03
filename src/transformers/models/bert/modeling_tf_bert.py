@@ -1223,6 +1223,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             training=training,
             kwargs_call=kwargs,
         )
+        breakpoint()
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
