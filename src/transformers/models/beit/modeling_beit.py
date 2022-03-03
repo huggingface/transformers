@@ -771,6 +771,8 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
 
         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
         >>> loss, logits = outputs.loss, outputs.logits
+        >>> list(logits.shape)
+        [1, 196, 8192]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
