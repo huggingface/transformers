@@ -538,7 +538,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                     # create the area, since bool we just need to sum :)
                     mask_k_area = mask_k.sum()
                     # this is the area of all the stuff in query k
-                    # TODO not 100%, why are the taking the k query here????
                     original_area = (mask_probs[k] >= 0.5).sum()
 
                     mask_does_exist = mask_k_area > 0 and original_area > 0
@@ -565,5 +564,5 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                             )
                             if is_stuff:
                                 stuff_memory_list[pred_class] = current_segment_id
-                results.append({"segmentation": segmentation, "segments": segments})
+            results.append({"segmentation": segmentation, "segments": segments})
         return results
