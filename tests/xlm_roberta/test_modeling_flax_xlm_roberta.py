@@ -31,7 +31,7 @@ if is_flax_available():
 class FlaxXLMRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_flax_xlm_roberta_base(self):
-        model = FlaxXLMRobertaModel.from_pretrained("xlm-roberta-base", from_pt=True)
+        model = FlaxXLMRobertaModel.from_pretrained("xlm-roberta-base")
         input_ids = jnp.array([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
         # The dog is cute and lives in the garden house
 
