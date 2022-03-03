@@ -29,7 +29,7 @@ class ResNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ResNetModel`]. It is used to instantiate an
     ResNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the resnet50 architecture.
+    with the defaults will yield a similar configuration to that of the [resnet50](...) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -40,7 +40,7 @@ class ResNetConfig(PretrainedConfig):
         hidden_sizes (`List[int]`, *optional*, defaults to `[64, 256, 512, 1024, 2048]`):
             Dimensionality (hidden size) of the embeddings + at each stage.
         depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
-            Depth (number of blocks) for each stage.
+            Depth (number of layers) for each stage.
         layer_type (`str`, *optional*, defaults to `"bottleneck"`):
             The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or
             `"bottleneck"` (used for larger models like resnet-50 and above).
@@ -52,11 +52,11 @@ class ResNetConfig(PretrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import ResNetModel, ResNetConfig
+    >>> from transformers import ResNetConfig, ResNetModel
 
-    >>> # Initializing a ResNet resnet50 style configuration
+    >>> # Initializing a ResNet resnet-50 style configuration
     >>> configuration = ResNetConfig()
-    >>> # Initializing a model from the resnet50 style configuration
+    >>> # Initializing a model from the resnet-50 style configuration
     >>> model = ResNetModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
