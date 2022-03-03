@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PyTorch ResNet model."""
 
-from typing import Optional
+from typing import List, Optional
 
 import torch
 import torch.utils.checkpoint
@@ -70,9 +70,28 @@ class ResNetEmbeddings(nn.Sequential):
     ResNet Embedddings (stem) composed of a single aggressive convolution.
     """
 
-    def __init__(self, num_channels: int, out_channels: int, activation: str = "relu"):
+    def __init__(self, num_channels: int, hidden_size: int, activation: str = "relu"):
         super().__init__()
-        self.embedder = ResNetConvLayer(num_channels, out_channels, kernel_size=7, stride=2, activation=activation)
+        self.embedder = ResNetConvLayer(num_channels, hidden_size, kernel_size=7, stride=2, activation=activation)
+        self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+
+class ResNetEmbeddingsDeep(nn.Sequential):
+    """
+    Modified ResNet Embedddings (stem) proposed in [Bag of Tricks for Image Classification with Convolutional Neural
+    Networks](https://arxiv.org/pdf/1812.01187.pdf). The observation is that the computational cost of a convolution is
+    quadratic to the kernel width or height. A `7x7` convolution is `5.4` times more expensive than a `3x3`
+    convolution. So this tweak replacing the `7x7` convolution in the input stem with three conservative
+    `3x3`convolution. Using this layer without changing anything else will result in ResNet version C.
+    """
+
+    def __init__(self, num_channels: int, hidden_size: int = 64, activation: str = "relu"):
+        super().__init__()
+        self.layers = nn.Sequential(
+            ResNetConvLayer(num_channels, hidden_size // 2, kernel_size=3, stride=2, activation=activation),
+            ResNetConvLayer(hidden_size // 2, hidden_size // 2, kernel_size=3, stride=2, activation=activation),
+            ResNetConvLayer(hidden_size // 2, hidden_size, kernel_size=3, stride=2, activation=activation),
+        )
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
 
@@ -85,6 +104,19 @@ class ResNetShortCut(nn.Sequential):
     def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
+        self.bn = nn.BatchNorm2d(out_channels)
+
+
+class ResNetShortCutWithAvgPooling(nn.Sequential):
+    """
+    Modified ResNet Embedddings (stem) proposed in [Bag of Tricks for Image Classification with Convolutional Neural
+    Networks](https://arxiv.org/pdf/1812.01187.pdf.
+    """
+
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
+        super().__init__()
+        self.pool = nn.AvgPool2d((2, 2), ceil_mode=True) if stride == 2 else nn.Identity()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
         self.bn = nn.BatchNorm2d(out_channels)
 
 
@@ -103,11 +135,21 @@ class ResNetBasicLayer(nn.Module):
             The activation used by the layer.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu"):
+    shortcut_modules = {"basic": ResNetShortCut, "avg_down": ResNetShortCutWithAvgPooling}
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        stride: int = 1,
+        activation: str = "relu",
+        shortcut_type: str = "basic",
+    ):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
+        shortcut_module = self.shortcut_modules[shortcut_type]
         self.shortcut = (
-            ResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+            shortcut_module(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
         )
         self.layer = nn.Sequential(
             ResNetConvLayer(in_channels, out_channels, stride=stride),
@@ -144,14 +186,23 @@ class ResNetBottleNeckLayer(nn.Module):
             The reduction factor the block applies in the first `1x1` convolution.
     """
 
+    shortcut_modules = {"basic": ResNetShortCut, "avg_down": ResNetShortCutWithAvgPooling}
+
     def __init__(
-        self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu", reduction: int = 4
+        self,
+        in_channels: int,
+        out_channels: int,
+        stride: int = 1,
+        activation: str = "relu",
+        reduction: int = 4,
+        shortcut_type: str = "basic",
     ):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
         reduces_channels = out_channels // reduction
+        shortcut_module = self.shortcut_modules[shortcut_type]
         self.shortcut = (
-            ResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+            shortcut_module(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
         )
         self.layer = nn.Sequential(
             ResNetConvLayer(in_channels, reduces_channels, kernel_size=1),
@@ -197,6 +248,7 @@ class ResNetStage(nn.Sequential):
         depth: int = 2,
         layer_type: str = "basic",
         activation: str = "relu",
+        shortcut_type: str = "basic",
     ):
         super().__init__()
 
@@ -204,8 +256,11 @@ class ResNetStage(nn.Sequential):
 
         self.layers = nn.Sequential(
             # downsampling is done in the first layer with stride of 2
-            layer(in_channels, out_channels, stride=stride, activation=activation),
-            *[layer(out_channels, out_channels, activation=activation) for _ in range(depth - 1)],
+            layer(in_channels, out_channels, stride=stride, activation=activation, shortcut_type=shortcut_type),
+            *[
+                layer(out_channels, out_channels, activation=activation, shortcut_type=shortcut_type)
+                for _ in range(depth - 1)
+            ],
         )
 
 
@@ -222,13 +277,19 @@ class ResNetEncoder(nn.Module):
                 depth=config.depths[0],
                 layer_type=config.layer_type,
                 activation=config.hidden_act,
+                shortcut_type=config.shortcut_type,
             )
         )
         in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
         for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
             self.stages.append(
                 ResNetStage(
-                    in_channels, out_channels, depth=depth, layer_type=config.layer_type, activation=config.hidden_act
+                    in_channels,
+                    out_channels,
+                    depth=depth,
+                    layer_type=config.layer_type,
+                    activation=config.hidden_act,
+                    shortcut_type=config.shortcut_type,
                 )
             )
 
@@ -308,10 +369,13 @@ RESNET_INPUTS_DOCSTRING = r"""
     RESNET_START_DOCSTRING,
 )
 class ResNetModel(ResNetPreTrainedModel):
+    embedding_modules = {"basic": ResNetEmbeddings, "deep": ResNetEmbeddingsDeep}
+
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.embedder = ResNetEmbeddings(config.num_channels, config.embedding_size, config.hidden_act)
+        embegging_module = self.embedding_modules[self.config.embedding_type]
+        self.embedder = embegging_module(config.num_channels, config.embedding_size, config.hidden_act)
         self.encoder = ResNetEncoder(config)
         self.pooler = nn.AdaptiveAvgPool2d((1, 1))
         # Initialize weights and apply final processing

@@ -73,7 +73,9 @@ class ResNetConfig(PretrainedConfig):
         embedding_size=64,
         hidden_sizes=[256, 512, 1024, 2048],
         depths=[3, 4, 6, 3],
+        embedding_type="basic",
         layer_type="bottleneck",
+        shortcut_type="basic",
         hidden_act="relu",
         downsample_in_first_stage=False,
         **kwargs
@@ -85,6 +87,8 @@ class ResNetConfig(PretrainedConfig):
         self.embedding_size = embedding_size
         self.hidden_sizes = hidden_sizes
         self.depths = depths
+        self.embedding_type = embedding_type
+        self.shortcut_type = shortcut_type
         self.layer_type = layer_type
         self.hidden_act = hidden_act
         self.downsample_in_first_stage = downsample_in_first_stage
