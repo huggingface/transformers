@@ -363,7 +363,7 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
     def test_post_process_panoptic_segmentation(self):
         fature_extractor = self.feature_extraction_class()
         outputs = self.feature_extract_tester.get_fake_maskformer_outputs()
-        segmentation = fature_extractor.post_process_panoptic_segmentation(outputs)
+        segmentation = fature_extractor.post_process_panoptic_segmentation(outputs, object_mask_threshold=0)
 
         self.assertTrue(len(segmentation) == self.feature_extract_tester.batch_size)
         for el in segmentation:
