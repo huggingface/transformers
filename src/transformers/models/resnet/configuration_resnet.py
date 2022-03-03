@@ -37,8 +37,10 @@ class ResNetConfig(PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[64, 256, 512, 1024, 2048]`):
-            Dimensionality (hidden size) of the embeddings + at each stage.
+        embedding_size (`int`, *optional*, defaults to 64):
+            Dimensionality (hidden size) for the embedding layer.
+        hidden_sizes (`List[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
+            Dimensionality (hidden size) at each stage.
         depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
             Depth (number of layers) for each stage.
         layer_type (`str`, *optional*, defaults to `"bottleneck"`):
@@ -68,7 +70,7 @@ class ResNetConfig(PretrainedConfig):
     def __init__(
         self,
         num_channels=3,
-        embeggings_size=64,
+        embedding_size=64,
         hidden_sizes=[256, 512, 1024, 2048],
         depths=[3, 4, 6, 3],
         layer_type="bottleneck",
@@ -80,7 +82,7 @@ class ResNetConfig(PretrainedConfig):
         if layer_type not in self.layer_types:
             raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
         self.num_channels = num_channels
-        self.embeggings_size = embeggings_size
+        self.embedding_size = embedding_size
         self.hidden_sizes = hidden_sizes
         self.depths = depths
         self.layer_type = layer_type
