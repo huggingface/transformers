@@ -275,7 +275,8 @@ class BaseModelOutputWithNoAttentionAndWithPooling(ModelOutput):
         pooler_output (`torch.FloatTensor` of shape `(batch_size, config.hidden_sizes[-1])`):
            The pooled last hidden state.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of shape `(batch_size, num_channels, height, width)`.
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, num_channels, height, width)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
     """
