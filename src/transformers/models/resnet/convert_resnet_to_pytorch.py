@@ -90,7 +90,7 @@ class ModuleTransfer:
                 print(f"Transfered from={src_m} to={dest_m}")
 
 
-def convert_weight_and_push(name: str, config: ResNetConfig, save_directory: Path):
+def convert_weight_and_push(name: str, config: ResNetConfig, save_directory: Path, push_to_hub: bool = True):
     print(f"Converting {name}...")
     with torch.no_grad():
         from_model = timm.create_model(name, pretrained=True).eval()
@@ -104,24 +104,25 @@ def convert_weight_and_push(name: str, config: ResNetConfig, save_directory: Pat
     checkpoint_name = f"resnet{'-'.join(name.split('resnet'))}"
     print(checkpoint_name)
 
-    # our_model.push_to_hub(
-    #     repo_path_or_name=save_directory / checkpoint_name,
-    #     commit_message="Add model",
-    #     use_temp_dir=True,
-    # )
+    if push_to_hub:
+        our_model.push_to_hub(
+            repo_path_or_name=save_directory / checkpoint_name,
+            commit_message="Add model",
+            use_temp_dir=True,
+        )
 
-    # # we can use the convnext one
-    # feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
-    # feature_extractor.push_to_hub(
-    #     repo_path_or_name=save_directory / checkpoint_name,
-    #     commit_message="Add feature extractor",
-    #     use_temp_dir=True,
-    # )
+        # we can use the convnext one
+        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
+        feature_extractor.push_to_hub(
+            repo_path_or_name=save_directory / checkpoint_name,
+            commit_message="Add feature extractor",
+            use_temp_dir=True,
+        )
 
-    # print(f"Pushed {checkpoint_name}")
+        print(f"Pushed {checkpoint_name}")
 
 
-def convert_weights_and_push(save_directory: Path, model_name: str = None):
+def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
     expected_shape = (1, num_labels)
@@ -158,10 +159,10 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
     }
 
     if model_name:
-        convert_weight_and_push(model_name, names_to_config[model_name], save_directory)
+        convert_weight_and_push(model_name, names_to_config[model_name], save_directory, push_to_hub)
     else:
         for model_name, config in names_to_config.items():
-            convert_weight_and_push(model_name, config, save_directory)
+            convert_weight_and_push(model_name, config, save_directory, push_to_hub)
     return config, expected_shape
 
 
@@ -181,8 +182,15 @@ if __name__ == "__main__":
         required=True,
         help="Path to the output PyTorch model directory.",
     )
+    parser.add_argument(
+        "--push_to_hub",
+        default=True,
+        type=bool,
+        required=False,
+        help="If True, push model and feature extractor to the hub.",
+    )
 
     args = parser.parse_args()
     pytorch_dump_folder_path: Path = args.pytorch_dump_folder_path
     pytorch_dump_folder_path.mkdir(exist_ok=True, parents=True)
-    convert_weights_and_push(pytorch_dump_folder_path, args.model_name)
+    convert_weights_and_push(pytorch_dump_folder_path, args.model_name, args.push_to_hub)
