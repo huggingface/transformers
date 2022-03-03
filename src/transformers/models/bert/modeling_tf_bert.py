@@ -1443,17 +1443,23 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
-    def prepare_inputs_for_generation(self, inputs, past=None, attention_mask=None, **model_kwargs):
-        # cut decoder_input_ids if past is used
-        if past:
-            inputs = tf.expand_dims(inputs[:, -1], -1)
+    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+        input_shape = input_ids.shape
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = tf.ones(input_shape)
 
-        return {
-            "input_ids": inputs,
-            "attention_mask": attention_mask,
-            "past_key_values": past,
-            "use_cache": model_kwargs["use_cache"],
-        }
+        # cut decoder_input_ids if past is used
+        if past is not None:
+            input_ids = input_ids[:, -1:]
+
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
+
+    def _reorder_cache(self, past, beam_idx):
+        reordered_past = ()
+        for layer_past in past:
+            reordered_past += (tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past),)
+        return reordered_past
 
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
