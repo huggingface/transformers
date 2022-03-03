@@ -565,5 +565,5 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                             )
                             if is_stuff:
                                 stuff_memory_list[pred_class] = current_segment_id
-                    results.append({"segmentation": segmentation, "segments": segments})
+                results.append({"segmentation": segmentation, "segments": segments})
         return results
