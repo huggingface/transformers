@@ -16,6 +16,7 @@ import hashlib
 import unittest
 
 import datasets
+from datasets import load_dataset
 
 from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
@@ -322,7 +323,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
         image_segmenter = pipeline("image-segmentation", model=model, feature_extractor=feature_extractor)
 
-        outputs = image_segmenter("/home/nicolas/src/api-inference/shard/tests/house.jpg", threshold=threshold)
+        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        outputs = image_segmenter(image[0]["file"], threshold=threshold)
 
         for o in outputs:
             o["mask"] = hashimage(o["mask"])
