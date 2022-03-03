@@ -183,6 +183,7 @@ if TYPE_CHECKING:
             AutoModelForCTC,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
+            AutoModelForInstanceSegmentation,
             AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
