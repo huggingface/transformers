@@ -484,12 +484,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 thing. If not set, defaults to the `is_thing_map` of COCO panoptic.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            `List[Optional[Dict]]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`.
             - **segments** -- a dictionary with the following keys
                 - **id** -- an integer representing the `segment_id`.
                 - **category_id** -- an integer representing the segment's label.
                 - **is_thing** -- a boolean, `True` if `category_id` was in `is_thing_map`, `False` otherwise.
+            Return `None` when nothing was detected in the image.
         """
 
         if is_thing_map is None:
@@ -566,4 +567,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                             if is_stuff:
                                 stuff_memory_list[pred_class] = current_segment_id
                 results.append({"segmentation": segmentation, "segments": segments})
+            else:
+                results.append(None)
         return results
