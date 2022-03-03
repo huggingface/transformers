@@ -308,3 +308,34 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 {"score": 0.9994, "label": "cat", "mask": "88b37bd2202c750cc9dd191518050a9b0ca5228c"},
             ],
         )
+
+    @require_torch
+    @slow
+    def test_maskformer(self):
+        threshold = 0.999
+        model_id = "facebook/maskformer-swin-base-ade"
+
+        from transformers import MaskFormerFeatureExtractor, MaskFormerForInstanceSegmentation
+
+        model = MaskFormerForInstanceSegmentation.from_pretrained(model_id)
+        feature_extractor = MaskFormerFeatureExtractor.from_pretrained(model_id)
+
+        image_segmenter = pipeline("image-segmentation", model=model, feature_extractor=feature_extractor)
+
+        outputs = image_segmenter("/home/nicolas/src/api-inference/shard/tests/house.jpg", threshold=threshold)
+
+        for o in outputs:
+            o["mask"] = hashimage(o["mask"])
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"mask": "20d1b9480d1dc1501dbdcfdff483e370", "label": "wall", "score": None},
+                {"mask": "0f902fbc66a0ff711ea455b0e4943adf", "label": "house", "score": None},
+                {"mask": "4537bdc07d47d84b3f8634b7ada37bd4", "label": "grass", "score": None},
+                {"mask": "b7ac77dfae44a904b479a0926a2acaf7", "label": "tree", "score": None},
+                {"mask": "e9bedd56bd40650fb263ce03eb621079", "label": "plant", "score": None},
+                {"mask": "37a609f8c9c1b8db91fbff269f428b20", "label": "road, route", "score": None},
+                {"mask": "0d8cdfd63bae8bf6e4344d460a2fa711", "label": "sky", "score": None},
+            ],
+        )
