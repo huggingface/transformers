@@ -98,9 +98,6 @@ class ResNetModelTester:
         model.eval()
         result = model(pixel_values)
         # expected last hidden states: B, C, H // 32, W // 32
-        print(
-            result.last_hidden_state.shape,
-        )
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
