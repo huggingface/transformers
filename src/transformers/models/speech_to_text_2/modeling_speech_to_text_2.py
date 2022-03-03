@@ -874,21 +874,23 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
 
         >>> encoder = Wav2Vec2Model(Wav2Vec2Config())
         >>> decoder = Speech2Text2ForCausalLM(Speech2Text2Config())
-
         # init random speech2text model
+
         >>> model = SpeechEncoderDecoderModel(encoder=encoder, decoder=decoder)
         >>> model.config.pad_token_id = tokenizer.pad_token_id
         >>> model.config.decoder_start_token_id = tokenizer.bos_token_id
-
         # pre-process inputs and labels
+
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> input_values = feature_extractor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt").input_values  # Batch size 1
+        >>> input_values = feature_extractor(
+        ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
+        >>> ).input_values  # Batch size 1
         >>> decoder_input_ids = tokenizer(ds[0]["text"], return_tensors="pt").input_ids
-
         # compute loss
-        >>> loss = model(inputs=input_values, labels=decoder_input_ids).loss
 
+        >>> loss = model(inputs=input_values, labels=decoder_input_ids).loss
         # backprop loss
+
         >>> loss.backward()
         ```"""
 

@@ -24,11 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1165,25 +1161,14 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         Example:
 
         ```python
-        >>> import torch
-        >>> from transformers import Speech2TextModel, Speech2TextFeatureExtractor
-        >>> from datasets import load_dataset
-
-        >>> model = Speech2TextModel.from_pretrained("facebook/s2t-small-librispeech-asr")
-        >>> feature_extractor = Speech2TextFeatureExtractor.from_pretrained("facebook/s2t-small-librispeech-asr")
-
-
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-
-        >>> input_features = feature_extractor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt").input_features
-        >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
-
-        >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
-
-        >>> list(last_hidden_state.shape)
-        [1, 2, 256]
-
-        """
+         >>> import torch >>> from transformers import Speech2TextModel, Speech2TextFeatureExtractor >>> from datasets
+        import load_dataset >>> model = Speech2TextModel.from_pretrained("facebook/s2t-small-librispeech-asr") >>>
+        feature_extractor = Speech2TextFeatureExtractor.from_pretrained("facebook/s2t-small-librispeech-asr") >>> ds =
+        load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation") >>> input_features =
+        feature_extractor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"],
+        return_tensors="pt").input_features >>> decoder_input_ids = torch.tensor([[1, 1]]) *
+        model.config.decoder_start_token_id >>> last_hidden_state = model(input_features,
+        decoder_input_ids=decoder_input_ids).last_hidden_state >>> list(last_hidden_state.shape) [1, 2, 256] """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1329,14 +1314,15 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
-        >>> input_features = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt").input_features
+        >>> input_features = processor(
+        ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
+        >>> ).input_features
 
         >>> generated_ids = model.generate(inputs=input_features)
 
         >>> transcription = processor.batch_decode(generated_ids)[0]
         >>> transcription
         'mister quilter is the apostle of the middle classes and we are glad to welcome his gospel'
-
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
