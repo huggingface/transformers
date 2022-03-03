@@ -102,6 +102,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "camembert/test_modeling_tf_camembert.py",
     "mt5/test_modeling_tf_mt5.py",
     "xlm_roberta/test_modeling_tf_xlm_roberta.py",
+    "xlm_roberta/test_modeling_flax_xlm_roberta.py",
     "xlm_prophetnet/test_modeling_xlm_prophetnet.py",
     "xlm_roberta/test_modeling_xlm_roberta.py",
     "vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
