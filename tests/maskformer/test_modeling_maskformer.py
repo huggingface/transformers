@@ -404,23 +404,3 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         self.assertTrue(outputs.loss is not None)
-
-    def test_panoptic_segmentation(self):
-        model = MaskFormerForInstanceSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
-        feature_extractor = self.default_feature_extractor
-
-        inputs = feature_extractor(
-            [np.zeros((3, 384, 384)), np.zeros((3, 384, 384))],
-            annotations=[
-                {"masks": np.random.rand(10, 384, 384).astype(np.float32), "labels": np.zeros(10).astype(np.int64)},
-                {"masks": np.random.rand(10, 384, 384).astype(np.float32), "labels": np.zeros(10).astype(np.int64)},
-            ],
-            return_tensors="pt",
-        )
-
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        panoptic_segmentation = feature_extractor.post_process_panoptic_segmentation(outputs)
-
-        self.assertTrue(len(panoptic_segmentation) == 2)
