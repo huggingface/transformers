@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "resnet50": "https://huggingface.co/Francesco/resnet50/blob/main/config.json",
+    "resnet-50": "https://huggingface.co/Francesco/resnet-50/blob/main/config.json",
 }
 
 
@@ -63,6 +63,7 @@ class ResNetConfig(PretrainedConfig):
     ```
     """
     model_type = "resnet"
+    layer_types = ["basic", "bottleneck"]
 
     def __init__(
         self,
@@ -76,7 +77,8 @@ class ResNetConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(**kwargs)
-
+        if layer_type not in self.layer_types:
+            raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
         self.num_channels = num_channels
         self.embeggings_size = embeggings_size
         self.hidden_sizes = hidden_sizes

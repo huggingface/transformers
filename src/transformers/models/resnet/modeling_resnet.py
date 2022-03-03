@@ -37,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "ResNetConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "ConvNextFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = ""
@@ -48,7 +48,7 @@ _IMAGE_CLASS_CHECKPOINT = ""
 _IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Francesco/resnet50",
+    "Francesco/resnet-50",
     # See all resnet models at https://huggingface.co/models?filter=resnet
 ]
 
@@ -239,11 +239,11 @@ class ResNetEncoder(nn.Module):
     ) -> BaseModelOutputWithNoAttention:
         all_hidden_states = () if output_hidden_states else None
 
-        for i, layer_module in enumerate(self.stages):
+        for stage_module in self.stages:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            hidden_states = layer_module(hidden_states)
+            hidden_states = stage_module(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)

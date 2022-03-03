@@ -48,19 +48,20 @@ class ResNetModelTester:
         batch_size=3,
         image_size=32,
         num_channels=3,
-        hidden_sizes=[10, 10, 20, 30, 40],
+        embeddings_size=10,
+        hidden_sizes=[10, 20, 30, 40],
         depths=[1, 1, 2, 1],
         is_training=True,
         use_labels=True,
         hidden_act="relu",
         num_labels=3,
         scope=None,
-        type_sequence_label_size=10,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
+        self.embeddings_size = embeddings_size
         self.hidden_sizes = hidden_sizes
         self.depths = depths
         self.is_training = is_training
@@ -68,15 +69,14 @@ class ResNetModelTester:
         self.hidden_act = hidden_act
         self.num_labels = num_labels
         self.scope = scope
-        self.type_sequence_label_size = type_sequence_label_size
-        self.num_stages = len(hidden_sizes) - 1  # -1 sinze hidden states is also use in the embeddings
+        self.num_stages = len(hidden_sizes)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = self.get_config()
 
@@ -85,9 +85,11 @@ class ResNetModelTester:
     def get_config(self):
         return ResNetConfig(
             num_channels=self.num_channels,
+            embeddings_size=self.embeddings_size,
             hidden_sizes=self.hidden_sizes,
             depths=self.depths,
             hidden_act=self.hidden_act,
+            num_labels=self.num_labels,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -105,12 +107,12 @@ class ResNetModelTester:
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
+        config.num_labels = self.num_labels
         model = ResNetForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -135,7 +137,7 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ResNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ResNetConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ResNetConfig, has_text_modality=False)
 
     def test_config(self):
         self.create_and_test_config_common_properties()
@@ -214,16 +216,18 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
+        layers_type = ["basic", "bottleneck"]
         for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
+            for layer_type in layers_type:
+                config.layer_type = layer_type
+                inputs_dict["output_hidden_states"] = True
+                check_hidden_states_output(inputs_dict, config, model_class)
 
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
+                # check that output_hidden_states also work using config
+                del inputs_dict["output_hidden_states"]
+                config.output_hidden_states = True
 
-            check_hidden_states_output(inputs_dict, config, model_class)
+                check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
