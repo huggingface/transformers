@@ -868,12 +868,12 @@ class ConvNextForSemanticSegmentation(ConvNextPreTrainedModel):
                 loss=loss,
                 logits=logits,
                 hidden_states=outputs.hidden_states if output_hidden_states else None,
-                attentions=outputs.attentions,
+                attentions=None,
             )
         else:
             return SemanticSegmentationModelOutput(
                 loss=loss,
                 logits=upsampled_logits,
                 hidden_states=outputs.hidden_states if output_hidden_states else None,
-                attentions=outputs.attentions,
+                attentions=None,
             )
