@@ -709,18 +709,11 @@ class FlaxT5BlockCollection(nn.Module):
 
 class FlaxT5Stack(nn.Module):
     config: T5Config
-    embed_tokens: Optional[nn.Embed] = None
+    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.causal = self.config.causal
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                self.config.d_model,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
 
         self.block = FlaxT5BlockCollection(self.config, dtype=self.dtype)
         self.final_layer_norm = FlaxT5LayerNorm(
