@@ -101,23 +101,24 @@ def convert_weight_and_push(name: str, config: ResNetConfig, save_directory: Pat
 
     assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
 
-    checkpoint_name = f"{name}"
+    checkpoint_name = f"resnet{'-'.join(name.split('resnet'))}"
+    print(checkpoint_name)
 
-    our_model.push_to_hub(
-        repo_path_or_name=save_directory / checkpoint_name,
-        commit_message="Add model",
-        use_temp_dir=True,
-    )
+    # our_model.push_to_hub(
+    #     repo_path_or_name=save_directory / checkpoint_name,
+    #     commit_message="Add model",
+    #     use_temp_dir=True,
+    # )
 
-    # we can use the convnext one
-    feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
-    feature_extractor.push_to_hub(
-        repo_path_or_name=save_directory / checkpoint_name,
-        commit_message="Add feature extractor",
-        use_temp_dir=True,
-    )
+    # # we can use the convnext one
+    # feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
+    # feature_extractor.push_to_hub(
+    #     repo_path_or_name=save_directory / checkpoint_name,
+    #     commit_message="Add feature extractor",
+    #     use_temp_dir=True,
+    # )
 
-    print(f"Pushed {checkpoint_name}")
+    # print(f"Pushed {checkpoint_name}")
 
 
 def convert_weights_and_push(save_directory: Path, model_name: str = None):
@@ -137,22 +138,22 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None):
 
     names_to_config = {
         "resnet18": ImageNetPreTrainedConfig(
-            depths=[2, 2, 2, 2], hidden_sizes=[64, 64, 128, 256, 512], layer_type="basic"
+            depths=[2, 2, 2, 2], hidden_sizes=[64, 128, 256, 512], layer_type="basic"
         ),
         "resnet26": ImageNetPreTrainedConfig(
-            depths=[2, 2, 2, 2], hidden_sizes=[64, 256, 512, 1024, 2048], layer_type="bottleneck"
+            depths=[2, 2, 2, 2], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
         ),
         "resnet34": ImageNetPreTrainedConfig(
-            depths=[3, 4, 6, 3], hidden_sizes=[64, 64, 128, 256, 512], layer_type="basic"
+            depths=[3, 4, 6, 3], hidden_sizes=[64, 128, 256, 512], layer_type="basic"
         ),
         "resnet50": ImageNetPreTrainedConfig(
-            depths=[3, 4, 6, 3], hidden_sizes=[64, 256, 512, 1024, 2048], layer_type="bottleneck"
+            depths=[3, 4, 6, 3], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
         ),
         "resnet101": ImageNetPreTrainedConfig(
-            depths=[3, 4, 23, 3], hidden_sizes=[64, 256, 512, 1024, 2048], layer_type="bottleneck"
+            depths=[3, 4, 23, 3], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
         ),
         "resnet152": ImageNetPreTrainedConfig(
-            depths=[3, 8, 36, 3], hidden_sizes=[64, 256, 512, 1024, 2048], layer_type="bottleneck"
+            depths=[3, 8, 36, 3], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
         ),
     }
 
