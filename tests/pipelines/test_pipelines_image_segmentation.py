@@ -89,7 +89,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             # and can output nothing even with a low threshold
             self.assertGreaterEqual(n, 0)
         else:
-            self.assertGreater(n, 1)
+            self.assertGreaterEqual(n, 1)
         # XXX: PIL.Image implements __eq__ which bypasses ANY, so we inverse the comparison
         # to make it work
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * n, outputs)
@@ -128,7 +128,6 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         ]
         outputs = image_segmenter(batch, threshold=0.0, batch_size=batch_size)
         self.assertEqual(len(batch), len(outputs))
-        # self.assertEqual({"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}, outputs[0][0])
         self.assertEqual(len(outputs[0]), n)
         self.assertEqual(
             [
