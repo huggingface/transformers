@@ -60,13 +60,15 @@ class ResNetConfig(PretrainedConfig):
     >>> model = ResNetModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
     model_type = "resnet"
 
     def __init__(
         self,
         num_channels=3,
-        hidden_sizes=[64, 256, 512, 1024, 2048],
+        embeggings_size=64,
+        hidden_sizes=[256, 512, 1024, 2048],
         depths=[3, 4, 6, 3],
         layer_type="bottleneck",
         hidden_act="relu",
@@ -76,6 +78,7 @@ class ResNetConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.num_channels = num_channels
+        self.embeggings_size = embeggings_size
         self.hidden_sizes = hidden_sizes
         self.depths = depths
         self.layer_type = layer_type

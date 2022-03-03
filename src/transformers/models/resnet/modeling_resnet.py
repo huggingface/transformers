@@ -218,16 +218,15 @@ class ResNetEncoder(nn.Module):
         # the first block doesn't downsample
         self.stages.append(
             ResNetStage(
+                config.embeggings_size,
                 config.hidden_sizes[0],
-                config.hidden_sizes[1],
                 stride=2 if config.downsample_in_first_stage else 1,
                 depth=config.depths[0],
                 layer_type=config.layer_type,
                 activation=config.hidden_act,
             )
         )
-        remaining_hidden_sizes = config.hidden_sizes[1:]
-        in_out_channels = zip(remaining_hidden_sizes, remaining_hidden_sizes[1:])
+        in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
         for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
             self.stages.append(
                 ResNetStage(
@@ -314,7 +313,7 @@ class ResNetModel(ResNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.embedder = ResNetEmbeddings(config.num_channels, config.hidden_sizes[0], config.hidden_act)
+        self.embedder = ResNetEmbeddings(config.num_channels, config.embeggings_size, config.hidden_act)
         self.encoder = ResNetEncoder(config)
         self.pooler = nn.AdaptiveAvgPool2d((1, 1))
         # Initialize weights and apply final processing
