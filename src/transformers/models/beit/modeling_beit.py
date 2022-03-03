@@ -754,6 +754,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
 
         ```python
         >>> from transformers import BeitFeatureExtractor, BeitForMaskedImageModeling
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
 
@@ -763,9 +764,15 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
         >>> model = BeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
+        >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
+        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> # create random boolean mask of shape (batch_size, num_patches)
+        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
+
+        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+        >>> loss, logits = outputs.loss, outputs.logits
+        >>> list(logits.shape)
+        [1, 196, 8192]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
