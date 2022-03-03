@@ -128,6 +128,9 @@ class ModelTesterMixin:
     test_missing_keys = True
     test_model_parallel = False
     is_encoder_decoder = False
+    # other_arg_names is a list of expected argument names in the forward pass of all variants of a model
+    # besides model.main_input_name, like ["attention_mask"] for text models
+    other_arg_names = None
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -414,7 +417,9 @@ class ModelTesterMixin:
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = [model.main_input_name]
-                self.assertListEqual(arg_names[:1], expected_arg_names)
+                if self.other_arg_names is not None:
+                    expected_arg_names.extend(self.other_arg_names)
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_training(self):
         if not self.model_tester.is_training:

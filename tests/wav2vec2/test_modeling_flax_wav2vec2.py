@@ -154,6 +154,7 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (FlaxWav2Vec2Model, FlaxWav2Vec2ForCTC, FlaxWav2Vec2ForPreTraining) if is_flax_available() else ()
     )
+    other_arg_names = ["attention_mask"]
 
     def setUp(self):
         self.model_tester = FlaxWav2Vec2ModelTester(self)

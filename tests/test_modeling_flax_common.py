@@ -112,6 +112,9 @@ class FlaxModelTesterMixin:
     test_mismatched_shapes = True
     is_encoder_decoder = False
     test_head_masking = False
+    # other_arg_names is a list of expected argument names in the forward pass of all variants of a model
+    # besides model.main_input_name, like ["attention_mask"] for text models
+    other_arg_names = None
 
     def _prepare_for_class(self, inputs_dict, model_class):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -451,7 +454,9 @@ class FlaxModelTesterMixin:
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = [model.main_input_name]
-                self.assertListEqual(arg_names[:1], expected_arg_names)
+                if self.other_arg_names is not None:
+                    expected_arg_names.extend(self.other_arg_names)
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_naming_convention(self):
         for model_class in self.all_model_classes:
