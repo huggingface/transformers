@@ -623,6 +623,7 @@ if is_torch_available():
     _import_structure["generation_beam_constraints"] = [
         "Constraint",
         "ConstraintListState",
+        "DisjunctiveConstraint",
         "PhrasalConstraint",
     ]
     _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]
@@ -2857,7 +2858,12 @@ if TYPE_CHECKING:
             TextDataset,
             TextDatasetForNextSentencePrediction,
         )
-        from .generation_beam_constraints import Constraint, ConstraintListState, PhrasalConstraint
+        from .generation_beam_constraints import (
+            Constraint,
+            ConstraintListState,
+            DisjunctiveConstraint,
+            PhrasalConstraint,
+        )
         from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .generation_logits_process import (
             ForcedBOSTokenLogitsProcessor,
