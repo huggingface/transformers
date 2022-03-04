@@ -24,7 +24,7 @@ import torch.distributed as dist
 from torch import nn
 
 from .file_utils import ModelOutput
-from .generation_beam_constraints import Constraint
+from .generation_beam_constraints import Constraint, DisjunctiveConstraint, PhrasalConstraint
 from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .generation_logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
@@ -818,6 +818,7 @@ class GenerationMixin:
         typical_p: Optional[float] = None,
         repetition_penalty: Optional[float] = None,
         bad_words_ids: Optional[Iterable[int]] = None,
+        force_words_ids: Optional[Union[Iterable[int], Iterable[Iterable[int]]]] = None,
         bos_token_id: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
@@ -904,6 +905,11 @@ class GenerationMixin:
                 List of token ids that are not allowed to be generated. In order to get the token ids of the words that
                 should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
                 add_special_tokens=False).input_ids`.
+            force_words_ids(`List[List[int]]` or `List[List[List[int]]]`, *optional*):
+                List of token ids that must be generated. If given a `List[List[int]]`, this is treated as a simple
+                list of words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`,
+                this triggers a [disjunctive constraint](https://github.com/huggingface/transformers/issues/14081),
+                where one can allow different forms of each word.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch.
             max_time(`float`, *optional*, defaults to None):
@@ -1038,10 +1044,18 @@ class GenerationMixin:
         >>> bad_words_ids = tokenizer(
         ...     ["idiot", "stupid", "shut up"], add_prefix_space=True, add_special_tokens=False
         >>> ).input_ids
+        >>> # get tokens of words that we want generated
+        >>> force_words_ids = tokenizer(["runs", "loves"], add_prefix_space=True, add_special_tokens=False).input_ids
         >>> # encode input context
         >>> input_ids = tokenizer(input_context, return_tensors="pt").input_ids
         >>> # generate sequences without allowing bad_words to be generated
-        >>> outputs = model.generate(input_ids=input_ids, max_length=20, do_sample=True, bad_words_ids=bad_words_ids)
+        >>> outputs = model.generate(
+        ...     input_ids=input_ids,
+        ...     max_length=20,
+        ...     do_sample=True,
+        ...     bad_words_ids=bad_words_ids,
+        ...     force_words_ids=force_words_ids,
+        ... )
         >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
         ```"""
         # 1. Set generation parameters if not already defined
@@ -1138,14 +1152,20 @@ class GenerationMixin:
             )
 
         # 6. determine generation mode
-        is_constraint_gen_mode = constraints is not None
-        is_greedy_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is False and constraints is None
-        is_sample_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is True and constraints is None
-        is_beam_gen_mode = (num_beams > 1) and (num_beam_groups == 1) and do_sample is False and constraints is None
-        is_beam_sample_gen_mode = (
-            (num_beams > 1) and (num_beam_groups == 1) and do_sample is True and constraints is None
+        is_constraint_gen_mode = constraints is not None or force_words_ids is not None
+        is_greedy_gen_mode = (
+            (num_beams == 1) and (num_beam_groups == 1) and do_sample is False and not is_constraint_gen_mode
         )
-        is_group_beam_gen_mode = (num_beams > 1) and (num_beam_groups > 1) and constraints is None
+        is_sample_gen_mode = (
+            (num_beams == 1) and (num_beam_groups == 1) and do_sample is True and not is_constraint_gen_mode
+        )
+        is_beam_gen_mode = (
+            (num_beams > 1) and (num_beam_groups == 1) and do_sample is False and not is_constraint_gen_mode
+        )
+        is_beam_sample_gen_mode = (
+            (num_beams > 1) and (num_beam_groups == 1) and do_sample is True and not is_constraint_gen_mode
+        )
+        is_group_beam_gen_mode = (num_beams > 1) and (num_beam_groups > 1) and not is_constraint_gen_mode
 
         if num_beam_groups > num_beams:
             raise ValueError("`num_beam_groups` has to be smaller or equal to `num_beams`")
@@ -1356,9 +1376,46 @@ class GenerationMixin:
             if num_beam_groups is not None and num_beam_groups > 1:
                 raise ValueError("`num_beam_groups` not supported yet for constrained generation.")
 
+            final_constraints = []
+            if constraints is not None:
+                final_constraints = constraints
+
+            if force_words_ids is not None:
+
+                def typeerror():
+                    raise ValueError(
+                        "`force_words_ids` has to either be a `List[List[List[int]]]` or `List[List[int]]`"
+                        f"of positive integers, but is {force_words_ids}."
+                    )
+
+                if not isinstance(force_words_ids, list) or len(force_words_ids) == 0:
+                    typeerror()
+
+                for word_ids in force_words_ids:
+                    if isinstance(word_ids[0], list):
+                        if not isinstance(word_ids, list) or len(word_ids) == 0:
+                            typeerror()
+                        if any(not isinstance(token_ids, list) for token_ids in word_ids):
+                            typeerror()
+                        if any(
+                            any((not isinstance(token_id, int) or token_id < 0) for token_id in token_ids)
+                            for token_ids in word_ids
+                        ):
+                            typeerror()
+
+                        constraint = DisjunctiveConstraint(word_ids)
+                    else:
+                        if not isinstance(word_ids, list) or len(word_ids) == 0:
+                            typeerror()
+                        if any((not isinstance(token_id, int) or token_id < 0) for token_id in word_ids):
+                            typeerror()
+
+                        constraint = PhrasalConstraint(word_ids)
+                    final_constraints.append(constraint)
+
             # 10. prepare beam search scorer
             constrained_beam_scorer = ConstrainedBeamSearchScorer(
-                constraints=constraints,
+                constraints=final_constraints,
                 batch_size=batch_size,
                 num_beams=num_beams,
                 device=self.device,

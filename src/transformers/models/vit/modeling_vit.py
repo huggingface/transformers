@@ -624,6 +624,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
         Examples:
         ```python
         >>> from transformers import ViTFeatureExtractor, ViTForMaskedImageModeling
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
 
@@ -633,10 +634,15 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
         >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
         >>> model = ViTForMaskedImageModeling.from_pretrained("google/vit-base-patch16-224-in21k")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
+        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> # create random boolean mask of shape (batch_size, num_patches)
+        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
 
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
+        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
+        >>> list(reconstructed_pixel_values.shape)
+        [1, 3, 224, 224]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

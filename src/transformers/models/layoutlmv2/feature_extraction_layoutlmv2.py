@@ -120,8 +120,6 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self.resample = resample
         self.apply_ocr = apply_ocr
         self.ocr_lang = ocr_lang
-        if apply_ocr:
-            requires_backends(self, "pytesseract")
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
@@ -200,6 +198,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         # Tesseract OCR to get words + normalized bounding boxes
         if self.apply_ocr:
+            requires_backends(self, "pytesseract")
             words_batch = []
             boxes_batch = []
             for image in images:

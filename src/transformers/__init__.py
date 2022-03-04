@@ -623,6 +623,7 @@ if is_torch_available():
     _import_structure["generation_beam_constraints"] = [
         "Constraint",
         "ConstraintListState",
+        "DisjunctiveConstraint",
         "PhrasalConstraint",
     ]
     _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]
@@ -677,6 +678,7 @@ if is_torch_available():
             "MODEL_FOR_CTC_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
+            "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
             "MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
             "MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
@@ -701,6 +703,7 @@ if is_torch_available():
             "AutoModelForCTC",
             "AutoModelForImageClassification",
             "AutoModelForImageSegmentation",
+            "AutoModelForInstanceSegmentation",
             "AutoModelForMaskedImageModeling",
             "AutoModelForMaskedLM",
             "AutoModelForMultipleChoice",
@@ -2346,6 +2349,16 @@ if is_flax_available():
             "FlaxXGLMPreTrainedModel",
         ]
     )
+    _import_structure["models.xlm_roberta"].extend(
+        [
+            "FlaxXLMRobertaForMaskedLM",
+            "FlaxXLMRobertaForMultipleChoice",
+            "FlaxXLMRobertaForQuestionAnswering",
+            "FlaxXLMRobertaForSequenceClassification",
+            "FlaxXLMRobertaForTokenClassification",
+            "FlaxXLMRobertaModel",
+        ]
+    )
 else:
     from .utils import dummy_flax_objects
 
@@ -2845,7 +2858,12 @@ if TYPE_CHECKING:
             TextDataset,
             TextDatasetForNextSentencePrediction,
         )
-        from .generation_beam_constraints import Constraint, ConstraintListState, PhrasalConstraint
+        from .generation_beam_constraints import (
+            Constraint,
+            ConstraintListState,
+            DisjunctiveConstraint,
+            PhrasalConstraint,
+        )
         from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .generation_logits_process import (
             ForcedBOSTokenLogitsProcessor,
@@ -2892,6 +2910,7 @@ if TYPE_CHECKING:
             MODEL_FOR_CTC_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+            MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
             MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
             MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
@@ -2916,6 +2935,7 @@ if TYPE_CHECKING:
             AutoModelForCTC,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
+            AutoModelForInstanceSegmentation,
             AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
@@ -4264,6 +4284,14 @@ if TYPE_CHECKING:
             FlaxWav2Vec2PreTrainedModel,
         )
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
+        from .models.xlm_roberta import (
+            FlaxXLMRobertaForMaskedLM,
+            FlaxXLMRobertaForMultipleChoice,
+            FlaxXLMRobertaForQuestionAnswering,
+            FlaxXLMRobertaForSequenceClassification,
+            FlaxXLMRobertaForTokenClassification,
+            FlaxXLMRobertaModel,
+        )
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.

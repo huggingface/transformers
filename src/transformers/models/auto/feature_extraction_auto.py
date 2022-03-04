@@ -54,6 +54,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("segformer", "SegformerFeatureExtractor"),
         ("convnext", "ConvNextFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
+        ("maskformer", "MaskFormerFeatureExtractor"),
     ]
 )
 
