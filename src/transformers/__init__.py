@@ -2348,6 +2348,16 @@ if is_flax_available():
             "FlaxXGLMPreTrainedModel",
         ]
     )
+    _import_structure["models.xlm_roberta"].extend(
+        [
+            "FlaxXLMRobertaForMaskedLM",
+            "FlaxXLMRobertaForMultipleChoice",
+            "FlaxXLMRobertaForQuestionAnswering",
+            "FlaxXLMRobertaForSequenceClassification",
+            "FlaxXLMRobertaForTokenClassification",
+            "FlaxXLMRobertaModel",
+        ]
+    )
 else:
     from .utils import dummy_flax_objects
 
@@ -4268,6 +4278,14 @@ if TYPE_CHECKING:
             FlaxWav2Vec2PreTrainedModel,
         )
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
+        from .models.xlm_roberta import (
+            FlaxXLMRobertaForMaskedLM,
+            FlaxXLMRobertaForMultipleChoice,
+            FlaxXLMRobertaForQuestionAnswering,
+            FlaxXLMRobertaForSequenceClassification,
+            FlaxXLMRobertaForTokenClassification,
+            FlaxXLMRobertaModel,
+        )
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
