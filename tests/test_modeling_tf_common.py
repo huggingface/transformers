@@ -385,7 +385,7 @@ class TFModelTesterMixin:
             if names == "past_key_values":
                 return
 
-            if type(tfo) in [tuple, list]:
+            if type(tfo) == tuple:
                 self.assertEqual(type(tfo), type(pto))
                 self.assertEqual(len(tfo), len(pto))
                 if type(names) in [tuple, list]:
@@ -394,6 +394,8 @@ class TFModelTesterMixin:
                 elif type(names) == str:
                     for idx, (to, po) in enumerate(zip(tfo, pto)):
                         check_outputs(to, po, model_class, names=f"{names}_{idx}")
+                else:
+                    raise ValueError(f"`names` should be a `tuple`, a`list` or a string. Got {type(names)} instead.")
             elif isinstance(tfo, tf.Tensor):
                 self.assertTrue(isinstance(pto, torch.Tensor))
 
