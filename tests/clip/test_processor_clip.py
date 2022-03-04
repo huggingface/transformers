@@ -89,28 +89,28 @@ class CLIPProcessorTest(unittest.TestCase):
         return image_inputs
 
     def test_save_load_pretrained_default(self):
-        tokenizer_s = self.get_tokenizer()
-        tokenizer_r = self.get_rust_tokenizer()
+        tokenizer_slow = self.get_tokenizer()
+        tokenizer_fast = self.get_rust_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
-        processor_s = CLIPProcessor(tokenizer=tokenizer_s, feature_extractor=feature_extractor)
-        processor_s.save_pretrained(self.tmpdirname)
-        processor_s = CLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        processor_slow = CLIPProcessor(tokenizer=tokenizer_slow, feature_extractor=feature_extractor)
+        processor_slow.save_pretrained(self.tmpdirname)
+        processor_slow = CLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_r = CLIPProcessor(tokenizer=tokenizer_r, feature_extractor=feature_extractor)
-        processor_r.save_pretrained(self.tmpdirname)
-        processor_r = CLIPProcessor.from_pretrained(self.tmpdirname)
+        processor_fast = CLIPProcessor(tokenizer=tokenizer_fast, feature_extractor=feature_extractor)
+        processor_fast.save_pretrained(self.tmpdirname)
+        processor_fast = CLIPProcessor.from_pretrained(self.tmpdirname)
 
-        self.assertEqual(processor_s.tokenizer.get_vocab(), tokenizer_s.get_vocab())
-        self.assertEqual(processor_r.tokenizer.get_vocab(), tokenizer_r.get_vocab())
-        self.assertEqual(tokenizer_s.get_vocab(), tokenizer_r.get_vocab())
-        self.assertIsInstance(processor_s.tokenizer, CLIPTokenizer)
-        self.assertIsInstance(processor_r.tokenizer, CLIPTokenizerFast)
+        self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
+        self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
+        self.assertEqual(tokenizer_slow.get_vocab(), tokenizer_fast.get_vocab())
+        self.assertIsInstance(processor_slow.tokenizer, CLIPTokenizer)
+        self.assertIsInstance(processor_fast.tokenizer, CLIPTokenizerFast)
 
-        self.assertEqual(processor_s.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertEqual(processor_r.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor_s.feature_extractor, CLIPFeatureExtractor)
-        self.assertIsInstance(processor_r.feature_extractor, CLIPFeatureExtractor)
+        self.assertEqual(processor_slow.feature_extractor.to_json_string(), feature_extractor.to_json_string())
+        self.assertEqual(processor_fast.feature_extractor.to_json_string(), feature_extractor.to_json_string())
+        self.assertIsInstance(processor_slow.feature_extractor, CLIPFeatureExtractor)
+        self.assertIsInstance(processor_fast.feature_extractor, CLIPFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
         processor = CLIPProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
