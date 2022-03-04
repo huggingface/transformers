@@ -29,6 +29,7 @@ if is_torch_available():
 
     if is_vision_available():
         from transformers import MaskFormerFeatureExtractor
+        from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
 
 if is_vision_available():
     from PIL import Image
@@ -61,6 +62,12 @@ class MaskFormerFeatureExtractionTester(unittest.TestCase):
         self.image_mean = image_mean
         self.image_std = image_std
         self.size_divisibility = 0
+        # for the post_process_functions
+        self.batch_size = 2
+        self.num_queries = 3
+        self.num_classes = 2
+        self.height = 3
+        self.width = 4
 
     def prepare_feat_extract_dict(self):
         return {
@@ -103,6 +110,13 @@ class MaskFormerFeatureExtractionTester(unittest.TestCase):
             expected_width = max(expected_values, key=lambda item: item[1])[1]
 
         return expected_height, expected_width
+
+    def get_fake_maskformer_outputs(self):
+        return MaskFormerForInstanceSegmentationOutput(
+            # +1 for null class
+            class_queries_logits=torch.randn((self.batch_size, self.num_queries, self.num_classes + 1)),
+            masks_queries_logits=torch.randn((self.batch_size, self.num_queries, self.height, self.width)),
+        )
 
 
 @require_torch
@@ -301,3 +315,61 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         self.assertEqual(pixel_values.shape[-1], mask_labels.shape[-1])
         self.assertEqual(mask_labels.shape[1], class_labels.shape[1])
         self.assertEqual(mask_labels.shape[1], num_classes)
+
+    def test_post_process_segmentation(self):
+        fature_extractor = self.feature_extraction_class()
+        outputs = self.feature_extract_tester.get_fake_maskformer_outputs()
+        segmentation = fature_extractor.post_process_segmentation(outputs)
+
+        self.assertEqual(
+            segmentation.shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_classes,
+                self.feature_extract_tester.height,
+                self.feature_extract_tester.width,
+            ),
+        )
+
+        target_size = (1, 4)
+        segmentation = fature_extractor.post_process_segmentation(outputs, target_size=target_size)
+
+        self.assertEqual(
+            segmentation.shape,
+            (self.feature_extract_tester.batch_size, self.feature_extract_tester.num_classes, *target_size),
+        )
+
+    def test_post_process_semantic_segmentation(self):
+        fature_extractor = self.feature_extraction_class()
+        outputs = self.feature_extract_tester.get_fake_maskformer_outputs()
+
+        segmentation = fature_extractor.post_process_semantic_segmentation(outputs)
+
+        self.assertEqual(
+            segmentation.shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.height,
+                self.feature_extract_tester.width,
+            ),
+        )
+
+        target_size = (1, 4)
+
+        segmentation = fature_extractor.post_process_semantic_segmentation(outputs, target_size=target_size)
+
+        self.assertEqual(segmentation.shape, (self.feature_extract_tester.batch_size, *target_size))
+
+    def test_post_process_panoptic_segmentation(self):
+        fature_extractor = self.feature_extraction_class()
+        outputs = self.feature_extract_tester.get_fake_maskformer_outputs()
+        segmentation = fature_extractor.post_process_panoptic_segmentation(outputs, object_mask_threshold=0)
+
+        self.assertTrue(len(segmentation) == self.feature_extract_tester.batch_size)
+        for el in segmentation:
+            self.assertTrue("segmentation" in el)
+            self.assertTrue("segments" in el)
+            self.assertEqual(type(el["segments"]), list)
+            self.assertEqual(
+                el["segmentation"].shape, (self.feature_extract_tester.height, self.feature_extract_tester.width)
+            )
