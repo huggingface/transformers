@@ -370,4 +370,6 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             self.assertTrue("segmentation" in el)
             self.assertTrue("segments" in el)
             self.assertEqual(type(el["segments"]), list)
-            self.assertEqual(el["segmentation"].shape, (self.feature_extract_tester.height, self.feature_extract_tester.width))   
+            self.assertEqual(
+                el["segmentation"].shape, (self.feature_extract_tester.height, self.feature_extract_tester.width)
+            )
