@@ -701,7 +701,8 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
             "decoder_input_ids": decoder_inputs["input_ids"],
-            "encoder_outputs": encoder_outputs,
+            # TODO (joao): the `TFBaseModelOutput` wrapper should not be needed after the generate refactor is complete
+            "encoder_outputs": TFBaseModelOutput(last_hidden_state=encoder_outputs[0]),
             "past_key_values": decoder_inputs["past_key_values"],
             "use_cache": use_cache,
         }
