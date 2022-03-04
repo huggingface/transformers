@@ -20,11 +20,14 @@ from datasets import load_dataset
 
 from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+    MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
     AutoFeatureExtractor,
     AutoModelForImageSegmentation,
+    AutoModelForInstanceSegmentation,
     DetrForSegmentation,
     ImageSegmentationPipeline,
+    MaskFormerForInstanceSegmentation,
     is_vision_available,
     pipeline,
 )
@@ -67,6 +70,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             list(MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items()) if MODEL_FOR_IMAGE_SEGMENTATION_MAPPING else []
         )
         + (MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items() if MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING else [])
+        + (MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items() if MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING else [])
     }
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
@@ -80,7 +84,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)
         self.assertIsInstance(outputs, list)
         n = len(outputs)
-        self.assertGreater(n, 1)
+        if isinstance(image_segmenter.model, (MaskFormerForInstanceSegmentation)):
+            # Instance segmentation (maskformer) have a slot for null class
+            # and can output nothing even with a low threshold
+            self.assertGreaterEqual(n, 0)
+        else:
+            self.assertGreaterEqual(n, 1)
         # XXX: PIL.Image implements __eq__ which bypasses ANY, so we inverse the comparison
         # to make it work
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * n, outputs)
@@ -119,7 +128,6 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         ]
         outputs = image_segmenter(batch, threshold=0.0, batch_size=batch_size)
         self.assertEqual(len(batch), len(outputs))
-        self.assertEqual({"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}, outputs[0][0])
         self.assertEqual(len(outputs[0]), n)
         self.assertEqual(
             [
@@ -313,18 +321,17 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
     @require_torch
     @slow
     def test_maskformer(self):
-        threshold = 0.999
+        threshold = 0.8
         model_id = "facebook/maskformer-swin-base-ade"
 
-        from transformers import MaskFormerFeatureExtractor, MaskFormerForInstanceSegmentation
-
-        model = MaskFormerForInstanceSegmentation.from_pretrained(model_id)
-        feature_extractor = MaskFormerFeatureExtractor.from_pretrained(model_id)
+        model = AutoModelForInstanceSegmentation.from_pretrained(model_id)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
         image_segmenter = pipeline("image-segmentation", model=model, feature_extractor=feature_extractor)
 
         image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-        outputs = image_segmenter(image[0]["file"], threshold=threshold)
+        file = image[0]["file"]
+        outputs = image_segmenter(file, threshold=threshold)
 
         for o in outputs:
             o["mask"] = hashimage(o["mask"])
