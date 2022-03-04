@@ -126,8 +126,8 @@ And then pass the paths to the datasets when we run the training script:
 ```bash
 accelerate launch scripts/codeparrot_training.py \
 --model_ckpt lvwerra/codeparrot-small \
---dataset_name_train /path/to/codeparrot-clean-train \
---dataset_name_valid /path/to/codeparrot-clean-valid \
+--dataset_name_train ./data/codeparrot-clean-train \
+--dataset_name_valid ./data/codeparrot-clean-valid \
 --train_batch_size 12 \
 --valid_batch_size 12 \
 --learning_rate 5e-4 \
