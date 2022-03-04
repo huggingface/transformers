@@ -788,23 +788,27 @@ class DPTNeck(nn.Module):
             self.fusion_blocks.append(DPTFeatureFusionBlock(config))
         self.fusion_blocks[0].res_conv_unit1 = None  # not sure why this is done in mmseg
 
-    def forward(self, encoder_hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         # TODO: possibly move
         # only keep certain features based on config.out_indices
-        # note that the encoder_hidden_states also include the initial embeddings
-        features = [feature for idx, feature in enumerate(encoder_hidden_states[1:]) if idx in self.config.out_indices]
+        # note that the hidden_states also include the initial embeddings
+        features = [feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.out_indices]
 
         # postprocess features
         features = self.reassemble_blocks(features)
 
         features = [self.convs[i](feature) for i, feature in enumerate(features)]
 
-        # fusion
-        out = self.fusion_blocks[0](features[-1])
-        for i in range(1, len(self.fusion_blocks)):
-            out = self.fusion_blocks[i](out, features[-(i + 1)])
-
-        return out
+        # fusion blocks
+        output = []
+        for i in range(len(self.fusion_blocks)):
+            if i == 0:
+                out = self.fusion_blocks[i](features[-1])
+            else:
+                out = self.fusion_blocks[i](out, features[-(i + 1)])
+            output.append(out)
+        
+        return output
 
 
 class DPTInterpolate(nn.Module):
@@ -939,7 +943,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
         hidden_states = self.neck(encoder_hidden_states)
 
-        logits = self.head(hidden_states)
+        logits = self.head(hidden_states[-1])
         logits = logits.squeeze(dim=1)
 
         loss = None
@@ -1090,11 +1094,11 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
         hidden_states = self.neck(encoder_hidden_states)
 
-        logits = self.head(hidden_states)
+        logits = self.head(hidden_states[-1])
 
         auxiliary_logits = None
         if self.auxiliary_head is not None:
-            auxiliary_logits = self.auxiliary_head(hidden_states)
+            auxiliary_logits = self.auxiliary_head(hidden_states[-1])
 
         loss = None
         if labels is not None:
