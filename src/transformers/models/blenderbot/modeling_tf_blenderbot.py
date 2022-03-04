@@ -1011,12 +1011,6 @@ class TFBlenderbotDecoder(tf.keras.layers.Layer):
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
 
-        if inputs["output_attentions"]:
-            all_self_attns = list(all_self_attns)
-
-            if inputs["encoder_hidden_states"] is not None:
-                all_cross_attns = list(all_cross_attns)
-
         if inputs["use_cache"]:
             present_key_values = (inputs["encoder_hidden_states"], present_key_values)
 
