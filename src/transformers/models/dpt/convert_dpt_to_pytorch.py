@@ -151,6 +151,8 @@ def rename_key(name):
         name = name.replace("head", "head.head")
     if "encoder.norm" in name:
         name = name.replace("encoder.norm", "layernorm")
+    if "auxlayer" in name:
+        name = name.replace("auxlayer", "auxiliary_head.head")
 
     return name
 
@@ -221,8 +223,6 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
         ]
     )
     pixel_values = transform(image).unsqueeze(0)
-
-    print("Pixel values:", pixel_values)
 
     # forward pass
     logits = model(pixel_values).logits

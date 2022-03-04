@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Embodied AI Foundation, OpenMMLab and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ from typing import List
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -62,7 +63,8 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "'Egyptian cat'"
 
 
 DPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/dpt-base-patch16-224",
+    # TODO update to organization
+    "nielsr/dpt-large",
     # See all DPT models at https://huggingface.co/models?filter=dpt
 ]
 
@@ -605,7 +607,7 @@ class DPTPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -926,6 +928,8 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
+        print("Shape of pixel_values:", pixel_values.shape)
+
         outputs = self.dpt(
             pixel_values,
             head_mask=head_mask,
@@ -936,6 +940,8 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
         hidden_states = self.neck(encoder_hidden_states)
+
+        print("Shape of hidden_states:", hidden_states.shape)
 
         logits = self.head(hidden_states)
         logits = logits.squeeze(dim=1)
@@ -966,7 +972,7 @@ class DPTSemanticSegmentationHead(nn.Module):
             nn.BatchNorm2d(features),
             nn.ReLU(True),
             nn.Dropout(0.1, False),
-            nn.Conv2d(features, self.num_labels, kernel_size=1),
+            nn.Conv2d(features, config.num_labels, kernel_size=1),
             DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
         )
 
@@ -986,15 +992,7 @@ class DPTAuxiliaryHead(nn.Module):
             nn.BatchNorm2d(features),
             nn.ReLU(True),
             nn.Dropout(0.1, False),
-            nn.Conv2d(features, self.num_labels, kernel_size=1),
-            DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
-        )
-        self.auxhead = nn.Sequential(
-            nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(features),
-            nn.ReLU(True),
-            nn.Dropout(0.1, False),
-            nn.Conv2d(features, self.num_labels, kernel_size=1),
+            nn.Conv2d(features, config.num_labels, kernel_size=1),
         )
 
     def forward(self, hidden_states):
@@ -1013,15 +1011,34 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.num_labels = config.num_labels
         self.dpt = DPTModel(config, add_pooling_layer=False)
 
-        # Segmentation head + auxiliary head
+        # Neck
+        self.neck = DPTNeck(config)
+
+        # Segmentation head(s)
         self.head = DPTSemanticSegmentationHead(config)
-        self.auxlayer = DPTAuxiliaryHead(config)
+        self.auxiliary_head = DPTAuxiliaryHead(config) if config.use_auxiliary_head else None
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def compute_loss(self, logits, auxiliary_logits, labels):
+        # upsample logits to the images' original size
+        upsampled_logits = nn.functional.interpolate(
+            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+        )
+        if auxiliary_logits is not None:
+            upsampled_auxiliary_logits = nn.functional.interpolate(
+                auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            )
+        # compute weighted loss
+        loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
+        main_loss = loss_fct(upsampled_logits, labels)
+        auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
+        loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
+
+        return loss
 
     @add_start_docstrings_to_model_forward(DPT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SemanticSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1076,17 +1093,27 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
         logits = self.head(hidden_states)
 
+        auxiliary_logits = None
+        if self.auxiliary_head is not None:
+            auxiliary_logits = self.auxiliary_head(hidden_states)
+
         loss = None
         if labels is not None:
-            raise NotImplementedError("Training is not implemented yet")
+            if self.config.num_labels == 1:
+                raise ValueError("The number of labels should be greater than one")
+            else:
+                loss = self.compute_loss(logits, auxiliary_logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            if output_hidden_states:
+                output = (logits,) + outputs[1:]
+            else:
+                output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SemanticSegmentationModelOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )

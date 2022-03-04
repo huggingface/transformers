@@ -20,6 +20,7 @@ import unittest
 
 from transformers import DPTConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ..test_configuration_common import ConfigTester
@@ -30,8 +31,8 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DPTForDepthEstimation, DPTForSemanticSegmentation, DPTModel
-    from transformers.models.dpt.modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers import MODEL_MAPPING, DPTForDepthEstimation, DPTForSemanticSegmentation, DPTModel
+    from transformers.models.dpt.modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -45,13 +46,14 @@ class DPTModelTester:
         self,
         parent,
         batch_size=13,
-        image_size=30,
+        image_size=32,
         patch_size=2,
         num_channels=3,
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=4,
+        out_indices=[0, 1, 2, 3],
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -71,6 +73,7 @@ class DPTModelTester:
         self.use_labels = use_labels
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
+        self.out_indices = out_indices
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
@@ -98,6 +101,7 @@ class DPTModelTester:
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
+            out_indices=self.out_indices,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
@@ -113,9 +117,7 @@ class DPTModelTester:
         model.eval()
         result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = to_2tuple(self.image_size)
-        patch_size = to_2tuple(self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        num_patches = (config.image_size // config.patch_size) ** 2
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
@@ -123,7 +125,7 @@ class DPTModelTester:
         model = DPTForDepthEstimation(config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values, labels=labels)
+        result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels):
@@ -216,15 +218,8 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         # in DPT, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
-        image_size = to_2tuple(self.model_tester.image_size)
-        patch_size = to_2tuple(self.model_tester.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        num_patches = (config.image_size // config.patch_size) ** 2
         seq_len = num_patches + 1
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-        chunk_length = getattr(self.model_tester, "chunk_length", None)
-        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
-            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -235,8 +230,8 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertEqual(len(outputs.attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -246,19 +241,13 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_len, seq_len],
+            )
             out_len = len(outputs)
 
             # Check attention is always last and order is fine
@@ -270,27 +259,15 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
-            else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
+            self.assertEqual(out_len + 1, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self_attentions = outputs.attentions
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_len, seq_len],
+            )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -301,7 +278,7 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = outputs.hidden_states
 
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
@@ -309,14 +286,12 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             # DPT has a different seq_length
-            image_size = to_2tuple(self.model_tester.image_size)
-            patch_size = to_2tuple(self.model_tester.patch_size)
-            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-            seq_length = num_patches + 1
+            num_patches = (config.image_size // config.patch_size) ** 2
+            seq_len = num_patches + 1
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                [seq_len, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -334,6 +309,49 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_depth_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
+
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "DPTForDepthEstimation":
+                continue
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            if model_class in get_values(MODEL_MAPPING):
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_training_gradient_checkpointing(self):
+        if not self.model_tester.is_training:
+            return
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "DPTForDepthEstimation":
+                continue
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.use_cache = False
+            config.return_dict = True
+
+            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.gradient_checkpointing_enable()
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
 
     @slow
     def test_model_from_pretrained(self):
@@ -359,8 +377,6 @@ class DPTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_semantic_segmentation(self):
         model = DPTForSemanticSegmentation.from_pretrained("nielsr/dpt-large-ade").to(torch_device)
-
-        image = prepare_img()
 
         # TODO
         raise NotImplementedError("")

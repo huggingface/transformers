@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ class DPTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DPTModel`]. It is used to instantiate an DPT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DPT
-    [google/vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224) architecture.
+    [google/dpt-large](https://huggingface.co/google/dpt-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -84,16 +84,22 @@ class DPTConfig(PretrainedConfig):
             Whether to expand the number of channels of the backbone feature maps.
         use_batch_norm (`bool`, *optional*, defaults to `False`):
             Whether to use batch normalization in the pre-activate residual units of the fusion blocks.
+        use_auxiliary_head (`bool`, *optional*, defaults to `True`):
+            Whether to use an auxiliary head during training.
+        auxiliary_loss_weight (`float`, *optional*, defaults to 0.4):
+            Weight of the cross-entropy loss of the auxiliary head.
+        semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
+            The index that is ignored by the loss function of the semantic segmentation model.
 
     Example:
 
     ```python
     >>> from transformers import DPTModel, DPTConfig
 
-    >>> # Initializing a DPT vit-base-patch16-224 style configuration
+    >>> # Initializing a DPT dpt-large style configuration
     >>> configuration = DPTConfig()
 
-    >>> # Initializing a model from the vit-base-patch16-224 style configuration
+    >>> # Initializing a model from the dpt-large style configuration
     >>> model = DPTModel(configuration)
 
     >>> # Accessing the model configuration
@@ -123,6 +129,9 @@ class DPTConfig(PretrainedConfig):
         channels=256,
         expand_channels=False,
         use_batch_norm=False,
+        use_auxiliary_head=True,
+        auxiliary_loss_weight=0.4,
+        semantic_loss_ignore_index=255,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -148,3 +157,7 @@ class DPTConfig(PretrainedConfig):
         self.channels = channels
         self.expand_channels = expand_channels
         self.use_batch_norm = use_batch_norm
+        # auxiliary head attributes (semantic segmentation)
+        self.use_auxiliary_head = use_auxiliary_head
+        self.auxiliary_loss_weight = auxiliary_loss_weight
+        self.semantic_loss_ignore_index = semantic_loss_ignore_index
