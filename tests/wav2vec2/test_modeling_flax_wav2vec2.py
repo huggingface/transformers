@@ -280,20 +280,20 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
         for feature_extractor_grad, feature_extractor_grad_frozen in zip(
             feature_extractor_grads, feature_extractor_grads_frozen
         ):
-            self.assert_greater_zero(feature_extractor_grad, feature_extractor_grad_frozen)
+            self.assert_difference(feature_extractor_grad, feature_extractor_grad_frozen, 1e-7)
 
         # ensure that the gradients of all unfrozen layers remain equal, i.e. all layers excluding the frozen 'feature_extractor'
         grads = tuple(grads[k] for k in grads if "feature_extractor" not in k)
         grads_frozen = tuple(grads_frozen[k] for k in grads_frozen if "feature_extractor" not in k)
 
         for grad, grad_frozen in zip(grads, grads_frozen):
-            self.assert_almost_equals(grad, grad_frozen, 1e-5)
+            self.assert_almost_equals(grad, grad_frozen, 1e-7)
 
-    def assert_greater_zero(self, a: jnp.ndarray, b: jnp.ndarray):
+    def assert_difference(self, a, b, tol: float):
         diff = jnp.abs((a - b)).min()
-        self.assertGreaterEqual(diff, 0.0)
+        self.assertGreaterEqual(diff, tol, f"Difference between arrays is {diff} (<= {tol}).")
 
-    def assert_almost_equals(self, a: jnp.ndarray, b: jnp.ndarray, tol: float):
+    def assert_almost_equals(self, a, b, tol: float):
         diff = jnp.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between arrays is {diff} (>= {tol}).")
 
