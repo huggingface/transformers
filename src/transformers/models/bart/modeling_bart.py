@@ -55,7 +55,7 @@ _TOKENIZER_FOR_DOC = "BartTokenizer"
 
 BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/bart-large",
-    # See all BART models at https://huggingface.co/models?filter=bart
+    # see all BART models at https://huggingface.co/models?filter=bart
 ]
 
 
