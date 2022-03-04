@@ -2492,6 +2492,9 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             )
             loss = self.get_loss(loss_dict)
 
+        output_auxiliary_logits = (
+            self.config.output_auxiliary_logits if output_auxiliary_logits is None else output_auxiliary_logits
+        )
         if not output_auxiliary_logits:
             auxiliary_logits = None
 
