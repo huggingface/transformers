@@ -886,6 +886,13 @@ class TFGenerationMixin:
                 else None
             )
 
+            # NB: the refactored generate, without the encoder outputs in `past`, expects the `encoder_outputs`
+            # variable to contain (encoder_outputs, encoder_hidden_states, encoder_attentions).
+            if encoder_hidden_states is not None:
+                encoder_outputs = (*encoder_outputs, encoder_hidden_states)
+            if encoder_attentions is not None:
+                encoder_outputs = (*encoder_outputs, encoder_attentions)
+
         # done sentences
         done = [False for _ in range(batch_size)]
 

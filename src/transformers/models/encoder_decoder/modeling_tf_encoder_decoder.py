@@ -697,6 +697,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past=past)
         decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
         input_dict = {
+            "input_ids": None,  # needs to be passed to make Keras.layer.__call__ happy
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
             "decoder_input_ids": decoder_inputs["input_ids"],

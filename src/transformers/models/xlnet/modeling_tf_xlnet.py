@@ -1246,7 +1246,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.lm_loss.name
 
-    def prepare_inputs_for_generation(self, inputs, past, use_mems=None, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past=None, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = inputs.shape[0]

@@ -1482,7 +1482,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
 
         past = decoder_outputs[1] if inputs["use_cache"] else None
-        breakpoint()
         if not inputs["return_dict"]:
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
