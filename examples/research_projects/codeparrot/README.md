@@ -113,7 +113,7 @@ Recall that you can see the full set of possible options with descriptions (for 
 python scripts/codeparrot_training.py --help
 ```
 
-If you would like to train the model offline, you can download the dataset locally:
+Instead of streaming the dataset from the hub you can also stream it from disk. This can be helpful for long training runs where the connection can be interrupted sometimes. To stream locally you simply need to clone the datasets and replace the dataset name with their path. In this example we store the data in a folder called `data`: 
 
 ```bash
 git lfs install
