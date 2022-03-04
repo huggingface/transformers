@@ -1688,8 +1688,9 @@ class TFGenerationMixin:
 
         return inputs
 
+    @staticmethod
     def _update_model_kwargs_for_generation(
-        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
+        outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
     ) -> Dict[str, Any]:
         # update past
         if "past_key_values" in outputs:

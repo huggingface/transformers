@@ -116,7 +116,6 @@ class TFMarianModelTester:
         outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
-        past_key_values = past_key_values[1]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)

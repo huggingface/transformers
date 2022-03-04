@@ -851,7 +851,10 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
     def set_output_embeddings(self, value):
         self.set_input_embeddings(value)
 
-    def prepare_inputs_for_generation(self, inputs, past, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past=None, **kwargs):
+        # TODO: (Joao) after the TF generator is complete, update GPT2 TF generation to match PT's. NB -- some GPT2
+        # tests will need to be fixed after the change
+
         # only last token for inputs_ids if past is defined in kwargs
         if past:
             inputs = tf.expand_dims(inputs[:, -1], -1)
