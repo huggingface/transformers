@@ -204,7 +204,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             )
             if self.use_past:
                 num_encoder_layers, _ = self.num_layers
-                for i in range(num_encoder_layers):
+                for i in range(12): # Seems to need decoder layers here?
                     common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
                     common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
         else:
@@ -266,7 +266,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 encoder_seq_length,
                 self._config.hidden_size // num_encoder_attention_heads,
             )
-            decoder_past_length = decoder_seq_length + 3
+            decoder_past_length = decoder_seq_length #+ 3
             decoder_shape = (
                 batch,
                 num_decoder_attention_heads,
@@ -285,7 +285,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             max_num_layers = max(num_encoder_layers, num_decoder_layers) - min_num_layers
             remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
 
-            for _ in range(min_num_layers):
+            for _ in range(12): # Seems to need decoder layers
                 common_inputs["past_key_values"].append(
                     (
                         torch.zeros(decoder_shape),
@@ -296,8 +296,8 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 )
             # TODO: test this.
             shape = encoder_shape if remaining_side_name == "encoder" else decoder_shape
-            for _ in range(min_num_layers, max_num_layers):
-                common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
+            # for _ in range(min_num_layers, max_num_layers): # could drop this?
+            #     common_inputs["past_key_values"].append((torch.zeros(shape), torch.zeros(shape)))
         return common_inputs
 
     def _generate_dummy_inputs_for_causal_lm(
@@ -319,8 +319,8 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 import torch
             batch, seqlen = common_inputs["input_ids"].shape
             # Not using the same length for past_key_values
-            past_key_values_length = seqlen + 2
-            num_encoder_layers, _ = self.num_layers
+            past_key_values_length = seqlen # + 2
+            num_encoder_layers, num_decoder_layers = self.num_layers
             num_encoder_attention_heads, _ = self.num_attention_heads
             past_shape = (
                 batch,
@@ -333,7 +333,7 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
             )
             common_inputs["past_key_values"] = [
-                (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(num_encoder_layers)
+                (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(12) # Seems to really need the decoder layers here
             ]
         return common_inputs
 
@@ -394,3 +394,31 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+    def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str):
+        if direction not in ["inputs", "outputs"]:
+            raise ValueError(f'direction must either be "inputs" or "outputs", but {direction} was given')
+
+        name = "past_key_values" if direction == "inputs" else "present"
+
+        # If the number of encoder and decoder layers are present in the model configuration, both are considered
+        num_encoder_layers, num_decoder_layers = self.num_layers
+        min_num_layers = min(num_encoder_layers, num_decoder_layers)
+        max_num_layers = max(num_encoder_layers, num_decoder_layers) - min_num_layers
+        remaining_side_name = "encoder" if num_encoder_layers > num_decoder_layers else "decoder"
+
+        encoder_sequence = "past_encoder_sequence"
+        decoder_sequence = "past_decoder_sequence" if direction == "inputs" else "past_decoder_sequence + sequence"
+
+        for i in range(12):
+            inputs_or_outputs[f"{name}.{i}.decoder.key"] = {0: "batch", 2: decoder_sequence}
+            inputs_or_outputs[f"{name}.{i}.decoder.value"] = {0: "batch", 2: decoder_sequence}
+            inputs_or_outputs[f"{name}.{i}.encoder.key"] = {0: "batch", 2: encoder_sequence}
+            inputs_or_outputs[f"{name}.{i}.encoder.value"] = {0: "batch", 2: encoder_sequence}
+
+        # for i in range(min_num_layers, max_num_layers):
+        #     if remaining_side_name == "encoder":
+        #         axes_info = {0: "batch", 2: encoder_sequence}
+        #     else:
+        #         axes_info = {0: "batch", 2: decoder_sequence}
+        #     inputs_or_outputs[f"{name}.{i}.{remaining_side_name}.key"] = axes_info
