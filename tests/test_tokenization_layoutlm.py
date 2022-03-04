@@ -72,8 +72,3 @@ class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_special_tokens_as_you_expect(self):
         """If you are training a seq2seq model that expects a decoder_prefix token make sure it is prepended to decoder_input_ids"""
         pass
-
-    # LayoutXLM's tokenizer doesn't use SentencePiece to convert tokens to string
-    # and doesn't add special tokens.
-    def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
-        pass
