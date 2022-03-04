@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import inspect
+from functools import wraps
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -34,6 +35,25 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+def xla_compile(do_compile: bool):
+    def run_function(func):
+        @wraps(func)
+        @tf.function(jit_compile=True)
+        def run_in_xla_compile_mode(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        @wraps(func)
+        def run_in_eager_mode(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        if do_compile:
+            return run_in_xla_compile_mode
+        else:
+            return run_in_eager_mode
+
+    return run_function
 
 
 @dataclass
@@ -384,6 +404,7 @@ class TFGenerationMixin:
         return_dict_in_generate=None,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
+        use_xla=bool,
         **model_kwargs,
     ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
         r"""
@@ -586,6 +607,7 @@ class TFGenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
+                use_xla=use_xla,
             )
 
         # We cannot generate if the model does not have a LM head
@@ -1553,6 +1575,7 @@ class TFGenerationMixin:
         return_dict_in_generate=None,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
+        use_xla=False,
         **model_kwargs,
     ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
         r"""
@@ -1813,6 +1836,7 @@ class TFGenerationMixin:
                 logits_processor=logits_processor,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                use_xla=use_xla,
                 **model_kwargs,
             )
 
@@ -2001,6 +2025,7 @@ class TFGenerationMixin:
         output_scores: Optional[bool] = None,
         attention_mask: Optional[tf.Tensor] = None,
         return_dict_in_generate: Optional[bool] = None,
+        use_xla: bool = False,
         **model_kwargs,
     ) -> Union[TFGreedySearchOutput, tf.Tensor]:
         r"""
@@ -2113,7 +2138,7 @@ class TFGenerationMixin:
             # Notes: new_prepare_inputs_for_generation should return constant-size arrays
             max_length = self.config.max_length if max_length is None else max_length
             return self.xla_greedy_generate(input_ids, max_length=max_length,
-                                            attention_mask=attention_mask, eos_token_id=eos_token_id)
+                                            attention_mask=attention_mask, eos_token_id=eos_token_id, use_xla=use_xla)
 
         while cur_len < max_length:
             # TODO(Patrick): remove following line by cleaning up `prepare_inputs_for_generation`
@@ -2206,51 +2231,85 @@ class TFGenerationMixin:
         else:
             return input_ids
 
-    @tf.function(jit_compile=True)
-    def xla_greedy_generate(self, input_ids, attention_mask, max_length, eos_token_id):
-        model_inputs = self.new_prepare_inputs_for_generation(input_ids, attention_mask, max_length=max_length)
-        past = model_inputs["past_key_values"]
-        generated = model_inputs["generated"]
-        next_logits = model_inputs["next_logits"]
-        attention_mask = model_inputs["attention_mask"]
-        attention_mask_slice_start_base = tf.constant([0, 1], dtype=tf.int32)
-        batch_size, seq_length = input_ids.shape
-        attention_mask_update_slice = tf.ones((batch_size, 1), dtype=attention_mask.dtype)
-        finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
-        next_tokens = tf.argmax(next_logits, axis=-1, output_type=tf.int32)
-        generated.write(0, next_tokens)
+    def xla_greedy_generate(self, input_ids, attention_mask, max_length, eos_token_id, use_xla=False, **model_kwargs):
+        @xla_compile(do_compile=use_xla)
+        def _xla_greedy_generate(self, input_ids, attention_mask, max_length, eos_token_id, use_xla: bool = False):
+            batch_size, seq_length = input_ids.shape
 
-        current_pos = tf.ones(shape=(1,), dtype=tf.int32)
-        max_tokens_to_generate = max_length - seq_length
+            if use_xla:
+                model_inputs = self.new_prepare_inputs_for_generation(input_ids, attention_mask, max_length=max_length)
+                past = model_inputs["past_key_values"]
+                generated = model_inputs["generated"]
+                next_logits = model_inputs["next_logits"]
+                attention_mask = model_inputs["attention_mask"]
+                attention_mask_slice_start_base = tf.constant([0, 1], dtype=tf.int32)
+                attention_mask_update_slice = tf.ones((batch_size, 1), dtype=attention_mask.dtype)
+            else:
+                # in all models
+                model_kwargs["use_cache"] = None if "use_cache" not in model_kwargs else model_kwargs["use_cache"]
 
-        def greedy_search_cond_fn(generated, finished_sequences, attention_mask, next_tokens, past, current_pos):
-            """state termination condition fn."""
-            return ~tf.reduce_all(finished_sequences)
+                # prepare model inputs
+                model_inputs = self.prepare_inputs_for_generation(input_ids, past=None, **model_kwargs)
 
-        def greedy_search_body_fn(generated, finished_sequences, attention_mask, next_tokens, past, current_pos):
-            """state update fn."""
-            position_ids = tf.reduce_sum(attention_mask, axis=1, keepdims=True) - 1
-            model_outputs = self(input_ids=next_tokens, past=past,
-                                 attention_mask=attention_mask, position_ids=position_ids)
-            logits = model_outputs.logits[:, -1:]
-            next_tokens = tf.argmax(logits, axis=-1, output_type=tf.int32)
-            finished_sequences = finished_sequences | (next_tokens[:, 0] == eos_token_id)
-            past = model_outputs.past_key_values
-            new_past_index = current_pos + seq_length - 1
-            past = self.update_cache_for_generation(past, new_past_index)
-            generated = generated.write(current_pos[0], next_tokens)
-            update_start = attention_mask_slice_start_base * new_past_index
-            attention_mask = dynamic_update_slice(attention_mask, attention_mask_update_slice, update_start)
-            current_pos += 1
-            return generated, finished_sequences, attention_mask, next_tokens, past, current_pos
+                # forward pass to get next token
+                outputs = self(
+                    **model_inputs,
+                    return_dict=True,
+#                    output_attentions=output_attentions,
+#                    output_hidden_states=output_hidden_states,
+                )
+                generated = tf.TensorArray(element_shape=(batch_size, 1), dtype=tf.int32, dynamic_size=False, size=max_length - seq_length, clear_after_read=False)
 
-        generated, _, _, _, _, _ = tf.while_loop(greedy_search_cond_fn, greedy_search_body_fn, (generated, finished_sequences, attention_mask, next_tokens, past, current_pos), maximum_iterations=max_tokens_to_generate-1)
+                next_logits = outputs.logits[:, -1:]
+                past = outputs.past_key_values
+                attention_mask = tf.concat(
+                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                )
 
-        output = tf.transpose(tf.reshape(generated.concat(), (-1, batch_size)))
+            finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
+            next_tokens = tf.argmax(next_logits, axis=-1, output_type=tf.int32)
+            generated.write(0, next_tokens)
 
-        output = tf.concat((input_ids, output), axis=-1)
+            current_pos = tf.ones(shape=(1,), dtype=tf.int32)
+            max_tokens_to_generate = max_length - seq_length
 
-        return output
+            def greedy_search_cond_fn(generated, finished_sequences, attention_mask, next_tokens, past, current_pos):
+                """state termination condition fn."""
+                return ~tf.reduce_all(finished_sequences)
+
+            def greedy_search_body_fn(generated, finished_sequences, attention_mask, next_tokens, past, current_pos):
+                """state update fn."""
+                position_ids = tf.reduce_sum(attention_mask, axis=1, keepdims=True) - 1 if use_xla else None
+
+                model_outputs = self(input_ids=next_tokens, past=past,
+                                     attention_mask=attention_mask, position_ids=position_ids)
+                logits = model_outputs.logits[:, -1:]
+                next_tokens = tf.argmax(logits, axis=-1, output_type=tf.int32)
+                finished_sequences = finished_sequences | (next_tokens[:, 0] == eos_token_id)
+                past = model_outputs.past_key_values
+                new_past_index = current_pos + seq_length - 1
+
+                if use_xla:
+                    past = self.update_cache_for_generation(past, new_past_index)
+                    update_start = attention_mask_slice_start_base * new_past_index
+                    attention_mask = dynamic_update_slice(attention_mask, attention_mask_update_slice, update_start)
+                else:
+                    attention_mask = tf.concat(
+                        [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                    )
+
+                generated = generated.write(current_pos[0], next_tokens)
+                current_pos += 1
+                return generated, finished_sequences, attention_mask, next_tokens, past, current_pos
+
+            generated, _, _, _, _, _ = tf.while_loop(greedy_search_cond_fn, greedy_search_body_fn, (generated, finished_sequences, attention_mask, next_tokens, past, current_pos), maximum_iterations=max_tokens_to_generate - 1)
+
+            output = tf.transpose(tf.reshape(generated.concat(), (-1, batch_size)))
+
+            output = tf.concat((input_ids, output), axis=-1)
+
+            return output
+        return _xla_greedy_generate(self, input_ids, attention_mask, max_length, eos_token_id, use_xla=use_xla)
 
 
 def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
