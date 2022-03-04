@@ -277,7 +277,7 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self) -> int:
-        return len(self.encoder)
+        return len(self.current_spm) + self.num_special_tokens_to_add()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
