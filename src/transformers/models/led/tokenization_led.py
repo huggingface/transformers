@@ -13,6 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for LED."""
+
+from typing import Dict, Optional, Union
+
+from ...file_utils import PaddingStrategy
+from ...tokenization_utils_base import BatchEncoding, EncodedInput
 from ...utils import logging
 from ..bart.tokenization_bart import BartTokenizer
 
@@ -48,3 +53,19 @@ class LEDTokenizer(BartTokenizer):
 
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+
+    def _pad(
+        self,
+        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
+        max_length: Optional[int] = None,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        pad_to_multiple_of: Optional[int] = None,
+        return_attention_mask: Optional[bool] = None,
+    ) -> dict:
+        return super()._pad(
+            encoded_inputs=encoded_inputs,
+            max_length=max_length,
+            padding_strategy=padding_strategy,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_attention_mask=return_attention_mask,
+        )
