@@ -933,8 +933,20 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
-
-        return self.module.init(
+        if self.config.is_decoder:
+            encoder_hidden_states = jnp.zeros(input_shape + (self.config.d_model,))
+            encoder_attention_mask = attention_mask
+            module_init_outputs = self.module.init(
+                rngs,
+                input_ids,
+                attention_mask,
+                position_ids,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                return_dict=False,
+            )
+        else:
+            module_init_outputs = self.module.init(
             rngs,
             input_ids,
             attention_mask,
@@ -942,7 +954,8 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
             decoder_attention_mask,
             position_ids,
             decoder_position_ids,
-        )["params"]
+        )
+        return module_init_outputs["params"]
 
     def init_cache(self, batch_size, max_length, encoder_outputs):
         r"""
@@ -1723,5 +1736,117 @@ append_call_sample_docstring(
     _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSeq2SeqQuestionAnsweringModelOutput,
+    _CONFIG_FOR_DOC,
+)
+
+
+class FlaxBartForCausalLMModule(nn.Module):
+    config: BartConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.config.is_encoder_decoder = False
+        self.config.is_decoder = True
+        embed_dim = self.config.d_model
+        self.embed_tokens = nn.Embed(
+            self.config.vocab_size,
+            embed_dim,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std),
+        )
+        self.model = FlaxBartDecoder(config=self.config, embed_tokens=self.embed_tokens, dtype=self.dtype)
+        self.lm_head = nn.Dense(
+            self.config.vocab_size,
+            use_bias=False,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
+        )
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        position_ids,
+        encoder_hidden_states: Optional[jnp.ndarray] = None,
+        encoder_attention_mask: Optional[jnp.ndarray] = None,
+        init_cache: bool = False,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        deterministic: bool = True,
+    ):
+
+        outputs = self.model(
+            input_ids,
+            attention_mask,
+            position_ids,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            deterministic=deterministic,
+            init_cache=init_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+
+        if self.config.tie_word_embeddings:
+            shared_embedding = self.embed_tokens.embedding
+            lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, hidden_states)
+        else:
+            lm_logits = self.lm_head(hidden_states)
+
+        if not return_dict:
+            return (lm_logits,) + outputs[1:]
+
+        return FlaxCausalLMOutputWithCrossAttentions(
+            logits=lm_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
+@add_start_docstrings(
+    """
+    Bart Model with a language modeling head on top (linear layer with weights tied to the input embeddings) e.g for
+    seq2seq tasks.
+    """,
+    BART_START_DOCSTRING,
+)
+class FlaxBartForCausalLM(FlaxBartPreTrainedModel):
+    module_class = FlaxBartForCausalLMModule
+
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+        # initializing the cache
+        batch_size, seq_length = input_ids.shape
+
+        past_key_values = self.init_cache(batch_size, max_length)
+        # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length.
+        # But since the decoder uses a causal mask, those positions are masked anyway.
+        # Thus, we can create a single static attention_mask here, which is more efficient for compilation
+        extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
+        if attention_mask is not None:
+            position_ids = attention_mask.cumsum(axis=-1) - 1
+            extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
+        else:
+            position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
+
+        return {
+            "past_key_values": past_key_values,
+            "attention_mask": extended_attention_mask,
+            "position_ids": position_ids,
+        }
+
+    def update_inputs_for_generation(self, model_outputs, model_kwargs):
+        model_kwargs["past_key_values"] = model_outputs.past_key_values
+        model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
+        return model_kwargs
+
+
+append_call_sample_docstring(
+    FlaxBartForCausalLM,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )

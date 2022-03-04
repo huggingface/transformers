@@ -45,6 +45,7 @@ if is_tf_available():
 
 if is_flax_available():
     _import_structure["modeling_flax_bart"] = [
+        "FlaxBartForCausalLM",
         "FlaxBartForConditionalGeneration",
         "FlaxBartForQuestionAnswering",
         "FlaxBartForSequenceClassification",
@@ -76,6 +77,7 @@ if TYPE_CHECKING:
 
     if is_flax_available():
         from .modeling_flax_bart import (
+            FlaxBartForCausalLM,
             FlaxBartForConditionalGeneration,
             FlaxBartForQuestionAnswering,
             FlaxBartForSequenceClassification,
