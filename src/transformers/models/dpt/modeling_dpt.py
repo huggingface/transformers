@@ -722,7 +722,7 @@ class DPTModel(DPTPreTrainedModel):
             embedding_output,
             head_mask=head_mask,
             output_attentions=output_attentions,
-            output_hidden_states=True,  # we need the intermediate hidden states
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
@@ -928,8 +928,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        print("Shape of pixel_values:", pixel_values.shape)
-
         outputs = self.dpt(
             pixel_values,
             head_mask=head_mask,
@@ -941,8 +939,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
         hidden_states = self.neck(encoder_hidden_states)
 
-        print("Shape of hidden_states:", hidden_states.shape)
-
         logits = self.head(hidden_states)
         logits = logits.squeeze(dim=1)
 
@@ -951,13 +947,16 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             raise NotImplementedError("Training is not implemented yet")
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            if output_hidden_states:
+                output = (logits,) + outputs[1:]
+            else:
+                output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
 

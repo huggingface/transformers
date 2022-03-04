@@ -239,6 +239,7 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
+            print("Inputs_dict:", inputs_dict.keys())
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
@@ -250,6 +251,9 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             )
             out_len = len(outputs)
 
+            print("Number of outputs with attention: {}".format(out_len))
+            print(outputs.keys())
+
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = True
@@ -259,6 +263,8 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
+            print("Outputs with attentions and hidden_states:")
+            print("outputs:", outputs.keys())
             self.assertEqual(out_len + 1, len(outputs))
 
             self_attentions = outputs.attentions
