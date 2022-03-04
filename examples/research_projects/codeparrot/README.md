@@ -121,7 +121,7 @@ git clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-train
 git clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-valid
 ```
 
-And then point the datasets loader to those directories:
+And then pass the paths to the datasets when we run the training script:
 
 ```bash
 accelerate launch scripts/codeparrot_training.py \
