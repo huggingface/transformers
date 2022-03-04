@@ -789,14 +789,11 @@ class DPTNeck(nn.Module):
         self.fusion_blocks[0].res_conv_unit1 = None  # not sure why this is done in mmseg
 
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
-        # TODO: possibly move
-        # only keep certain features based on config.out_indices
-        # note that the hidden_states also include the initial embeddings
-        features = [feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.out_indices]
-
-        # postprocess features
-        features = self.reassemble_blocks(features)
-
+        if len(hidden_states) != len(self.post_process_channels):
+            raise ValueError("The number of hidden states should be equal to the number of post-process channels.")
+        
+        # postprocess hidden states
+        features = self.reassemble_blocks(hidden_states)
         features = [self.convs[i](feature) for i, feature in enumerate(features)]
 
         # fusion blocks
@@ -807,7 +804,7 @@ class DPTNeck(nn.Module):
             else:
                 out = self.fusion_blocks[i](out, features[-(i + 1)])
             output.append(out)
-        
+
         return output
 
 
@@ -940,8 +937,13 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
-        hidden_states = self.neck(encoder_hidden_states)
+        hidden_states = outputs.hidden_states if return_dict else outputs[1]
+
+        # only keep certain features based on config.out_indices
+        # note that the hidden_states also include the initial embeddings
+        hidden_states = [feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.out_indices]
+
+        hidden_states = self.neck(hidden_states)
 
         logits = self.head(hidden_states[-1])
         logits = logits.squeeze(dim=1)
@@ -1091,8 +1093,13 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
-        hidden_states = self.neck(encoder_hidden_states)
+        hidden_states = outputs.hidden_states if return_dict else outputs[1]
+
+        # only keep certain features based on config.out_indices
+        # note that the hidden_states also include the initial embeddings
+        hidden_states = [feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.out_indices]
+
+        hidden_states = self.neck(hidden_states)
 
         logits = self.head(hidden_states[-1])
 

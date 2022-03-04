@@ -44,10 +44,15 @@ class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input to a certain `size`.
-        size (`int` or `Tuple(int)`, *optional*, defaults to 224):
+        size ('int' or `Tuple(int)`, *optional*, defaults to 384):
             Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
             integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize` is
             set to `True`.
+        ensure_multiple_of (`int`, *optional*, defaults to 1):
+            Ensure that the input is resized to a multiple of this value. Only has an effect if `do_resize` is
+            set to `True`.
+        keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
+            Whether to keep the aspect ratio of the input. Only has an effect if `do_resize` is set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
@@ -65,7 +70,9 @@ class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     def __init__(
         self,
         do_resize=True,
-        size=224,
+        size=384,
+        keep_aspect_ratio=False,
+        ensure_multiple_of=1,
         resample=Image.BILINEAR,
         do_normalize=True,
         image_mean=None,
@@ -75,10 +82,50 @@ class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size
+        self.keep_aspect_ratio = keep_aspect_ratio
+        self.ensure_multiple_of = ensure_multiple_of
         self.resample = resample
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+
+    def constrain_to_multiple_of(self, x, min_val=0, max_val=None):
+        y = (np.round(x / self.ensure_multiple_of) * self.ensure_multiple_of).astype(int)
+
+        if max_val is not None and y > max_val:
+            y = (np.floor(x / self.ensure_multiple_of) * self.ensure_multiple_of).astype(int)
+
+        if y < min_val:
+            y = (np.ceil(x / self.ensure_multiple_of) * self.ensure_multiple_of).astype(int)
+
+        return y
+
+    def update_size(self, width, height):
+        size = self.size
+
+        if isinstance(size, list):
+            size = tuple(size)
+
+        if isinstance(size, int) or len(size) == 1:
+            size = (size, size)
+
+        # determine new width and height
+        scale_width = size[0] / width
+        scale_height = size[1] / height
+
+        if self.keep_aspect_ratio:
+            # scale as least as possbile
+            if abs(1 - scale_width) < abs(1 - scale_height):
+                # fit width
+                scale_height = scale_width
+            else:
+                # fit height
+                scale_width = scale_height
+        else:
+            new_width = self.constrain_to_multiple_of(scale_width * width)
+            new_height = self.constrain_to_multiple_of(scale_height * height)
+
+        return (new_width, new_height)
 
     def __call__(
         self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
@@ -139,7 +186,9 @@ class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         # transformations (resizing + normalization)
         if self.do_resize and self.size is not None:
-            images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
+            for idx, image in enumerate(images):
+                size = self.update_size(image.width, image.height)
+                images[idx] = self.resize(image, size=size, resample=self.resample)
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
