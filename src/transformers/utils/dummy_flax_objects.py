@@ -989,3 +989,45 @@ class FlaxXGLMPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
+
+
+class FlaxXLMRobertaForMaskedLM(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxXLMRobertaForMultipleChoice(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxXLMRobertaForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxXLMRobertaForSequenceClassification(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxXLMRobertaForTokenClassification(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxXLMRobertaModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
