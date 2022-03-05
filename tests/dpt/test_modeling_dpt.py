@@ -19,7 +19,7 @@ import inspect
 import unittest
 
 from transformers import DPTConfig
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
@@ -239,7 +239,6 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
-            print("Inputs_dict:", inputs_dict.keys())
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
@@ -251,9 +250,6 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             )
             out_len = len(outputs)
 
-            print("Number of outputs with attention: {}".format(out_len))
-            print(outputs.keys())
-
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = True
@@ -263,8 +259,6 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            print("Outputs with attentions and hidden_states:")
-            print("outputs:", outputs.keys())
             self.assertEqual(out_len + 1, len(outputs))
 
             self_attentions = outputs.attentions
@@ -374,15 +368,48 @@ def prepare_img():
 
 @require_torch
 @require_vision
+@slow
 class DPTModelIntegrationTest(unittest.TestCase):
-    @cached_property
-    def default_feature_extractor(self):
-        # TODO replace nielsr to appropriate organization
-        return DPTFeatureExtractor.from_pretrained("nielsr/dpt-large") if is_vision_available() else None
+    def test_inference_depth_estimation(self):
+        # TODO update model name
+        feature_extractor = DPTFeatureExtractor.from_pretrained("nielsr/dpt-large-redesign")
+        model = DPTForDepthEstimation.from_pretrained("nielsr/dpt-large-redesign").to(torch_device)
 
-    @slow
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 384, 384))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+
     def test_inference_semantic_segmentation(self):
+        # TODO update model name
+        feature_extractor = DPTFeatureExtractor.from_pretrained("nielsr/dpt-large-ade")
         model = DPTForSemanticSegmentation.from_pretrained("nielsr/dpt-large-ade").to(torch_device)
 
-        # TODO
-        raise NotImplementedError("")
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 150, 480, 480))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[4.0480, 4.2420, 4.4360], [4.3124, 4.5693, 4.8261], [4.5768, 4.8965, 5.2163]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))

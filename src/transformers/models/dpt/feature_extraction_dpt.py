@@ -49,8 +49,8 @@ class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize` is
             set to `True`.
         ensure_multiple_of (`int`, *optional*, defaults to 1):
-            Ensure that the input is resized to a multiple of this value. Only has an effect if `do_resize` is
-            set to `True`.
+            Ensure that the input is resized to a multiple of this value. Only has an effect if `do_resize` is set to
+            `True`.
         keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
             Whether to keep the aspect ratio of the input. Only has an effect if `do_resize` is set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):

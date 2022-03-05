@@ -791,7 +791,7 @@ class DPTNeck(nn.Module):
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         if len(hidden_states) != len(self.post_process_channels):
             raise ValueError("The number of hidden states should be equal to the number of post-process channels.")
-        
+
         # postprocess hidden states
         features = self.reassemble_blocks(hidden_states)
         features = [self.convs[i](feature) for i, feature in enumerate(features)]
@@ -844,9 +844,9 @@ class DPTInterpolate(nn.Module):
 
 class DPTDepthEstimationHead(nn.Module):
     """
-    Output head head consisting of 3 convolutional layers. It progressively halves the feature dimension and
-    upsamples the predictions to the input resolution after the first convolutional layer (details can be found
-    in the paper's supplementary material).
+    Output head head consisting of 3 convolutional layers. It progressively halves the feature dimension and upsamples
+    the predictions to the input resolution after the first convolutional layer (details can be found in the paper's
+    supplementary material).
     """
 
     def __init__(self, config):

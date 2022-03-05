@@ -21,11 +21,10 @@ from pathlib import Path
 
 import torch
 from PIL import Image
-from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import DPTConfig, DPTForDepthEstimation, DPTForSemanticSegmentation
+from transformers import DPTConfig, DPTFeatureExtractor, DPTForDepthEstimation, DPTForSemanticSegmentation
 from transformers.utils import logging
 
 
@@ -186,7 +185,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub):
+def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub, model_name):
     """
     Copy/paste/tweak model's weights to our DPT structure.
     """
@@ -210,22 +209,14 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     model.eval()
 
     # Check outputs on an image
-    # TODO prepare image by DPTFeatureExtractor
+    size = 480 if "ade" in checkpoint_url else 384
+    feature_extractor = DPTFeatureExtractor(size=size)
+
     image = prepare_img()
-
-    size = (480, 480) if "ade" in checkpoint_url else (384, 384)
-
-    transform = Compose(
-        [
-            Resize(size),
-            ToTensor(),
-            Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-        ]
-    )
-    pixel_values = transform(image).unsqueeze(0)
+    encoding = feature_extractor(image, return_tensors="pt")
 
     # forward pass
-    logits = model(pixel_values).logits
+    logits = model(**encoding).logits
 
     # Assert logits
     expected_slice = torch.tensor([[6.3199, 6.3629, 6.4148], [6.3850, 6.3615, 6.4166], [6.3519, 6.3176, 6.3575]])
@@ -241,16 +232,21 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print("Pushing model to hub...")
-        model_name = "dpt-large-ade" if "ade" in checkpoint_url else "dpt-large"
         model.push_to_hub(
             repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
             organization="nielsr",
             commit_message="Add model",
+            use_temp_dir=True,
+        )
+        feature_extractor.push_to_hub(
+            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
+            organization="nielsr",
+            commit_message="Add feature extractor",
             use_temp_dir=True,
         )
 
@@ -275,6 +271,12 @@ if __name__ == "__main__":
         "--push_to_hub",
         action="store_true",
     )
+    parser.add_argument(
+        "--model_name",
+        default="dpt-large",
+        type=str,
+        help="Name of the model, in case you're pushing to the hub.",
+    )
 
     args = parser.parse_args()
-    convert_dpt_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_dpt_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub, args.model_name)
