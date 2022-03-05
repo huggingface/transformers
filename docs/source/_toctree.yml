@@ -60,7 +60,7 @@
       title: Multiple choice
     title: Fine-tune for downstream tasks
   - local: run_scripts
-    title: Run a training script
+    title: Train with a script
   - local: notebooks
     title: "🤗 Transformers Notebooks"
   - local: sagemaker
