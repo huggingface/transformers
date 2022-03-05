@@ -369,14 +369,14 @@ class TFModelTesterMixin:
 
             return pt_inputs_dict
 
-        def check_outputs(tfo, pto, model_class, names):
+        def check_outputs(tf_outputs, pt_outputs, model_class, names):
             """
             Args:
                 model_class: The class of the model that is currently testing. For example, `TFBertModel`,
                     TFBertForMaskedLM`, `TFBertForSequenceClassification`, etc. Currently unused, but it could make
                     debugging easier and faster.
 
-                names: A string, or a list of strings. These specify what tfo/pto represent in the model outputs.
+                names: A string, or a tuple of strings. These specify what tf_outputs/pt_outputs represent in the model outputs.
                     Currently unused, but in the future, we could use this information to make the error message clearer
                     by giving the name(s) of the output tensor(s) with large difference(s) between PT and TF.
             """
@@ -385,35 +385,39 @@ class TFModelTesterMixin:
             if names == "past_key_values":
                 return
 
-            if type(tfo) == tuple:
-                self.assertEqual(type(tfo), type(pto))
-                self.assertEqual(len(tfo), len(pto))
-                if type(names) in [tuple, list]:
-                    for to, po, name in zip(tfo, pto, names):
-                        check_outputs(to, po, model_class, names=name)
+            # Currently, there are a few cases where we get `list` instead of `tuple`.
+            # TODO: Only use `tuple` for all outputs.
+            if type(tf_outputs) in [tuple, list]:
+                self.assertEqual(type(tf_outputs), type(pt_outputs))
+                self.assertEqual(len(tf_outputs), len(pt_outputs))
+                if type(names) == tuple:
+                    for tfo, pto, name in zip(tf_outputs, pt_outputs, names):
+                        check_outputs(tfo, pto, model_class, names=name)
                 elif type(names) == str:
-                    for idx, (to, po) in enumerate(zip(tfo, pto)):
-                        check_outputs(to, po, model_class, names=f"{names}_{idx}")
+                    for idx, (tfo, pto) in enumerate(zip(tf_outputs, pt_outputs)):
+                        check_outputs(tfo, pto, model_class, names=f"{names}_{idx}")
                 else:
-                    raise ValueError(f"`names` should be a `tuple`, a`list` or a string. Got {type(names)} instead.")
-            elif isinstance(tfo, tf.Tensor):
-                self.assertTrue(isinstance(pto, torch.Tensor))
+                    raise ValueError(f"`names` should be a `tuple` or a string. Got {type(names)} instead.")
+            elif isinstance(tf_outputs, tf.Tensor):
+                self.assertTrue(isinstance(pt_outputs, torch.Tensor))
 
-                tfo = tfo.numpy()
-                pto = pto.detach().to("cpu").numpy()
+                tf_outputs = tf_outputs.numpy()
+                pt_outputs = pt_outputs.detach().to("cpu").numpy()
 
-                tf_nans = np.copy(np.isnan(tfo))
-                pt_nans = np.copy(np.isnan(pto))
+                tf_nans = np.copy(np.isnan(tf_outputs))
+                pt_nans = np.copy(np.isnan(pt_outputs))
 
-                pto[tf_nans] = 0
-                tfo[tf_nans] = 0
-                pto[pt_nans] = 0
-                tfo[pt_nans] = 0
+                pt_outputs[tf_nans] = 0
+                tf_outputs[tf_nans] = 0
+                pt_outputs[pt_nans] = 0
+                tf_outputs[pt_nans] = 0
 
-                max_diff = np.amax(np.abs(tfo - pto))
+                max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
                 self.assertLessEqual(max_diff, 1e-5)
             else:
-                raise ValueError(f"`tfo` should be a `tuple` or an instance of `tf.Tensor`. Got {type(tfo)} instead.")
+                raise ValueError(
+                    f"`tf_outputs` should be a `tuple` or an instance of `tf.Tensor`. Got {type(tf_outputs)} instead."
+                )
 
         def check_pt_tf_models(tf_model, pt_model):
 
@@ -437,14 +441,14 @@ class TFModelTesterMixin:
 
             # Original test: check without `labels`
             with torch.no_grad():
-                pto = pt_model(**pt_inputs_dict)
-            tfo = tf_model(tf_inputs_dict)
+                pt_outputs = pt_model(**pt_inputs_dict)
+            tf_outputs = tf_model(tf_inputs_dict)
 
-            tf_keys = [k for k, v in tfo.items() if v is not None]
-            pt_keys = [k for k, v in pto.items() if v is not None]
+            tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
+            pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
 
             self.assertEqual(tf_keys, pt_keys)
-            check_outputs(tfo.to_tuple(), pto.to_tuple(), model_class, names=tf_keys)
+            check_outputs(tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=tf_keys)
 
             # check the case where `labels` is passed
             has_labels = any(
@@ -453,13 +457,13 @@ class TFModelTesterMixin:
             if has_labels:
 
                 with torch.no_grad():
-                    pto = pt_model(**pt_inputs_dict_maybe_with_labels)
-                tfo = tf_model(tf_inputs_dict_maybe_with_labels)
+                    pt_outputs = pt_model(**pt_inputs_dict_maybe_with_labels)
+                tf_outputs = tf_model(tf_inputs_dict_maybe_with_labels)
 
                 # Some models' output class don't have `loss` attribute despite `labels` is used.
                 # TODO: identify which models
-                tf_loss = getattr(tfo, "loss", None)
-                pt_loss = getattr(pto, "loss", None)
+                tf_loss = getattr(tf_outputs, "loss", None)
+                pt_loss = getattr(pt_outputs, "loss", None)
 
                 # Some PT models return loss while the corresponding TF models don't (i.e. `None` for `loss`).
                 #   - TFFlaubertWithLMHeadModel
@@ -476,8 +480,8 @@ class TFModelTesterMixin:
                     ]:
                         self.assertEqual(tf_loss is None, pt_loss is None)
 
-                tf_keys = [k for k, v in tfo.items() if v is not None]
-                pt_keys = [k for k, v in pto.items() if v is not None]
+                tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
 
                 # TODO: remove these 2 conditions once the above TODOs (above loss) are implemented
                 # (Also, `TFTransfoXLLMHeadModel` has no `loss` while `TransfoXLLMHeadModel` return `losses`)
@@ -509,7 +513,7 @@ class TFModelTesterMixin:
 
                     # check anything else than `loss`
                     keys = [k for k in tf_keys]
-                    check_outputs(tfo[1:index], pto[1:index], model_class, names=keys[1:index])
+                    check_outputs(tf_outputs[1:index], pt_outputs[1:index], model_class, names=keys[1:index])
 
                     # check `loss`
 
