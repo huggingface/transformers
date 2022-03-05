@@ -427,7 +427,7 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
             [[0.8948, -1.0680, 0.0030], [0.9758, -1.1181, -0.0290], [1.0602, -1.1522, -0.0528]]
         )
 
-        # set expected slide depending on device
+        # set expected slice depending on device
         expected_slice = expected_slice_cpu if torch_device == "cpu" else expected_slice_gpu
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice.to(torch_device), atol=1e-4))
