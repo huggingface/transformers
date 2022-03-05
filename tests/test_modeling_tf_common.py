@@ -385,8 +385,7 @@ class TFModelTesterMixin:
             if names == "past_key_values":
                 return
 
-            # Currently, there are a few cases where we get `list` instead of `tuple`.
-            # TODO: Only use `tuple` for all outputs.
+            # Allow `list` because `(TF)TransfoXLModelOutput.mems` is a list of tensors.
             if type(tf_outputs) in [tuple, list]:
                 self.assertEqual(type(tf_outputs), type(pt_outputs))
                 self.assertEqual(len(tf_outputs), len(pt_outputs))
@@ -404,8 +403,8 @@ class TFModelTesterMixin:
                 tf_outputs = tf_outputs.numpy()
                 pt_outputs = pt_outputs.detach().to("cpu").numpy()
 
-                tf_nans = np.copy(np.isnan(tf_outputs))
-                pt_nans = np.copy(np.isnan(pt_outputs))
+                tf_nans = np.isnan(tf_outputs)
+                pt_nans = np.isnan(pt_outputs)
 
                 pt_outputs[tf_nans] = 0
                 tf_outputs[tf_nans] = 0
@@ -523,8 +522,8 @@ class TFModelTesterMixin:
                     tf_loss = tf.math.reduce_mean(tf_loss).numpy()
                     pt_loss = pt_loss.detach().to("cpu").numpy()
 
-                    tf_nans = np.copy(np.isnan(tf_loss))
-                    pt_nans = np.copy(np.isnan(pt_loss))
+                    tf_nans = np.isnan(tf_loss)
+                    pt_nans = np.isnan(pt_loss)
                     # the 2 losses need to be both nan or both not nan
                     self.assertEqual(tf_nans, pt_nans)
 
