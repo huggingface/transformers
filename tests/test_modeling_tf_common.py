@@ -512,7 +512,7 @@ class TFModelTesterMixin:
                 if tf_loss is not None and pt_loss is not None:
 
                     # check anything else than `loss`
-                    keys = [k for k in tf_keys]
+                    keys = tuple([k for k in tf_keys])
                     check_outputs(tf_outputs[1:index], pt_outputs[1:index], model_class, names=keys[1:index])
 
                     # check `loss`
