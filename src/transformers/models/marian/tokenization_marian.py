@@ -127,7 +127,6 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        vocab,
         source_spm,
         target_spm,
         source_lang=None,
@@ -153,15 +152,9 @@ class MarianTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         assert Path(source_spm).exists(), f"cannot find spm source {source_spm}"
-        self.encoder = load_json(vocab)
-        if self.unk_token not in self.encoder:
-            raise KeyError("<unk> token must be in vocab")
-        assert self.pad_token in self.encoder
-        self.decoder = {v: k for k, v in self.encoder.items()}
 
         self.source_lang = source_lang
         self.target_lang = target_lang
-        self.supported_language_codes: list = [k for k in self.encoder if k.startswith(">>") and k.endswith("<<")]
         self.spm_files = [source_spm, target_spm]
 
         # load SentencePiece model for pre-processing
@@ -187,7 +180,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         return self.punc_normalizer(x) if x else ""
 
     def _convert_token_to_id(self, token):
-        return self.encoder.get(token, self.encoder[self.unk_token])
+        return self.current_spm.PieceToId(token)
 
     def remove_language_code(self, text: str):
         """Remove language codes like >>fr<< before sentencepiece"""
@@ -201,8 +194,8 @@ class MarianTokenizer(PreTrainedTokenizer):
         return code + pieces
 
     def _convert_id_to_token(self, index: int) -> str:
-        """Converts an index (integer) in a token (str) using the decoder."""
-        return self.decoder.get(index, self.unk_token)
+        """Converts an index (integer) in a token (str) using the sentencepiece model."""
+        return self.current_spm.IdToPiece(index)
 
     def batch_decode(self, sequences, **kwargs):
         """
@@ -277,19 +270,13 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self) -> int:
-        return len(self.encoder)
+        return len(self.current_spm) + self.num_special_tokens_to_add()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         saved_files = []
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab"]
-        )
-
-        save_json(self.encoder, out_vocab_file)
-        saved_files.append(out_vocab_file)
 
         for spm_save_filename, spm_orig_path, spm_model in zip(
             [VOCAB_FILES_NAMES["source_spm"], VOCAB_FILES_NAMES["target_spm"]],
@@ -311,7 +298,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         return tuple(saved_files)
 
     def get_vocab(self) -> Dict:
-        vocab = self.encoder.copy()
+        vocab = {self.current_spm.IdToPiece(_id): _id for _id in range(self.current_spm.GetPieceSize())}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
