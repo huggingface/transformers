@@ -56,6 +56,9 @@ if TYPE_CHECKING:
     from .configuration_deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
     from .tokenization_deberta_v2 import DebertaV2Tokenizer
 
+    if is_tokenizers_available():
+        from .tokenization_deberta_v2_fast import DebertaV2TokenizerFast
+
     if is_tf_available():
         from .modeling_tf_deberta_v2 import (
             TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -67,8 +70,6 @@ if TYPE_CHECKING:
             TFDebertaV2PreTrainedModel,
         )
 
-    if is_tokenizers_available():
-        from .tokenization_deberta_v2_fast import DebertaV2TokenizerFast
     if is_torch_available():
         from .modeling_deberta_v2 import (
             DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,

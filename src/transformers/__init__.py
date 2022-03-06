@@ -2730,6 +2730,7 @@ if TYPE_CHECKING:
         from .models.clip import CLIPTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.deberta import DebertaTokenizerFast
+        from .models.deberta_v2 import DebertaV2TokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
         from .models.electra import ElectraTokenizerFast
