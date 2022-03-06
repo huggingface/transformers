@@ -325,7 +325,6 @@ class SPMTokenizer:
         self.spm.Load(self.vocab_file)
 
     def tokenize(self, text):
-        pieces = self._encode_as_pieces(text)
         return self._encode_as_pieces(text)
 
     def convert_ids_to_tokens(self, ids):
