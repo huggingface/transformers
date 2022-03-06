@@ -72,6 +72,10 @@ class ConvNextConfig(PretrainedConfig):
             The dimensionality (hidden size) of the auxiliary head.
         auxiliary_depths (`List[int]`, *optional*, defaults to `[3, 3]`):
             The depth (number of blocks) of the auxiliary head.
+        legacy_output (`bool`, *optional*, defaults to `False`):
+            Whether to return the legacy outputs or not (with logits of shape `height / 4 , width / 4`)
+
+            This argument is only present for backward compatibility reasons and will be removed in v5 of Transformers.
 
     Example:
     ```python
@@ -107,6 +111,7 @@ class ConvNextConfig(PretrainedConfig):
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
         semantic_loss_ignore_index=255,
+        legacy_output=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -131,3 +136,4 @@ class ConvNextConfig(PretrainedConfig):
         self.auxiliary_num_convs = auxiliary_num_convs
         self.auxiliary_concat_input = auxiliary_concat_input
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
+        self.legacy_output = legacy_output

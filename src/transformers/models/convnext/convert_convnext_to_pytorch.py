@@ -26,7 +26,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import ConvNextConfig, ConvNextFeatureExtractor, ConvNextForImageClassification
+from transformers import ConvNextConfig, ConvNextFeatureExtractor, ConvNextForImageClassification, ConvNextForSemanticSegmentation
 from transformers.utils import logging
 
 

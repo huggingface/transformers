@@ -521,8 +521,8 @@ class ConvNextConvModule(nn.Module):
             bias=bias,
             dilation=dilation,
         )
-        self.bn = nn.BatchNorm2d(out_channels)
-        self.activation = nn.ReLU()
+        self.bn = nn.SyncBatchNorm(out_channels)
+        self.activation = nn.ReLU(inplace=True)
 
     def forward(self, input):
         output = self.conv(input)
@@ -583,8 +583,8 @@ class ConvNextUperHead(nn.Module):
         super().__init__()
 
         self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
-        self.in_channels = [config.hidden_sizes[-1]] * 4  # e.g. [768, 768, 768, 768]
-        self.channels = config.hidden_sizes[-1]
+        self.in_channels = config.hidden_sizes
+        self.channels = config.auxiliary_channels * 2 # e.g. 512
         self.align_corners = False
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
@@ -673,7 +673,7 @@ class ConvNextFCNHead(nn.Module):
 
     def __init__(self, config, in_index=2, kernel_size=3, dilation=1):
         super().__init__()
-        self.in_channels = config.hidden_sizes[-1]
+        self.in_channels = config.hidden_sizes[-2]
         self.channels = config.auxiliary_channels
         self.num_convs = config.auxiliary_num_convs
         self.concat_input = config.auxiliary_concat_input
