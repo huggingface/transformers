@@ -18,13 +18,16 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tf_available, is_torch_available
+from ...file_utils import _LazyModule, is_tf_available, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
     "configuration_deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "tokenization_deberta_v2": ["DebertaV2Tokenizer"],
 }
+
+if is_tokenizers_available():
+    _import_structure["tokenization_deberta_v2_fast"] = ["DebertaV2TokenizerFast"]
 
 if is_tf_available():
     _import_structure["modeling_tf_deberta_v2"] = [
@@ -64,6 +67,8 @@ if TYPE_CHECKING:
             TFDebertaV2PreTrainedModel,
         )
 
+    if is_tokenizers_available():
+        from .tokenization_deberta_v2_fast import DebertaV2TokenizerFast
     if is_torch_available():
         from .modeling_deberta_v2 import (
             DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
