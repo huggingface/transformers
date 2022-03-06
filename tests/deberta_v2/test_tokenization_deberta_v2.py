@@ -17,7 +17,7 @@ import os
 import unittest
 from os.path import dirname
 
-from transformers import DebertaV2Tokenizer
+from transformers import DebertaV2Tokenizer, DebertaV2TokenizerFast
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
 from ..test_tokenization_common import TokenizerTesterMixin
@@ -31,8 +31,8 @@ SAMPLE_VOCAB = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtur
 class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = DebertaV2Tokenizer
-    rust_tokenizer_class = None
-    test_rust_tokenizer = False
+    rust_tokenizer_class = DebertaV2TokenizerFast
+    test_rust_tokenizer = True
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
 
@@ -67,6 +67,144 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 30_000)
 
+    def test_do_lower_case(self):
+        tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, do_lower_case=True, split_by_punct=False)
+
+        sequence = " \tHeLLo!how  \n Are yoU?  "
+
+        tokens = tokenizer.tokenize(sequence)
+
+        self.assertListEqual(tokens, ["▁hello", "!", "how", "▁are", "▁you", "?"])
+
+        if self.test_rust_tokenizer:
+            rust_tokenizer = DebertaV2TokenizerFast(SAMPLE_VOCAB, do_lower_case=True, split_by_punct=False)
+
+            rust_tokens = rust_tokenizer.tokenize(sequence)
+
+            self.assertListEqual(rust_tokens, ["▁hello", "!", "how", "▁are", "▁you", "?"])
+            self.assertListEqual(tokens, rust_tokens)
+
+    def test_split_by_punct(self):
+        tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, split_by_punct=True)
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        # fmt: off
+        self.assertListEqual(
+            tokens,
+            ['▁', 'I', '▁was', '▁born', '▁in', '▁9', '2000', '▁', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '▁', '.'],
+        )
+        # fmt: on
+
+        if self.test_rust_tokenizer:
+            rust_tokenizer = DebertaV2TokenizerFast(SAMPLE_VOCAB, split_by_punct=True)
+            rust_tokens = rust_tokenizer.tokenize(sequence)
+            # fmt: off
+            self.assertListEqual(
+                rust_tokens,
+                ['▁', 'I', '▁was', '▁born', '▁in', '▁9', '2000', '▁', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '▁', '.'],
+            )
+            # fmt: on
+
+            self.assertListEqual(tokens, rust_tokens)
+
+    def test_do_lower_case_split_by_punct(self):
+        tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, do_lower_case=True, split_by_punct=True)
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        # fmt: off
+        self.assertListEqual(
+            tokens,
+            ['▁i', '▁was', '▁born', '▁in', '▁9', '2000', '▁', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '▁', '.']
+        )
+        # fmt: on
+
+        if self.test_rust_tokenizer:
+            rust_tokenizer = DebertaV2TokenizerFast(SAMPLE_VOCAB, do_lower_case=True, split_by_punct=True)
+            rust_tokens = rust_tokenizer.tokenize(sequence)
+            # fmt: off
+            self.assertListEqual(
+                rust_tokens,
+                ['▁i', '▁was', '▁born', '▁in', '▁9', '2000', '▁', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '▁', '.']
+            )
+            # fmt: on
+            self.assertListEqual(tokens, rust_tokens)
+
+    def test_do_lower_case_split_by_punct_false(self):
+        tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, do_lower_case=True, split_by_punct=False)
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        # fmt: off
+        self.assertListEqual(
+            tokens,
+            ['▁i', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '.']
+        )
+        # fmt: on
+
+        if self.test_rust_tokenizer:
+            rust_tokenizer = DebertaV2TokenizerFast(SAMPLE_VOCAB, do_lower_case=True, split_by_punct=False)
+            rust_tokens = rust_tokenizer.tokenize(sequence)
+            # fmt: off
+            self.assertListEqual(
+                rust_tokens,
+                ['▁i', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '.']
+            )
+            # fmt: on
+            self.assertListEqual(tokens, rust_tokens)
+
+    def test_do_lower_case_false_split_by_punct(self):
+        tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, do_lower_case=False, split_by_punct=True)
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        # fmt: off
+        self.assertListEqual(
+            tokens,
+            ['▁', 'I', '▁was', '▁born', '▁in', '▁9', '2000', '▁', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '▁', '.']
+        )
+        # fmt: on
+
+        if self.test_rust_tokenizer:
+            rust_tokenizer = DebertaV2TokenizerFast(SAMPLE_VOCAB, do_lower_case=False, split_by_punct=True)
+            rust_tokens = rust_tokenizer.tokenize(sequence)
+            # fmt: off
+            self.assertListEqual(
+                rust_tokens,
+                ['▁', 'I', '▁was', '▁born', '▁in', '▁9', '2000', '▁', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '▁', '.']
+            )
+            # fmt: on
+            self.assertListEqual(tokens, rust_tokens)
+
+    def test_do_lower_case_false_split_by_punct_false(self):
+        tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, do_lower_case=False, split_by_punct=True)
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        # fmt: off
+        self.assertListEqual(
+            tokens,
+            ['▁', 'I', '▁was', '▁born', '▁in', '▁9', '2000', '▁', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '▁', '.']
+        )
+        # fmt: on
+
+        if self.test_rust_tokenizer:
+            rust_tokenizer = DebertaV2TokenizerFast(SAMPLE_VOCAB, do_lower_case=False, split_by_punct=True)
+            rust_tokens = rust_tokenizer.tokenize(sequence)
+            # fmt: off
+            self.assertListEqual(
+                rust_tokens,
+                ['▁', 'I', '▁was', '▁born', '▁in', '▁9', '2000', '▁', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '▁', '.']
+            )
+            # fmt: on
+            self.assertListEqual(tokens, rust_tokens)
+
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
             return
@@ -93,7 +231,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁", "[UNK]", "his", "▁is", "▁a", "▁test"])
+        self.assertListEqual(tokens, ["▁", "T", "his", "▁is", "▁a", "▁test"])
 
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [13, 1, 4398, 25, 21, 1289])
 
@@ -101,7 +239,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: off
         self.assertListEqual(
             tokens,
-            ["▁", "[UNK]", "▁was", "▁born", "▁in", "▁9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "[UNK]", "."],
+            ["▁", "I", "▁was", "▁born", "▁in", "▁9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "é", "."]
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(ids, [13, 1, 23, 386, 19, 561, 3050, 15, 17, 48, 25, 8256, 18, 1, 9])
