@@ -97,6 +97,8 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
                 Whether or not to print more information and warnings.
 """
 
+ListOfDict = List[Dict[str, Union[int, str]]]
+
 
 @dataclass
 class Wav2Vec2CTCTokenizerOutput(ModelOutput):
@@ -106,18 +108,18 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
     Args:
         text (list of `str` or `str`):
             Decoded logits in text from. Usually the speech transcription.
-        char_offsets (`Dict[str, Union[int, str]]` or `Dict[str, Union[int, str]]`):
+        char_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
             Offsets of the decoded characters. In combination with sampling rate and model downsampling rate char
             offsets can be used to compute time stamps for each charater. Total logit score of the beam associated with
             produced text.
-        word_offsets (`Dict[str, Union[int, str]]` or `Dict[str, Union[int, str]]`):
+        word_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
             Offsets of the decoded words. In combination with sampling rate and model downsampling rate word offsets
             can be used to compute time stamps for each word.
     """
 
     text: Union[List[str], str]
-    char_offsets: List[Dict[str, Union[float, str]]] = None
-    word_offsets: List[Dict[str, Union[float, str]]] = None
+    char_offsets: Union[List[ListOfDict], ListOfDict] = None
+    word_offsets: Union[List[ListOfDict], ListOfDict] = None
 
 
 class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
@@ -258,6 +260,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
         """
+        if len(tokens) == 0:
+            return {"text": "", "char_offsets": [], "word_offsets": []}
         # group same tokens into non-repeating tokens in CTC style decoding
         if group_tokens:
             chars, char_repetitions = zip(*((token, len(list(group_iter))) for token, group_iter in groupby(tokens)))
@@ -324,28 +328,33 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         offsets: Dict[str, Union[str, float]], word_delimiter_char: str = " "
     ) -> Dict[str, Union[str, float]]:
         word_offsets = []
-        final_offset_idx = len(offsets) - 1
 
+        last_state = "SPACE"
+        word = ""
+        start_offset = 0
+        end_offset = 0
         for i, offset in enumerate(offsets):
-            # define previous, next and current char
             char = offset["char"]
-            prev_char = offsets[i - 1]["char"] if i > 0 else None
-            next_char = offsets[i + 1]["char"] if i < final_offset_idx else None
+            state = "SPACE" if char == word_delimiter_char else "WORD"
 
-            # derive whether word begins, ends and whether current char is in word
-            word_begin = (i == 0 and char != word_delimiter_char) or (prev_char == word_delimiter_char)
-            word_end = (i == final_offset_idx and char != word_delimiter_char) or (next_char == word_delimiter_char)
-            char_is_in_word = char != word_delimiter_char
+            if state == last_state:
+                # If we are in the same state as before, we simply repeat what we've done before
+                end_offset = offset["end_offset"]
+                word += char
+            else:
+                # Switching state
+                if state == "SPACE":
+                    # Finishing a word
+                    word_offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
+                else:
+                    # Starting a new word
+                    start_offset = offset["start_offset"]
+                    end_offset = offset["end_offset"]
+                    word = char
 
-            if word_begin:
-                word_offset = {"word": "", "start_offset": offset["start_offset"]}
-
-            if word_end:
-                word_offset["end_offset"] = offset["end_offset"]
-                word_offsets.append(word_offset)
-
-            if char_is_in_word:
-                word_offset["word"] += offset["char"]
+            last_state = state
+        if last_state == "WORD":
+            word_offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
 
         return word_offsets
 
@@ -557,17 +566,15 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         >>> word_offsets = [
         ...     {
         ...         "word": d["word"],
-        ...         "start_time": d["start_offset"] * time_offset,
-        ...         "end_time": d["end_offset"] * time_offset,
+        ...         "start_time": round(d["start_offset"] * time_offset, 2),
+        ...         "end_time": round(d["end_offset"] * time_offset, 2),
         ...     }
         ...     for d in outputs.word_offsets
         ... ]
         >>> # compare word offsets with audio `common_voice_en_100038.mp3` online on the dataset viewer:
         >>> # https://huggingface.co/datasets/common_voice/viewer/en/train
-        >>> word_offset
-        >>> # [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES',
-        >>> # 'start_time': 1.64, 'end_time': 1.90}, {'word': 'MILISANDRA',
-        >>> # 'start_time': 2.26, 'end_time': 2.9}, {'word': 'LOOK', 'start_time': 3.0, 'end_time': 3.16}, ...
+        >>> word_offsets[:3]
+        [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES', 'start_time': 1.64, 'end_time': 1.9}, {'word': 'MILISANDRA', 'start_time': 2.26, 'end_time': 2.9}]
         ```"""
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)

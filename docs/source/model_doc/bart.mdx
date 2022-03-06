@@ -51,7 +51,7 @@ This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The
 - The forward pass of [`BartModel`] will create the `decoder_input_ids` if they are not passed.
   This is different than some other modeling APIs. A typical use case of this feature is mask filling.
 - Model predictions are intended to be identical to the original implementation when
-  `force_bos_token_to_be_generated=True`. This only works, however, if the string you pass to
+  `forced_bos_token_id=0`. This only works, however, if the string you pass to
   [`fairseq.encode`] starts with a space.
 - [`~generation_utils.GenerationMixin.generate`] should be used for conditional generation tasks like
   summarization, see the example in that docstrings.

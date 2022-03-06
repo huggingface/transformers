@@ -88,8 +88,8 @@ def clean_master_ref_in_model_list():
     while not lines[index].startswith(_end_prompt):
         if lines[index].startswith("1."):
             lines[index] = lines[index].replace(
-                "https://huggingface.co/transformers/master/model_doc",
-                "https://huggingface.co/transformers/model_doc",
+                "https://huggingface.co/docs/transformers/master/model_doc",
+                "https://huggingface.co/docs/transformers/model_doc",
             )
         index += 1
 

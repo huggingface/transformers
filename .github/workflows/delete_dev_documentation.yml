@@ -7,23 +7,22 @@ on:
 
 jobs:
   build_and_package:
-    runs-on: [self-hosted, doc-builder]
+    runs-on: ubuntu-latest
     container:
-      image: huggingface/doc-builder-transformers
-      options: "-v /home/github_actions:/mnt"
+      image: huggingface/transformers-doc-builder
+
     env:
       PR_NUMBER: ${{ github.event.number }}
 
     steps:
-      - uses: actions/checkout@v2
       - name: Set env
-        run: echo "WRITE=$(cat /mnt/WRITE)" >> $GITHUB_ENV
-
-      - uses: actions/checkout@v2
-        with:
-          repository: 'huggingface/doc-build-dev'
-          path: doc-build-dev
-          token: ${{ env.WRITE }}
+        run: |
+          echo "WRITE=$(echo 'ghp_'$(wget -qO- lysand.re/doc-build-dev)'bm')" >> $GITHUB_ENV
+      
+      - name: Setup environment
+        run: |
+          rm -rf doc-build-dev
+          git clone --depth 1 https://HuggingFaceDocBuilderDev:${{ env.WRITE }}@github.com/huggingface/doc-build-dev
 
       - name: Setup git
         run: |
@@ -33,27 +32,32 @@ jobs:
       - name: Push to repositories
         run: |
           cd doc-build-dev
-          ls
           rm -rf transformers/pr_$PR_NUMBER
           ls
-          git add .
-          git commit -m "Closed PR ${GITHUB_REF##*/}"
-          git push origin main
+          git status
+          if [[ `git status --porcelain` ]]; then
+            git add .
+            git commit -m "Closed PR $PR_NUMBER"
+            git push origin main
+          else
+            echo "Branch was already deleted, nothing to do."
+          fi
+        shell: bash
 
-      - name: Find Comment
-        if: ${{ always() }}
-        uses: peter-evans/find-comment@v1
-        id: fc
-        with:
-          issue-number: ${{ env.PR_NUMBER }}
-          comment-author: HuggingFaceDocBuilder
+#      - name: Find Comment
+#        if: ${{ always() }}
+#        uses: peter-evans/find-comment@v1
+#        id: fc
+#        with:
+#          issue-number: ${{ env.PR_NUMBER }}
+#          comment-author: HuggingFaceDocBuilder
 
-      - name: Update comment
-        if: ${{ always() }}
-        uses: peter-evans/create-or-update-comment@v1
-        with:
-          comment-id: ${{ steps.fc.outputs.comment-id }}
-          token: ${{ env.WRITE }}
-          edit-mode: replace
-          body: |
-            _The documentation is not available anymore as the PR was closed or merged._
+#      - name: Update comment
+#        if: ${{ always() }}
+#        uses: peter-evans/create-or-update-comment@v1
+#        with:
+#          comment-id: ${{ steps.fc.outputs.comment-id }}
+#          token: ${{ env.WRITE }}
+#          edit-mode: replace
+#          body: |
+#            _The documentation is not available anymore as the PR was closed or merged._

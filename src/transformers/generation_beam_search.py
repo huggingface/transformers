@@ -443,7 +443,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
     def check_completes_constraints(self, sequence):
         new_state = self.make_constraint_states(1)[0]
-        new_state = new_state.reset(sequence)
+        new_state.reset(sequence)
         return new_state.completed
 
     def process(
@@ -484,6 +484,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 - **next_beam_scores** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Updated scores of
                   all
                 non-finished beams.
+
                 - **next_beam_tokens** (`torch.FloatTensor` of shape `(batch_size * num_beams)`) -- Next tokens to be
                   added
                 to the non-finished beam_hypotheses.
@@ -537,7 +538,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                     if is_beam_token_worse_than_top_num_beams:
                         continue
 
-                    completes_constraint = self.check_completes_constraints(input_ids[batch_beam_idx])
+                    completes_constraint = self.check_completes_constraints(input_ids[batch_beam_idx].cpu().tolist())
                     if completes_constraint:
                         beam_hyp.add(
                             input_ids[batch_beam_idx].clone(),
@@ -628,23 +629,23 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             # hypotheses.
 
             topk_state = topk_contraint_states[seq_idx]
-            topk_state.reset(full_hypotheses[seq_idx])
+            topk_state.reset(full_hypotheses[seq_idx].cpu().tolist())
 
             advance_state = advance_constraint_states[seq_idx]
-            advance_state.reset(pre_seq)
+            advance_state.reset(pre_seq.cpu().tolist())
 
             if not advance_state.completed:
-                advance_tokens = advance_state.advance()
-                for advance_token in advance_tokens.to(device):
+                advance_tokens = torch.LongTensor(advance_state.advance()).to(device)
+                for advance_token in advance_tokens:
                     # since adding each `advance_token` leads to a different hypothesis, create new state instance.
                     new_state = advance_state.copy(stateful=True)
-                    new_state.add(advance_token)
+                    new_state.add(advance_token.cpu().tolist())
 
                     advance_seq = torch.cat((pre_seq, advance_token.unsqueeze(0)), -1).cpu().tolist()
                     if advance_seq not in track_new["new_seqs"]:
                         # prevent duplicates, which are basically bound to happen in this process.
                         track_new["new_seqs"].append(advance_seq)
-                        track_new["new_indices"].append(seq_idx)
+                        track_new["new_indices"].append(sidx + seq_idx)  # idx -> global idx across all the batches
                         track_new["new_tokens"].append(advance_token)
                         track_new["new_scores"].append(this_batch_token_scores[seq_idx].take(advance_token))
                         track_new["new_states"].append(new_state)
@@ -673,8 +674,9 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
                 advance_state = advance_constraint_states[seq_idx]
 
-                advance_state.reset(advance_seq)
                 advance_seq = advance_seq.cpu().tolist()
+
+                advance_state.reset(advance_seq)
                 if advance_seq not in track_new["new_seqs"]:
                     # but still don't want to have duplicates
                     track_new["new_seqs"].append(advance_seq)
@@ -745,7 +747,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 final_score = final_beam_scores[batch_beam_idx].item()
                 final_tokens = input_ids[batch_beam_idx]
 
-                completes_constraint = self.check_completes_constraints(final_tokens)
+                completes_constraint = self.check_completes_constraints(final_tokens.cpu().tolist())
                 if completes_constraint:
                     beam_hyp.add(final_tokens, final_score)
                     ids_collect.append(beam_id)

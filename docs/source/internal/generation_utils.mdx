@@ -154,18 +154,30 @@ generation.
 [[autodoc]] TFLogitsProcessorList
     - __call__
 
+[[autodoc]] TFLogitsWarper
+    - __call__
+
+[[autodoc]] TFTemperatureLogitsWarper
+    - __call__
+
+[[autodoc]] TFTopPLogitsWarper
+    - __call__
+
+[[autodoc]] TFTopKLogitsWarper
+    - __call__
+
 [[autodoc]] TFMinLengthLogitsProcessor
     - __call__
 
 [[autodoc]] TFNoBadWordsLogitsProcessor
     - __call__
-	
+
 [[autodoc]] TFNoRepeatNGramLogitsProcessor
     - __call__
-	
+
 [[autodoc]] TFRepetitionPenaltyLogitsProcessor
     - __call__
-	
+
 [[autodoc]] FlaxLogitsProcessor
     - __call__
 
@@ -216,6 +228,8 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] Constraint
 
 [[autodoc]] PhrasalConstraint
+
+[[autodoc]] DisjunctiveConstraint
 
 [[autodoc]] ConstraintListState
 
