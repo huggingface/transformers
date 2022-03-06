@@ -481,7 +481,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 The overlap mask area threshold to use.
             is_thing_map (`Dict[int, bool]`, *optional*):
                 Dictionary mapping class indices to either `True` or `False`, depending on whether or not they are a
-                thing. If not set, defaults to the `is_thing_map` of COCO panoptic.
+                thing. If `is_thing_map[label_id] == True`, all instances of `label_id` won't be merged. If not set,
+                all instances will be considered `thing`.
 
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
@@ -493,9 +494,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         """
 
         if is_thing_map is None:
-            logger.warning("`is_thing_map` unset. Default to COCO.")
-            # default to is_thing_map of COCO panoptic
-            is_thing_map = {i: i <= 90 for i in range(201)}
+            logger.warning("`is_thing_map` unset. All instances will be considered `thing`.")
         # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits = outputs.class_queries_logits
         # keep track of the number of labels, subtract -1 for null class
@@ -532,7 +531,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 for k in range(pred_labels.shape[0]):
                     pred_class = pred_labels[k].item()
                     # check if pred_class is not a "thing", so it can be merged with other instance. For example, class "sky" cannot have more then one instance
-                    is_stuff = not is_thing_map[pred_class]
+                    if is_thing_map is None:
+                        # not `is_thing_map` defined by the user, all instances are considered `thing`.
+                        is_stuff = False
+                    else:
+                        is_stuff = not is_thing_map[pred_class]
                     # get the mask associated with the k class
                     mask_k = mask_labels == k
                     # create the area, since bool we just need to sum :)
