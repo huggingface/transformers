@@ -661,9 +661,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     raise IndexError
                 return {"input_ids": [i]}
 
-        class DummyModel(nn.Module):
+        class DummyModel(PreTrainedModel):
             def __init__(self, num_params: int):
-                super().__init__()
+                super().__init__(PretrainedConfig())
                 # Add some (unused) params. the point here is that randomness in model_init shouldn't influence
                 # data loader order.
                 self.params = nn.Parameter(torch.randn(num_params))
@@ -674,7 +674,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 else:
                     return input_ids
 
-        def _get_first_data_sample(num_params, seed, **kwargs):
+        def _get_first_data_sample(num_params, seed, data_seed, **kwargs):
             with tempfile.TemporaryDirectory() as tmpdir:
                 trainer = Trainer(
                     model_init=lambda: DummyModel(num_params),
@@ -682,6 +682,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                         output_dir=tmpdir,
                         **kwargs,
                         seed=seed,
+                        data_seed=data_seed,
                         local_rank=-1,
                     ),
                     train_dataset=DummyDataset(),
@@ -692,12 +693,19 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # test that the seed is passed to the sampler
         # the codepath we want to hit is world_size <= 1, and both group_by_length
         for group_by_length in [True, False]:
-            sample42_1 = _get_first_data_sample(num_params=10, seed=42, group_by_length=group_by_length)
-            sample42_2 = _get_first_data_sample(num_params=11, seed=42, group_by_length=group_by_length)
+            sample42_1 = _get_first_data_sample(num_params=10, seed=42, data_seed=42, group_by_length=group_by_length)
+            sample42_2 = _get_first_data_sample(num_params=11, seed=42, data_seed=42, group_by_length=group_by_length)
             self.assertTrue(torch.equal(sample42_1["input_ids"], sample42_2["input_ids"]))
 
-            # make sure we have some randomness
-            others = [_get_first_data_sample(num_params=i, seed=i, group_by_length=group_by_length) for i in range(10)]
+            # should get same samples with different seed, so long as data_seed is the same
+            sample42_3 = _get_first_data_sample(num_params=11, seed=11, data_seed=42, group_by_length=group_by_length)
+            self.assertTrue(torch.equal(sample42_1["input_ids"], sample42_3["input_ids"]))
+
+            # make sure we have some randomness in the samples if data_seed is different
+            others = [
+                _get_first_data_sample(num_params=i, seed=42, data_seed=i, group_by_length=group_by_length)
+                for i in range(10)
+            ]
             self.assertTrue(any(not torch.equal(sample42_1["input_ids"], sample["input_ids"]) for sample in others))
 
     @require_torch_multi_gpu
