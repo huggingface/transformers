@@ -116,7 +116,7 @@ class TFSpeech2TextModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
-        self.scale_embedding = False
+        self.scale_embedding = scale_embedding
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor(
