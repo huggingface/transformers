@@ -528,8 +528,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 # this is a map between stuff and segments id, the used it to keep track of the instances of one class
                 for k in range(pred_labels.shape[0]):
                     pred_class = pred_labels[k].item()
-                    # check if pred_class is not a "thing", so it can be merged with other instance. For example, class "sky" cannot have more then one instance
-                    should_fuse = pred_class in label_ids_to_fuse
+                    # check if pred_class should be fused. For example, class "sky" cannot have more then one instance
+                    should_fuse = False
+                    if label_ids_to_fuse is not None:
+                        should_fuse = pred_class in label_ids_to_fuse
                     # get the mask associated with the k class
                     mask_k = mask_labels == k
                     # create the area, since bool we just need to sum :)
