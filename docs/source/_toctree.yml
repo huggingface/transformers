@@ -37,8 +37,6 @@
     title: Create a custom model
   - local: multilingual
     title: Inference for multilingual models
-  - local: examples
-    title: Examples
   - local: troubleshooting
     title: Troubleshooting
   - local: custom_datasets
@@ -59,6 +57,8 @@
     - local: tasks/multiple_choice
       title: Multiple choice
     title: Fine-tune for downstream tasks
+  - local: run_scripts
+    title: Train with a script
   - local: notebooks
     title: "🤗 Transformers Notebooks"
   - local: sagemaker
