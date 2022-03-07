@@ -1493,12 +1493,10 @@ class TFGenerationMixin:
         if model_kwargs.get("attention_mask", None) is None and requires_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(input_ids, pad_token_id)
 
+        # 4. Prepare model inputs which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
-            # if model is encoder decoder model, we create encoder_outputs and add to `model_kwargs`
+            # if encoder-decoder, we create encoder_outputs and add to `model_kwargs`
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
-
-        # 4. Prepare `input_ids` which will be used for auto-regressive generation
-        if self.config.is_encoder_decoder:
             # if encoder-decoder then `input_ids` come from `decoder_start_token_id`
             input_ids = self._prepare_decoder_input_ids_for_generation(
                 batch_size,

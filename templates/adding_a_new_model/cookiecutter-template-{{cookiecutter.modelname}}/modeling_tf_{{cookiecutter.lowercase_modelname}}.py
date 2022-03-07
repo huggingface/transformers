@@ -2736,9 +2736,6 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
 
-        if inputs["use_cache"]:
-            present_key_values = (inputs["encoder_hidden_states"], present_key_values)
-
         if not inputs["return_dict"]:
             return hidden_states, present_key_values, all_hidden_states, all_self_attns, all_cross_attns
         else:
