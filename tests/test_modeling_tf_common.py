@@ -546,10 +546,14 @@ class TFModelTesterMixin:
             for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
                 if k in inputs_dict:
                     attention_mask = inputs_dict[k]
-                    # (make sure no all 0s attention masks - to avoid failure at this moment)
+                    # make sure no all 0s attention masks - to avoid failure at this moment.
+                    # TODO: remove this line once the TODO below is implemented.
                     attention_mask = tf.ones_like(attention_mask, dtype=tf.int32)
-                    # (make the first sequence with all 0s attention mask -> to demonstrate the issue)
-                    # (this will fail for `TFWav2Vec2Model`)
+                    # Here we make the first sequence with all 0s as attention mask.
+                    # Currently, this will fail for `TFWav2Vec2Model`. This is caused by the different large negative
+                    # values, like `1e-4`, `1e-9`, `1e-30` and `-inf` for attention mask across models/frameworks.
+                    # TODO: enable this block once the large negative values thing is cleaned up.
+                    # (see https://github.com/huggingface/transformers/issues/14859)
                     # attention_mask = tf.concat(
                     #     [
                     #         tf.zeros_like(attention_mask[:1], dtype=tf.int32),
