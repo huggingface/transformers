@@ -480,7 +480,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to use.
             label_ids_to_fuse (`Set[int]`, *optional*):
-                A set of integers, if a label id is present, all its instances will be fused together.
+                The labels in this state will have all their instances be fused together. For instance we could say
+                there can only be one sky in an image, but several persons, so the label ID for sky would be in that
+                set, but not the one for person.
 
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
@@ -493,6 +495,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         if label_ids_to_fuse is None:
             logger.warning("`label_ids_to_fuse` unset. No instance will be fused.")
+            label_ids_to_fuse = set()
         # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits = outputs.class_queries_logits
         # keep track of the number of labels, subtract -1 for null class
@@ -529,9 +532,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 for k in range(pred_labels.shape[0]):
                     pred_class = pred_labels[k].item()
                     # check if pred_class should be fused. For example, class "sky" cannot have more then one instance
-                    should_fuse = False
-                    if label_ids_to_fuse is not None:
-                        should_fuse = pred_class in label_ids_to_fuse
+                    should_fuse = pred_class in label_ids_to_fuse
                     # get the mask associated with the k class
                     mask_k = mask_labels == k
                     # create the area, since bool we just need to sum :)
