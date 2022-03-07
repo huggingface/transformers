@@ -149,7 +149,7 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
         raise ValueError("Should either find 'base' or 'large' in checkpoint URL")
 
     # load state_dict of original model, remove and rename some keys
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["model"]
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
 
     rename_keys = create_rename_keys(config, has_lm_head=has_lm_head)
     for src, dest in rename_keys:
