@@ -40,7 +40,7 @@ jobs:
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
           pip install -U pytest
-          pip install .[testing,torch-speech]
+          pip install .[testing,torch-speech,sentencepiece,vision]
           pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Prepare files for doctests

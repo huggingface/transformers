@@ -882,9 +882,10 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
         # pre-process inputs and labels
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> input_values = feature_extractor(
+        >>> inputs = feature_extractor(
         ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
-        >>> ).input_values  # Batch size 1
+        ... )
+        >>> input_values = inputs.input_values
         >>> decoder_input_ids = tokenizer(ds[0]["text"], return_tensors="pt").input_ids
         # compute loss
 
