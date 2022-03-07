@@ -1324,11 +1324,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         )
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output=sequence_output, training=training)
-        loss = (
-            None
-            if labels is None
-            else self.hf_compute_loss(labels=labels, logits=prediction_scores)
-        )
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=prediction_scores)
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -1741,23 +1737,15 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             num_choices = shape_list(inputs_embeds)[1]
             seq_length = shape_list(inputs_embeds)[2]
 
-        flat_input_ids = (
-            tf.reshape(tensor=input_ids, shape=(-1, seq_length)) if input_ids is not None else None
-        )
+        flat_input_ids = tf.reshape(tensor=input_ids, shape=(-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = (
-            tf.reshape(tensor=attention_mask, shape=(-1, seq_length))
-            if attention_mask is not None
-            else None
+            tf.reshape(tensor=attention_mask, shape=(-1, seq_length)) if attention_mask is not None else None
         )
         flat_token_type_ids = (
-            tf.reshape(tensor=token_type_ids, shape=(-1, seq_length))
-            if token_type_ids is not None
-            else None
+            tf.reshape(tensor=token_type_ids, shape=(-1, seq_length)) if token_type_ids is not None else None
         )
         flat_position_ids = (
-            tf.reshape(tensor=position_ids, shape=(-1, seq_length))
-            if position_ids is not None
-            else None
+            tf.reshape(tensor=position_ids, shape=(-1, seq_length)) if position_ids is not None else None
         )
         flat_inputs_embeds = (
             tf.reshape(tensor=inputs_embeds, shape=(-1, seq_length, shape_list(inputs_embeds)[3]))
@@ -1780,9 +1768,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         pooled_output = self.dropout(inputs=pooled_output, training=training)
         logits = self.classifier(inputs=pooled_output)
         reshaped_logits = tf.reshape(tensor=logits, shape=(-1, num_choices))
-        loss = (
-            None if labels is None else self.hf_compute_loss(labels=labels, logits=reshaped_logits)
-        )
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=reshaped_logits)
 
         if not return_dict:
             output = (reshaped_logits,) + outputs[2:]
