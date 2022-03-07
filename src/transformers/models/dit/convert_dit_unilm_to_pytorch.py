@@ -138,15 +138,11 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     has_lm_head = False if "rvlcdip" in checkpoint_url else True
 
     # size of the architecture
-    if "base" in checkpoint_url:
-        pass
-    elif "large" in checkpoint_url or "dit-l" in checkpoint_url:
+    if "large" in checkpoint_url or "dit-l" in checkpoint_url:
         config.hidden_size = 1024
         config.intermediate_size = 4096
         config.num_hidden_layers = 24
         config.num_attention_heads = 16
-    else:
-        raise ValueError("Should either find 'base' or 'large' in checkpoint URL")
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
