@@ -1206,10 +1206,6 @@ overwrite_call_docstring(
 append_replace_return_docstrings(FlaxWav2Vec2ForCTC, output_type=FlaxCausalLMOutput, config_class=Wav2Vec2Config)
 
 
-class FlaxWav2Vec2ForCTCModule(nn.Module):
-    config: Wav2Vec2Config
-
-
 class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
     config: Wav2Vec2Config
     dtype: jnp.dtype = jnp.float32
@@ -1409,7 +1405,3 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxWav2Vec2ForPreTraining, output_type=FlaxWav2Vec2ForPreTrainingOutput, config_class=Wav2Vec2Config
 )
-
-
-class FlaxWav2Vec2ForCTCModule(nn.Module):
-    config: Wav2Vec2Config
