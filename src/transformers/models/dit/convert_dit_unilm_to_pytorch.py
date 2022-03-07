@@ -22,6 +22,7 @@ import torch
 from PIL import Image
 
 import requests
+from huggingface_hub import cached_download, hf_hub_url
 from transformers import BeitConfig, BeitFeatureExtractor, BeitForImageClassification, BeitForMaskedImageModeling
 from transformers.utils import logging
 
@@ -134,8 +135,8 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     """
 
     # define default BEiT configuration
-    config = BeitConfig(use_absolute_position_embeddings=True, use_mask_token=True)
     has_lm_head = False if "rvlcdip" in checkpoint_url else True
+    config = BeitConfig(use_absolute_position_embeddings=True, use_mask_token=has_lm_head)
 
     # size of the architecture
     if "large" in checkpoint_url or "dit-l" in checkpoint_url:
@@ -143,6 +144,16 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
         config.intermediate_size = 4096
         config.num_hidden_layers = 24
         config.num_attention_heads = 16
+
+    # labels
+    if "rvlcdip" in checkpoint_url:
+        config.num_labels = 16
+        repo_id = "datasets/huggingface/label-files"
+        filename = "imagenet-22k-id2label.json"
+        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
 
     # load state_dict of original model, remove and rename some keys
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
