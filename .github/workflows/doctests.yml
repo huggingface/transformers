@@ -5,8 +5,16 @@ on:
     branches:
       - doctest*
   repository_dispatch:
-  schedule:
-    - cron: "0 0 * * *"
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+      - "templates/**"
+      - "docs/**"
+    types: [assigned, opened, synchronize, reopened]
+#  schedule:
+#    - cron: "0 0 * * *"
 
 
 env:
@@ -21,21 +29,18 @@ jobs:
   run_doctests:
     runs-on: [self-hosted, docker-gpu-test, single-gpu]
     container:
-      image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      image: huggingface/transformers-cpu
+      options: --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
 
       - name: Install dependencies
         run: |
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
           pip install .[testing,torch-speech]
+          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Prepare files for doctests
         run: |
