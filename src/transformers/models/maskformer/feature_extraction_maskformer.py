@@ -196,9 +196,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               *"pixel_mask"* is in `self.model_input_names`).
-            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_labels, height, width) to be fed to a
+            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_labels, height, width)` to be fed to a
               model (when `annotations` are provided).
-            - **class_labels** -- Optional class labels of shape `(batch_size, num_labels) to be fed to a model (when
+            - **class_labels** -- Optional class labels of shape `(batch_size, num_labels)` to be fed to a model (when
               `annotations` are provided).
         """
         # Input type checking for clearer error
@@ -304,12 +304,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # we need to convert mask from [W,H] to [C, W, H]
         all_labels = np.arange(num_labels)
         # helping broadcast by making mask [1,W,H] and labels [C, 1, 1]
-        binary_masks = (
-            segmentation_map[
-                np.newaxis,
-            ]
-            == all_labels[:, np.newaxis, np.newaxis]
-        )
+        binary_masks = segmentation_map[None]  == all_labels[:, None, None]
         # convert labels to multi label format
         one_hot_labels = np.zeros(num_labels, dtype=np.int64)
         one_hot_labels[labels] = 1
@@ -332,7 +327,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 width)`.
 
             segmentation_maps (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
-                Optionally, the corresponding semantic segmentation maps with the pixel-wise annotations.
+                The corresponding semantic segmentation maps with the pixel-wise annotations.
 
             pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
@@ -352,9 +347,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               *"pixel_mask"* is in `self.model_input_names`).
-            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_labels, height, width) to be fed to a
+            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_labels, height, width)` to be fed to a
               model (when `annotations` are provided).
-            - **class_labels** -- Optional class labels of shape `(batch_size, num_labels) to be fed to a model (when
+            - **class_labels** -- Optional class labels of shape `(batch_size, num_labels)` to be fed to a model (when
               `annotations` are provided).
         """
 
