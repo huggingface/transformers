@@ -697,8 +697,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(torch.equal(sample42_1["input_ids"], sample42_2["input_ids"]))
 
             # make sure we have some randomness
-            others = [_get_first_data_sample(num_params=i, seed=i, group_by_length=group_by_length) for i in
-                      range(10)]
+            others = [_get_first_data_sample(num_params=i, seed=i, group_by_length=group_by_length) for i in range(10)]
             self.assertTrue(any(not torch.equal(sample42_1["input_ids"], sample["input_ids"]) for sample in others))
 
     @require_torch_multi_gpu
