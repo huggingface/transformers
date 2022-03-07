@@ -672,7 +672,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 if labels is not None:
                     return torch.tensor(0.0, device=input_ids.device), input_ids
                 else:
-                    return input_id
+                    return input_ids
 
         def _get_first_data_sample(num_params, seed, **kwargs):
             with tempfile.TemporaryDirectory() as tmpdir:
