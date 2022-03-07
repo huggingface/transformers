@@ -542,7 +542,6 @@ class TFModelTesterMixin:
             if "TFConvNext" not in model_class.__name__:
                 config.output_attentions = True
 
-            # TODO: remove this block once the large negative value for attention masks is fixed.
             for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
                 if k in inputs_dict:
                     attention_mask = inputs_dict[k]
