@@ -319,7 +319,7 @@ class TFEncoderDecoderMixin:
 
         # prepare inputs
         tf_inputs = inputs_dict
-        pt_inputs = {k: torch.tensor(v.numpy()) for k, v in tf_inputs.items()}
+        pt_inputs = {k: torch.tensor(v.numpy()).to(device=torch_device) for k, v in tf_inputs.items()}
         if "labels" in pt_inputs:
             pt_inputs["labels"] = pt_inputs["labels"].type(torch.LongTensor)
 
