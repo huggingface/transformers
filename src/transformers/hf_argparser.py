@@ -129,7 +129,8 @@ class HfArgumentParser(ArgumentParser):
                     # This is the value that will get picked if we do --field_name (without value)
                     kwargs["const"] = True
             elif (
-                hasattr(field.type, "__origin__") and re.search(r"^typing\.List\[(.*)\]$", str(field.type)) is not None
+                hasattr(field.type, "__origin__")
+                and re.search(r"^(typing\.List|list)\[(.*)\]$", str(field.type)) is not None
             ):
                 kwargs["nargs"] = "+"
                 kwargs["type"] = field.type.__args__[0]
