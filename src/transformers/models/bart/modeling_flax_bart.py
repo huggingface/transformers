@@ -933,6 +933,7 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
+        print("is_decoder: ", self.config.is_decoder)
         if self.config.is_decoder:
             encoder_hidden_states = jnp.zeros(input_shape + (self.config.d_model,))
             encoder_attention_mask = attention_mask
@@ -947,14 +948,14 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
             )
         else:
             module_init_outputs = self.module.init(
-            rngs,
-            input_ids,
-            attention_mask,
-            decoder_input_ids,
-            decoder_attention_mask,
-            position_ids,
-            decoder_position_ids,
-        )
+                rngs,
+                input_ids,
+                attention_mask,
+                decoder_input_ids,
+                decoder_attention_mask,
+                position_ids,
+                decoder_position_ids,
+            )
         return module_init_outputs["params"]
 
     def init_cache(self, batch_size, max_length, encoder_outputs):
@@ -1805,6 +1806,7 @@ class FlaxBartForCausalLMModule(nn.Module):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
+
 
 @add_start_docstrings(
     """
