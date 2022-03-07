@@ -591,7 +591,7 @@ class Trainer:
         generator = None
         if self.args.world_size <= 1 and _is_torch_generator_available:
             generator = torch.Generator()
-            generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
+            generator.manual_seed(self.args.seed)
 
         # Build the sampler.
         if self.args.group_by_length:
