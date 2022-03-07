@@ -273,13 +273,14 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
         # ensure that the dicts of gradients contain the same keys
         self.assertEqual(grads.keys(), grads_frozen.keys())
 
-        # ensure that the gradients of the frozen layers differ, i.e. that the feature encoder is properly frozen
+        # ensure that the gradients of the frozen layers are precisely zero and that they differ to the gradients of the unfrozen layers
         feature_extractor_grads = tuple(grads[k] for k in grads if "feature_extractor" in k)
         feature_extractor_grads_frozen = tuple(grads_frozen[k] for k in grads_frozen if "feature_extractor" in k)
 
         for feature_extractor_grad, feature_extractor_grad_frozen in zip(
             feature_extractor_grads, feature_extractor_grads_frozen
         ):
+            self.assertTrue((feature_extractor_grad_frozen == 0.0).all())
             self.assert_difference(feature_extractor_grad, feature_extractor_grad_frozen, 1e-7)
 
         # ensure that the gradients of all unfrozen layers remain equal, i.e. all layers excluding the frozen 'feature_extractor'
