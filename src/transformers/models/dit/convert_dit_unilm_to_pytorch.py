@@ -135,12 +135,12 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
 
     # define default BEiT configuration
     config = BeitConfig(use_absolute_position_embeddings=True, use_mask_token=True)
-    has_lm_head = True
+    has_lm_head = False if "rvlcdip" in checkpoint_url else True
 
     # size of the architecture
     if "base" in checkpoint_url:
         pass
-    elif "large" in checkpoint_url:
+    elif "large" in checkpoint_url or "dit-l" in checkpoint_url:
         config.hidden_size = 1024
         config.intermediate_size = 4096
         config.num_hidden_layers = 24
