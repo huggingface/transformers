@@ -390,11 +390,11 @@ class TFModelTesterMixin:
                 self.assertEqual(type(tf_outputs), type(pt_outputs))
                 self.assertEqual(len(tf_outputs), len(pt_outputs))
                 if type(names) == tuple:
-                    for tfo, pto, name in zip(tf_outputs, pt_outputs, names):
-                        check_outputs(tfo, pto, model_class, names=name)
+                    for tf_output, pt_output, name in zip(tf_outputs, pt_outputs, names):
+                        check_outputs(tf_output, pt_output, model_class, names=name)
                 elif type(names) == str:
-                    for idx, (tfo, pto) in enumerate(zip(tf_outputs, pt_outputs)):
-                        check_outputs(tfo, pto, model_class, names=f"{names}_{idx}")
+                    for idx, (tf_output, pt_output) in enumerate(zip(tf_outputs, pt_outputs)):
+                        check_outputs(tf_output, pt_output, model_class, names=f"{names}_{idx}")
                 else:
                     raise ValueError(f"`names` should be a `tuple` or a string. Got {type(names)} instead.")
             elif isinstance(tf_outputs, tf.Tensor):
