@@ -796,6 +796,10 @@ class DPTNeck(nn.Module):
         features = self.reassemble_blocks(hidden_states)
         features = [self.convs[i](feature) for i, feature in enumerate(features)]
 
+        print("Shape of hidden states after reassembling:")
+        for i in features:
+            print(i.shape)
+
         # fusion blocks
         output = []
         for i in range(len(self.fusion_blocks)):
@@ -937,13 +941,21 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        hidden_states = outputs.hidden_states if return_dict else outputs[2]
 
         # only keep certain features based on config.out_indices
         # note that the hidden_states also include the initial embeddings
         hidden_states = [feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.out_indices]
 
+        print("Shape of hidden states:")
+        for i in hidden_states:
+            print(i.shape)
+
         hidden_states = self.neck(hidden_states)
+
+        print("Shape of hidden states after neck:")
+        for i in hidden_states:
+            print(i.shape)
 
         logits = self.head(hidden_states[-1])
         logits = logits.squeeze(dim=1)
@@ -954,9 +966,9 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         if not return_dict:
             if output_hidden_states:
-                output = (logits,) + outputs[1:]
-            else:
                 output = (logits,) + outputs[2:]
+            else:
+                output = (logits,) + outputs[3:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
@@ -1093,7 +1105,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        hidden_states = outputs.hidden_states if return_dict else outputs[2]
 
         # only keep certain features based on config.out_indices
         # note that the hidden_states also include the initial embeddings
@@ -1116,9 +1128,9 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
         if not return_dict:
             if output_hidden_states:
-                output = (logits,) + outputs[1:]
-            else:
                 output = (logits,) + outputs[2:]
+            else:
+                output = (logits,) + outputs[3:]
             return ((loss,) + output) if loss is not None else output
 
         return SemanticSegmentationModelOutput(

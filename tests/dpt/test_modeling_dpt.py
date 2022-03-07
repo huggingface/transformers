@@ -59,7 +59,6 @@ class DPTModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
         initializer_range=0.02,
         num_labels=3,
         scope=None,
@@ -79,8 +78,8 @@ class DPTModelTester:
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
+        self.num_labels = num_labels
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -88,7 +87,7 @@ class DPTModelTester:
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
 
         config = self.get_config()
 
@@ -121,20 +120,20 @@ class DPTModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
+        config.num_labels = self.num_labels
         model = DPTForDepthEstimation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
+        config.num_labels = self.num_labels
         model = DPTForSemanticSegmentation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -205,11 +204,11 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_for_depth_estimation(self):
+    def test_for_depth_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
 
-    def test_model_for_semantic_segmentation(self):
+    def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
 
@@ -305,10 +304,6 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    def test_for_depth_estimation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
 
     def test_training(self):
         if not self.model_tester.is_training:
