@@ -27,7 +27,7 @@ env:
 
 jobs:
   run_doctests:
-    runs-on: [self-hosted, docker-gpu-test, single-gpu]
+    runs-on: [self-hosted, doc-tests]
     container:
       image: huggingface/transformers-cpu
       options: --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
