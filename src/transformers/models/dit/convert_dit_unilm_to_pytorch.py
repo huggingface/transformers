@@ -150,7 +150,7 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     if "rvlcdip" in checkpoint_url:
         config.num_labels = 16
         repo_id = "datasets/huggingface/label-files"
-        filename = "imagenet-22k-id2label.json"
+        filename = "rvlcdip-id2label.json"
         id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
