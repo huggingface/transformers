@@ -397,16 +397,13 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 
-    def test_with_annotations_and_loss(self):
+    def test_with_segmentation_maps_and_loss(self):
         model = MaskFormerForInstanceSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
         feature_extractor = self.default_feature_extractor
 
         inputs = feature_extractor(
             [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333))],
-            annotations=[
-                {"masks": np.random.rand(10, 384, 384).astype(np.float32), "labels": np.zeros(10).astype(np.int64)},
-                {"masks": np.random.rand(10, 384, 384).astype(np.float32), "labels": np.zeros(10).astype(np.int64)},
-            ],
+            segmentation_maps=[np.zeros((384, 384)).astype(np.float32), np.zeros((384, 384)).astype(np.float32)],
             return_tensors="pt",
         ).to(torch_device)
 
