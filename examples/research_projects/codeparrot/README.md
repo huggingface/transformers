@@ -117,8 +117,9 @@ Instead of streaming the dataset from the hub you can also stream it from disk. 
 
 ```bash
 git lfs install
-git clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-train
-git clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-valid
+mkdir data
+git -C "./data" clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-train
+git -C "./data" clone https://huggingface.co/datasets/lvwerra/codeparrot-clean-valid
 ```
 
 And then pass the paths to the datasets when we run the training script:
