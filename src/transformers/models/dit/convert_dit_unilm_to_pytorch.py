@@ -134,7 +134,7 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     """
 
     # define default BEiT configuration
-    config = BeitConfig(use_absolute_embeddings=True, use_mask_token=True)
+    config = BeitConfig(use_absolute_position_embeddings=True, use_mask_token=True)
     has_lm_head = True
 
     # size of the architecture
