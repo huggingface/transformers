@@ -359,7 +359,7 @@ def unpack_inputs(func):
         fn_args_and_kwargs = {key: val for key, val in kwargs.items() if key not in kwargs_call}
         fn_args_and_kwargs.update({"kwargs_call": kwargs_call})
         # move any arg into kwargs, if they exist
-        fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames, args)))
+        fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames[2:], args)))
         unpacked_inputs = input_processing(func, self.config, input_ids, **fn_args_and_kwargs)
         return func(self, **unpacked_inputs)
 
