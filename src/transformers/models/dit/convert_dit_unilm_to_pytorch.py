@@ -128,7 +128,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
+def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub=False):
     """
     Copy/paste/tweak model's weights to our BEiT structure.
     """
@@ -181,6 +181,21 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        model_name = "dit-base" if "base" in checkpoint_url else "dit-large"
+        model.push_to_hub(
+            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
+            organization="nielsr",
+            commit_message="Add model",
+            use_temp_dir=True,
+        )
+        feature_extractor.push_to_hub(
+            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
+            organization="nielsr",
+            commit_message="Add feature extractor",
+            use_temp_dir=True,
+        )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -194,5 +209,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
     )
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+    )
     args = parser.parse_args()
-    convert_dit_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path)
+    convert_dit_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)
