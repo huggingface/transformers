@@ -67,7 +67,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         ignore_index (`int`, *optional*, default to 255):
             Value of the index (label) to ignore.
         num_labels (`int`, *optional*, defaults to 150):
-            The number of labels in the dataset. Needed to create the binary maskes of shape `(batch, num_labels,
+            The number of labels in the dataset. Needed to create the binary masks of shape `(batch, num_labels,
             height, width)`.
     """
 
@@ -97,7 +97,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]  # ImageNet std
         self.num_labels = num_labels
 
-    def _resize_with_size_disivibility(self, image, size, target=None, max_size=None, **kwargs):
+    def _resize_with_size_divisibility(self, image, size, target=None, max_size=None, **kwargs):
         """
         Resize the image to the given size. Size can be min_size (scalar) or (width, height) tuple. If size is an int,
         smaller edge of the image will be matched to this number.
@@ -250,14 +250,14 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         if self.do_resize and self.size is not None:
             if segmentation_maps is not None:
                 for idx, (image, target) in enumerate(zip(images, segmentation_maps)):
-                    image, target = self._resize_with_size_disivibility(
+                    image, target = self._resize_with_size_divisibility(
                         image=image, target=target, size=self.size, max_size=self.max_size
                     )
                     images[idx] = image
                     segmentation_maps[idx] = target
             else:
                 for idx, image in enumerate(images):
-                    images[idx] = self._resize_with_size_disivibility(
+                    images[idx] = self._resize_with_size_divisibility(
                         image=image, target=None, size=self.size, max_size=self.max_size
                     )[0]
 
