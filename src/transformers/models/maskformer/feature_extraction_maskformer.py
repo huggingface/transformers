@@ -196,9 +196,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               *"pixel_mask"* is in `self.model_input_names`).
-            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_classes, height, width) to be fed to a
+            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_labels, height, width) to be fed to a
               model (when `annotations` are provided).
-            - **class_labels** -- Optional class labels of shape `(batch_size, num_classes) to be fed to a model (when
+            - **class_labels** -- Optional class labels of shape `(batch_size, num_labels) to be fed to a model (when
               `annotations` are provided).
         """
         # Input type checking for clearer error
@@ -352,9 +352,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               *"pixel_mask"* is in `self.model_input_names`).
-            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_classes, height, width) to be fed to a
+            - **mask_labels** -- Optional mask labels of shape `(batch_size, num_labels, height, width) to be fed to a
               model (when `annotations` are provided).
-            - **class_labels** -- Optional class labels of shape `(batch_size, num_classes) to be fed to a model (when
+            - **class_labels** -- Optional class labels of shape `(batch_size, num_labels) to be fed to a model (when
               `annotations` are provided).
         """
 
