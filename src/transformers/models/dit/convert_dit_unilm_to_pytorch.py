@@ -16,16 +16,13 @@
 
 
 import argparse
-import json
 from pathlib import Path
 
 import torch
-from datasets import load_dataset
 from PIL import Image
 
 import requests
-from huggingface_hub import cached_download, hf_hub_url
-from transformers import BeitConfig, BeitFeatureExtractor, BeitForImageClassification
+from transformers import BeitConfig, BeitFeatureExtractor, BeitForImageClassification, BeitForMaskedImageModeling
 from transformers.utils import logging
 
 
@@ -160,7 +157,7 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     read_in_q_k_v(state_dict, config, has_lm_head=has_lm_head)
 
     # load HuggingFace model
-    model = BeitForMaskedImageModeling(config)
+    model = BeitForMaskedImageModeling(config) if has_lm_head else BeitForImageClassification(config)
     model.eval()
     model.load_state_dict(state_dict)
 
