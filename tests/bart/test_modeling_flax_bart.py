@@ -492,7 +492,7 @@ class FlaxBartStandaloneDecoderModelTester:
         batch_size=13,
         seq_length=7,
         is_training=True,
-        use_input_mask=True,
+        use_attention_mask=True,
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
@@ -512,7 +512,7 @@ class FlaxBartStandaloneDecoderModelTester:
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
-        self.use_input_mask = use_input_mask
+        self.use_attention_mask = use_attention_mask
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -531,9 +531,9 @@ class FlaxBartStandaloneDecoderModelTester:
     def prepare_config_and_inputs(self):
         input_ids = jnp.clip(ids_tensor([self.batch_size, self.seq_length], self.vocab_size), 3, self.vocab_size)
 
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+        attention_mask = None
+        if self.use_attention_mask:
+            attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = BartConfig(
             vocab_size=self.vocab_size,
@@ -554,7 +554,7 @@ class FlaxBartStandaloneDecoderModelTester:
             use_cache=False,
         )
 
-        return config, input_ids, input_mask
+        return config, input_ids, attention_mask
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -644,7 +644,7 @@ class FlaxBartStandaloneDecoderModelTester:
 @require_flax
 class FlaxBartStandaloneDecoderModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FlaxBartModel, FlaxBartForCausalLM) if is_flax_available() else ()
+    all_model_classes = (FlaxBartForCausalLM,) if is_flax_available() else ()
     all_generative_model_classes = (FlaxBartForCausalLM,) if is_flax_available() else ()
 
     def setUp(self):
