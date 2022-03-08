@@ -17,7 +17,6 @@
 
 import inspect
 import unittest
-from typing import Dict, List, Tuple
 
 from transformers import ConvNextConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
