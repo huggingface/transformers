@@ -594,10 +594,13 @@ class Trainer:
             # for backwards compatibility, we generate a seed here (which is sampled from a generator seeded with
             # `args.seed`) if data_seed isn't provided.
             # Further on in this method, we default to `args.seed` instead.
-            seed = self.args.data_seed or int(torch.empty((), dtype=torch.int64).random_().item())
+            if self.args.data_seed is None:
+                seed = int(torch.empty((), dtype=torch.int64).random_().item())
+            else:
+                seed = self.args.data_seed
             generator.manual_seed(seed)
 
-        seed = self.args.data_seed or self.args.seed
+        seed = self.args.data_seed if self.args.data_seed is not None else self.args.seed
 
         # Build the sampler.
         if self.args.group_by_length:
