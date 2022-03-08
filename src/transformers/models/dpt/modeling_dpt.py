@@ -69,22 +69,16 @@ DPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
+# Copied from transformers.models.vit.modeling_vit.to_2tuple
 def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
     return (x, x)
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-
-
 class DPTViTEmbeddings(nn.Module):
     """
-    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
+    Construct the CLS token, position and patch embeddings.
 
     """
 
@@ -92,7 +86,7 @@ class DPTViTEmbeddings(nn.Module):
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.patch_embeddings = PatchEmbeddings(
+        self.patch_embeddings = DPTViTPatchEmbeddings(
             image_size=config.image_size,
             patch_size=config.patch_size,
             num_channels=config.num_channels,
@@ -142,9 +136,7 @@ class DPTViTEmbeddings(nn.Module):
         return embeddings
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-class PatchEmbeddings(nn.Module):
+class DPTViTPatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
 
@@ -167,6 +159,7 @@ class PatchEmbeddings(nn.Module):
         return x
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention
 class DPTViTSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -225,9 +218,10 @@ class DPTViTSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput
 class DPTViTSelfOutput(nn.Module):
     """
-    The residual connection is defined in DPTViTLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in ViTLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
@@ -244,6 +238,7 @@ class DPTViTSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->DPTViT
 class DPTViTAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -278,6 +273,7 @@ class DPTViTAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTIntermediate
 class DPTViTIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -295,6 +291,7 @@ class DPTViTIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTOutput
 class DPTViTOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -310,6 +307,7 @@ class DPTViTOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->DPTViT
 class DPTViTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -325,7 +323,7 @@ class DPTViTLayer(nn.Module):
 
     def forward(self, hidden_states, head_mask=None, output_attentions=False):
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in DPT, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # in DPTViT, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
@@ -335,7 +333,7 @@ class DPTViTLayer(nn.Module):
         # first residual connection
         hidden_states = attention_output + hidden_states
 
-        # in DPT, layernorm is also applied after self-attention
+        # in DPTViT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
 
@@ -347,6 +345,7 @@ class DPTViTLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->DPTViT
 class DPTViTEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
