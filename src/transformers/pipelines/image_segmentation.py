@@ -120,9 +120,6 @@ class ImageSegmentationPipeline(Pipeline):
                 model_outputs, is_thing_map=self.model.config.id2label, object_mask_threshold=threshold
             )[0]
             annotation = []
-            if outputs is None:
-                # Can be None when nothing is detected
-                return annotation
             segmentation = outputs["segmentation"]
             for segment in outputs["segments"]:
                 mask = (segmentation == segment["id"]) * 255
