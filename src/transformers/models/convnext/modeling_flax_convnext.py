@@ -495,11 +495,11 @@ CONVNEXT_FOR_IMAGE_CLASSIFICATION = r"""
     >>> feature_extractor = ConvNextFeatureExtractor.from_pretrained("facebook/convnext-tiny-224")
     >>> model = FlaxConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224")
 
-    >>> inputs = feature_extractor(images=image, return_tensors="tf")
+    >>> inputs = feature_extractor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)
     >>> logits = outputs.logits
     >>> # model predicts one of the 1000 ImageNet classes
-    >>> predicted_class_idx = tf.math.argmax(logits, axis=-1)[0]
+    >>> predicted_class_idx = jnp.argmax(logits, axis=-1)[0]
     >>> print("Predicted class:", model.config.id2label[int(predicted_class_idx)])
     ```"""
 
@@ -555,6 +555,6 @@ overwrite_call_docstring(
 )
 append_replace_return_docstrings(
     FlaxConvNextForImageClassification,
-    output_type=FlaxSequenceClassifierOutput,
+    output_type=FlaxConvNextClassifierOutput,
     config_class=ConvNextConfig,
 )
