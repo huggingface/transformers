@@ -265,12 +265,13 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
 
             if chunk_length is not None:
                 self.assertListEqual(
-                    list(attentions[0].shape[-4:]),
+                    list(attentions[0][0].shape[-4:]),
                     [self.model_tester.num_heads[0], window_size_squared, chunk_length, window_size_squared],
                 )
             else:
+                # attentions is a tuple of tuple, since we have one attention per layer
                 self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
+                    list(attentions[0][0].shape[-3:]),
                     [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
                 )
             out_len = len(outputs)
@@ -297,12 +298,12 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(self_attentions), len(self.model_tester.depths))
             if chunk_length is not None:
                 self.assertListEqual(
-                    list(self_attentions[0].shape[-4:]),
+                    list(self_attentions[0][0].shape[-4:]),
                     [self.model_tester.num_heads[0], window_size_squared, chunk_length, window_size_squared],
                 )
             else:
                 self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
+                    list(self_attentions[0][0].shape[-3:]),
                     [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
                 )
 
@@ -395,7 +396,5 @@ class SwinModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-
         expected_slice = torch.tensor([-0.0948, -0.6454, -0.0921]).to(torch_device)
-
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

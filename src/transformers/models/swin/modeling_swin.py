@@ -87,8 +87,8 @@ class SwinBaseModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
 
 
 @dataclass
@@ -121,8 +121,8 @@ class SwinModelOutputWithPooling(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     pooler_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
 
 
 # to_2tuple, drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
@@ -457,9 +457,9 @@ class SwinAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
-        self_outputs, self_attentions = self.self(hidden_states, attention_mask, head_mask, output_attentions)
-        attention_output = self.output(self_outputs, hidden_states)
-        outputs = (attention_output, self_attentions) if output_attentions else (attention_output)
+        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
+        attention_output = self.output(self_outputs[0], hidden_states)
+        outputs = (attention_output, self_outputs[1]) if output_attentions else (attention_output,)
         return outputs
 
 
@@ -497,18 +497,19 @@ class SwinBlock(nn.Module):
         self.shift_size = shift_size
         self.window_size = config.window_size
         self.input_resolution = input_resolution
-
-        if min(self.input_resolution) <= self.window_size:
-            # if window size is larger than input resolution, we don't partition windows
-            self.shift_size = 0
-            self.window_size = min(self.input_resolution)
-
+        self.set_shift_and_window_size(input_resolution)
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = SwinAttention(config, dim, num_heads)
         self.drop_path = SwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = SwinIntermediate(config, dim)
         self.output = SwinOutput(config, dim)
+
+    def set_shift_and_window_size(self, input_resolution):
+        if min(input_resolution) <= self.window_size:
+            # if window size is larger than input resolution, we don't partition windows
+            self.shift_size = 0
+            self.window_size = min(input_resolution)
 
     def get_attn_mask(self, input_resolution):
         if self.shift_size > 0:
@@ -548,10 +549,11 @@ class SwinBlock(nn.Module):
         return hidden_states, pad_values
 
     def forward(self, hidden_states, input_dimensions, head_mask=None, output_attentions=False):
+        self.set_shift_and_window_size(input_dimensions)
         height, width = input_dimensions
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states
-
+        
         hidden_states = self.layernorm_before(hidden_states)
         hidden_states = hidden_states.view(batch_size, height, width, channels)
         # pad hidden_states to multiples of window size
@@ -598,7 +600,7 @@ class SwinBlock(nn.Module):
         layer_output = self.intermediate(layer_output)
         layer_output = hidden_states + self.output(layer_output)
 
-        layer_outputs = (layer_output, attention_output[1:]) if output_attentions else (layer_output)
+        layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
         return layer_outputs
 
 
@@ -637,7 +639,9 @@ class SwinLayer(nn.Module):
 
             block_outputs = block_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
             if output_attentions:
-                block_attentions += (block_outputs[1:],)
+                block_attentions += block_outputs[1:]
+
+            hidden_states = block_outputs[0]
 
         if self.downsample is not None:
             height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
@@ -704,7 +708,7 @@ class SwinEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module), hidden_states, layer_head_mask
+                    create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
                 layer_outputs = layer_module(
@@ -725,15 +729,15 @@ class SwinEncoder(nn.Module):
 
             if output_attentions:
                 all_self_attentions += (layer_outputs[2:],)
-
+        
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions, all_input_dimensions] if v is not None)
 
         return SwinBaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
-            hidden_states_spatial_dimensions=all_input_dimensions,
             attentions=all_self_attentions,
+            hidden_states_spatial_dimensions=all_input_dimensions,
         )
 
 
@@ -882,16 +886,20 @@ class SwinModel(SwinPreTrainedModel):
             pooled_output = self.pooler(sequence_output.transpose(1, 2))
             pooled_output = torch.flatten(pooled_output, 1)
 
+            
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            output =  (sequence_output, pooled_output) + encoder_outputs[1:-1] 
+            # spatial hidden sizes is at the end
+            hidden_states_spatial_dimensions = (input_dimensions,) + encoder_outputs[-1]
+            output += (hidden_states_spatial_dimensions,)
 
-        hidden_states_spatial_dimensions = (input_dimensions,) + encoder_outputs.hidden_states_spatial_dimensions
+            return output
 
         return SwinModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
-            hidden_states_spatial_dimensions=hidden_states_spatial_dimensions,
+            hidden_states_spatial_dimensions=(input_dimensions,) + encoder_outputs.hidden_states_spatial_dimensions,
             attentions=encoder_outputs.attentions,
         )
 
