@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "resnet-50": "https://huggingface.co/Francesco/resnet-50/blob/main/config.json",
+    "resnet-50": "https://huggingface.co/microsoft/resnet-50/blob/main/config.json",
 }
 
 
