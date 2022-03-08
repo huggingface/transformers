@@ -732,8 +732,8 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 class TFRoBertaEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
         return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "tiny-random-roberta",
-            "tiny-random-roberta",
+            "hf-internal-testing/tiny-random-roberta",
+            "hf-internal-testing/tiny-random-roberta",
         )
 
     def get_encoder_decoder_model(self, config, decoder_config):
