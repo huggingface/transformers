@@ -24,24 +24,30 @@ env:
   OMP_NUM_THREADS: 16
   MKL_NUM_THREADS: 16
   PYTEST_TIMEOUT: 600
+  TF_FORCE_GPU_ALLOW_GROWTH: true
 
 jobs:
   run_doctests:
-    runs-on: [self-hosted, doc-tests]
+    runs-on: [self-hosted, doc-tests-gpu]
     container:
-      image: huggingface/transformers-cpu
-      options: --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: Launcher docker
-        uses: actions/checkout@v2
-
-      - name: Install dependencies
+      - name: Update clone
+        working-directory: /transformers
         run: |
-          apt -y update && apt install -y libsndfile1-dev ffmpeg
-          pip install --upgrade pip
-          pip install -U pytest
-          pip install .[testing,torch-speech,sentencepiece,vision]
-          pip install https://github.com/kpu/kenlm/archive/master.zip
+          git fetch && git checkout ${{ github.sha }}
+          
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: GPU visibility
+        working-directory: /transformers
+        run: |
+          utils/print_env_pt.py
+          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
+          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
       - name: Prepare files for doctests
         run: |
@@ -49,7 +55,7 @@ jobs:
 
       - name: Run doctests
         run: |
-          pytest --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
+          python3 -m pytest --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
 
       - name: Clean files after doctests
         run: |
