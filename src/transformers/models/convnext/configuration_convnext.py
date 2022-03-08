@@ -111,6 +111,7 @@ class ConvNextConfig(PretrainedConfig):
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
         semantic_loss_ignore_index=255,
+        apply_norm_after_stage=False,
         legacy_output=False,
         **kwargs
     ):
@@ -136,4 +137,5 @@ class ConvNextConfig(PretrainedConfig):
         self.auxiliary_num_convs = auxiliary_num_convs
         self.auxiliary_concat_input = auxiliary_concat_input
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
+        self.apply_norm_after_stage = apply_norm_after_stage
         self.legacy_output = legacy_output

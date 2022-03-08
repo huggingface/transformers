@@ -79,11 +79,11 @@ def get_convnext_config(checkpoint_url):
     return config, expected_shape
 
 
-def rename_key(name):
+def rename_key(name, is_semantic=True):
     if "downsample_layers.0.0" in name:
         name = name.replace("downsample_layers.0.0", "embeddings.patch_embeddings")
     if "downsample_layers.0.1" in name:
-        name = name.replace("downsample_layers.0.1", "embeddings.norm")  # we rename to layernorm later on
+        name = name.replace("downsample_layers.0.1", "embeddings.norm")
     if "downsample_layers.1.0" in name:
         name = name.replace("downsample_layers.1.0", "stages.1.downsampling_layer.0")
     if "downsample_layers.1.1" in name:
@@ -96,18 +96,41 @@ def rename_key(name):
         name = name.replace("downsample_layers.3.0", "stages.3.downsampling_layer.0")
     if "downsample_layers.3.1" in name:
         name = name.replace("downsample_layers.3.1", "stages.3.downsampling_layer.1")
-    if "stages" in name and "downsampling_layer" not in name:
+    if "stages" in name and not is_semantic and "downsampling_layer" not in name:
         # stages.0.0. for instance should be renamed to stages.0.layers.0.
         name = name[: len("stages.0")] + ".layers" + name[len("stages.0") :]
-    if "stages" in name:
+    if "stages" in name and not is_semantic:
         name = name.replace("stages", "encoder.stages")
     if "norm" in name:
-        name = name.replace("norm", "layernorm")
+        if "stages" not in name and "embedding" not in name:
+            norm_name = name.split(".")[1]
+            norm_num = norm_name[-1]
+            name = name.replace(norm_name, f"layernorm.{norm_num}")
+        else:
+            name = name.replace("norm", "layernorm")
     if "gamma" in name:
         name = name.replace("gamma", "layer_scale_parameter")
-    if "head" in name:
+    if "head" in name and not is_semantic:
         name = name.replace("head", "classifier")
-
+        
+    if is_semantic:
+        if "backbone" in name:
+            name = name.replace("backbone", "convnext")
+        if "depthwise_conv" in name:
+            name = name.replace("depthwise_conv", "dwconv")
+        if "pointwise_conv" in name:
+            name = name.replace("pointwise_conv", "pwconv")
+        if "stages" in name and "downsampling_layer" not in name:
+            name = name[: len("backbone.stages.0")] + ".layers" + name[len("backbone.stages.0") :]
+        if "stages" in name:
+            name = name.replace("stages", "encoder.stages")
+        if "convnext.layernorm" in name:
+            name = name.replace("convnext", "convnext.encoder")
+        if "decode_head.conv_seg" in name:
+            name = name.replace("decode_head.conv_seg", "decode_head.classifier")
+        if "auxiliary_head.conv_seg" in name:
+            name = name.replace("auxiliary_head.conv_seg", "auxiliary_head.classifier")
+    
     return name
 
 

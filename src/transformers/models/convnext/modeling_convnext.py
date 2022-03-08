@@ -274,6 +274,7 @@ class ConvNextStage(nn.Module):
 class ConvNextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.stages = nn.ModuleList()
         drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         cur = 0
@@ -292,14 +293,29 @@ class ConvNextEncoder(nn.Module):
             cur += config.depths[i]
             prev_chs = out_chs
 
+        if config.apply_norm_after_stage:
+            self.layernorm = nn.ModuleList()
+            for i in range(config.num_stages):
+                norm_size = config.hidden_sizes[i]
+                self.layernorm.append(nn.LayerNorm(norm_size, eps=1e-6))
+
     def forward(self, hidden_states, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
+        
+        if self.config.apply_norm_after_stage:
+            for i, layers in enumerate(zip(self.stages, self.layernorm)):
+                layer_module, norm = layers
+                if output_hidden_states:
+                    all_hidden_states = all_hidden_states + (hidden_states,)
 
-        for i, layer_module in enumerate(self.stages):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                hidden_states = layer_module(hidden_states)
+                hidden_states = norm(hidden_states)
+        else:
+            for i, layer_module in enumerate(self.stages):
+                if output_hidden_states:
+                    all_hidden_states = all_hidden_states + (hidden_states,)
 
-            hidden_states = layer_module(hidden_states)
+                hidden_states = layer_module(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -379,7 +395,8 @@ class ConvNextModel(ConvNextPreTrainedModel):
         self.encoder = ConvNextEncoder(config)
 
         # final layernorm layer
-        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
+        if not self.config.apply_norm_after_stage:
+            self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -413,7 +430,8 @@ class ConvNextModel(ConvNextPreTrainedModel):
         last_hidden_state = encoder_outputs[0]
 
         # global average pooling, (N, C, H, W) -> (N, C)
-        pooled_output = self.layernorm(last_hidden_state.mean([-2, -1]))
+        if not self.config.apply_norm_after_stage:
+            pooled_output = self.layernorm(last_hidden_state.mean([-2, -1]))
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -521,7 +539,7 @@ class ConvNextConvModule(nn.Module):
             bias=bias,
             dilation=dilation,
         )
-        self.bn = nn.SyncBatchNorm(out_channels)
+        self.bn = nn.BatchNorm2d(out_channels)
         self.activation = nn.ReLU(inplace=True)
 
     def forward(self, input):
@@ -726,19 +744,6 @@ class ConvNextForSemanticSegmentation(ConvNextPreTrainedModel):
         self.num_labels = config.num_labels
         self.convnext = ConvNextModel(config)
 
-        # FPNs
-        self.fpn1 = nn.Sequential(
-            nn.ConvTranspose2d(config.hidden_sizes[-1], config.hidden_sizes[-1], kernel_size=2, stride=2),
-            nn.BatchNorm2d(config.hidden_sizes[-1]),
-            nn.GELU(),
-            nn.ConvTranspose2d(config.hidden_sizes[-1], config.hidden_sizes[-1], kernel_size=2, stride=2),
-        )
-        self.fpn2 = nn.Sequential(
-            nn.ConvTranspose2d(config.hidden_sizes[-1], config.hidden_sizes[-1], kernel_size=2, stride=2),
-        )
-        self.fpn3 = nn.Identity()
-        self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
-
         # Semantic segmentation head(s)
         self.decode_head = ConvNextUperHead(config)
         self.auxiliary_head = ConvNextFCNHead(config) if config.use_auxiliary_head else None
@@ -833,11 +838,6 @@ class ConvNextForSemanticSegmentation(ConvNextPreTrainedModel):
         features = [
             x[:, 1:, :].permute(0, 2, 1).reshape(batch_size, -1, patch_resolution, patch_resolution) for x in features
         ]
-
-        # apply FPNs
-        ops = [self.fpn1, self.fpn2, self.fpn3, self.fpn4]
-        for i in range(len(features)):
-            features[i] = ops[i](features[i])
 
         logits = self.decode_head(features)
 
