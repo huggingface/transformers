@@ -193,7 +193,7 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
         if has_lm_head:
             model_name = "dit-base" if "base" in checkpoint_url else "dit-large"
         else:
-            model_name = "dit-base-finetuned-rvlcdip" if "dpt-b" in checkpoint_url else "dit-large-finetuned-rvlcdip"
+            model_name = "dit-base-finetuned-rvlcdip" if "dit-b" in checkpoint_url else "dit-large-finetuned-rvlcdip"
         feature_extractor.push_to_hub(
             repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
             organization="nielsr",
