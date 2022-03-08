@@ -541,7 +541,10 @@ class TFEncoderDecoderMixin:
 @require_tf
 class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
+        return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "hf-internal-testing/tiny-random-bert",
+            "hf-internal-testing/tiny-random-bert",
+        )
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = TFBertModel(config, name="encoder")
@@ -636,7 +639,10 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 @require_tf
 class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "../gpt2")
+        return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "hf-internal-testing/tiny-random-bert",
+            "hf-internal-testing/tiny-random-gpt2",
+        )
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = TFBertModel(config, name="encoder")
@@ -725,7 +731,10 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 @require_tf
 class TFRoBertaEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        return TFEncoderDecoderModel.from_encoder_decoder_pretrained("roberta-base", "roberta-base")
+        return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "tiny-random-roberta",
+            "tiny-random-roberta",
+        )
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = TFRobertaModel(config, name="encoder")
