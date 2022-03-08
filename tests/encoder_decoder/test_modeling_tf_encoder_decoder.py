@@ -319,9 +319,12 @@ class TFEncoderDecoderMixin:
 
         # prepare inputs
         tf_inputs = inputs_dict
-        pt_inputs = {k: torch.tensor(v.numpy()).to(device=torch_device) for k, v in tf_inputs.items()}
+        pt_inputs = {k: torch.tensor(v.numpy()) for k, v in tf_inputs.items()}
         if "labels" in pt_inputs:
-            pt_inputs["labels"] = pt_inputs["labels"].type(torch.long)
+            pt_inputs["labels"] = pt_inputs["labels"]
+
+        # send pytorch inputs to the correct device
+        pt_inputs = {k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs.items()}
 
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs).to_tuple()
