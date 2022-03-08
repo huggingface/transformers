@@ -1789,8 +1789,6 @@ class FlaxBartPreTrainedDecoderModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    # TODO: change docstring to match decoder model/module inputs
-    @add_start_docstrings_to_model_forward(BART_DECODE_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,
