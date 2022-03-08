@@ -356,7 +356,7 @@ class TrainingArguments:
             than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset is an
             instance of `Dataset`.
         report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
-            The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
+            The list of integrations to report the results and logs to. Supported platforms are
             `"comet_ml"`, `"mlflow"`, `"tensorboard"` and `"wandb"`. Use `"all"` to report to all integrations
             installed, `"none"` for no integrations.
         ddp_find_unused_parameters (`bool`, *optional*):

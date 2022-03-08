@@ -87,14 +87,6 @@ def is_sigopt_available():
     return importlib.util.find_spec("sigopt") is not None
 
 
-def is_azureml_available():
-    if importlib.util.find_spec("azureml") is None:
-        return False
-    if importlib.util.find_spec("azureml.core") is None:
-        return False
-    return importlib.util.find_spec("azureml.core.run") is not None
-
-
 def is_mlflow_available():
     return importlib.util.find_spec("mlflow") is not None
 
@@ -412,8 +404,6 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
 
 def get_available_reporting_integrations():
     integrations = []
-    if is_azureml_available():
-        integrations.append("azure_ml")
     if is_comet_available():
         integrations.append("comet_ml")
     if is_mlflow_available():
@@ -733,29 +723,6 @@ class CometCallback(TrainerCallback):
             experiment.end()
 
 
-class AzureMLCallback(TrainerCallback):
-    """
-    A [`TrainerCallback`] that sends the logs to [AzureML](https://pypi.org/project/azureml-sdk/).
-    """
-
-    def __init__(self, azureml_run=None):
-        if not is_azureml_available():
-            raise RuntimeError("AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`.")
-        self.azureml_run = azureml_run
-
-    def on_init_end(self, args, state, control, **kwargs):
-        from azureml.core.run import Run
-
-        if self.azureml_run is None and state.is_world_process_zero:
-            self.azureml_run = Run.get_context()
-
-    def on_log(self, args, state, control, logs=None, **kwargs):
-        if self.azureml_run and state.is_world_process_zero:
-            for k, v in logs.items():
-                if isinstance(v, (int, float)):
-                    self.azureml_run.log(k, v, description=k)
-
-
 class MLflowCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that sends the logs to [MLflow](https://www.mlflow.org/).
@@ -946,7 +913,6 @@ class CodeCarbonCallback(TrainerCallback):
 
 
 INTEGRATION_TO_CALLBACK = {
-    "azure_ml": AzureMLCallback,
     "comet_ml": CometCallback,
     "mlflow": MLflowCallback,
     "neptune": NeptuneCallback,
