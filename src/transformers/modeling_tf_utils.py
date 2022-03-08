@@ -946,17 +946,45 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         additional loss function that reduces a `loss` output, and the model will output a `loss` component (notice the
         name matching) containing the loss that was used to train the pre-trained model.
         """
+        # TODO Handle this bit in a slightly more principled way
+        possible_label_cols = {"labels", "label", "label_ids", "start_logits", "end_logits"}
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
         # These next two lines differ from the base method - they avoid issues when the labels are in
         # the input dict (and loss is computed internally)
-        if y is None and "labels" in x:
-            y = x["labels"]  # Stops confusion with metric computations
-        elif y is None and "input_ids" in x:
-            # Just make any kind of dummy array to make loss work
-            y = tf.zeros(tf.shape(x["input_ids"])[0], dtype=tf.int64)
+        if y is None:
+            if not isinstance(x, dict):
+                raise RuntimeError("No labels passed to fit()!")
+            label_keys = possible_label_cols.intersection(x.keys())
+            if len(label_keys) == 1:
+                label_key = next(iter(label_keys))
+                y = x[label_key]
+            elif len(label_keys) > 1:
+                y = {key: x[key] for key in label_keys}
+            else:
+                # TODO Is there any important case this will fail on?
+                raise RuntimeError("Could not find labels in either the input dict or labels argument!")
+        else:
+            arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+            assert arg_names[0] == "self"
+            label_kwargs = possible_label_cols.intersection(arg_names)
+            if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[1]: x}
+                label_kwarg = next(iter(label_kwargs))
+                if label_kwarg not in x:
+                    x[label_kwarg] = y
+            elif isinstance(y, dict) and set(y.keys()).issubset(label_kwargs):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[1]: x}
+                for label_kwarg in label_kwargs:
+                    if label_kwarg not in x:
+                        x[label_kwarg] = y[label_kwarg]
+            # If neither of the above cases are true, we assume the user is doing
+            # their own custom loss and let them at it.
+
         # Run forward pass.
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
@@ -1893,7 +1921,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.initializer_range = hidden_size**-0.5 if initializer_range is None else initializer_range
+        self.initializer_range = hidden_size ** -0.5 if initializer_range is None else initializer_range
 
     def build(self, input_shape):
         """
