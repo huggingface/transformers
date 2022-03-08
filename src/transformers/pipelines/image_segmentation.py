@@ -117,7 +117,7 @@ class ImageSegmentationPipeline(Pipeline):
     def postprocess(self, model_outputs, raw_image=False, threshold=0.9, mask_threshold=0.5):
         if hasattr(self.feature_extractor, "post_process_panoptic_segmentation"):
             outputs = self.feature_extractor.post_process_panoptic_segmentation(
-                model_outputs, is_thing_map=self.model.config.id2label, object_mask_threshold=threshold
+                model_outputs, object_mask_threshold=threshold
             )[0]
             annotation = []
             segmentation = outputs["segmentation"]
