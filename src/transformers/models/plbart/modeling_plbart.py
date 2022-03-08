@@ -50,6 +50,13 @@ _CHECKPOINT_FOR_DOC = "uclanlp/plbart-base"
 _CONFIG_FOR_DOC = "PLBartConfig"
 _TOKENIZER_FOR_DOC = "PLBartTokenizer"
 
+# Base model docstring
+_EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
+
+# SequenceClassification docstring
+_SEQ_CLASS_EXPECTED_LOSS = [0.6, 0.72]
+_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [[1, 2], [1, 2]]
+
 
 PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uclanlp/plbart-base",
@@ -526,27 +533,20 @@ PLBART_START_DOCSTRING = r"""
 """
 
 PLBART_GENERATION_EXAMPLE = r"""
-    Token in-filling example:
-
-        >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration, PLBartConfig
-
-        >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base') >>> tokenizer =
-        PLBartTokenizer.from_pretrained('uclanlp/plbart-base', src_lang='java', tgt_lang='java') >>> METHOD_TO_FILL =
-        "public static main (String args[0]) { data=Date(); System.out. String.format("Current Date : % tc", ));}" >>>
-        inputs = tokenizer([METHOD_TO_FILL], max_length=1024, return_tensors='pt') >>> # Generate Filled Code >>>
-        generated_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True) >>>
-        print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in
-        generated_ids])
-
     Mask-filling example:
 
-        >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration >>> tokenizer =
-        PLBartTokenizer.from_pretrained('uclanlp/plbart-base') >>> # en_XX is the language symbol id <LID> for English
-        >>> TXT = "</s> Is 0 the <mask> Fibonacci <mask> ? </s> en_XX" >>> model =
-        PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base') >>> input_ids = tokenizer([TXT],
-        add_special_tokens=False, return_tensors='pt')['input_ids'] >>> logits = model(input_ids).logits >>>
-        masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item() >>> probs = logits[0,
-        masked_index].softmax(dim=0) >>> values, predictions = probs.topk(5) >>> tokenizer.decode(predictions).split()
+    >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration >>> tokenizer =
+    PLBartTokenizer.from_pretrained('uclanlp/plbart-base') >>> model =
+    PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base')
+
+    >>> # en_XX is the language symbol id <LID> for English >>> TXT = "<s> Is 0 the <mask> Fibonacci number ? </s>
+    en_XX" >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors='pt').input_ids >>> logits =
+    model(input_ids).logits
+
+    >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item() >>> probs = logits[0,
+    masked_index].softmax(dim=0) >>> values, predictions = probs.topk(5)
+
+    >>> tokenizer.decode(predictions).split() ['same', 'first', 'highest', 'result', 'Fib']
 """
 
 PLBART_INPUTS_DOCSTRING = r"""
@@ -1521,7 +1521,7 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->PLBart
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->PLBart, facebook/bart-base->uclanlp/plbart-base
 class PLBartForCausalLM(PLBartPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
@@ -1643,13 +1643,16 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
         ```python
         >>> from transformers import PLBartTokenizer, PLBartForCausalLM
 
-        >>> tokenizer = PLBartTokenizer.from_pretrained("facebook/bart-large")
-        >>> model = PLBartForCausalLM.from_pretrained("facebook/bart-large", add_cross_attention=False)
+        >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-base")
+        >>> model = PLBartForCausalLM.from_pretrained("uclanlp/plbart-base", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

@@ -523,27 +523,28 @@ MARIAN_START_DOCSTRING = r"""
 """
 
 MARIAN_GENERATION_EXAMPLE = r"""
-        Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
-        Available models are listed [here](https://huggingface.co/models?search=Helsinki-NLP).
+    Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints. Available
+    models are listed [here](https://huggingface.co/models?search=Helsinki-NLP).
 
-        Examples:
+    Examples:
 
-        ```python
-        >>> from transformers import MarianTokenizer, MarianMTModel
-        >>> from typing import List
+    ```python
+    >>> from transformers import MarianTokenizer, MarianMTModel
 
-        >>> src = "fr"  # source language
-        >>> trg = "en"  # target language
-        >>> sample_text = "où est l'arrêt de bus ?"
-        >>> model_name = f"Helsinki-NLP/opus-mt-{src}-{trg}"
+    >>> src = "fr"  # source language
+    >>> trg = "en"  # target language
 
-        >>> model = MarianMTModel.from_pretrained(model_name)
-        >>> tokenizer = MarianTokenizer.from_pretrained(model_name)
-        >>> batch = tokenizer([sample_text], return_tensors="pt")
-        >>> gen = model.generate(**batch)
-        >>> tokenizer.batch_decode(gen, skip_special_tokens=True)
-        "Where is the bus stop ?"
-        ```
+    >>> model_name = f"Helsinki-NLP/opus-mt-{src}-{trg}"
+    >>> model = MarianMTModel.from_pretrained(model_name)
+    >>> tokenizer = MarianTokenizer.from_pretrained(model_name)
+
+    >>> sample_text = "où est l'arrêt de bus ?"
+    >>> batch = tokenizer([sample_text], return_tensors="pt")
+
+    >>> generated_ids = model.generate(**batch)
+    >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    "Where's the bus stop?"
+    ```
 """
 
 MARIAN_INPUTS_DOCSTRING = r"""
@@ -1147,6 +1148,8 @@ class MarianModel(MarianPreTrainedModel):
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 26, 512]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1400,7 +1403,7 @@ class MarianDecoderWrapper(MarianPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Marian, facebook/bart-large->Helsinki-NLP/opus-mt-fr-en
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Marian, facebook/bart-base->Helsinki-NLP/opus-mt-fr-en
 class MarianForCausalLM(MarianPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
@@ -1529,6 +1532,9 @@ class MarianForCausalLM(MarianPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

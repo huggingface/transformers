@@ -508,18 +508,18 @@ BLENDERBOT_START_DOCSTRING = r"""
 BLENDERBOT_GENERATION_EXAMPLE = r"""
     Conversation example::
 
-        >>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration >>> mname =
-        'facebook/blenderbot-400M-distill' >>> model = BlenderbotForConditionalGeneration.from_pretrained(mname) >>>
-        tokenizer = BlenderbotTokenizer.from_pretrained(mname) >>> UTTERANCE = "My friends are cool but they eat too
-        many carbs." >>> print("Human: ", UTTERANCE) >>> inputs = tokenizer([UTTERANCE], return_tensors='pt') >>>
-        reply_ids = model.generate(**inputs) >>> print("Bot: ", tokenizer.batch_decode(reply_ids,
-        skip_special_tokens=True)[0])
-
-        >>> REPLY = "I'm not sure" >>> print("Human: ", REPLY) >>> NEXT_UTTERANCE = ( ... "My friends are cool but they
-        eat too many carbs.</s> <s>That's unfortunate. " ... "Are they trying to lose weight or are they just trying to
-        be healthier?</s> " ... "<s> I'm not sure." ... ) >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='pt')
-        >>> next_reply_ids = model.generate(**inputs) >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids,
-        skip_special_tokens=True)[0])
+    >>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration >>> mname
+    ='facebook/blenderbot-400M-distill' >>> model = BlenderbotForConditionalGeneration.from_pretrained(mname) >>>
+    tokenizer = BlenderbotTokenizer.from_pretrained(mname) >>> UTTERANCE = "My friends are cool but they eat too many
+    carbs." >>> print("Human: ", UTTERANCE) Human: My friends are cool but they eat too many carbs >>> inputs =
+    tokenizer([UTTERANCE], return_tensors='pt') >>> reply_ids = model.generate(**inputs) >>> print("Bot: ",
+    tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0]) Bot: That's unfortunate. Are they trying to lose
+    weight or are they just trying to be healthier? >>> REPLY = "I'm not sure" >>> print("Human: ", REPLY) Human: I'm
+    not sure >>> NEXT_UTTERANCE = ( ... "My friends are cool but they eat too many carbs.</s> <s>That's unfortunate. "
+    ... "Are they trying to lose weight or are they just trying to be healthier?</s> " ... "<s> I'm not sure." ... )
+    >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='pt') >>> next_reply_ids = model.generate(**inputs) >>>
+    print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0]) Bot: That's too bad. Have you
+    tried encouraging them to change their eating habits?
 """
 
 BLENDERBOT_INPUTS_DOCSTRING = r"""
@@ -1137,6 +1137,8 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 16, 1280]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1389,7 +1391,7 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot, facebook/bart-large->facebook/blenderbot-400M-distill
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot, facebook/bart-base->facebook/blenderbot-400M-distill
 class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
@@ -1520,6 +1522,9 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

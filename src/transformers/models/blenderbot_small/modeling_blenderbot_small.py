@@ -506,18 +506,17 @@ BLENDERBOT_SMALL_START_DOCSTRING = r"""
 BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
     Conversation example::
 
-        >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForConditionalGeneration >>> mname =
-        'facebook/blenderbot_small-90M' >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname) >>>
-        tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname) >>> UTTERANCE = "My friends are cool but they eat
-        too many carbs." >>> print("Human: ", UTTERANCE) >>> inputs = tokenizer([UTTERANCE], return_tensors='pt') >>>
-        reply_ids = model.generate(**inputs) >>> print("Bot: ", tokenizer.batch_decode(reply_ids,
-        skip_special_tokens=True)[0]) what kind of carbs do they eat? i don't know much about carbs.
-
-        >>> REPLY = "I'm not sure" >>> print("Human: ", REPLY) >>> NEXT_UTTERANCE = ( ... "My friends are cool but they
-        eat too many carbs.</s> " ... "<s>what kind of carbs do they eat? i don't know much about carbs.</s> " ...
-        "<s>I'm not sure." ... ) >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='pt') >>>
-        inputs.pop("token_type_ids") >>> next_reply_ids = model.generate(**inputs) >>> print("Bot: ",
-        tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
+    >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForConditionalGeneration >>> mname
+    ='facebook/blenderbot-400M-distill' >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname) >>>
+    tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname) >>> UTTERANCE = "My friends are cool but they eat too
+    many carbs." >>> print("Human: ", UTTERANCE) Human: My friends are cool but they eat too many carbs >>> inputs =
+    tokenizer([UTTERANCE], return_tensors='pt') >>> reply_ids = model.generate(**inputs) >>> print("Bot: ",
+    tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0]) Bot: what kind of carbs do they eat? i don't know
+    much about carbs. >>> REPLY = "I'm not sure" >>> print("Human: ", REPLY) Human: I'm not sure >>> NEXT_UTTERANCE = (
+    ... "My friends are cool but they eat too many carbs.</s> <s>what kind of carbs do they eat? " ... "i don't know
+    much about carbs</s> " ... "<s> I'm not sure." ... ) >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='pt')
+    >>> next_reply_ids = model.generate(**inputs) >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids,
+    skip_special_tokens=True)[0]) Bot: they eat a lot of carbs. carbs are high in fat, protein, and carbohydrates.
 """
 
 BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
@@ -1120,6 +1119,8 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 12, 512]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1360,7 +1361,7 @@ class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall, facebook/bart-large->facebook/blenderbot_small-90M
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall, facebook/bart-base->facebook/blenderbot_small-90M
 class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
@@ -1491,6 +1492,9 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
