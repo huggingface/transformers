@@ -509,7 +509,7 @@ class TFEncoderDecoderMixin:
         model = TFEncoderDecoderModel(encoder_decoder_config)
         model(**inputs_dict)
 
-    def test_real_model_save_load_from_pretrained(self):
+    def test_model_save_load_from_pretrained(self):
         model_2 = self.get_pretrained_model()
         input_ids = ids_tensor([13, 5], model_2.config.encoder.vocab_size)
         decoder_input_ids = ids_tensor([13, 1], model_2.config.decoder.vocab_size)
