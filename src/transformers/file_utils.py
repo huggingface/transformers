@@ -1012,8 +1012,7 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
     >>> from transformers import {processor_class}, {model_class}
     >>> import torch
 
-    >>> torch.manual_seed(0)  # doctest:+ELLIPSIS
-    <torch._C.Generator object at ...>
+    >>> torch.manual_seed(0)  # doctest:+IGNORE_OUTPUT
 
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
@@ -1045,8 +1044,7 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> import torch
     >>> from transformers import {processor_class}, {model_class}
 
-    >>> torch.manual_seed(0)  # doctest:+ELLIPSIS
-    <torch._C.Generator object at ...>
+    >>> torch.manual_seed(0)  # doctest:+IGNORE_OUTPUT
 
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=2)
