@@ -34,6 +34,16 @@ jobs:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
+      - name: Remove transformers
+        working-directory: ./
+        run: 
+          rm -rf transformers
+
+      - uses: actions/checkout@v2
+        with:
+          repository: 'huggingface/transformers'
+          path: transformers
+
       - name: Update clone
         working-directory: /transformers
         run: |
