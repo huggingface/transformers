@@ -151,15 +151,7 @@ class DPTModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            DPTModel,
-            DPTForDepthEstimation,
-            DPTForSemanticSegmentation,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (DPTModel, DPTForDepthEstimation, DPTForSemanticSegmentation) if is_torch_available() else ()
 
     test_pruning = False
     test_torchscript = False
