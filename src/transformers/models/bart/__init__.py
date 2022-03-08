@@ -50,6 +50,7 @@ if is_flax_available():
         "FlaxBartForQuestionAnswering",
         "FlaxBartForSequenceClassification",
         "FlaxBartModel",
+        "FlaxBartPreTrainedDecoderModel",
         "FlaxBartPreTrainedModel",
     ]
 
@@ -82,6 +83,7 @@ if TYPE_CHECKING:
             FlaxBartForQuestionAnswering,
             FlaxBartForSequenceClassification,
             FlaxBartModel,
+            FlaxBartPreTrainedDecoderModel,
             FlaxBartPreTrainedModel,
         )
 

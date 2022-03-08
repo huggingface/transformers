@@ -284,6 +284,13 @@ class FlaxBartModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxBartPreTrainedDecoderModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxBartPreTrainedModel(metaclass=DummyObject):
     _backends = ["flax"]
 
