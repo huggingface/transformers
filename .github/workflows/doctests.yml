@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - doctest*
+      - test-doctest*
   repository_dispatch:
   pull_request:
     paths:
