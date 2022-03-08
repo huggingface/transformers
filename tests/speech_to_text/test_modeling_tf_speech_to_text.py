@@ -182,7 +182,7 @@ class TFSpeech2TextModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        _, (_, past_key_values) = outputs.to_tuple()
+        _, past_key_values = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = tf.math.maximum(ids_tensor((self.batch_size, 3), config.vocab_size), 2)

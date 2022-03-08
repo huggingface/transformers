@@ -1058,14 +1058,21 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             attentions=attns,
         )
 
-    def prepare_inputs_for_generation(self, inputs, past, **model_kwargs):
-        inputs = {"input_ids": inputs}
+    def prepare_inputs_for_generation(self, input_ids, past=None, **model_kwargs):
+        inputs = {}
 
         # if past is defined in model kwargs then use it for faster decoding
         if past:
             inputs["mems"] = past
+            inputs["input_ids"] = tf.expand_dims(input_ids[:, -1], axis=-1)
+        else:
+            inputs["input_ids"] = input_ids
 
         return inputs
+
+    @staticmethod
+    def _reorder_cache(mems: List[tf.Tensor], beam_idx: tf.Tensor) -> List[tf.Tensor]:
+        return [tf.gather(layer_past, beam_idx, axis=1) for layer_past in mems]
 
 
 @add_start_docstrings(

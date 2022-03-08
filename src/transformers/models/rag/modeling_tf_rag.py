@@ -16,14 +16,13 @@
 """TFRAG model implementation."""
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import ModelOutput, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_tf_outputs import TFBaseModelOutput
 from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, input_processing, shape_list
 from ...utils import logging
 from .configuration_rag import RagConfig
@@ -788,42 +787,28 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
     # Adapted from https://github.com/huggingface/transformers/blob/master/src/transformers/modeling_tf_bart.py
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past, attention_mask, use_cache, doc_scores, n_docs=None, **kwargs
-    ) -> Dict:
-        assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
-
-        if len(past) == 1:
-            assert isinstance(past[0], tf.Tensor)
-            encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
-            decoder_cached_states = None
-        else:
-            assert len(past) == 2
-            # Note: encoder_outputs is never changed by Bart as a generator
-            encoder_outputs, decoder_cached_states = past
-
-            if isinstance(encoder_outputs, tuple):
-                assert isinstance(encoder_outputs[0], tf.Tensor)
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs[0])
-            elif isinstance(encoder_outputs, tf.Tensor):
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs)
-
-            assert (
-                decoder_cached_states
-            ), f"decoder cached states must be truthy. got {decoder_cached_states} from the 2nd element of past"
-            # if past is defined cut decoder_input_ids to last token
+        self,
+        decoder_input_ids,
+        past=None,
+        attention_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        doc_scores=None,
+        n_docs=None,
+        **kwargs
+    ):
+        if past is not None:
+            # if past is defined use only last decoder_input_ids
             decoder_input_ids = decoder_input_ids[:, -1:]
 
-        assert isinstance(
-            encoder_outputs, TFBaseModelOutput
-        ), f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}."
         return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
+            "input_ids": None,
             "encoder_outputs": encoder_outputs,
             "doc_scores": doc_scores,
             "context_attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
-            "past_key_values": decoder_cached_states,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
+            "past_key_values": past,
+            "use_cache": use_cache,
             "do_marginalize": True,
             "n_docs": n_docs,
         }
@@ -844,46 +829,19 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     def _reorder_cache(past, beam_idx):
         """Reorders cache for generation. BART-inspired but we need to take care of the extra dimension for docs"""
 
-        def tf_index_select(input_, dim, indices):
-            """
-            Input:
-                input_(tensor): input tensor dim(int): dimension indices(list): selected indices list
-            Output:
-                mimic of torch_tensor.index_select(dim, indices)
-
-            credit:
-                https://stackoverflow.com/questions/58464790/is-there-an-equivalent-function-of-pytorch-named-index-select-in-tensorflow
-            """
-            shape = shape_list(input_)
-            if dim == -1:
-                dim = len(shape) - 1
-            shape[dim] = 1
-
-            tmp = []
-            for idx in indices:
-                begin = [0] * len(shape)
-                begin[dim] = idx
-                tmp.append(tf.slice(input_, begin, shape))
-            res = tf.concat(tmp, axis=dim)
-
-            return res
-
-        def _reorder_stacked(hidden_states, new_order=beam_idx):
+        def _reorder_stacked(hidden_states, new_order):
             n_docs = hidden_states.shape[0] // new_order.shape[0]
             hidden_states = tf.reshape(hidden_states, (-1, n_docs, *hidden_states.shape[1:]))
-            hidden_states = tf_index_select(hidden_states, 0, new_order)
-            return tf.reshape(hidden_states, (-1, *hidden_states.shape[2:]))
-
-        if len(past) == 1:
-            return past
-
-        past_key_values = past[1]
+            hidden_states = tf.gather(hidden_states, new_order, axis=0)
+            result = tf.reshape(hidden_states, (-1, *hidden_states.shape[2:]))
+            return result
 
         reordered_past = ()
-        for layer_past in past_key_values:
+        for layer_past in past:
+            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             reordered_past += (tuple(_reorder_stacked(past_state, beam_idx) for past_state in layer_past),)
 
-        return (past[0], reordered_past)
+        return reordered_past
 
     def marginalize(self, seq_logits, doc_scores, n_docs=None):
         n_docs = n_docs if n_docs is not None else self.config.n_docs
@@ -1268,14 +1226,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             return_dict=True,
         )
 
-        if return_dict_in_generate:
-            # TODO(Patrick): `encoder_outputs`, `past` hack.
-            # Remove after cleaning encoder-decoder outputs
-            if output_attentions:
-                model_kwargs["encoder_attentions"] = encoder_outputs.attentions
-            if output_hidden_states:
-                model_kwargs["encoder_hidden_states"] = encoder_outputs.hidden_states
-
         decoder_input_ids = tf.fill(
             (batch_size * num_beams, 1),
             tf.cast(decoder_start_token_id, tf.int32),
@@ -1365,10 +1315,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             model_kwargs.pop("output_hidden_states", None)
             model_kwargs.pop("output_attentions", None)
             model_kwargs.pop("output_scores", None)
-
-            # TODO(Patrick): `encoder_outputs`, `past` hack.
-            # Remove after cleaning encoder-decoder outputs
-            model_kwargs["past"] = encoder_outputs
 
             return self.greedy_search(
                 input_ids=decoder_input_ids,
