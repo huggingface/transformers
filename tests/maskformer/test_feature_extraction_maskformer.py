@@ -250,7 +250,9 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
     def test_equivalence_pad_and_create_pixel_mask(self):
         # Initialize feature_extractors
         feature_extractor_1 = self.feature_extraction_class(**self.feat_extract_dict)
-        feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False)
+        feature_extractor_2 = self.feature_extraction_class(
+            do_resize=False, do_normalize=False, num_labels=self.feature_extract_tester.num_classes
+        )
         # create random PyTorch tensors
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
@@ -283,6 +285,9 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         inputs = feature_extractor(image_inputs, annotations, return_tensors="pt", pad_and_return_pixel_mask=True)
 
         return inputs
+
+    def test_init_without_params(self):
+        pass
 
     def test_with_size_divisibility(self):
         size_divisibilities = [8, 16, 32]
@@ -334,7 +339,7 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         self.assertEqual(mask_labels.shape[1], self.feature_extract_tester.num_labels)
 
     def test_post_process_segmentation(self):
-        fature_extractor = self.feature_extraction_class()
+        fature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes)
         outputs = self.feature_extract_tester.get_fake_maskformer_outputs()
         segmentation = fature_extractor.post_process_segmentation(outputs)
 
@@ -357,7 +362,7 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         )
 
     def test_post_process_semantic_segmentation(self):
-        fature_extractor = self.feature_extraction_class()
+        fature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes)
         outputs = self.feature_extract_tester.get_fake_maskformer_outputs()
 
         segmentation = fature_extractor.post_process_semantic_segmentation(outputs)
@@ -378,7 +383,7 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         self.assertEqual(segmentation.shape, (self.feature_extract_tester.batch_size, *target_size))
 
     def test_post_process_panoptic_segmentation(self):
-        fature_extractor = self.feature_extraction_class()
+        fature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes)
         outputs = self.feature_extract_tester.get_fake_maskformer_outputs()
         segmentation = fature_extractor.post_process_panoptic_segmentation(outputs, object_mask_threshold=0)
 

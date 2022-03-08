@@ -308,7 +308,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # we need to convert mask from [W,H] to [C, W, H]
         all_labels = np.arange(num_labels)
         # helping broadcast by making mask [1,W,H] and labels [C, 1, 1]
-        binary_masks = segmentation_map[None]  == all_labels[:, None, None]
+        binary_masks = segmentation_map[None] == all_labels[:, None, None]
         # convert labels to multi label format
         one_hot_labels = np.zeros(num_labels, dtype=np.int64)
         one_hot_labels[labels] = 1
