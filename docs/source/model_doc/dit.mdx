@@ -30,6 +30,14 @@ from transformers import AutoModel
 model = AutoModel.from_pretrained("microsoft/dit-base")
 ```
 
+This will load the model pre-trained on masked image modeling. You can also load a fine-tuned model from the [hub](https://huggingface.co/models?other=dit), like so:
+
+```python
+from transformers import AutoModelForImageClassification
+
+model = AutoModelForImageClassification.from_pretrained("microsoft/dit-base-finetuned-rvlcdip")
+```
+
 As DiT's architecture is equivalent to that of BEiT, one can refer to [BEiT's documentation page](beit) for all tips, code examples and notebooks.
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/dit).
