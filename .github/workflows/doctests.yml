@@ -47,7 +47,8 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         run: |
-          git fetch && git checkout ${{ github.sha }}
+          git rev-parse HEAD
+          echo ${{ github.sha }}
 
       - name: NVIDIA-SMI
         run: |
