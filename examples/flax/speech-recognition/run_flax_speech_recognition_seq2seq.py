@@ -192,45 +192,6 @@ class DataTrainingArguments:
         metadata={"help": "Whether the target text should be lower cased."},
     )
 
-"""
-Following needed? Review later.
-"""
-@dataclass
-class DataCollatorSpeechSeq2SeqWithPadding:
-    """
-    Data collator that will dynamically pad the inputs received.
-    Args:
-        processor ([`Wav2Vec2Processor`])
-            The processor used for proccessing the data.
-        decoder_start_token_id (`int`)
-            The begin-of-sentence of the decoder.
-    """
-
-    processor: Any
-    decoder_start_token_id: int
-
-    def __call__(self, features: List[Dict[str, Union[List[int], jnp.array]]]) -> Dict[str, jnp.array]:
-        # split inputs and labels since they have to be of different lengths and need
-        # different padding methods
-        input_features = [{"input_values": feature["input_values"]} for feature in features]
-        label_features = [{"input_ids": feature["labels"]} for feature in features]
-
-        batch = self.processor.feature_extractor.pad(input_features, return_tensors="np")
-
-        labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="np")
-
-        # replace padding with -100 to ignore loss correctly
-        labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
-
-        # if bos token is appended in previous tokenization step,
-        # cut bos token here as it's append later
-        if (labels[:, 0] == self.decoder_start_token_id).all().item():
-            labels = labels[:, 1:]
-
-        batch["labels"] = labels
-
-        return batch
-
 class TrainState(train_state.TrainState):
     dropout_rng: jnp.ndarray
 
@@ -327,17 +288,7 @@ def main():
         transformers.utils.logging.set_verbosity_info()
     logger.info("Training/evaluation parameters %s", training_args)
 
-    # 3. Handle the repository creation
-    if training_args.push_to_hub:
-        if training_args.hub_model_id is None:
-            repo_name = get_full_repo_name(
-                Path(training_args.output_dir).absolute().name, token=training_args.hub_token
-            )
-        else:
-            repo_name = training_args.hub_model_id
-        repo = Repository(training_args.output_dir, clone_from=repo_name)
-
-    # 3. CHANGE NUMBERS ONWARDS Detecting last checkpoint and eventually continue from last checkpoint
+    # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
@@ -378,6 +329,7 @@ def main():
             "Make sure to set `--text_column_name` to the correct text column - one of "
             f"{', '.join(next(iter(raw_datasets.values())).column_names)}."
         )
+
     # 5. Load pretrained model, tokenizer, and feature extractor
     #
     # Distributed training:
@@ -417,7 +369,7 @@ def main():
     if model_args.freeze_feature_encoder:
         model.freeze_feature_encoder()
 
-# 6. Resample speech dataset if necessary
+    # 6. Resample speech dataset if necessary
     dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
     if dataset_sampling_rate != feature_extractor.sampling_rate:
         raw_datasets = raw_datasets.cast_column(
@@ -523,12 +475,17 @@ def main():
             "Please run `pip install tensorboard` to enable."
         )
 
-    # 10. Define data collator NO NO NO
-    data_collator = DataCollatorSpeechSeq2SeqWithPadding(
-        processor=processor, decoder_start_token_id=model.config.decoder_start_token_id
-    )
+    # 10. Handle the repository creation
+    if training_args.push_to_hub:
+        if training_args.hub_model_id is None:
+            repo_name = get_full_repo_name(
+                Path(training_args.output_dir).absolute().name, token=training_args.hub_token
+            )
+        else:
+            repo_name = training_args.hub_model_id
+        repo = Repository(training_args.output_dir, clone_from=repo_name)
 
-    # Initialize our training
+    # 11. Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
     rng, dropout_rng = jax.random.split(rng)
 
