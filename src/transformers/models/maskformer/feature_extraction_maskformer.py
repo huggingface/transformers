@@ -66,7 +66,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             ImageNet std.
         ignore_index (`int`, *optional*, default to 255):
             Value of the index (label) to ignore.
-        num_labels (`int`, *optional*, defaults to 150):
+        num_labels (`int`, *optional*):
             The number of labels in the dataset. Needed to create the binary masks of shape `(batch, num_labels,
             height, width)`.
     """
@@ -83,10 +83,14 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         image_mean=None,
         image_std=None,
         ignore_index=255,
-        num_labels=150,
+        num_labels=None,
         **kwargs
     ):
         super().__init__(**kwargs)
+        if num_labels is None:
+            raise ValueError(
+                "`num_labels` must be set since MaskFormer takes as input binary masks of size `(batch, num_labels, height, width)."
+            )
         self.do_resize = do_resize
         self.size = size
         self.max_size = max_size
@@ -97,7 +101,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]  # ImageNet std
         self.num_labels = num_labels
 
-    def _resize_with_size_divisibility(self, image, size, target=None, max_size=None, **kwargs):
+    def _resize_with_size_divisibility(self, image, size, target=None, max_size=None):
         """
         Resize the image to the given size. Size can be min_size (scalar) or (width, height) tuple. If size is an int,
         smaller edge of the image will be matched to this number.
@@ -142,7 +146,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             width = int(np.ceil(width / self.size_divisibility)) * self.size_divisibility
 
         size = (width, height)
-        image = self.resize(image, size=size, **kwargs)
+        image = self.resize(image, size=size)
 
         if target is not None:
             target = self.resize(target, size=size, resample=Image.NEAREST)

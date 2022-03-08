@@ -175,6 +175,7 @@ class OriginalMaskFormerConfigToFeatureExtractorConverter:
             image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
             max_size=model_input.MAX_SIZE_TEST,
+            num_labels=model.SEM_SEG_HEAD.NUM_CLASSES,
             size_divisibility=32,  # 32 is required by swin
         )
 
