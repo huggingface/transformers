@@ -346,22 +346,40 @@ def booleans_processing(config, **kwargs):
 
 def unpack_inputs(func):
     """
-    **Demo docstring** Proof of concept decorator that essentially runs `input_processing()` as we have been using it,
-    but as a decorator. This allows the direct use of the arguments in the signature, as opposed through some
-    dictionary (e.g. do things like `a = input_ids`, as opposed to `a = inputs['input_ids']`), enabling clearer code.
+    Decorator that processes the inputs to a Keras layer, passing them to the layer as keyword arguments. This enables
+    downstream use of the inputs by their variable name, even if they arrive packed as a dictionary in the first input
+    (common case in Keras).
+
+    Args:
+        func (`callable`):
+            The callable function of the TensorFlow model.
+
+    Returns:
+        A callable that wraps the original `func` with the behavior described above.
     """
 
+    original_signature = inspect.signature(func)
+
     @functools.wraps(func)
-    def run_call_with_unpacked_inputs(self, input_ids, *args, **kwargs):
+    def run_call_with_unpacked_inputs(self, *args, **kwargs):
         # isolates the actual `**kwargs` for the decorated function
-        signature = dict(inspect.signature(func).parameters)
-        kwargs_call = {key: val for key, val in kwargs.items() if key not in signature}
+        kwargs_call = {key: val for key, val in kwargs.items() if key not in dict(original_signature.parameters)}
         fn_args_and_kwargs = {key: val for key, val in kwargs.items() if key not in kwargs_call}
         fn_args_and_kwargs.update({"kwargs_call": kwargs_call})
+
         # move any arg into kwargs, if they exist
-        fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames[2:], args)))
-        unpacked_inputs = input_processing(func, self.config, input_ids, **fn_args_and_kwargs)
+        fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames[1:], args)))
+
+        # process the inputs and call the wrapped function
+        main_input_name = getattr(self, "main_input_name", func.__code__.co_varnames[1])
+        main_input = fn_args_and_kwargs.pop(main_input_name)
+        unpacked_inputs = input_processing(func, self.config, main_input, **fn_args_and_kwargs)
         return func(self, **unpacked_inputs)
+
+    # Keras enforces the first layer argument to be passed, and checks it through `inspect.getfullargspec()`. This
+    # function does not follow wrapper chains (i.e. ignores `functools.wraps()`), meaning that without the line below
+    # Keras would attempt to check the first argument against the literal signature of the wrapper.
+    run_call_with_unpacked_inputs.__signature__ = original_signature
 
     return run_call_with_unpacked_inputs
 
