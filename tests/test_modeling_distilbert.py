@@ -20,7 +20,7 @@ from transformers import DistilBertConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -37,8 +37,8 @@ if is_torch_available():
         DistilBertModel,
     )
 
-class DistilBertModelTester(object):
 
+class DistilBertModelTester(object):
     def __init__(
         self,
         parent,
@@ -224,9 +224,7 @@ class DistilBertModelTester(object):
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_distilbert_for_causal_lm(
@@ -250,15 +248,6 @@ class DistilBertModelTester(object):
             # token_type_ids=token_type_ids,
             labels=token_labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_distilbert_for_masked_lm(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = DistilBertForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_model_for_causal_lm_as_decoder(
@@ -353,57 +342,6 @@ class DistilBertModelTester(object):
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_distilbert_for_question_answering(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = DistilBertForQuestionAnswering(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
-        )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
-
-    def create_and_check_distilbert_for_sequence_classification(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = DistilBertForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
-    def create_and_check_distilbert_for_token_classification(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = DistilBertForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
-    def create_and_check_distilbert_for_multiple_choice(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_choices = self.num_choices
-        model = DistilBertForMultipleChoice(config=config)
-        model.to(torch_device)
-        model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        result = model(
-            multiple_choice_inputs_ids,
-            attention_mask=multiple_choice_input_mask,
-            labels=choice_labels,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
 @require_torch
 class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):

@@ -26,7 +26,7 @@ from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import gelu
+from ...activations import ACT2FN, gelu
 from ...deepspeed import is_deepspeed_zero3_enabled
 from ...file_utils import (
     add_code_sample_docstrings,
@@ -1417,39 +1417,39 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
+                labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                    Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+                    num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
+                    `input_ids` above)
 
-        Returns:
+                Returns:
 
-        Examples:
+                Examples:
 
-        ```python
-        >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
-        >>> import torch
+                ```python
+                >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
+                >>> import torch
 
-        >>> tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
-        >>> model = DistilBertForMultipleChoice.from_pretrained("distilbert-base-cased")
+                >>> tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
+                >>> model = DistilBertForMultipleChoice.from_pretrained("distilbert-base-cased")
 
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> choice0 = "It is eaten with a fork and a knife."
-        >>> choice1 = "It is eaten while held in the hand."
-        >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
+                >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+                >>> choice0 = "It is eaten with a fork and a knife."
+                >>> choice1 = "It is eaten while held in the hand."
+                >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
 
-<<<<<<< HEAD
-            >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors='pt', padding=True)
-            >>> outputs = model(**{key: value.unsqueeze(0) for key,value in encoding.items()}, labels=labels) # batch size is 1
-=======
-        >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors="pt", padding=True)
-        >>> outputs = model(**{k: v.unsqueeze(0) for k, v in encoding.items()}, labels=labels)  # batch size is 1
->>>>>>> origin/master
+        <<<<<<< HEAD
+                    >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors='pt', padding=True)
+                    >>> outputs = model(**{key: value.unsqueeze(0) for key,value in encoding.items()}, labels=labels) # batch size is 1
+        =======
+                >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors="pt", padding=True)
+                >>> outputs = model(**{k: v.unsqueeze(0) for k, v in encoding.items()}, labels=labels)  # batch size is 1
+        >>>>>>> origin/master
 
-        >>> # the linear classifier still needs to be trained
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
-        ```"""
+                >>> # the linear classifier still needs to be trained
+                >>> loss = outputs.loss
+                >>> logits = outputs.logits
+                ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
