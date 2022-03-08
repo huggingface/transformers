@@ -629,13 +629,15 @@ class SwinLayer(nn.Module):
         self.pointing = False
 
     def forward(self, hidden_states, input_dimensions, head_mask=None, output_attentions=False):
-
         height, width = input_dimensions
+        block_attentions = () if output_attentions else None
         for i, block_module in enumerate(self.blocks):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             block_outputs = block_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            if output_attentions:
+                block_attentions += (block_outputs[1:],)
 
         if self.downsample is not None:
             height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
@@ -647,7 +649,7 @@ class SwinLayer(nn.Module):
         layer_outputs = (hidden_states, output_dimensions)
 
         if output_attentions:
-            layer_outputs += (block_outputs[1:],)
+            layer_outputs += block_attentions
         return layer_outputs
 
 
@@ -722,7 +724,7 @@ class SwinEncoder(nn.Module):
                 all_hidden_states += (hidden_states,)
 
             if output_attentions:
-                all_self_attentions += (layer_outputs[2],)
+                all_self_attentions += (layer_outputs[2:],)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
