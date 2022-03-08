@@ -60,10 +60,7 @@ def get_dpt_config(checkpoint_url):
 
 
 def remove_ignore_keys_(state_dict):
-    ignore_keys = [
-        "pretrained.model.head.weight",
-        "pretrained.model.head.bias",
-    ]
+    ignore_keys = ["pretrained.model.head.weight", "pretrained.model.head.bias"]
     for k in ignore_keys:
         state_dict.pop(k, None)
 

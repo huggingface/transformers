@@ -65,9 +65,9 @@ class DPTConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        out_indices (`List[int]`, *optional*, defaults to [2, 5, 8, 11]):
+        out_indices (`List[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
             Indices of the intermediate hidden states to use from backbone.
-        readout_type (`str`, *optional*, defaults to `project`):
+        readout_type (`str`, *optional*, defaults to `"project"`):
             The readout type to use when processing the readout token (CLS token) of the intermediate hidden states of
             the ViT backbone. Can be one of [`"ignore"`, `"add"`, `"project"`].
 
@@ -82,7 +82,7 @@ class DPTConfig(PretrainedConfig):
             The number of channels before fusion.
         in_index (`int`, *optional*, defaults to -1):
             The index of the features to use in the heads.
-        expand_channels (`bool`, *optional*, defaults to `False``):
+        expand_channels (`bool`, *optional*, defaults to `False`):
             Whether to expand the number of channels of the backbone feature maps.
         use_batch_norm (`bool`, *optional*, defaults to `False`):
             Whether to use batch normalization in the pre-activate residual units of the fusion blocks.

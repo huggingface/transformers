@@ -104,10 +104,8 @@ class DPTViTEmbeddings(nn.Module):
         self.config = config
 
     def _resize_pos_embed(self, posemb, gs_h, gs_w, start_index=1):
-        posemb_tok, posemb_grid = (
-            posemb[:, :start_index],
-            posemb[0, start_index:],
-        )
+        posemb_tok = posemb[:, :start_index]
+        posemb_grid = posemb[0, start_index:]
 
         gs_old = int(math.sqrt(len(posemb_grid)))
 
@@ -426,11 +424,7 @@ class DPTReassembleBlocks(nn.Module):
 
         self.projects = nn.ModuleList(
             [
-                nn.Conv2d(
-                    in_channels=config.hidden_size,
-                    out_channels=out_channel,
-                    kernel_size=1,
-                )
+                nn.Conv2d(in_channels=config.hidden_size, out_channels=out_channel, kernel_size=1)
                 for out_channel in out_channels
             ]
         )
@@ -480,8 +474,6 @@ class DPTReassembleBlocks(nn.Module):
             elif self.config.readout_type == "add":
                 x = x.flatten(2) + cls_token.unsqueeze(-1)
                 x = x.reshape(feature_shape)
-            else:
-                pass
             x = self.projects[i](x)
             x = self.resize_layers[i](x)
             out.append(x)
@@ -819,7 +811,7 @@ class DPTInterpolate(nn.Module):
             scale_factor (float): scaling
             mode (str): interpolation mode
         """
-        super(DPTInterpolate, self).__init__()
+        super().__init__()
 
         self.interpolate = nn.functional.interpolate
         self.scale_factor = scale_factor
@@ -834,12 +826,7 @@ class DPTInterpolate(nn.Module):
             tensor: interpolated data
         """
 
-        x = self.interpolate(
-            x,
-            scale_factor=self.scale_factor,
-            mode=self.mode,
-            align_corners=self.align_corners,
-        )
+        x = self.interpolate(x, scale_factor=self.scale_factor, mode=self.mode, align_corners=self.align_corners)
 
         return x
 
