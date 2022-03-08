@@ -2313,9 +2313,16 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         )
         queries = transformer_module_output.last_hidden_state
 
-        encoder_hidden_states = pixel_level_module_output.encoder_hidden_states if output_hidden_states else ()
-        pixel_decoder_hidden_states = pixel_level_module_output.decoder_hidden_states if output_hidden_states else ()
-        transformer_decoder_hidden_states = transformer_module_output.hidden_states if output_hidden_states else ()
+        if output_hidden_states:
+            encoder_hidden_states = pixel_level_module_output.encoder_hidden_states
+            pixel_decoder_hidden_states = pixel_level_module_output.decoder_hidden_states
+            transformer_decoder_hidden_states = transformer_module_output.hidden_states
+            hidden_states = encoder_hidden_states + pixel_decoder_hidden_states + transformer_decoder_hidden_states
+        else:
+            encoder_hidden_states = None
+            pixel_decoder_hidden_states = None
+            transformer_decoder_hidden_states = None
+            hidden_states = None
 
         output = MaskFormerModelOutput(
             encoder_last_hidden_state=image_features,
@@ -2324,7 +2331,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             pixel_decoder_hidden_states=pixel_decoder_hidden_states,
             transformer_decoder_hidden_states=transformer_decoder_hidden_states,
-            hidden_states=encoder_hidden_states + pixel_decoder_hidden_states + transformer_decoder_hidden_states,
+            hidden_states=hidden_states,
             attentions=transformer_module_output.attentions,
         )
 
@@ -2421,6 +2428,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         mask_labels: Optional[Tensor] = None,
         class_labels: Optional[Tensor] = None,
         pixel_mask: Optional[Tensor] = None,
+        output_auxiliary_logits: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2483,6 +2491,12 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
                 masks_queries_logits, class_queries_logits, mask_labels, class_labels, auxiliary_logits
             )
             loss = self.get_loss(loss_dict)
+
+        output_auxiliary_logits = (
+            self.config.output_auxiliary_logits if output_auxiliary_logits is None else output_auxiliary_logits
+        )
+        if not output_auxiliary_logits:
+            auxiliary_logits = None
 
         output = MaskFormerForInstanceSegmentationOutput(
             loss=loss,
