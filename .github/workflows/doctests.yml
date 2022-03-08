@@ -24,6 +24,7 @@ env:
   OMP_NUM_THREADS: 16
   MKL_NUM_THREADS: 16
   PYTEST_TIMEOUT: 600
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
 
 jobs:
@@ -33,6 +34,11 @@ jobs:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: |
+          git fetch && git checkout ${{ github.sha }}
+
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
