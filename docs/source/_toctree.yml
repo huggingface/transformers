@@ -114,7 +114,7 @@
       title: Logging
     - local: main_classes/model
       title: Models
-    - local: main_classes/text_generationgenerate
+    - local: main_classes/text_generation
       title: Text Generation
     - local: main_classes/onnx
       title: ONNX
