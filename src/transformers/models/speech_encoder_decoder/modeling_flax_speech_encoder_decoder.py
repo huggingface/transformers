@@ -250,13 +250,6 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
     def _get_decoder_module(self):
         return self.decoder
 
-    def freeze_feature_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder of the speech encoder in
-        order that its parameters are not updated during training.
-        """
-        self.encoder.freeze_feature_encoder()
-
     def __call__(
         self,
         inputs,
@@ -269,6 +262,7 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
+        freeze_feature_encoder: bool = False,
     ):
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -278,6 +272,7 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 deterministic=deterministic,
+                freeze_feature_encoder=freeze_feature_encoder,
             )
 
         encoder_hidden_states = encoder_outputs[0]
@@ -448,6 +443,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
+        freeze_feature_encoder: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
@@ -493,6 +489,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             deterministic=not train,
+            freeze_feature_encoder=freeze_feature_encoder,
             rngs=rngs,
             method=_encoder_forward,
         )
@@ -644,6 +641,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
+        freeze_feature_encoder: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
@@ -705,6 +703,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             deterministic=not train,
+            freeze_feature_encoder=freeze_feature_encoder,
             rngs=rngs,
         )
 
