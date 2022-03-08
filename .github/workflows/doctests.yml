@@ -37,7 +37,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt -y update && apt install -y libsndfile1-dev
+          apt -y update && apt install -y libsndfile1-dev ffmpeg
           pip install --upgrade pip
           pip install -U pytest
           pip install .[testing,torch-speech,sentencepiece,vision]

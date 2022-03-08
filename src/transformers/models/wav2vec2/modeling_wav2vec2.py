@@ -1611,7 +1611,6 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Wav2Vec2BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values,
@@ -1621,40 +1620,6 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         return_dict=None,
         labels=None,
     ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            TODO(PVP): Fill out when adding training
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForMaskedLM
-        >>> from datasets import load_dataset
-        >>> import soundfile as sf
-        >>> import torch
-
-        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-        >>> model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-base-960h")
-
-
-        >>> def map_to_array(batch):
-        ...     speech, _ = sf.read(batch["file"])
-        ...     batch["speech"] = speech
-        ...     return batch
-
-
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.map(map_to_array)
-
-        >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-        >>> logits = model(input_values).logits
-
-        >>> predicted_ids = torch.argmax(logits, dim=-1)
-        >>> transcription = processor.decode(predicted_ids[0])
-        ```"""
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.wav2vec2(
