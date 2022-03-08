@@ -54,11 +54,11 @@ _CONFIG_FOR_DOC = "DPTConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "DPTFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "google/dpt-base-patch16-224-in21k"
+_CHECKPOINT_FOR_DOC = "intel/dpt-lare"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/dpt-base-patch16-224"
+_IMAGE_CLASS_CHECKPOINT = "intel/dpt-large"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "'Egyptian cat'"
 
 
@@ -917,8 +917,8 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("islorg/dpt-large-ade")
-        >>> model = DPTForDepthEstimation.from_pretrained("islorg/dpt-large-ade")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("Intel/dpt-large-ade")
+        >>> model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large-ade")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 
@@ -1073,8 +1073,8 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
-        >>> model = DPTForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("Intel/dpt-large-ade")
+        >>> model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 

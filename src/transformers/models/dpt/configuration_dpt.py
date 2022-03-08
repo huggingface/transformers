@@ -20,8 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/vit-base-patch16-224": "https://huggingface.co/vit-base-patch16-224/resolve/main/config.json",
+DPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "Intel/dpt-large": "https://huggingface.co/intel/dpt-large/resolve/main/config.json",
     # See all DPT models at https://huggingface.co/models?filter=dpt
 }
 
