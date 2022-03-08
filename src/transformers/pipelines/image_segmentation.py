@@ -127,7 +127,7 @@ class ImageSegmentationPipeline(Pipeline):
             for segment in outputs["segments"]:
                 mask = (segmentation == segment["id"]) * 255
                 mask = Image.fromarray(mask.numpy().astype(np.uint8), mode="L")
-                label = self.model.config.id2label[segment["category_id"]]
+                label = self.model.config.id2label[segment["label_id"]]
                 annotation.append({"mask": mask, "label": label, "score": None})
         elif hasattr(self.feature_extractor, "post_process_segmentation"):
             # Panoptic
