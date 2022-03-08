@@ -29,7 +29,8 @@ class ResNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ResNetModel`]. It is used to instantiate an
     ResNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the [resnet50](...) architecture.
+    with the defaults will yield a similar configuration to that of the
+    [resnet-50](https://huggingface.co/microsoft/resnet-50) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
