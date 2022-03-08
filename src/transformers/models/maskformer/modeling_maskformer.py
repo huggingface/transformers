@@ -799,7 +799,7 @@ class MaskFormerSwinAttention(nn.Module):
     def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
         self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output, self_outputs[1]) if output_attentions else (attention_output,)
         return outputs
 
 

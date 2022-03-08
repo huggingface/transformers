@@ -553,7 +553,7 @@ class SwinBlock(nn.Module):
         height, width = input_dimensions
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states
-        
+
         hidden_states = self.layernorm_before(hidden_states)
         hidden_states = hidden_states.view(batch_size, height, width, channels)
         # pad hidden_states to multiples of window size
@@ -728,10 +728,14 @@ class SwinEncoder(nn.Module):
                 all_hidden_states += (hidden_states,)
 
             if output_attentions:
-                all_self_attentions += (layer_outputs[2:],)
-        
+                all_self_attentions += layer_outputs[2:]
+
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions, all_input_dimensions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions, all_input_dimensions]
+                if v is not None
+            )
 
         return SwinBaseModelOutput(
             last_hidden_state=hidden_states,
@@ -886,9 +890,8 @@ class SwinModel(SwinPreTrainedModel):
             pooled_output = self.pooler(sequence_output.transpose(1, 2))
             pooled_output = torch.flatten(pooled_output, 1)
 
-            
         if not return_dict:
-            output =  (sequence_output, pooled_output) + encoder_outputs[1:-1] 
+            output = (sequence_output, pooled_output) + encoder_outputs[1:-1]
             # spatial hidden sizes is at the end
             hidden_states_spatial_dimensions = (input_dimensions,) + encoder_outputs[-1]
             output += (hidden_states_spatial_dimensions,)
