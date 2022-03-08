@@ -1,8 +1,10 @@
 import torch
-from PIL import Image
 
-import requests
-from transformers import DPTConfig, DPTFeatureExtractor, DPTForDepthEstimation
+# import requests
+from transformers import DPTConfig, DPTForDepthEstimation
+
+
+# from PIL import Image
 
 
 # feature_extractor = DPTFeatureExtractor(ensure_multiple_of=88)

@@ -45,9 +45,9 @@ class DPTModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         image_size=32,
-        patch_size=2,
+        patch_size=16,
         num_channels=3,
         is_training=True,
         use_labels=True,
@@ -125,7 +125,7 @@ class DPTModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.image_size, self.image_size))
 
     def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -133,7 +133,9 @@ class DPTModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size, self.image_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

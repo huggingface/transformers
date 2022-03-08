@@ -794,11 +794,8 @@ class DPTNeck(nn.Module):
 
         # postprocess hidden states
         features = self.reassemble_blocks(hidden_states)
-        features = [self.convs[i](feature) for i, feature in enumerate(features)]
 
-        print("Shape of hidden states after reassembling:")
-        for i in features:
-            print(i.shape)
+        features = [self.convs[i](feature) for i, feature in enumerate(features)]
 
         # fusion blocks
         output = []
@@ -947,15 +944,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         # note that the hidden_states also include the initial embeddings
         hidden_states = [feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.out_indices]
 
-        print("Shape of hidden states:")
-        for i in hidden_states:
-            print(i.shape)
-
         hidden_states = self.neck(hidden_states)
-
-        print("Shape of hidden states after neck:")
-        for i in hidden_states:
-            print(i.shape)
 
         logits = self.head(hidden_states[-1])
         logits = logits.squeeze(dim=1)
