@@ -44,7 +44,7 @@ _FEAT_EXTRACTOR_FOR_DOC = "PoolFormerFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "sail/poolformer_s12"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+_EXPECTED_OUTPUT_SHAPE = [1, 512, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "sail/poolformer_s12"
