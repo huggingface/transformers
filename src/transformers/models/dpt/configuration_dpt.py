@@ -80,6 +80,8 @@ class DPTConfig(PretrainedConfig):
             The number of output channels for each of the four feature maps of the backbone.
         channels (`int`, *optional*, defaults to 256):
             The number of channels before fusion.
+        in_index (`int`, *optional*, defaults to -1):
+            The index of the features to use in the heads.
         expand_channels (`bool`, *optional*, defaults to `False``):
             Whether to expand the number of channels of the backbone feature maps.
         use_batch_norm (`bool`, *optional*, defaults to `False`):
@@ -127,6 +129,7 @@ class DPTConfig(PretrainedConfig):
         readout_type="project",
         post_process_channels=[96, 192, 384, 768],
         channels=256,
+        in_index=-1,
         expand_channels=False,
         use_batch_norm=False,
         use_auxiliary_head=True,
@@ -155,6 +158,7 @@ class DPTConfig(PretrainedConfig):
         self.readout_type = readout_type
         self.post_process_channels = post_process_channels
         self.channels = channels
+        self.in_index = in_index
         self.expand_channels = expand_channels
         self.use_batch_norm = use_batch_norm
         # auxiliary head attributes (semantic segmentation)

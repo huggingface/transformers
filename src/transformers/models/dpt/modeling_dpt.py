@@ -758,7 +758,8 @@ class DPTViTPooler(nn.Module):
 
 class DPTNeck(nn.Module):
     """
-    DPTNeck, which includes:
+    DPTNeck. A neck is a module that isused between the backbone and the head. It takes a list of tensors as input and
+    produces another list of tensors as output. For DPT, it includes:
 
     * DPTReassembleBlocks
     * FeatureFusionBlocks.
@@ -853,6 +854,8 @@ class DPTDepthEstimationHead(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        self.config = config
+
         features = config.channels
         self.head = nn.Sequential(
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
@@ -865,6 +868,9 @@ class DPTDepthEstimationHead(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # use last features
+        hidden_states = hidden_states[self.config.in_index]
+
         logits = self.head(hidden_states)
 
         return logits
@@ -946,7 +952,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         hidden_states = self.neck(hidden_states)
 
-        logits = self.head(hidden_states[-1])
+        logits = self.head(hidden_states)
         logits = logits.squeeze(dim=1)
 
         loss = None
@@ -972,6 +978,8 @@ class DPTSemanticSegmentationHead(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        self.config = config
+
         features = config.channels
         self.head = nn.Sequential(
             nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
@@ -983,6 +991,9 @@ class DPTSemanticSegmentationHead(nn.Module):
         )
 
     def forward(self, hidden_states):
+        # use last features
+        hidden_states = hidden_states[self.config.in_index]
+
         logits = self.head(hidden_states)
 
         return logits
@@ -1102,7 +1113,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
         hidden_states = self.neck(hidden_states)
 
-        logits = self.head(hidden_states[-1])
+        logits = self.head(hidden_states)
 
         auxiliary_logits = None
         if self.auxiliary_head is not None:
