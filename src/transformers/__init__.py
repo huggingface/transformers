@@ -2248,6 +2248,7 @@ if is_flax_available():
             "FlaxAutoModelForQuestionAnswering",
             "FlaxAutoModelForSeq2SeqLM",
             "FlaxAutoModelForSequenceClassification",
+            "FlaxAutoModelForSpeechSeq2Seq",
             "FlaxAutoModelForTokenClassification",
             "FlaxAutoModelForVision2Seq",
         ]
@@ -4274,6 +4275,7 @@ if TYPE_CHECKING:
             FlaxAutoModelForQuestionAnswering,
             FlaxAutoModelForSeq2SeqLM,
             FlaxAutoModelForSequenceClassification,
+            FlaxAutoModelForSpeechSeq2Seq,
             FlaxAutoModelForTokenClassification,
             FlaxAutoModelForVision2Seq,
         )

@@ -40,6 +40,7 @@ import jax
 import jax.numpy as jnp
 import optax
 import transformers
+import flax
 from flax import jax_utils, traverse_util
 from flax.jax_utils import replicate, unreplicate
 from flax.training import train_state
@@ -53,9 +54,7 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     HfArgumentParser,
-    Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
-    set_seed,
     is_tensorboard_available,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
@@ -71,7 +70,7 @@ require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/spe
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@flax.struct.dataclass
 class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
@@ -112,7 +111,7 @@ class ModelArguments:
         default=True, metadata={"help": "Whether to freeze the feature encoder layers of the model."}
     )
 
-@dataclass
+@flax.struct.dataclass
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
@@ -198,28 +197,45 @@ class TrainState(train_state.TrainState):
     def replicate(self):
         return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
 
-def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuffle: bool = False):
+@flax.struct.dataclass
+class FlaxDataCollatorSpeechSeq2SeqWithPadding:
     """
-    Returns batches of size `batch_size` from truncated `dataset`, sharded over all local devices.
-    Shuffle batches if `shuffle` is `True`.
+    Data collator that will dynamically pad the inputs received.
+    Args:
+        processor ([`Wav2Vec2Processor`])
+            The processor used for proccessing the data.
+        decoder_start_token_id (`int`)
+            The begin-of-sentence of the decoder.
     """
-    steps_per_epoch = len(dataset) // batch_size
+    processor: Any
+    decoder_start_token_id: int
 
-    if shuffle:
-        batch_idx = jax.random.permutation(rng, len(dataset))
-    else:
-        batch_idx = jnp.arange(len(dataset))
+    def __call__(self, features: List[Dict[str, Union[List[int], np.ndarray]]]) -> Dict[str, np.ndarray]:
+        # split inputs and labels since they have to be of different lenghts and need
+        # different padding methods
+        input_features = [{"input_values": feature["input_values"]} for feature in features]
+        label_features = [{"input_ids": feature["labels"]} for feature in features]
 
-    batch_idx = batch_idx[: steps_per_epoch * batch_size]  # Skip incomplete batch.
-    batch_idx = batch_idx.reshape((steps_per_epoch, batch_size))
+        batch = self.processor.feature_extractor.pad(input_features, return_tensors="np")
 
-    for idx in batch_idx:
-        batch = dataset[idx]
-        batch = {k: jnp.array(v) for k, v in batch.items()}
+        labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="np", )
 
-        batch = shard(batch)
+        # replace padding with -100 to ignore loss correctly
+        labels_batch["input_ids"] = np.ma.array(labels_batch["input_ids"], mask=np.not_equal(labels_batch.attention_mask, 1))
+        labels = labels_batch["input_ids"].filled(fill_value=-100)
 
-        yield batch
+        # if bos token is appended in previous tokenization step,
+        # cut bos token here as it's append later anyways
+        if (labels[:, 0] == self.decoder_start_token_id).all().item():
+            labels = labels[:, 1:]
+
+        batch["labels"] = labels
+
+        batch['inputs'] = batch.pop("input_values")
+
+        batch['decoder_attention_mask'] = labels_batch.attention_mask
+
+        return batch
 
 
 def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
@@ -247,6 +263,16 @@ def create_learning_rate_fn(
     )
     schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps])
     return schedule_fn
+
+def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+    num_samples = len(samples_idx)
+    samples_to_remove = num_samples % batch_size
+
+    if samples_to_remove != 0:
+        samples_idx = samples_idx[:-samples_to_remove]
+    sections_split = num_samples // batch_size
+    batch_idx = np.split(samples_idx, sections_split)
+    return batch_idx
 
 def main():
     # 1. Parse input arguments
@@ -354,6 +380,7 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+    import ipdb; ipdb.set_trace()
     model = FlaxAutoModelForSpeechSeq2Seq.from_pretrained(
         model_args.model_name_or_path,
         config=config,
@@ -364,10 +391,6 @@ def main():
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
-
-    #TODO: freeze feature encoder
-    if model_args.freeze_feature_encoder:
-        model.freeze_feature_encoder()
 
     # 6. Resample speech dataset if necessary
     dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
@@ -456,6 +479,8 @@ def main():
         config.save_pretrained(training_args.output_dir)
 
     processor = AutoProcessor.from_pretrained(training_args.output_dir)
+
+    data_collator = FlaxDataCollatorSpeechSeq2SeqWithPadding(processor=processor, decoder_start_token_id=model.config.decoder_start_token_id)
 
     # Enable tensorboard only on the master node
     has_tensorboard = is_tensorboard_available()
@@ -588,11 +613,7 @@ def main():
         return metrics
 
     # Define generation function
-    max_length = (
-        data_args.val_max_target_length if data_args.val_max_target_length is not None else model.config.max_length
-    )
-    num_beams = data_args.num_beams if data_args.num_beams is not None else model.config.num_beams
-    gen_kwargs = {"max_length": max_length, "num_beams": num_beams}
+    gen_kwargs = {"max_length": model.config.max_length, "num_beams": model.config.num_beams}
 
     def generate_step(params, batch):
         model.params = params
@@ -627,11 +648,15 @@ def main():
         train_metrics = []
 
         # Generate an epoch by shuffling sampling indices from the train dataset
-        train_loader = data_loader(input_rng, vectorized_datasets["train"], train_batch_size, shuffle=True)
-        steps_per_epoch = len(vectorized_datasets["train"]) // train_batch_size
-        # train
-        for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
-            batch = next(train_loader)
+        num_train_samples = len(vectorized_datasets["train"])
+        train_samples_idx = jax.random.permutation(input_rng, jnp.arange(num_train_samples))
+        train_batch_idx = generate_batch_splits(train_samples_idx, train_batch_size)
+
+        # Gather the indexes for creating the batch and do a training step
+        for step, batch_idx in enumerate(tqdm(train_batch_idx, desc="Training...", position=1)):
+            samples = [vectorized_datasets["train"][int(idx)] for idx in batch_idx]
+            batch = data_collator(samples)
+            batch = shard(batch.data)
             state, train_metric = p_train_step(state, batch)
             train_metrics.append(train_metric)
 
@@ -648,11 +673,13 @@ def main():
         eval_preds = []
         eval_labels = []
 
-        eval_loader = data_loader(input_rng, vectorized_datasets["eval"], eval_batch_size)
-        eval_steps = len(vectorized_datasets["eval"]) // eval_batch_size
-        for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
-            # Model forward
-            batch = next(eval_loader)
+        num_eval_samples = len(vectorized_datasets["validation"])
+        eval_samples_idx = jnp.arange(num_eval_samples)
+        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
+        for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
+            samples = [vectorized_datasets["validation"][int(idx)] for idx in batch_idx]
+            batch = data_collator(samples)
+            batch = shard(batch)
             labels = batch["labels"]
 
             metrics = p_eval_step(state.params, batch)
