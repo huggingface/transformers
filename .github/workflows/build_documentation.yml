@@ -89,7 +89,7 @@ jobs:
         run: |
           cd doc-build &&
           git pull &&
-          cp -r ../builder_dir/transformers . &&
+          cp -r ../builder_dir ./transformers &&
           git status &&
           cd .. &&
 
