@@ -50,7 +50,7 @@ _IMAGE_CLASS_CHECKPOINT = "van-base"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 VAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "van-base",
+    "zuppif/van-base",
     # See all van models at https://huggingface.co/models?filter=van
 ]
 
@@ -182,8 +182,9 @@ class VanMlpLayer(nn.Sequential):
         self.fc1 = nn.Conv2d(in_channels, hidden_size, kernel_size=1)
         self.depth_wise = nn.Conv2d(hidden_size, hidden_size, kernel_size=3, padding=1, groups=hidden_size)
         self.activation = ACT2FN[hidden_act]
+        self.drop1 = nn.Dropout(dropout_rate)
         self.fc2 = nn.Conv2d(hidden_size, out_channels, kernel_size=1)
-        self.norm = nn.Dropout(dropout_rate)
+        self.drop2 = nn.Dropout(dropout_rate)
 
 
 class VanLargeKernelAttention(nn.Sequential):
@@ -237,7 +238,7 @@ class VanSpatialAttentionLayer(nn.Module):
         hidden_state = self.attention_layer(hidden_state)
         hidden_state = self.post_projection(hidden_state)
 
-        return residual + hidden_state
+        return hidden_state + residual
 
 
 class VanLayerScaling(nn.Module):
@@ -284,7 +285,6 @@ class VanLayer(nn.Module):
         hidden_state = self.mlp(hidden_state)
         hidden_state = self.mlp_scaling(hidden_state)
         hidden_state = self.drop_path(hidden_state)
-        hidden_state = residual + hidden_state
         # residual connection
         hidden_state = residual + hidden_state
         return hidden_state
@@ -311,6 +311,7 @@ class VanStage(nn.Module):
         drop_path_rate: float = 0.0,
         dropout_rate: float = 0.0,
         hidden_act: str = "gelu",
+        layer_norm_eps: float = 1e-6,
     ):
         super().__init__()
         self.embeddings = VanOverlappingPatchEmbedder(in_channels, hidden_size, patch_size, stride)
@@ -326,17 +327,18 @@ class VanStage(nn.Module):
                 for _ in range(depth)
             ]
         )
-        self.norm = nn.LayerNorm(hidden_size, eps=1e-6)
+        self.norm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
 
     def forward(self, hidden_state):
         hidden_state = self.embeddings(hidden_state)
         hidden_state = self.layers(hidden_state)
         # rearrange b c h w -> b (h w) c
-        batch_size, hidden_size , height, width = hidden_state.shape
+        batch_size, hidden_size, height, width = hidden_state.shape
         hidden_state = hidden_state.flatten(2).transpose(1, 2)
         hidden_state = self.norm(hidden_state)
         hidden_state = hidden_state.view(batch_size, height, width, hidden_size).permute(0, 3, 1, 2)
         return hidden_state
+
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextEncoder with ConvNext->Van
 class VanEncoder(nn.Module):
@@ -369,6 +371,7 @@ class VanEncoder(nn.Module):
                     mlp_expansion=mlp_expantion,
                     drop_path_rate=drop_path_rate,
                     dropout_rate=config.dropout_rate,
+                    layer_norm_eps=config.layer_norm_eps,
                 )
             )
 
@@ -474,19 +477,14 @@ class VanModel(VanPreTrainedModel):
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
-    def forward(self, pixel_values=None, output_hidden_states=None, return_dict=None):
+    def forward(self, pixel_values, output_hidden_states=None, return_dict=None):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        embedding_output = self.embeddings(pixel_values)
-
         encoder_outputs = self.encoder(
-            embedding_output,
+            pixel_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -494,7 +492,7 @@ class VanModel(VanPreTrainedModel):
         last_hidden_state = encoder_outputs[0]
 
         # global average pooling, (N, C, H, W) -> (N, C)
-        pooled_output = self.layernorm(last_hidden_state.mean([-2, -1]))
+        pooled_output = last_hidden_state.mean([-2, -1])
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -513,7 +511,6 @@ class VanModel(VanPreTrainedModel):
     """,
     VAN_START_DOCSTRING,
 )
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextForImageClassification with CONVNEXT->VAN,ConvNext->Van,convnext->van
 class VanForImageClassification(VanPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "van-base": "https://huggingface.co/van-base/resolve/main/config.json",
+    "van-base": "https://huggingface.co/zuppif/van-base/blob/main/config.json",
 }
 
 
@@ -81,8 +81,8 @@ class VanConfig(PretrainedConfig):
         mlp_expansions=[8, 8, 4, 4],
         hidden_act="gelu",
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        layer_scale_init_value=1e-6,
+        layer_norm_eps=1e-6,
+        layer_scale_init_value=1e-2,
         drop_path_rate=0.0,
         dropout_rate=0.0,
         image_size=224,

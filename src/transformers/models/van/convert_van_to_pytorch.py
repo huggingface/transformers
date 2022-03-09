@@ -14,19 +14,24 @@
 # limitations under the License.
 """Convert Van checkpoints from the original repository.
 
-URL: https://github.com/facebookresearch/ConvNeXt"""
+URL: https://github.com/Visual-Attention-Network/VAN-Classification"""
 
 
 import argparse
 import json
+import sys
+from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
+from typing import List
 
 import torch
-from PIL import Image
+import torch.nn as nn
+from torch import Tensor
 
-import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import VanConfig, VanFeatureExtractor, VanForImageClassification
+from transformers import AutoFeatureExtractor, VanConfig, VanForImageClassification
+from transformers.models.van.modeling_van import VanLayerScaling
 from transformers.utils import logging
 
 
@@ -34,210 +39,240 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_van_config(checkpoint_url):
-    config = VanConfig()
+@dataclass
+class Tracker:
+    module: nn.Module
+    traced: List[nn.Module] = field(default_factory=list)
+    handles: list = field(default_factory=list)
 
-    if "tiny" in checkpoint_url:
-        depths = [3, 3, 9, 3]
-        hidden_sizes = [96, 192, 384, 768]
-    if "small" in checkpoint_url:
-        depths = [3, 3, 27, 3]
-        hidden_sizes = [96, 192, 384, 768]
-    if "base" in checkpoint_url:
-        depths = [3, 3, 27, 3]
-        hidden_sizes = [128, 256, 512, 1024]
-    if "large" in checkpoint_url:
-        depths = [3, 3, 27, 3]
-        hidden_sizes = [192, 384, 768, 1536]
-    if "xlarge" in checkpoint_url:
-        depths = [3, 3, 27, 3]
-        hidden_sizes = [256, 512, 1024, 2048]
+    def _forward_hook(self, m, inputs: Tensor, outputs: Tensor):
+        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d)
+        if has_not_submodules:
+            if not isinstance(m, VanLayerScaling):
+                self.traced.append(m)
 
-    if "1k" in checkpoint_url:
-        num_labels = 1000
-        filename = "imagenet-1k-id2label.json"
-        expected_shape = (1, 1000)
-    else:
-        num_labels = 21841
-        filename = "imagenet-22k-id2label.json"
-        expected_shape = (1, 21841)
+    def __call__(self, x: Tensor):
+        for m in self.module.modules():
+            self.handles.append(m.register_forward_hook(self._forward_hook))
+        self.module(x)
+        list(map(lambda x: x.remove(), self.handles))
+        return self
+
+    @property
+    def parametrized(self):
+        # check the len of the state_dict keys to see if we have learnable params
+        return list(filter(lambda x: len(list(x.state_dict().keys())) > 0, self.traced))
+
+
+@dataclass
+class ModuleTransfer:
+    src: nn.Module
+    dest: nn.Module
+    verbose: int = 0
+    src_skip: List = field(default_factory=list)
+    dest_skip: List = field(default_factory=list)
+
+    def __call__(self, x: Tensor):
+        """
+        Transfer the weights of `self.src` to `self.dest` by performing a forward pass using `x` as input. Under the
+        hood we tracked all the operations in both modules.
+        """
+        dest_traced = Tracker(self.dest)(x).parametrized
+        src_traced = Tracker(self.src)(x).parametrized
+
+        src_traced = list(filter(lambda x: type(x) not in self.src_skip, src_traced))
+        dest_traced = list(filter(lambda x: type(x) not in self.dest_skip, dest_traced))
+
+        if len(dest_traced) != len(src_traced):
+            raise Exception(
+                f"Numbers of operations are different. Source module has {len(src_traced)} operations while destination module has {len(dest_traced)}."
+            )
+
+        for dest_m, src_m in zip(dest_traced, src_traced):
+            dest_m.load_state_dict(src_m.state_dict())
+            if self.verbose == 1:
+                print(f"Transfered from={src_m} to={dest_m}")
+
+
+def copy_parameters(from_model: nn.Module, our_model: nn.Module) -> nn.Module:
+
+    from_state_dict = from_model.state_dict()
+    our_state_dict = our_model.state_dict()
+    config = our_model.config
+    all_keys = []
+    for stage_idx in range(len(config.hidden_sizes)):
+        for block_id in range(config.depths[stage_idx]):
+            from_key = f"block{stage_idx + 1}.{block_id}.layer_scale_1"
+            to_key = f"van.encoder.stages.{stage_idx}.layers.{block_id}.attention_scaling.weight"
+
+            all_keys.append((from_key, to_key))
+            from_key = f"block{stage_idx + 1}.{block_id}.layer_scale_2"
+            to_key = f"van.encoder.stages.{stage_idx}.layers.{block_id}.mlp_scaling.weight"
+
+            all_keys.append((from_key, to_key))
+
+    for from_key, to_key in all_keys:
+        # print(f'converting {from_key}->{to_key}')
+        our_state_dict[to_key] = from_state_dict.pop(from_key)
+
+    our_model.load_state_dict(our_state_dict)
+    return our_model
+
+
+def convert_weight_and_push(
+    name: str,
+    config: VanConfig,
+    checkpoint: str,
+    from_model: nn.Module,
+    save_directory: Path,
+    push_to_hub: bool = True,
+):
+    print(f"Downloading weights for {name}...")
+    checkpoint_path = cached_download(checkpoint)
+    print(f"Converting {name}...")
+    from_state_dict = torch.load(checkpoint_path)["state_dict"]
+    from_model.load_state_dict(from_state_dict)
+    from_model.eval()
+    with torch.no_grad():
+        our_model = VanForImageClassification(config).eval()
+        module_transfer = ModuleTransfer(src=from_model, dest=our_model)
+        x = torch.randn((1, 3, 224, 224))
+        module_transfer(x)
+        our_model = copy_parameters(from_model, our_model)
+
+    assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
+
+    checkpoint_name = name
+    print(checkpoint_name)
+
+    if push_to_hub:
+        our_model.push_to_hub(
+            repo_path_or_name=save_directory / checkpoint_name,
+            commit_message="Add model",
+            use_temp_dir=True,
+        )
+
+        # we can use the convnext one
+        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
+        feature_extractor.push_to_hub(
+            repo_path_or_name=save_directory / checkpoint_name,
+            commit_message="Add feature extractor",
+            use_temp_dir=True,
+        )
+
+        print(f"Pushed {checkpoint_name}")
+
+
+def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
+    filename = "imagenet-1k-id2label.json"
+    num_labels = 1000
+    expected_shape = (1, num_labels)
 
     repo_id = "datasets/huggingface/label-files"
-    config.num_labels = num_labels
+    num_labels = num_labels
     id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
-    if "1k" not in checkpoint_url:
-        # this dataset contains 21843 labels but the model only has 21841
-        # we delete the classes as mentioned in https://github.com/google-research/big_transfer/issues/18
-        del id2label[9205]
-        del id2label[15027]
-    config.id2label = id2label
-    config.label2id = {v: k for k, v in id2label.items()}
-    config.hidden_sizes = hidden_sizes
-    config.depths = depths
 
-    return config, expected_shape
+    id2label = id2label
+    label2id = {v: k for k, v in id2label.items()}
 
+    ImageNetPreTrainedConfig = partial(VanConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)
 
-def rename_key(name):
-    if "downsample_layers.0.0" in name:
-        name = name.replace("downsample_layers.0.0", "embeddings.patch_embeddings")
-    if "downsample_layers.0.1" in name:
-        name = name.replace("downsample_layers.0.1", "embeddings.norm")  # we rename to layernorm later on
-    if "downsample_layers.1.0" in name:
-        name = name.replace("downsample_layers.1.0", "stages.1.downsampling_layer.0")
-    if "downsample_layers.1.1" in name:
-        name = name.replace("downsample_layers.1.1", "stages.1.downsampling_layer.1")
-    if "downsample_layers.2.0" in name:
-        name = name.replace("downsample_layers.2.0", "stages.2.downsampling_layer.0")
-    if "downsample_layers.2.1" in name:
-        name = name.replace("downsample_layers.2.1", "stages.2.downsampling_layer.1")
-    if "downsample_layers.3.0" in name:
-        name = name.replace("downsample_layers.3.0", "stages.3.downsampling_layer.0")
-    if "downsample_layers.3.1" in name:
-        name = name.replace("downsample_layers.3.1", "stages.3.downsampling_layer.1")
-    if "stages" in name and "downsampling_layer" not in name:
-        # stages.0.0. for instance should be renamed to stages.0.layers.0.
-        name = name[: len("stages.0")] + ".layers" + name[len("stages.0") :]
-    if "stages" in name:
-        name = name.replace("stages", "encoder.stages")
-    if "norm" in name:
-        name = name.replace("norm", "layernorm")
-    if "gamma" in name:
-        name = name.replace("gamma", "layer_scale_parameter")
-    if "head" in name:
-        name = name.replace("head", "classifier")
+    names_to_config = {
+        "van-tiny": ImageNetPreTrainedConfig(
+            hidden_sizes=[32, 64, 160, 256],
+            depths=[3, 3, 5, 2],
+            mlp_expansions=[8, 8, 4, 4],
+        ),
+        "van-small": ImageNetPreTrainedConfig(
+            hidden_sizes=[64, 128, 320, 512],
+            depths=[2, 2, 4, 2],
+            mlp_expansions=[8, 8, 4, 4],
+        ),
+        "van-base": ImageNetPreTrainedConfig(
+            hidden_sizes=[64, 128, 320, 512],
+            depths=[3, 3, 12, 3],
+            mlp_expansions=[8, 8, 4, 4],
+        ),
+        "van-large": ImageNetPreTrainedConfig(
+            hidden_sizes=[64, 128, 320, 512],
+            depths=[3, 5, 27, 3],
+            mlp_expansions=[8, 8, 4, 4],
+        ),
+    }
 
-    return name
+    names_to_original_models = {
+        "van-tiny": van_tiny,
+        "van-small": van_small,
+        "van-base": van_base,
+        "van-large": van_large,
+    }
 
+    names_to_original_checkpoints = {
+        "van-tiny": "https://huggingface.co/Visual-Attention-Network/VAN-Tiny/resolve/main/van_tiny_754.pth.tar",
+        "van-small": "https://huggingface.co/Visual-Attention-Network/VAN-Small/resolve/main/van_small_811.pth.tar",
+        "van-base": "https://huggingface.co/Visual-Attention-Network/VAN-Base/resolve/main/van_base_828.pth.tar",
+        "van-large": "https://huggingface.co/Visual-Attention-Network/VAN-Large/resolve/main/van_large_839.pth.tar",
+    }
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
-
-
-@torch.no_grad()
-def convert_van_checkpoint(checkpoint_url, pytorch_dump_folder_path):
-    """
-    Copy/paste/tweak model's weights to our Van structure.
-    """
-
-    # define Van configuration based on URL
-    config, expected_shape = get_van_config(checkpoint_url)
-    # load original state_dict from URL
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
-    # rename keys
-    for key in state_dict.copy().keys():
-        val = state_dict.pop(key)
-        state_dict[rename_key(key)] = val
-    # add prefix to all keys expect classifier head
-    for key in state_dict.copy().keys():
-        val = state_dict.pop(key)
-        if not key.startswith("classifier"):
-            key = "van." + key
-        state_dict[key] = val
-
-    # load HuggingFace model
-    model = VanForImageClassification(config)
-    model.load_state_dict(state_dict)
-    model.eval()
-
-    # Check outputs on an image, prepared by VanFeatureExtractor
-    size = 224 if "224" in checkpoint_url else 384
-    feature_extractor = VanFeatureExtractor(size=size)
-    pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
-
-    logits = model(pixel_values).logits
-
-    # note: the logits below were obtained without center cropping
-    if checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_tiny_1k_224_ema.pth":
-        expected_logits = torch.tensor([-0.1210, -0.6605, 0.1918])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_small_1k_224_ema.pth":
-        expected_logits = torch.tensor([-0.4473, -0.1847, -0.6365])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_base_1k_224_ema.pth":
-        expected_logits = torch.tensor([0.4525, 0.7539, 0.0308])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_base_1k_384.pth":
-        expected_logits = torch.tensor([0.3561, 0.6350, -0.0384])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_large_1k_224_ema.pth":
-        expected_logits = torch.tensor([0.4174, -0.0989, 0.1489])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_large_1k_384.pth":
-        expected_logits = torch.tensor([0.2513, -0.1349, -0.1613])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_base_22k_224.pth":
-        expected_logits = torch.tensor([1.2980, 0.3631, -0.1198])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_large_22k_224.pth":
-        expected_logits = torch.tensor([1.2963, 0.1227, 0.1723])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_xlarge_22k_224.pth":
-        expected_logits = torch.tensor([1.7956, 0.8390, 0.2820])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_base_22k_1k_224.pth":
-        expected_logits = torch.tensor([-0.2822, -0.0502, -0.0878])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_base_22k_1k_384.pth":
-        expected_logits = torch.tensor([-0.5672, -0.0730, -0.4348])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_large_22k_1k_224.pth":
-        expected_logits = torch.tensor([0.2681, 0.2365, 0.6246])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_large_22k_1k_384.pth":
-        expected_logits = torch.tensor([-0.2642, 0.3931, 0.5116])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_xlarge_22k_1k_224_ema.pth":
-        expected_logits = torch.tensor([-0.6677, -0.1873, -0.8379])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/van/van_xlarge_22k_1k_384_ema.pth":
-        expected_logits = torch.tensor([-0.7749, -0.2967, -0.6444])
+    if model_name:
+        convert_weight_and_push(
+            model_name,
+            names_to_config[model_name],
+            checkpoint=names_to_original_checkpoints[model_name],
+            from_model=names_to_original_models[model_name](),
+            save_directory=save_directory,
+            push_to_hub=push_to_hub,
+        )
     else:
-        raise ValueError(f"Unknown URL: {checkpoint_url}")
-
-    assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
-    assert logits.shape == expected_shape
-
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
-
-    print("Pushing model to the hub...")
-    model_name = "van"
-    if "tiny" in checkpoint_url:
-        model_name += "-tiny"
-    elif "small" in checkpoint_url:
-        model_name += "-small"
-    elif "base" in checkpoint_url:
-        model_name += "-base"
-    elif "xlarge" in checkpoint_url:
-        model_name += "-xlarge"
-    elif "large" in checkpoint_url:
-        model_name += "-large"
-    if "224" in checkpoint_url:
-        model_name += "-224"
-    elif "384" in checkpoint_url:
-        model_name += "-384"
-    if "22k" in checkpoint_url and "1k" not in checkpoint_url:
-        model_name += "-22k"
-    if "22k" in checkpoint_url and "1k" in checkpoint_url:
-        model_name += "-22k-1k"
-
-    model.push_to_hub(
-        repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-        organization="nielsr",
-        commit_message="Add model",
-    )
+        for model_name, config in names_to_config.items():
+            convert_weight_and_push(
+                model_name,
+                names_to_config[model_name],
+                checkpoint=names_to_original_checkpoints[model_name],
+                from_model=names_to_original_models[model_name](),
+                save_directory=save_directory,
+                push_to_hub=push_to_hub,
+            )
+    return config, expected_shape
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--checkpoint_url",
-        default="https://dl.fbaipublicfiles.com/van/van_tiny_1k_224_ema.pth",
+        "--model-name",
+        default=None,
         type=str,
-        help="URL of the original ConvNeXT checkpoint you'd like to convert.",
+        help="The name of the model you wish to convert, it must be one of the supported resnet* architecture, currently: van-tiny/small/base/large. If `None`, all of them will the converted.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
         default=None,
-        type=str,
+        type=Path,
         required=True,
         help="Path to the output PyTorch model directory.",
     )
+    parser.add_argument(
+        "--van_dir",
+        required=True,
+        type=Path,
+        help="A path to VAN's original implementation directory. You can download from here: https://github.com/Visual-Attention-Network/VAN-Classification",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        default=True,
+        type=bool,
+        required=False,
+        help="If True, push model and feature extractor to the hub.",
+    )
 
     args = parser.parse_args()
-    convert_van_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path)
+    pytorch_dump_folder_path: Path = args.pytorch_dump_folder_path
+    pytorch_dump_folder_path.mkdir(exist_ok=True, parents=True)
+    van_dir = args.van_dir
+    # append the path to the parents to maskformer dir
+    sys.path.append(str(van_dir.parent))
+    from van.models.van import van_base, van_large, van_small, van_tiny
+
+    convert_weights_and_push(pytorch_dump_folder_path, args.model_name, args.push_to_hub)
