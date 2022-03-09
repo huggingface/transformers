@@ -921,8 +921,6 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
-        # make sure initialization pass will work for FlaxBartForSequenceClassificationModule
-        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
         attention_mask = jnp.ones_like(input_ids)
         decoder_input_ids = input_ids
         decoder_attention_mask = jnp.ones_like(input_ids)
@@ -1789,6 +1787,7 @@ class FlaxBartPreTrainedDecoderModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
+    @add_start_docstrings_to_model_forward(BART_DECODE_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,
@@ -1828,7 +1827,7 @@ class FlaxBartPreTrainedDecoderModel(FlaxPreTrainedModel):
 
         # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed
         # down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be
-        # changed by FlaxXGLMAttention module
+        # changed by FlaxBartAttention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
@@ -1945,8 +1944,8 @@ class FlaxBartForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    Bart Model with a language modeling head on top (linear layer with weights tied to the input embeddings) e.g for
-    seq2seq tasks.
+    Bart Decoder Model with a language modeling head on top (linear layer with weights tied to the input embeddings)
+    e.g for autoregressive tasks.
     """,
     BART_START_DOCSTRING,
 )
