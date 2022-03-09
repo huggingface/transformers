@@ -80,14 +80,13 @@ jobs:
         id: fc
         with:
           issue-number: ${{ env.PR_NUMBER }}
-          comment-author: HuggingFaceDocBuilder
+          comment-author: HuggingFaceDocBuilderDev
 
       - name: Update comment
         if: github.event.action == 'reopened'
         uses: peter-evans/create-or-update-comment@v1
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
-          issue-number: ${{ env.PR_NUMBER }}
           token: ${{ env.WRITE }}
           edit-mode: replace
           body: |

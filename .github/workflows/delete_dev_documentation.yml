@@ -50,13 +50,12 @@ jobs:
         id: fc
         with:
           issue-number: ${{ env.PR_NUMBER }}
-          comment-author: HuggingFaceDocBuilder
+          comment-author: HuggingFaceDocBuilderDev
 
       - name: Update comment
         if: ${{ always() }}
         uses: peter-evans/create-or-update-comment@v1
         with:
-          issue-number: ${{ env.PR_NUMBER }}
           comment-id: ${{ steps.fc.outputs.comment-id }}
           token: ${{ env.WRITE }}
           edit-mode: replace
