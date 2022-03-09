@@ -57,7 +57,7 @@ _TOKENIZER_FOR_DOC = "PegasusTokenizer"
 _EXPECTED_OUTPUT_SHAPE = [1, 7, 1024]
 
 # SequenceClassification docstring
-_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [[1, 2], [1, 2]]
+_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [1, 2]
 
 # QuestionAsnwering docstring
 _QA_EXPECTED_LOSS = 2.56
