@@ -48,7 +48,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "microsoft/swin-tiny-patch4-window7-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
