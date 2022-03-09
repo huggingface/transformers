@@ -87,16 +87,15 @@ jobs:
 
       - name: Push to repositories
         run: |
-          cd doc-build &&
-          git pull &&
-          VERSION = $(ls ../build_dir/transformers) &&
-          rm -rf transformers/$VERSION &&
-          mv ../build_dir/transformers/$VERSION transformers/$VERSION &&
-          git status &&
-          cd .. &&
+          cd doc-build
+          git pull
+          rm -rf transformers/$(ls ../build_dir/transformers)
+          mv ../build_dir/transformers/$(ls ../build_dir/transformers) transformers/$(ls ../build_dir/transformers)
+          git status
+          cd ..
 
-          cd notebooks &&
-          git pull &&
-          cp -r ../notebooks_dir/. transformers_doc &&
-          git status &&
+          cd notebooks
+          git pull
+          cp -r ../notebooks_dir/. transformers_doc
+          git status
           cd ..
