@@ -390,6 +390,8 @@ class GenerationMixin:
           `num_beams>1` and `do_sample=True`.
         - *diverse beam-search decoding* by calling [`~generation_utils.GenerationMixin.group_beam_search`], if
           `num_beams>1` and `num_beam_groups>1`.
+        - *constrained beam-search decoding* by calling [`~generation_utils.GenerationMixin.constrained_beam_search`],
+          if `constraints!=None` or `force_words_ids!=None`.
     """
 
     def _prepare_model_inputs(
@@ -873,6 +875,9 @@ class GenerationMixin:
               `num_beams>1` and `do_sample=True`.
             - *diverse beam-search decoding* by calling [`~generation_utils.GenerationMixin.group_beam_search`], if
               `num_beams>1` and `num_beam_groups>1`.
+            - *constrained beam-search decoding* by calling
+              [`~generation_utils.GenerationMixin.constrained_beam_search`], if `constraints!=None` or
+              `force_words_ids!=None`.
 
         Apart from `inputs`, all the arguments below will default to the value of the attribute of the same name as
         defined in the model's config (`config.json`) which in turn defaults to the
