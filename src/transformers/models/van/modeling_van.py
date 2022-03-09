@@ -290,7 +290,7 @@ class VanLayer(nn.Module):
         return hidden_state
 
 
-class VanStage(nn.Sequential):
+class VanStage(nn.Module):
     """VanStage stage, consisting of an optional downsampling layer + multiple layers.
 
     Args:
@@ -326,7 +326,17 @@ class VanStage(nn.Sequential):
                 for _ in range(depth)
             ]
         )
+        self.norm = nn.LayerNorm(hidden_size, eps=1e-6)
 
+    def forward(self, hidden_state):
+        hidden_state = self.embeddings(hidden_state)
+        hidden_state = self.layers(hidden_state)
+        # rearrange b c h w -> b (h w) c
+        batch_size, hidden_size , height, width = hidden_state.shape
+        hidden_state = hidden_state.flatten(2).transpose(1, 2)
+        hidden_state = self.norm(hidden_state)
+        hidden_state = hidden_state.view(batch_size, height, width, hidden_size).permute(0, 3, 1, 2)
+        return hidden_state
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextEncoder with ConvNext->Van
 class VanEncoder(nn.Module):
@@ -365,7 +375,7 @@ class VanEncoder(nn.Module):
     def forward(self, hidden_state, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
 
-        for i, stage_module in enumerate(self.stages):
+        for _, stage_module in enumerate(self.stages):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
