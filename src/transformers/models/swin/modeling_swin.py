@@ -541,10 +541,9 @@ class SwinBlock(nn.Module):
         return attn_mask
 
     def maybe_pad(self, hidden_states, height, width):
-        pad_left = pad_top = 0
-        pad_rigth = (self.window_size - width % self.window_size) % self.window_size
+        pad_right = (self.window_size - width % self.window_size) % self.window_size
         pad_bottom = (self.window_size - height % self.window_size) % self.window_size
-        pad_values = (0, 0, pad_left, pad_rigth, pad_top, pad_bottom)
+        pad_values = (0, 0, 0, pad_right, 0, pad_bottom)
         hidden_states = nn.functional.pad(hidden_states, pad_values)
         return hidden_states, pad_values
 
@@ -580,7 +579,7 @@ class SwinBlock(nn.Module):
         attention_output = attention_outputs[0]
 
         attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
-        shifted_windows = window_reverse(attention_windows, self.window_size, height_pad, width_pad)  # B H' W' C
+        shifted_windows = window_reverse(attention_windows, self.window_size, height_pad, width_pad)
 
         # reverse cyclic shift
         if self.shift_size > 0:
@@ -711,12 +710,7 @@ class SwinEncoder(nn.Module):
                     create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    input_dimensions,
-                    layer_head_mask,
-                    output_attentions,
-                )
+                layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             output_dimensions = layer_outputs[1]

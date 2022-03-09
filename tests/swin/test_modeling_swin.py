@@ -312,7 +312,6 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def set_nan_tensor_to_zero(t):
-
             t[t != t] = 0
             return t
 
