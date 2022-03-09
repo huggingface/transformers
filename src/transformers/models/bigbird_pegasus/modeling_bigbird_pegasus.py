@@ -57,7 +57,6 @@ _TOKENIZER_FOR_DOC = "PegasusTokenizer"
 _EXPECTED_OUTPUT_SHAPE = [1, 7, 1024]
 
 # SequenceClassification docstring
-_SEQ_CLASS_EXPECTED_LOSS = [0.7, 0.69]
 _SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [[1, 2], [1, 2]]
 
 # QuestionAsnwering docstring
@@ -2650,7 +2649,6 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
         expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(

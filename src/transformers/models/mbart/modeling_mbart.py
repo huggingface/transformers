@@ -55,7 +55,6 @@ _TOKENIZER_FOR_DOC = "MBartTokenizer"
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
 # SequenceClassification docstring
-_SEQ_CLASS_EXPECTED_LOSS = [0.37, 0.64]
 _SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [[1, 2], [1, 2]]
 
 # QuestionAsnwering docstring
@@ -1442,7 +1441,6 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
         expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
     )
     # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward

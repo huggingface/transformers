@@ -56,7 +56,6 @@ _TOKENIZER_FOR_DOC = "BartTokenizer"
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
 
 # SequenceClassification docstring
-_SEQ_CLASS_EXPECTED_LOSS = [1.17, 0.84]
 _SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [[1, 2], [1, 2]]
 
 # QuestionAsnwering docstring
@@ -1452,7 +1451,6 @@ class BartForSequenceClassification(BartPretrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
         expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(

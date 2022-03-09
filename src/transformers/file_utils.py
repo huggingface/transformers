@@ -1053,12 +1053,9 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
     >>> outputs = model(**inputs, labels=labels)
     >>> loss = outputs.loss
-    >>> round(loss.item(), 2)
-    {expected_loss[0] if expected_loss!="" else expected_loss}
-
     >>> logits = outputs.logits
     >>> list(logits.shape)
-    {expected_output[0] if expected_output!="" else expected_output}
+    {expected_output}
     ```
 
     Example of multi-label classification:
@@ -1076,11 +1073,8 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> labels = torch.tensor([[1, 1]], dtype=torch.float)  # need dtype=float for BCEWithLogitsLoss
     >>> outputs = model(**inputs, labels=labels)
     >>> loss = outputs.loss
-    >>> round(loss.item(), 2)
-    {expected_loss[1] if expected_loss!="" else expected_loss}
-
     >>> list(logits.shape)
-    {expected_output[1] if expected_output!="" else expected_output}
+    {expected_output}
     ```
 """
 

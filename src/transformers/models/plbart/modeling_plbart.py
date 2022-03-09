@@ -54,7 +54,6 @@ _TOKENIZER_FOR_DOC = "PLBartTokenizer"
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
 
 # SequenceClassification docstring
-_SEQ_CLASS_EXPECTED_LOSS = [0.6, 0.72]
 _SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [[1, 2], [1, 2]]
 
 
@@ -1406,6 +1405,7 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
     )
     # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
