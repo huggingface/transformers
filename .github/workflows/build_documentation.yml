@@ -89,7 +89,9 @@ jobs:
         run: |
           cd doc-build &&
           git pull &&
-          cp -r ../builder_dir/transformers . &&
+          VERSION = $(ls ../builder_dir/transformers) &&
+          rm -rf transformers/$VERSION &&
+          mv ../builder_dir/transformers/$VERSION transformers/$VERSION &&
           git status &&
           cd .. &&
 
