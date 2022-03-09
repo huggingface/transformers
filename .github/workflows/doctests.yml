@@ -5,16 +5,8 @@ on:
     branches:
       - doctest*
   repository_dispatch:
-  pull_request:
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-      - "templates/**"
-      - "docs/**"
-    types: [assigned, opened, synchronize, reopened]
-#  schedule:
-#    - cron: "0 0 * * *"
+  schedule:
+    - cron: "0 0 * * *"
 
 
 env:
