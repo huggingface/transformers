@@ -74,23 +74,23 @@ jobs:
           message: 'The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_${{ env.PR_NUMBER }}). All of your documentation changes will be reflected on that endpoint.'
           GITHUB_TOKEN: ${{ env.WRITE }}
 
-#      - name: Find Comment
-#        if: github.event.action == 'reopened'
-#        uses: peter-evans/find-comment@v1
-#        id: fc
-#        with:
-#          issue-number: ${{ env.PR_NUMBER }}
-#          comment-author: HuggingFaceDocBuilder
+      - name: Find Comment
+        if: github.event.action == 'reopened'
+        uses: peter-evans/find-comment@v1
+        id: fc
+        with:
+          issue-number: ${{ env.PR_NUMBER }}
+          comment-author: HuggingFaceDocBuilderDev
 
-#      - name: Update comment
-#        if: github.event.action == 'reopened'
-#        uses: peter-evans/create-or-update-comment@v1
-#        with:
-#          comment-id: ${{ steps.fc.outputs.comment-id }}
-#          token: ${{ env.WRITE }}
-#          edit-mode: replace
-#          body: |
-#            The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_${{ env.PR_NUMBER }}). All of your documentation changes will be reflected on that endpoint.
+      - name: Update comment
+        if: github.event.action == 'reopened'
+        uses: peter-evans/create-or-update-comment@v1
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          token: ${{ env.WRITE }}
+          edit-mode: replace
+          body: |
+            The docs for this PR live [here](https://moon-ci-docs.huggingface.co/docs/transformers/pr_${{ env.PR_NUMBER }}). All of your documentation changes will be reflected on that endpoint.
 
       - name: Make documentation
         env:
