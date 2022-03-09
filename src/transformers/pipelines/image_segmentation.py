@@ -18,6 +18,7 @@ if is_torch_available():
 
     from ..models.auto.modeling_auto import (
         MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+        MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
         MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
     )
 
@@ -32,10 +33,10 @@ Predictions = List[Prediction]
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ImageSegmentationPipeline(Pipeline):
     """
-    Image segmentation pipeline using any `AutoModelForImageSegmentation`. This pipeline predicts masks of objects and
+    Image segmentation pipeline using any `AutoModelForXXXSegmentation`. This pipeline predicts masks of objects and
     their classes.
 
-    This image segmntation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    This image segmentation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"image-segmentation"`.
 
     See the list of available models on
@@ -50,7 +51,11 @@ class ImageSegmentationPipeline(Pipeline):
 
         requires_backends(self, "vision")
         self.check_model_type(
-            dict(MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items() + MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items())
+            dict(
+                MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items()
+                + MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items()
+                + MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items()
+            )
         )
 
     def _sanitize_parameters(self, **kwargs):
@@ -112,14 +117,14 @@ class ImageSegmentationPipeline(Pipeline):
     def postprocess(self, model_outputs, raw_image=False, threshold=0.9, mask_threshold=0.5):
         if hasattr(self.feature_extractor, "post_process_panoptic_segmentation"):
             outputs = self.feature_extractor.post_process_panoptic_segmentation(
-                model_outputs, is_thing_map=self.model.config.id2label
+                model_outputs, object_mask_threshold=threshold
             )[0]
             annotation = []
             segmentation = outputs["segmentation"]
             for segment in outputs["segments"]:
                 mask = (segmentation == segment["id"]) * 255
                 mask = Image.fromarray(mask.numpy().astype(np.uint8), mode="L")
-                label = self.model.config.id2label[segment["category_id"]]
+                label = self.model.config.id2label[segment["label_id"]]
                 annotation.append({"mask": mask, "label": label, "score": None})
         elif hasattr(self.feature_extractor, "post_process_segmentation"):
             # Panoptic
