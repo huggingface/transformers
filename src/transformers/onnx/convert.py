@@ -273,7 +273,7 @@ def export(
             raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
         if not config.is_torch_support_available:
-            raise ImportError(
+            logger.warning(
                 f"Unsupported PyTorch version for this model. Minimum required is {config.torch_onnx_minimum_version}, got: {torch_version}"
             )
 
