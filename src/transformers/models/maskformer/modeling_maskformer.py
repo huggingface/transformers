@@ -2313,16 +2313,16 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         )
         queries = transformer_module_output.last_hidden_state
 
+        encoder_hidden_states = None
+        pixel_decoder_hidden_states = None
+        transformer_decoder_hidden_states = None
+        hidden_states = None
+
         if output_hidden_states:
             encoder_hidden_states = pixel_level_module_output.encoder_hidden_states
             pixel_decoder_hidden_states = pixel_level_module_output.decoder_hidden_states
             transformer_decoder_hidden_states = transformer_module_output.hidden_states
             hidden_states = encoder_hidden_states + pixel_decoder_hidden_states + transformer_decoder_hidden_states
-        else:
-            encoder_hidden_states = None
-            pixel_decoder_hidden_states = None
-            transformer_decoder_hidden_states = None
-            hidden_states = None
 
         output = MaskFormerModelOutput(
             encoder_last_hidden_state=image_features,
@@ -2463,7 +2463,6 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         >>> # you can pass them to feature_extractor for postprocessing
         >>> output = feature_extractor.post_process_segmentation(outputs)
         >>> output = feature_extractor.post_process_semantic_segmentation(outputs)
-
         >>> output = feature_extractor.post_process_panoptic_segmentation(outputs)
         ```
         """
@@ -2477,7 +2476,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         outputs: MaskFormerModelOutput = self.model(
             pixel_values,
             pixel_mask,
-            output_hidden_states=output_hidden_states,
+            output_hidden_states=output_hidden_states or self.config.use_auxiliary_loss,
             return_dict=True,
             output_attentions=output_attentions,
         )
