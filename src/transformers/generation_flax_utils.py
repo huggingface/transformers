@@ -118,7 +118,16 @@ class BeamSearchState:
 
 class FlaxGenerationMixin:
     """
-    A class containing all of the functions supporting generation, to be used as a mixin in [`FlaxPreTrainedModel`].
+    A class containing all functions for auto-regressive text generation, to be used as a mixin in
+    [`FlaxPreTrainedModel`].
+
+    The class exposes [`~generation_flax_utils.FlaxGenerationMixin.generate`], which can be used for:
+            - *greedy decoding* by calling [`~generation_flax_utils.FlaxGenerationMixin._greedy_search`] if
+              `num_beams=1` and `do_sample=False`.
+            - *multinomial sampling* by calling [`~generation_flax_utils.FlaxGenerationMixin._sample`] if `num_beams=1`
+              and `do_sample=True`.
+            - *beam-search decoding* by calling [`~generation_utils.FlaxGenerationMixin._beam_search`] if `num_beams>1`
+              and `do_sample=False`.
     """
 
     @staticmethod

@@ -379,7 +379,7 @@ class GenerationMixin:
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
 
-    The class exposes the [`~generation_utils.GenerationMixin.generate`], which can be used for:
+    The class exposes [`~generation_utils.GenerationMixin.generate`], which can be used for:
         - *greedy decoding* by calling [`~generation_utils.GenerationMixin.greedy_search`] if `num_beams=1` and
           `do_sample=False`.
         - *multinomial sampling* by calling [`~generation_utils.GenerationMixin.sample`] if `num_beams=1` and
