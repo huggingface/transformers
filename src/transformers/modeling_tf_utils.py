@@ -33,6 +33,7 @@ from tensorflow.python.keras.saving import hdf5_format
 
 from huggingface_hub import Repository, list_repo_files
 from requests import HTTPError
+from collections import OrderedDict
 
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
@@ -79,6 +80,14 @@ TFModelInputType = Union[
 
 def dummy_loss(y_true, y_pred):
     return tf.reduce_mean(y_pred)
+
+class IndexableOrderedDict(OrderedDict):
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            key = list(self.keys())[item]
+            return super().__getitem__(key)
+        else:
+            return super().__getitem__(item)
 
 
 class TFModelUtilsMixin:
@@ -715,6 +724,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     base_model_prefix = ""
     main_input_name = "input_ids"
     _auto_class = None
+    _using_dummy_loss = None
 
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
@@ -907,6 +917,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 "loss argument, or explicitly pass loss=None if you do not want your model to compute a loss."
             )
             loss = {"loss": dummy_loss}
+            self._using_dummy_loss = True
+        else:
+            self._using_dummy_loss = False
         super().compile(
             optimizer=optimizer,
             loss=loss,
@@ -946,14 +959,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         additional loss function that reduces a `loss` output, and the model will output a `loss` component (notice the
         name matching) containing the loss that was used to train the pre-trained model.
         """
-        # TODO Handle this bit in a slightly more principled way
-        possible_label_cols = {"labels", "label", "label_ids", "start_logits", "end_logits"}
+        possible_label_cols = {"labels", "label", "label_ids", "start_position", "end_position", "next_sentence_label"}
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
         data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
-        # These next two lines differ from the base method - they avoid issues when the labels are in
-        # the input dict (and loss is computed internally)
+
+        # In this block, we handle the situations where labels might be either in the input dict or passed
+        # separately. Specifically, when labels are in the input dict only, we copy them to the separate labels argument
         if y is None:
             if not isinstance(x, dict):
                 raise RuntimeError("No labels passed to fit()!")
@@ -964,21 +977,23 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             elif len(label_keys) > 1:
                 y = {key: x[key] for key in label_keys}
             else:
-                # TODO Is there any important case this will fail on?
                 raise RuntimeError("Could not find labels in either the input dict or labels argument!")
-        else:
+        # And when using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
+        # if those keys are not already present in the input dict
+        elif self._using_dummy_loss:
             arg_names = list(dict(inspect.signature(self.call).parameters).keys())
-            assert arg_names[0] == "self"
             label_kwargs = possible_label_cols.intersection(arg_names)
             if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
                 if isinstance(x, tf.Tensor):
-                    x = {arg_names[1]: x}
+                    x = {arg_names[0]: x}
                 label_kwarg = next(iter(label_kwargs))
+                print(y.shape)
+                print(label_kwarg)
                 if label_kwarg not in x:
                     x[label_kwarg] = y
             elif isinstance(y, dict) and set(y.keys()).issubset(label_kwargs):
                 if isinstance(x, tf.Tensor):
-                    x = {arg_names[1]: x}
+                    x = {arg_names[0]: x}
                 for label_kwarg in label_kwargs:
                     if label_kwarg not in x:
                         x[label_kwarg] = y[label_kwarg]
@@ -994,8 +1009,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # When y_pred is a ModelOutput and y is a tf.Tensor the metrics update
         # should be done only with the relevant ModelOutput param that is
         # considered by the loss.
-        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
-            y_pred = y_pred["logits"]
+        if isinstance(y_pred, ModelOutput) and self._using_dummy_loss:
+            output_keys = list(y_pred.keys())
+            if output_keys[0] == loss and y_pred.loss is not None:
+                reordered_keys = output_keys[1:] + output_keys[:1]
+                reordered_output = IndexableOrderedDict()
+                for key in reordered_keys:
+                    reordered_output[key] = y_pred[key]
+                y_pred = reordered_output
+
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
