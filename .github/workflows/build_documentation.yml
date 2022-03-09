@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - doc_builder*
       - doc-builder*
       - v*-release
 
