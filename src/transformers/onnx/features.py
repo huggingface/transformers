@@ -17,6 +17,7 @@ from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
+from ..models.vit import ViTOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
 from ..utils import logging
 from .config import OnnxConfig
@@ -28,6 +29,7 @@ if is_torch_available():
     from transformers.models.auto import (
         AutoModel,
         AutoModelForCausalLM,
+        AutoModelForImageClassification,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
         AutoModelForQuestionAnswering,
@@ -90,6 +92,7 @@ class FeaturesManager:
             "token-classification": AutoModelForTokenClassification,
             "multiple-choice": AutoModelForMultipleChoice,
             "question-answering": AutoModelForQuestionAnswering,
+            "image-classification": AutoModelForImageClassification,
         }
     elif is_tf_available():
         _TASKS_TO_AUTOMODELS = {
@@ -244,6 +247,7 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=ElectraOnnxConfig,
         ),
+        "vit": supported_features_mapping("default", "image-classification", onnx_config_cls=ViTOnnxConfig),
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))

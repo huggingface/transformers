@@ -15,8 +15,9 @@
 from argparse import ArgumentParser
 from pathlib import Path
 
-from transformers.models.auto import AutoTokenizer
-
+from ..models.auto import AutoConfig, AutoFeatureExtractor, AutoTokenizer
+from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
+from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from ..utils import logging
 from .convert import export, validate_model_outputs
 from .features import FeaturesManager
@@ -46,8 +47,17 @@ def main():
     if not args.output.parent.exists():
         args.output.parent.mkdir(parents=True)
 
+    # Check the modality of the inputs and instantiate the appropriate preprocessor
+    # TODO(lewtun): Refactor this as a function if we need to check modalities elsewhere as well
+    config = AutoConfig.from_pretrained(args.model)
+    if config.model_type in TOKENIZER_MAPPING_NAMES:
+        preprocessor = AutoTokenizer.from_pretrained(args.model)
+    elif config.model_type in FEATURE_EXTRACTOR_MAPPING_NAMES:
+        preprocessor = AutoFeatureExtractor.from_pretrained(args.model)
+    else:
+        raise ValueError(f"Unsupported model type: {config.model_type}")
+
     # Allocate the model
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
     model = FeaturesManager.get_model_from_feature(args.feature, args.model)
     model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=args.feature)
     onnx_config = model_onnx_config(model.config)
@@ -62,12 +72,18 @@ def main():
             f"At least  {onnx_config.default_onnx_opset} is required."
         )
 
-    onnx_inputs, onnx_outputs = export(tokenizer, model, onnx_config, args.opset, args.output)
+    onnx_inputs, onnx_outputs = export(
+        preprocessor,
+        model,
+        onnx_config,
+        args.opset,
+        args.output,
+    )
 
     if args.atol is None:
         args.atol = onnx_config.atol_for_validation
 
-    validate_model_outputs(onnx_config, tokenizer, model, args.output, onnx_outputs, args.atol)
+    validate_model_outputs(onnx_config, preprocessor, model, args.output, onnx_outputs, args.atol)
     logger.info(f"All good, model saved at: {args.output.as_posix()}")
 
 
