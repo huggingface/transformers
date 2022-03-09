@@ -138,3 +138,7 @@ class ViTOnnxConfig(OnnxConfig):
                 ("pixel_values", {0: "batch", 1: "sequence"}),
             ]
         )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4
