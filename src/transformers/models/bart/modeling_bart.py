@@ -48,14 +48,24 @@ from .configuration_bart import BartConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "facebook/bart-large"
+_CHECKPOINT_FOR_DOC = "facebook/bart-base"
 _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
+
+# Base model docstring
+_EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
+
+# SequenceClassification docstring
+_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [1, 2]
+
+# QuestionAsnwering docstring
+_QA_EXPECTED_LOSS = 2.98
+_QA_EXPECTED_OUTPUT_SHAPE = [1, 17]
 
 
 BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/bart-large",
-    # See all BART models at https://huggingface.co/models?filter=bart
+    # see all BART models at https://huggingface.co/models?filter=bart
 ]
 
 
@@ -542,12 +552,17 @@ BART_GENERATION_EXAMPLE = r"""
     >>> model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
     >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
 
-    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+    >>> ARTICLE_TO_SUMMARIZE = (
+    ...     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
+    ...     "amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were "
+    ...     "scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."
+    ... )
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="pt")
 
     >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
-    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=2, max_length=20)
+    >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+    'PG&E scheduled the blackouts in response to forecasts for high winds amid dry conditions'
     ```
 
     Mask filling example:
@@ -555,10 +570,10 @@ BART_GENERATION_EXAMPLE = r"""
     ```python
     >>> from transformers import BartTokenizer, BartForConditionalGeneration
 
-    >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
-    >>> TXT = "My friends are <mask> but they eat too many carbs."
+    >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-base")
+    >>> model = BartForConditionalGeneration.from_pretrained("facebook/bart-base")
 
-    >>> model = BartForConditionalGeneration.from_pretrained("facebook/bart-large")
+    >>> TXT = "My friends are <mask> but they eat too many carbs."
     >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
     >>> logits = model(input_ids).logits
 
@@ -567,6 +582,7 @@ BART_GENERATION_EXAMPLE = r"""
     >>> values, predictions = probs.topk(5)
 
     >>> tokenizer.decode(predictions).split()
+    ['not', 'good', 'healthy', 'great', 'very']
     ```
 """
 
@@ -641,11 +657,10 @@ BART_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-            shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
-            you can choose to directly pass an embedded representation. This is useful if you want more control over
-            how to convert `input_ids` indices into associated vectors than the model's internal embedding lookup
-            matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
+            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            can choose to directly pass an embedded representation. This is useful if you want more control over how to
+            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -966,8 +981,8 @@ class BartDecoder(BartPretrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
-                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
                 embedding lookup matrix.
@@ -1153,6 +1168,7 @@ class BartModel(BartPretrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1434,6 +1450,7 @@ class BartForSequenceClassification(BartPretrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1558,6 +1575,8 @@ class BartForQuestionAnswering(BartPretrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_loss=_QA_EXPECTED_LOSS,
+        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1789,13 +1808,16 @@ class BartForCausalLM(BartPretrainedModel):
         ```python
         >>> from transformers import BartTokenizer, BartForCausalLM
 
-        >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
-        >>> model = BartForCausalLM.from_pretrained("facebook/bart-large", add_cross_attention=False)
+        >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-base")
+        >>> model = BartForCausalLM.from_pretrained("facebook/bart-base", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

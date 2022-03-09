@@ -20,5 +20,13 @@ src/transformers/models/poolformer/modeling_poolformer.py
 src/transformers/models/vit_mae/modeling_vit_mae.py
 src/transformers/models/segformer/modeling_segformer.py
 src/transformers/models/vision_encoder_decoder/modeling_vision_encoder_decoder.py
+src/transformers/models/bart/modeling_bart.py
+src/transformers/models/mbart/modeling_mbart.py
+src/transformers/models/bigbird_pegasus/modeling_bigbird_pegasus.py
+src/transformers/models/marian/modeling_marian.py
+src/transformers/models/pegasus/modeling_pegasus.py
+src/transformers/models/blenderbot/modeling_blenderbot.py
+src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
+src/transformers/models/plbart/modeling_plbart.py
 docs/source/quicktour.mdx
 docs/source/task_summary.mdx
