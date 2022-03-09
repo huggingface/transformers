@@ -51,7 +51,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 198, 768]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/deit-base-distilled-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -697,9 +697,11 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 
         ```python
         >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
 
+        >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -714,6 +716,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        Predicted class: maillot
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
