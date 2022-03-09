@@ -1648,7 +1648,7 @@ BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=4096, return_tensors="pt", truncation=True)
 
     >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
+    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=15)
     >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
     'dominant sequence models are based on recurrent or convolution'
     ```

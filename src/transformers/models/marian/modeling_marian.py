@@ -1137,15 +1137,13 @@ class MarianModel(MarianPreTrainedModel):
         >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
         >>> model = MarianModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
-        >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        >>> ).input_ids  # Batch size 1
-        >>> decoder_input_ids = tokenizer(
+        >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
+        >>> decoder_inputs = tokenizer(
         ...     "<pad> Studien haben gezeigt dass es hilfreich ist einen Hund zu besitzen",
         ...     return_tensors="pt",
         ...     add_special_tokens=False,
-        >>> ).input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        ... )
+        >>> outputs = model(input_ids=inputs.input_ids, decoder_input_ids=decoder_inputs.input_ids)
 
         >>> last_hidden_states = outputs.last_hidden_state
         >>> list(last_hidden_states.shape)
@@ -1533,8 +1531,7 @@ class MarianForCausalLM(MarianPreTrainedModel):
 
         >>> logits = outputs.logits
         >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
-        >>> list(logits.shape) == expected_shape
-        True
+        >>> assert list(logits.shape) == expected_shape
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
