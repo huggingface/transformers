@@ -50,6 +50,12 @@ _CHECKPOINT_FOR_DOC = "uclanlp/plbart-base"
 _CONFIG_FOR_DOC = "PLBartConfig"
 _TOKENIZER_FOR_DOC = "PLBartTokenizer"
 
+# Base model docstring
+_EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
+
+# SequenceClassification docstring
+_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [1, 2]
+
 
 PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uclanlp/plbart-base",
@@ -526,27 +532,26 @@ PLBART_START_DOCSTRING = r"""
 """
 
 PLBART_GENERATION_EXAMPLE = r"""
-    Token in-filling example:
-
-        >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration, PLBartConfig
-
-        >>> model = PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base') >>> tokenizer =
-        PLBartTokenizer.from_pretrained('uclanlp/plbart-base', src_lang='java', tgt_lang='java') >>> METHOD_TO_FILL =
-        "public static main (String args[0]) { data=Date(); System.out. String.format("Current Date : % tc", ));}" >>>
-        inputs = tokenizer([METHOD_TO_FILL], max_length=1024, return_tensors='pt') >>> # Generate Filled Code >>>
-        generated_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True) >>>
-        print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in
-        generated_ids])
-
     Mask-filling example:
 
-        >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration >>> tokenizer =
-        PLBartTokenizer.from_pretrained('uclanlp/plbart-base') >>> # en_XX is the language symbol id <LID> for English
-        >>> TXT = "</s> Is 0 the <mask> Fibonacci <mask> ? </s> en_XX" >>> model =
-        PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base') >>> input_ids = tokenizer([TXT],
-        add_special_tokens=False, return_tensors='pt')['input_ids'] >>> logits = model(input_ids).logits >>>
-        masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item() >>> probs = logits[0,
-        masked_index].softmax(dim=0) >>> values, predictions = probs.topk(5) >>> tokenizer.decode(predictions).split()
+    ```python
+    >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration
+
+    >>> model = PLBartForConditionalGeneration.from_pretrained("uclanlp/plbart-base")
+    >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-base")
+
+    >>> # en_XX is the language symbol id <LID> for English
+    >>> TXT = "<s> Is 0 the <mask> Fibonacci number ? </s> en_XX"
+    >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors="pt").input_ids
+
+    >>> logits = model(input_ids).logits
+    >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+    >>> probs = logits[0, masked_index].softmax(dim=0)
+    >>> values, predictions = probs.topk(5)
+
+    >>> tokenizer.decode(predictions).split()
+    ['same', 'first', 'highest', 'result', 'Fib']
+    ```
 """
 
 PLBART_INPUTS_DOCSTRING = r"""
@@ -619,7 +624,7 @@ PLBART_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            ``decoder_input_ids``` of shape `(batch_size, sequence_length)`.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         inputs_embeds (:
             obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally,
             instead of passing `input_ids` you can choose to directly pass an embedded representation. This is useful
@@ -948,8 +953,8 @@ class PLBartDecoder(PLBartPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
-                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
                 embedding lookup matrix.
@@ -1406,6 +1411,7 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
     )
     # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
@@ -1521,7 +1527,7 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->PLBart
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->PLBart, facebook/bart-base->uclanlp/plbart-base
 class PLBartForCausalLM(PLBartPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
@@ -1643,13 +1649,16 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
         ```python
         >>> from transformers import PLBartTokenizer, PLBartForCausalLM
 
-        >>> tokenizer = PLBartTokenizer.from_pretrained("facebook/bart-large")
-        >>> model = PLBartForCausalLM.from_pretrained("facebook/bart-large", add_cross_attention=False)
+        >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-base")
+        >>> model = PLBartForCausalLM.from_pretrained("uclanlp/plbart-base", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

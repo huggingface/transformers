@@ -529,7 +529,8 @@ PEGASUS_GENERATION_EXAMPLE = r"""
 
     >>> # Generate Summary
     >>> summary_ids = model.generate(inputs["input_ids"])
-    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+    "California's largest electricity provider has turned off power to hundreds of thousands of customers."
     ```
 """
 
@@ -597,11 +598,10 @@ PEGASUS_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-            shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
-            you can choose to directly pass an embedded representation. This is useful if you want more control over
-            how to convert `input_ids` indices into associated vectors than the model's internal embedding lookup
-            matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
+            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            can choose to directly pass an embedded representation. This is useful if you want more control over how to
+            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -977,8 +977,8 @@ class PegasusDecoder(PegasusPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
-                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
                 embedding lookup matrix.
@@ -1211,13 +1211,13 @@ class PegasusModel(PegasusPreTrainedModel):
         >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
         >>> model = PegasusModel.from_pretrained("google/pegasus-large")
 
-        >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        >>> ).input_ids  # Batch size 1
-        >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
+        >>> decoder_inputs = tokenizer("Studies show that", return_tensors="pt")
+        >>> outputs = model(input_ids=inputs.input_ids, decoder_input_ids=decoder_inputs.input_ids)
 
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 4, 1024]
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1540,7 +1540,7 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
         self.model.decoder.resize_position_embeddings(new_num_position_embeddings)
 
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.bart.modeling_bart.BartForCausalLM.forward with Bart->Pegasus, facebook/bart-large->google/pegasus-large
+    # Copied from transformers.models.bart.modeling_bart.BartForCausalLM.forward with Bart->Pegasus, facebook/bart-base->google/pegasus-large
     def forward(
         self,
         input_ids=None,
@@ -1637,6 +1637,9 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

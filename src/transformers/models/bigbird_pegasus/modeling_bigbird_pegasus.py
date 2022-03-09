@@ -53,6 +53,16 @@ _CHECKPOINT_FOR_DOC = "google/bigbird-pegasus-large-arxiv"
 _CONFIG_FOR_DOC = "BigBirdPegasusConfig"
 _TOKENIZER_FOR_DOC = "PegasusTokenizer"
 
+# Base model docstring
+_EXPECTED_OUTPUT_SHAPE = [1, 7, 1024]
+
+# SequenceClassification docstring
+_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [1, 2]
+
+# QuestionAsnwering docstring
+_QA_EXPECTED_LOSS = 2.56
+_QA_EXPECTED_OUTPUT_SHAPE = [1, 12]
+
 
 BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/bigbird-pegasus-large-arxiv",
@@ -1627,12 +1637,20 @@ BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
     >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained("google/bigbird-pegasus-large-arxiv")
     >>> tokenizer = PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
 
-    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+    >>> ARTICLE_TO_SUMMARIZE = (
+    ...     "The dominant sequence transduction models are based on complex recurrent or convolutional neural "
+    ...     "networks in an encoder-decoder configuration. The best performing models also connect the encoder "
+    ...     "and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, "
+    ...     "based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. "
+    ...     "Experiments on two machine translation tasks show these models to be superior in quality "
+    ...     "while being more parallelizable and requiring significantly less time to train."
+    ... )
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=4096, return_tensors="pt", truncation=True)
 
     >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
-    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=15)
+    >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+    'dominant sequence models are based on recurrent or convolutional neural networks .'
     ```
 """
 
@@ -1684,11 +1702,10 @@ BIGBIRD_PEGASUS_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-            shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
-            you can choose to directly pass an embedded representation. This is useful if you want more control over
-            how to convert `input_ids` indices into associated vectors than the model's internal embedding lookup
-            matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
+            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            can choose to directly pass an embedded representation. This is useful if you want more control over how to
+            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -2159,8 +2176,8 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
-                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
                 embedding lookup matrix.
@@ -2346,6 +2363,7 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -2630,6 +2648,7 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -2755,6 +2774,8 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_loss=_QA_EXPECTED_LOSS,
+        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
