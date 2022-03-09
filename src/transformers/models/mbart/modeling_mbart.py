@@ -550,7 +550,7 @@ MBART_GENERATION_EXAMPLE = r"""
     >>> model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
     >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro")
 
-    >>> example_english_phrase = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
+    >>> example_english_phrase = "42 is the answer"
     >>> inputs = tokenizer(example_english_phrase, return_tensors="pt")
 
     >>> # Translate
