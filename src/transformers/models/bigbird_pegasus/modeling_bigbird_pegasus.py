@@ -1650,7 +1650,7 @@ BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
     >>> # Generate Summary
     >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=15)
     >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-    'dominant sequence models are based on recurrent or convolution'
+    'dominant sequence models are based on recurrent or convolutional neural networks .'
     ```
 """
 
