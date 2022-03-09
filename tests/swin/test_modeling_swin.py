@@ -400,8 +400,10 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             patch_size = to_2tuple(self.model_tester.patch_size)
             num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
+            batch_size, num_channels, height, width = hidden_states[0].shape
+            hidden_states = hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
+                list(hidden_states.shape[-2:]),
                 [num_patches, self.model_tester.embed_dim],
             )
 

@@ -33,7 +33,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_swin import SwinConfig
@@ -58,72 +58,6 @@ SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/swin-tiny-patch4-window7-224",
     # See all Swin models at https://huggingface.co/models?filter=swin
 ]
-
-
-@dataclass
-class SwinBaseModelOutput(ModelOutput):
-    """
-    Class for SwinEncoder's outputs.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):
-            A tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to
-            `batch, channels, height, width`. Due to padding, their spatial size cannot inferred before the `forward`
-            method.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
-
-
-@dataclass
-class SwinModelOutputWithPooling(ModelOutput):
-    """
-    Class for SwinModel's outputs that also contains the spatial dimensions of the hidden states.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state after a mean pooling operation.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):
-            A tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to
-            `batch, channels, height, width`. Due to padding, their spatial size cannot be inferred before the
-            `forward` method.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
-
 
 # to_2tuple, drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
 
@@ -693,7 +627,10 @@ class SwinEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            batch_size, _, hidden_size = hidden_states.shape
+            # rearrange b (h w) c -> b c h w
+            reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size).permute(0, 3, 1, 2)
+            all_hidden_states = all_hidden_states + (reshaped_hidden_state,)
 
         for i, layer_module in enumerate(self.layers):
             layer_head_mask = head_mask[i] if head_mask is not None else None
@@ -719,23 +656,21 @@ class SwinEncoder(nn.Module):
             all_input_dimensions += (input_dimensions,)
 
             if output_hidden_states:
-                all_hidden_states += (hidden_states,)
+                batch_size, _, hidden_size = hidden_states.shape
+                # rearrange b (h w) c -> b c h w
+                reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size).permute(
+                    0, 3, 1, 2
+                )
+                all_hidden_states += (reshaped_hidden_state,)
 
             if output_attentions:
                 all_self_attentions += layer_outputs[2:]
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, all_hidden_states, all_self_attentions, all_input_dimensions]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
-        return SwinBaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            hidden_states_spatial_dimensions=all_input_dimensions,
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions
         )
 
 
@@ -885,18 +820,14 @@ class SwinModel(SwinPreTrainedModel):
             pooled_output = torch.flatten(pooled_output, 1)
 
         if not return_dict:
-            output = (sequence_output, pooled_output) + encoder_outputs[1:-1]
-            # spatial hidden sizes is at the end
-            hidden_states_spatial_dimensions = (input_dimensions,) + encoder_outputs[-1]
-            output += (hidden_states_spatial_dimensions,)
+            output = (sequence_output, pooled_output) + encoder_outputs[1:]
 
             return output
 
-        return SwinModelOutputWithPooling(
+        return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
-            hidden_states_spatial_dimensions=(input_dimensions,) + encoder_outputs.hidden_states_spatial_dimensions,
             attentions=encoder_outputs.attentions,
         )
 
