@@ -453,7 +453,6 @@ class DPTReassembleBlocks(nn.Module):
         """
         Inputs: list of torch.FloatTensor, each of shape (B, L + 1, C).
         """
-        assert isinstance(inputs, list)
         out = []
 
         for i, x in enumerate(inputs):
@@ -781,6 +780,9 @@ class DPTNeck(nn.Module):
         self.fusion_blocks[0].res_conv_unit1 = None  # not sure why this is done in mmseg
 
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
+        if not isinstance(hidden_states, list):
+            raise ValueError("hidden_states should be a list of tensors")
+
         if len(hidden_states) != len(self.post_process_channels):
             raise ValueError("The number of hidden states should be equal to the number of post-process channels.")
 
