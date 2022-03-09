@@ -249,6 +249,13 @@ class FlaxAutoModelForVision2Seq(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxBartDecoderPreTrainedModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxBartForCausalLM(metaclass=DummyObject):
     _backends = ["flax"]
 
@@ -278,13 +285,6 @@ class FlaxBartForSequenceClassification(metaclass=DummyObject):
 
 
 class FlaxBartModel(metaclass=DummyObject):
-    _backends = ["flax"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
-class FlaxBartPreTrainedDecoderModel(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):

@@ -1727,7 +1727,7 @@ append_call_sample_docstring(
 )
 
 
-class FlaxBartPreTrainedDecoderModel(FlaxPreTrainedModel):
+class FlaxBartDecoderPreTrainedModel(FlaxPreTrainedModel):
     config_class = BartConfig
     base_model_prefix: str = "model"
     module_class: nn.Module = None
@@ -1949,7 +1949,7 @@ class FlaxBartForCausalLMModule(nn.Module):
     """,
     BART_START_DOCSTRING,
 )
-class FlaxBartForCausalLM(FlaxBartPreTrainedDecoderModel):
+class FlaxBartForCausalLM(FlaxBartDecoderPreTrainedModel):
     module_class = FlaxBartForCausalLMModule
 
     def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):

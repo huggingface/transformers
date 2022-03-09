@@ -2198,12 +2198,12 @@ if is_flax_available():
 
     _import_structure["models.bart"].extend(
         [
+            "FlaxBartDecoderPreTrainedModel",
             "FlaxBartForCausalLM",
             "FlaxBartForConditionalGeneration",
             "FlaxBartForQuestionAnswering",
             "FlaxBartForSequenceClassification",
             "FlaxBartModel",
-            "FlaxBartPreTrainedDecoderModel",
             "FlaxBartPreTrainedModel",
         ]
     )
@@ -4172,12 +4172,12 @@ if TYPE_CHECKING:
             FlaxAutoModelForVision2Seq,
         )
         from .models.bart import (
+            FlaxBartDecoderPreTrainedModel,
             FlaxBartForCausalLM,
             FlaxBartForConditionalGeneration,
             FlaxBartForQuestionAnswering,
             FlaxBartForSequenceClassification,
             FlaxBartModel,
-            FlaxBartPreTrainedDecoderModel,
             FlaxBartPreTrainedModel,
         )
         from .models.beit import (
