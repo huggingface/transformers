@@ -534,18 +534,24 @@ PLBART_START_DOCSTRING = r"""
 PLBART_GENERATION_EXAMPLE = r"""
     Mask-filling example:
 
-    >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration >>> tokenizer =
-    PLBartTokenizer.from_pretrained('uclanlp/plbart-base') >>> model =
-    PLBartForConditionalGeneration.from_pretrained('uclanlp/plbart-base')
+    ```python
+    >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration
 
-    >>> # en_XX is the language symbol id <LID> for English >>> TXT = "<s> Is 0 the <mask> Fibonacci number ? </s>
-    en_XX" >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors='pt').input_ids >>> logits =
-    model(input_ids).logits
+    >>> model = PLBartForConditionalGeneration.from_pretrained("uclanlp/plbart-base")
+    >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-base")
 
-    >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item() >>> probs = logits[0,
-    masked_index].softmax(dim=0) >>> values, predictions = probs.topk(5)
+    >>> # en_XX is the language symbol id <LID> for English
+    >>> TXT = "<s> Is 0 the <mask> Fibonacci number ? </s> en_XX"
+    >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors="pt").input_ids
 
-    >>> tokenizer.decode(predictions).split() ['same', 'first', 'highest', 'result', 'Fib']
+    >>> logits = model(input_ids).logits
+    >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+    >>> probs = logits[0, masked_index].softmax(dim=0)
+    >>> values, predictions = probs.topk(5)
+
+    >>> tokenizer.decode(predictions).split()
+    ['same', 'first', 'highest', 'result', 'Fib']
+    ```
 """
 
 PLBART_INPUTS_DOCSTRING = r"""

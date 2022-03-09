@@ -509,17 +509,17 @@ BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
     ```python
     >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForConditionalGeneration
 
-    >>> mname = "facebook/blenderbot-400M-distill"
+    >>> mname = "facebook/blenderbot_small-90M"
     >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname)
     >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname)
     >>> UTTERANCE = "My friends are cool but they eat too many carbs."
     >>> print("Human: ", UTTERANCE)
-    Human: My friends are cool but they eat too many carbs
+    Human:  My friends are cool but they eat too many carbs.
 
     >>> inputs = tokenizer([UTTERANCE], return_tensors="pt")
     >>> reply_ids = model.generate(**inputs)
     >>> print("Bot: ", tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0])
-    Bot: what kind of carbs do they eat? i don't know much about carbs.
+    Bot:  what kind of carbs do they eat? i don't know much about carbs.
 
     >>> REPLY = "I'm not sure"
     >>> print("Human: ", REPLY)
@@ -533,6 +533,7 @@ BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
     >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors="pt")
     >>> next_reply_ids = model.generate(**inputs)
     >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
+    Bot:  they eat a lot of carbs. carbs are high in fat, protein, and carbohydrates.
     ```
 """
 
@@ -1128,15 +1129,13 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
         >>> model = BlenderbotSmallModel.from_pretrained("facebook/blenderbot_small-90M")
         >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
-        >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        >>> ).input_ids  # Batch size 1
-        >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
+        >>> decoder_inputs = tokenizer("Studies show that", return_tensors="pt")  # Batch size 1
+        >>> outputs = model(input_ids=inputs.input_ids, decoder_input_ids=decoder_inputs.input_ids)
 
         >>> last_hidden_states = outputs.last_hidden_state
         >>> list(last_hidden_states.shape)
-        [1, 12, 512]
+        [1, 3, 512]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

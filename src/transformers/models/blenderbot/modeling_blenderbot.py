@@ -516,7 +516,7 @@ BLENDERBOT_GENERATION_EXAMPLE = r"""
     >>> tokenizer = BlenderbotTokenizer.from_pretrained(mname)
     >>> UTTERANCE = "My friends are cool but they eat too many carbs."
     >>> print("Human: ", UTTERANCE)
-    Human: My friends are cool but they eat too many carbs
+    Human:  My friends are cool but they eat too many carbs.
 
     >>> inputs = tokenizer([UTTERANCE], return_tensors="pt")
     >>> reply_ids = model.generate(**inputs)
@@ -535,7 +535,7 @@ BLENDERBOT_GENERATION_EXAMPLE = r"""
     >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors="pt")
     >>> next_reply_ids = model.generate(**inputs)
     >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
-    Bot: That's too bad. Have you tried encouraging them to change their eating habits?
+    Bot:   That's too bad. Have you tried encouraging them to change their eating habits?
     ```
 """
 
@@ -1146,15 +1146,13 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         >>> model = BlenderbotModel.from_pretrained("facebook/blenderbot-400M-distill")
         >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
-        >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        >>> ).input_ids  # Batch size 1
+        >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        >>> outputs = model(input_ids=inputs.input_ids, decoder_input_ids=decoder_input_ids)
 
         >>> last_hidden_states = outputs.last_hidden_state
         >>> list(last_hidden_states.shape)
-        [1, 16, 1280]
+        [1, 6, 1280]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
