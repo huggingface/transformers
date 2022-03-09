@@ -380,11 +380,16 @@ class GenerationMixin:
     A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
 
     The class exposes the [`~generation_utils.GenerationMixin.generate`], which can be used for:
-        - *greedy decoding* by calling [`~generation_utils.GenerationMixin.greedy_search`] if `num_beams=1` and `do_sample=False`.
-        - *multinomial sampling* by calling [`~generation_utils.GenerationMixin.sample`] if `num_beams=1` and `do_sample=True`.
-        - *beam-search decoding* by calling [`~generation_utils.GenerationMixin.beam_search`] if `num_beams>1` and `do_sample=False`.
-        - *beam-search multinomial sampling* by calling [`~generation_utils.GenerationMixin.beam_sample`] if `num_beams>1` and `do_sample=True`.
-        - *diverse beam-search decoding* by calling [`~generation_utils.GenerationMixin.group_beam_search`], if `num_beams>1` and `num_beam_groups>1`.
+        - *greedy decoding* by calling [`~generation_utils.GenerationMixin.greedy_search`] if `num_beams=1` and
+          `do_sample=False`.
+        - *multinomial sampling* by calling [`~generation_utils.GenerationMixin.sample`] if `num_beams=1` and
+          `do_sample=True`.
+        - *beam-search decoding* by calling [`~generation_utils.GenerationMixin.beam_search`] if `num_beams>1` and
+          `do_sample=False`.
+        - *beam-search multinomial sampling* by calling [`~generation_utils.GenerationMixin.beam_sample`] if
+          `num_beams>1` and `do_sample=True`.
+        - *diverse beam-search decoding* by calling [`~generation_utils.GenerationMixin.group_beam_search`], if
+          `num_beams>1` and `num_beam_groups>1`.
     """
 
     def _prepare_model_inputs(
@@ -858,16 +863,23 @@ class GenerationMixin:
         Generates sequences of token ids for models with a language modeling head. The method supports the following
         generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
-            - *greedy decoding* by calling [`~generation_utils.GenerationMixin.greedy_search`] if `num_beams=1` and `do_sample=False`.
-            - *multinomial sampling* by calling [`~generation_utils.GenerationMixin.sample`] if `num_beams=1` and `do_sample=True`.
-            - *beam-search decoding* by calling [`~generation_utils.GenerationMixin.beam_search`] if `num_beams>1` and `do_sample=False`.
-            - *beam-search multinomial sampling* by calling [`~generation_utils.GenerationMixin.beam_sample`] if `num_beams>1` and `do_sample=True`.
-            - *diverse beam-search decoding* by calling [`~generation_utils.GenerationMixin.group_beam_search`], if `num_beams>1` and `num_beam_groups>1`.
+            - *greedy decoding* by calling [`~generation_utils.GenerationMixin.greedy_search`] if `num_beams=1` and
+              `do_sample=False`.
+            - *multinomial sampling* by calling [`~generation_utils.GenerationMixin.sample`] if `num_beams=1` and
+              `do_sample=True`.
+            - *beam-search decoding* by calling [`~generation_utils.GenerationMixin.beam_search`] if `num_beams>1` and
+              `do_sample=False`.
+            - *beam-search multinomial sampling* by calling [`~generation_utils.GenerationMixin.beam_sample`] if
+              `num_beams>1` and `do_sample=True`.
+            - *diverse beam-search decoding* by calling [`~generation_utils.GenerationMixin.group_beam_search`], if
+              `num_beams>1` and `num_beam_groups>1`.
 
-        Apart from `inputs`, all the arguments below will default to the value of the attribute of the same name
-        as defined in the model's config (`config.json`) which in turn defaults to the [`~modeling_utils.PretrainedConfig`] of the model.
+        Apart from `inputs`, all the arguments below will default to the value of the attribute of the same name as
+        defined in the model's config (`config.json`) which in turn defaults to the
+        [`~modeling_utils.PretrainedConfig`] of the model.
 
-        Most of these parameters are explained in more detail in [this blog post](https://huggingface.co/blog/how-to-generate).
+        Most of these parameters are explained in more detail in [this blog
+        post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
             inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):
@@ -1023,7 +1035,7 @@ class GenerationMixin:
         >>> # generate up to 30 tokens
         >>> outputs = model.generate(input_ids, do_sample=False, max_length=30)
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
+        ['Today I believe we can finally get to the point where we can make a difference in the lives of the people of the United States of America.\n']
         ```
 
         Multinomial Sampling:
@@ -1038,10 +1050,11 @@ class GenerationMixin:
         >>> prompt = "Today I believe we can finally"
         >>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
 
+        >>> # sample up to 30 tokens
         >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
-        >>> outputs = model.generate(input_ids)
+        >>> outputs = model.generate(input_ids, do_sample=True, max_length=30)
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
+        ['Today I believe we can finally get rid of discrimination," said Rep. Mark Pocan (D-Wis.).\n\n"Just look at the']
         ```
 
         Beam-search decoding:
@@ -1057,7 +1070,7 @@ class GenerationMixin:
 
         >>> outputs = model.generate(input_ids)
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
+        ['Paris ist eines der dichtesten besiedelten Gebiete Europas.']
         ```"""
         # 1. Set generation parameters if not already defined
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
@@ -1458,7 +1471,8 @@ class GenerationMixin:
         **model_kwargs,
     ) -> Union[GreedySearchOutput, torch.LongTensor]:
         r"""
-        Generates sequences of token ids for models with a language modeling head using **greedy decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+        Generates sequences of token ids for models with a language modeling head using **greedy decoding** and can be
+        used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
         Parameters:
 
@@ -1509,6 +1523,8 @@ class GenerationMixin:
         ...     AutoModelForCausalLM,
         ...     LogitsProcessorList,
         ...     MinLengthLogitsProcessor,
+        ...     StoppingCriteriaList,
+        ...     MaxLengthCriteria,
         ... )
 
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -1517,26 +1533,30 @@ class GenerationMixin:
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
         >>> model.config.pad_token_id = model.config.eos_token_id
 
-        >>> input_prompt = "Today is a beautiful day, and"
+        >>> input_prompt = "It might be possible to"
         >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
 
         >>> # instantiate logits processors
         >>> logits_processor = LogitsProcessorList(
         ...     [
-        ...         MinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
+        ...         MinLengthLogitsProcessor(10, eos_token_id=model.config.eos_token_id),
         ...     ]
         ... )
+        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
 
-        >>> outputs = model.greedy_search(input_ids, logits_processor=logits_processor)
+        >>> outputs = model.greedy_search(
+        ...     input_ids, logits_processor=logits_processor, stopping_criteria=stopping_criteria
+        ... )
 
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
             warnings.warn(
-                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
+                "`max_length` is deprecated in this function, use `stopping_criteria=StoppingCriteriaList([MaxLengthCriteria(max_length=max_length)])` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
@@ -1684,7 +1704,8 @@ class GenerationMixin:
         **model_kwargs,
     ) -> Union[SampleOutput, torch.LongTensor]:
         r"""
-        Generates sequences of token ids for models with a language modeling head using **multinomial sampling** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+        Generates sequences of token ids for models with a language modeling head using **multinomial sampling** and
+        can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
         Parameters:
 
@@ -1740,7 +1761,10 @@ class GenerationMixin:
         ...     MinLengthLogitsProcessor,
         ...     TopKLogitsWarper,
         ...     TemperatureLogitsWarper,
+        ...     StoppingCriteriaList,
+        ...     MaxLengthCriteria,
         ... )
+        >>> import torch
 
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
         >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
@@ -1765,9 +1789,18 @@ class GenerationMixin:
         ...     ]
         ... )
 
-        >>> outputs = model.sample(input_ids, logits_processor=logits_processor, logits_warper=logits_warper)
+        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
+
+        >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
+        >>> outputs = model.sample(
+        ...     input_ids,
+        ...     logits_processor=logits_processor,
+        ...     logits_warper=logits_warper,
+        ...     stopping_criteria=stopping_criteria,
+        ... )
 
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        ['Today is a beautiful day, and a wonderful day.\n\nI was lucky enough to meet the']
         ```"""
 
         # init values
@@ -1927,7 +1960,8 @@ class GenerationMixin:
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
         r"""
-        Generates sequences of token ids for models with a language modeling head using **beam search decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+        Generates sequences of token ids for models with a language modeling head using **beam search decoding** and
+        can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
         Parameters:
 
@@ -2021,7 +2055,8 @@ class GenerationMixin:
 
         >>> outputs = model.beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
 
-        >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        ['Wie alt bist du?']
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -2238,7 +2273,8 @@ class GenerationMixin:
         **model_kwargs,
     ) -> Union[BeamSampleOutput, torch.LongTensor]:
         r"""
-        Generates sequences of token ids for models with a language modeling head using **beam search multinomial sampling** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+        Generates sequences of token ids for models with a language modeling head using **beam search multinomial
+        sampling** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
         Parameters:
 
@@ -2558,7 +2594,8 @@ class GenerationMixin:
         **model_kwargs,
     ):
         r"""
-        Generates sequences of token ids for models with a language modeling head using **diverse beam search decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+        Generates sequences of token ids for models with a language modeling head using **diverse beam search
+        decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
         Parameters:
 
@@ -2658,7 +2695,8 @@ class GenerationMixin:
         ...     input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs
         ... )
 
-        >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        ['Wie alt bist du?']
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -2922,7 +2960,8 @@ class GenerationMixin:
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
 
         r"""
-        Generates sequences of token ids for models with a language modeling head using **constrained beam search decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+        Generates sequences of token ids for models with a language modeling head using **constrained beam search
+        decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
