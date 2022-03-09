@@ -90,7 +90,7 @@ jobs:
           cd doc-build &&
           git pull &&
           mv ../builder_dir/transformers . &&
-          git status &&
+          git status
 
 #          if [[ `git status --porcelain` ]]; then 
 #            git add . &&
@@ -105,7 +105,7 @@ jobs:
           cd notebooks &&
           git pull &&
           mv ../notebooks_dir transformers_doc &&
-          git status &&
+          git status
 #          if [[ `git status --porcelain` ]]; then
 #            git add transformers_doc &&
 #            git commit -m "Updated Transformer doc notebooks with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}" &&
