@@ -115,7 +115,7 @@ jobs:
 
           cd notebooks
           git pull
-          cp -r ../notebook_dir/. transformers_doc/
+          cp -r ../notebooks_dir/. transformers_doc/
           git status
 
           if [[ `git status --porcelain` ]]; then
