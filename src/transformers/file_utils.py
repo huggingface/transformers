@@ -1012,7 +1012,7 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
     >>> from transformers import {processor_class}, {model_class}
     >>> import torch
 
-    >>> torch.manual_seed(0)  # doctest:+IGNORE_OUTPUT
+    >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
 
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
@@ -1044,7 +1044,7 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> import torch
     >>> from transformers import {processor_class}, {model_class}
 
-    >>> torch.manual_seed(0)  # doctest:+IGNORE_OUTPUT
+    >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
 
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=2)
@@ -1064,7 +1064,7 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> import torch
     >>> from transformers import {processor_class}, {model_class}
 
-    >>> torch.manual_seed(0)  # doctest:+IGNORE_OUTPUT
+    >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
 
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}", problem_type="multi_label_classification", num_labels=2)
