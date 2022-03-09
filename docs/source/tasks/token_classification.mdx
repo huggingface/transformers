@@ -134,15 +134,22 @@ Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference
 
 Use [`DataCollatorForTokenClassification`] to create a batch of examples. It will also *dynamically pad* your text and labels to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import DataCollatorForTokenClassification
 
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import DataCollatorForTokenClassification
 
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
 ```
+</tf>
+</frameworkcontent>
 
 ## Fine-tune with Trainer
 
