@@ -96,19 +96,18 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6656
         run: |
-          cd doc-build-dev && git pull
-          cd ../doc-builder
-          doc-builder build transformers ../transformers/docs/source --build_dir ../doc-build-dev --notebook_dir ../notebooks/transformers_doc --clean --version pr_$PR_NUMBER --html
+          doc-builder build transformers transformers/docs/source --build_dir build_dir --clean --version pr_$PR_NUMBER --html
 
       - name: Push to repositories
         run: |
           cd doc-build-dev
-          ls
+          git pull
+          rm -rf transformers/pr_$PR_NUMBER
+          mv ../build_dir/transformers/pr_$PR_NUMBER transformers/pr_$PR_NUMBER
           git status
 
           if [[ `git status --porcelain` ]]; then
             git add .
-            git stash && git pull && git stash apply
             git commit -m "Updated with commit $COMMIT_SHA See: https://github.com/huggingface/transformers/commit/$COMMIT_SHA"
             git push origin main
           else

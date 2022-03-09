@@ -99,10 +99,28 @@ jobs:
           rm -rf transformers/$(ls ../build_dir/transformers)
           mv ../build_dir/transformers/$(ls ../build_dir/transformers) transformers/$(ls ../build_dir/transformers)
           git status
+
+          if [[ `git status --porcelain` ]]; then 
+            git add .
+            git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
+            git push origin main
+          else
+            echo "No diff in the documentation."
+          fi
+
           cd ..
 
           cd notebooks
           git pull
           cp -r ../notebook_dir/. transformers_doc/
           git status
+
+          if [[ `git status --porcelain` ]]; then
+            git add transformers_doc
+            git commit -m "Updated Transformer doc notebooks with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}" &&
+            git push origin master
+          else
+            echo "No diff in the notebooks."
+          fi
+
           cd ..
