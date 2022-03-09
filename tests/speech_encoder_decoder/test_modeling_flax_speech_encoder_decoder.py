@@ -21,6 +21,7 @@ import numpy as np
 from transformers import is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow, torch_device
 
+from ..bart.test_modeling_flax_bart import FlaxBartStandaloneDecoderModelTester
 from ..gpt2.test_modeling_flax_gpt2 import FlaxGPT2ModelTester
 from ..test_modeling_flax_common import floats_tensor, ids_tensor, random_attention_mask
 from ..wav2vec2.test_modeling_flax_wav2vec2 import FlaxWav2Vec2ModelTester
@@ -28,6 +29,7 @@ from ..wav2vec2.test_modeling_flax_wav2vec2 import FlaxWav2Vec2ModelTester
 
 if is_flax_available():
     from transformers import (
+        FlaxBartForCausalLM,
         FlaxGPT2LMHeadModel,
         FlaxSpeechEncoderDecoderModel,
         FlaxWav2Vec2Model,
@@ -494,6 +496,123 @@ class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
         pt_model = SpeechEncoderDecoderModel.from_pretrained("jsnfly/wav2vec2-large-xlsr-53-german-gpt2")
         fx_model = FlaxSpeechEncoderDecoderModel.from_pretrained(
             "jsnfly/wav2vec2-large-xlsr-53-german-gpt2", from_pt=True
+        )
+
+        pt_model.to(torch_device)
+        pt_model.eval()
+
+        # prepare inputs
+        batch_size = 13
+        input_values = floats_tensor([batch_size, 512], fx_model.config.encoder.vocab_size)
+        attention_mask = random_attention_mask([batch_size, 512])
+        decoder_input_ids = ids_tensor([batch_size, 4], fx_model.config.decoder.vocab_size)
+        decoder_attention_mask = random_attention_mask([batch_size, 4])
+        inputs_dict = {
+            "inputs": input_values,
+            "attention_mask": attention_mask,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+        }
+
+        flax_inputs = inputs_dict
+        pt_inputs = {k: torch.tensor(v.tolist()) for k, v in flax_inputs.items()}
+
+        with torch.no_grad():
+            pt_outputs = pt_model(**pt_inputs)
+        pt_logits = pt_outputs.logits
+        pt_outputs = pt_outputs.to_tuple()
+
+        fx_outputs = fx_model(**inputs_dict)
+        fx_logits = fx_outputs.logits
+        fx_outputs = fx_outputs.to_tuple()
+
+        self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+        self.assert_almost_equals(fx_logits, pt_logits.numpy(), 4e-2)
+
+        # PT -> Flax
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            pt_model.save_pretrained(tmpdirname)
+            fx_model_loaded = FlaxSpeechEncoderDecoderModel.from_pretrained(tmpdirname, from_pt=True)
+
+        fx_outputs_loaded = fx_model_loaded(**inputs_dict)
+        fx_logits_loaded = fx_outputs_loaded.logits
+        fx_outputs_loaded = fx_outputs_loaded.to_tuple()
+        self.assertEqual(len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+        self.assert_almost_equals(fx_logits_loaded, pt_logits.numpy(), 4e-2)
+
+        # Flax -> PT
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            fx_model.save_pretrained(tmpdirname)
+            pt_model_loaded = SpeechEncoderDecoderModel.from_pretrained(tmpdirname, from_flax=True)
+
+        pt_model_loaded.to(torch_device)
+        pt_model_loaded.eval()
+
+        with torch.no_grad():
+            pt_outputs_loaded = pt_model_loaded(**pt_inputs)
+        pt_logits_loaded = pt_outputs_loaded.logits
+        pt_outputs_loaded = pt_outputs_loaded.to_tuple()
+
+        self.assertEqual(len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch")
+        self.assert_almost_equals(fx_logits, pt_logits_loaded.numpy(), 4e-2)
+
+
+@require_flax
+class FlaxWav2Vec2BartModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
+    def get_pretrained_model_and_inputs(self):
+        model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "facebook/wav2vec2-large-lv60", "bart-large"
+        )
+        batch_size = 13
+        input_values = floats_tensor([batch_size, 512], model.config.encoder.vocab_size)
+        attention_mask = random_attention_mask([batch_size, 512])
+        decoder_input_ids = ids_tensor([batch_size, 4], model.config.decoder.vocab_size)
+        decoder_attention_mask = random_attention_mask([batch_size, 4])
+        inputs = {
+            "inputs": input_values,
+            "attention_mask": attention_mask,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+        }
+
+        return model, inputs
+
+    def get_encoder_decoder_model(self, config, decoder_config):
+        encoder_model = FlaxWav2Vec2Model(config)
+        decoder_model = FlaxBartForCausalLM(decoder_config)
+        return encoder_model, decoder_model
+
+    def prepare_config_and_inputs(self):
+        model_tester_encoder = FlaxWav2Vec2ModelTester(self, batch_size=13)
+        model_tester_decoder = FlaxBartStandaloneDecoderModelTester(self, batch_size=13)
+        encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()
+        (config, inputs, attention_mask) = encoder_config_and_inputs
+        (
+            decoder_config,
+            decoder_input_ids,
+            decoder_attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        ) = decoder_config_and_inputs
+
+        # make sure that cross attention layers are added
+        decoder_config.add_cross_attention = True
+        return {
+            "config": config,
+            "inputs": inputs,
+            "attention_mask": attention_mask,
+            "decoder_config": decoder_config,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+            "encoder_hidden_states": encoder_hidden_states,
+        }
+
+    @slow
+    def test_flaxwav2vec2bart_pt_flax_equivalence(self):
+        pt_model = SpeechEncoderDecoderModel.from_pretrained("patrickvonplaten/wav2vec2-2-bart-large")
+        fx_model = FlaxSpeechEncoderDecoderModel.from_pretrained(
+            "patrickvonplaten/wav2vec2-2-bart-large", from_pt=True
         )
 
         pt_model.to(torch_device)
