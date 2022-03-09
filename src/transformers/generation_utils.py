@@ -981,7 +981,7 @@ class GenerationMixin:
                 crash. Note that using `remove_invalid_values` can slow down generation.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
-            exponential_decay_length_penalty (`Tuple`, *optional*):
+            exponential_decay_length_penalty (`tuple(int, float)`, *optional*):
                 This Tuple adds an exponentially increasing length penalty, after a certain amount of tokens have been
                 generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where
                 penalty starts and `decay_factor` represents the factor of exponential decay
