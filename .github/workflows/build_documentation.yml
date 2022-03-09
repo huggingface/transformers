@@ -76,12 +76,18 @@ jobs:
         run: |
           git config --global user.name "Hugging Face Doc Builder"
           git config --global user.email docs@huggingface.co
+      
+      - name: Create build directory
+          cd doc-build
+          git pull
+          cd ..
+          mkdir build_dir
+          mkdir build_dir/transformers
+          cp doc-build/transformers/_versions.yml build_dir/transformers
           
       - name: Make documentation
         run: |
-          cd doc-builder &&
-          doc-builder build transformers ../transformers/docs/source --build_dir ../build_dir --notebook_dir ../notebooks_dir --clean --html &&
-          cd ..
+          doc-builder build transformers transformers/docs/source --build_dir build_dir --notebook_dir notebooks_dir --clean --html &&
         env:
           NODE_OPTIONS: --max-old-space-size=6656
 
@@ -89,6 +95,7 @@ jobs:
         run: |
           cd doc-build
           git pull
+          mv ../build_dir/transformers/_versions.yml transformers/
           rm -rf transformers/$(ls ../build_dir/transformers)
           mv ../build_dir/transformers/$(ls ../build_dir/transformers) transformers/$(ls ../build_dir/transformers)
           git status
@@ -96,6 +103,6 @@ jobs:
 
           cd notebooks
           git pull
-          cp -r ../notebooks_dir/. transformers_doc
+          cp -r ../notebook_dir/. transformers_doc/
           git status
           cd ..
