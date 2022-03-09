@@ -78,6 +78,7 @@ jobs:
           git config --global user.email docs@huggingface.co
       
       - name: Create build directory
+        run: |
           cd doc-build
           git pull
           cd ..
