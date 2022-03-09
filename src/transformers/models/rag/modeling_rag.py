@@ -15,7 +15,7 @@
 """RAG model implementation."""
 
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -1405,7 +1405,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
-        exponential_decay_length_penalty: Optional[Tuple] = None,
+        exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
         **model_kwargs
     ):
         """
