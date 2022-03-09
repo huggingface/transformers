@@ -34,8 +34,8 @@ import transformers
 from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
-    AutoModelForCTC,
     AutoModelForAudioClassification,
+    AutoModelForCTC,
     AutoProcessor,
     AutoTokenizer,
     HfArgumentParser,
@@ -77,8 +77,9 @@ class ModelArguments:
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models and datasets downloaded from "
-                          "huggingface.co"},
+        metadata={
+            "help": "Where do you want to store the pretrained models and datasets downloaded from " "huggingface.co"
+        },
     )
     freeze_feature_encoder: bool = field(
         default=True, metadata={"help": "Whether to freeze the feature encoder layers of the model."}
@@ -141,7 +142,7 @@ class DataTrainingArguments:
 
     dataset_name: str = field(
         default="xtreme_s",
-        metadata={"help": "The name of the dataset to use (via the datasets library). Defaults to 'xtreme_s'"}
+        metadata={"help": "The name of the dataset to use (via the datasets library). Defaults to 'xtreme_s'"},
     )
     dataset_config_name: str = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
@@ -149,15 +150,14 @@ class DataTrainingArguments:
     train_split_name: str = field(
         default="train",
         metadata={
-            "help": "The name of the training data set split to use (via the datasets library). "
-                    "Defaults to 'train'"
+            "help": "The name of the training data set split to use (via the datasets library). " "Defaults to 'train'"
         },
     )
     eval_split_name: str = field(
         default="validation",
         metadata={
             "help": "The name of the evaluation data set split to use (via the datasets library). "
-                    "Defaults to 'validation'"
+            "Defaults to 'validation'"
         },
     )
     audio_column_name: str = field(
@@ -166,8 +166,10 @@ class DataTrainingArguments:
     )
     target_column_name: str = field(
         default="transcription",
-        metadata={"help": "The name of the dataset column containing the target data "
-                          "(transcription/translation/label). Defaults to 'transcription'"},
+        metadata={
+            "help": "The name of the dataset column containing the target data "
+            "(transcription/translation/label). Defaults to 'transcription'"
+        },
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
@@ -412,7 +414,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.train_split_name,
             use_auth_token=data_args.use_auth_token,
-            cache_dir=model_args.cache_dir
+            cache_dir=model_args.cache_dir,
         )
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
@@ -442,7 +444,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
             use_auth_token=data_args.use_auth_token,
-            cache_dir=model_args.cache_dir
+            cache_dir=model_args.cache_dir,
         )
 
         if data_args.max_eval_samples is not None:
