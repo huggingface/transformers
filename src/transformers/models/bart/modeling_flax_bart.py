@@ -1746,8 +1746,6 @@ class FlaxBartPreTrainedDecoderModel(FlaxPreTrainedModel):
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
-        # make sure initialization pass will work for FlaxBartForSequenceClassificationModule
-        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
         attention_mask = jnp.ones_like(input_ids)
 
         batch_size, sequence_length = input_ids.shape
