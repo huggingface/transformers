@@ -72,10 +72,6 @@ if is_torch_available():
 class TFPTAutoModelTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
-        import h5py
-
-        self.assertTrue(h5py.version.hdf5_version.startswith("1.10"))
-
         # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
         for model_name in ["bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
@@ -92,10 +88,6 @@ class TFPTAutoModelTest(unittest.TestCase):
 
     @slow
     def test_model_for_pretraining_from_pretrained(self):
-        import h5py
-
-        self.assertTrue(h5py.version.hdf5_version.startswith("1.10"))
-
         # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
         for model_name in ["bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
