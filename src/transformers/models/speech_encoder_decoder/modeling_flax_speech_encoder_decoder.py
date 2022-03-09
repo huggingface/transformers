@@ -108,8 +108,7 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
 
-            For training, `decoder_input_ids` are automatically created by the model by shifting the `labels` to the
-            right, replacing -100 by the `pad_token_id` and prepending them with the `decoder_start_token_id`.
+            For sequence to sequence training, `decoder_input_ids` should be provided.
         decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
@@ -161,9 +160,7 @@ SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
 
-            For sequence to sequence training, `decoder_input_ids` should be provided. If no `decoder_input_ids` is
-            provided, the model will create this tensor by shifting the `input_ids` to the right for denoising
-            pre-training.
+            For sequence to sequence training, `decoder_input_ids` should be provided.
         encoder_outputs (`tuple(tuple(jnp.ndarray)`):
             Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
@@ -681,6 +678,10 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
             attention_mask = jnp.ones_like(inputs)
 
         # prepare decoder inputs
+        if decoder_input_ids is None:
+            raise ValueError(
+                "For sequence to sequence training, `decoder_position_ids` must be specified as an input argument."
+            )
         if decoder_attention_mask is None:
             decoder_attention_mask = jnp.ones_like(decoder_input_ids)
         if decoder_position_ids is None:
