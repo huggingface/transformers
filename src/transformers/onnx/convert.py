@@ -100,11 +100,18 @@ def export_pytorch(
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
+
+    if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
+        raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
             FutureWarning,
         )
+        logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        preprocessor = tokenizer
+
     if issubclass(type(model), PreTrainedModel):
         import torch
         from torch.onnx import export as onnx_export
@@ -123,9 +130,7 @@ def export_pytorch(
 
             # Ensure inputs match
             # TODO: Check when exporting QA we provide "is_pair=True"
-            model_inputs = config.generate_dummy_inputs(
-                preprocessor, tokenizer=tokenizer, framework=TensorType.PYTORCH
-            )
+            model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.PYTORCH)
             inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
             onnx_outputs = list(config.outputs.keys())
 
@@ -213,11 +218,17 @@ def export_tensorflow(
     import onnx
     import tf2onnx
 
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
+
+    if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
+        raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
             FutureWarning,
         )
+        logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        preprocessor = tokenizer
 
     model.config.return_dict = True
 
@@ -229,7 +240,7 @@ def export_tensorflow(
             setattr(model.config, override_config_key, override_config_value)
 
     # Ensure inputs match
-    model_inputs = config.generate_dummy_inputs(preprocessor, tokenizer=tokenizer, framework=TensorType.TENSORFLOW)
+    model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.TENSORFLOW)
     inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
     onnx_outputs = list(config.outputs.keys())
 
@@ -273,11 +284,17 @@ def export(
             "Cannot convert because neither PyTorch nor TensorFlow are not installed. "
             "Please install torch or tensorflow first."
         )
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
+
+    if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
+        raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
             FutureWarning,
         )
+        logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        preprocessor = tokenizer
 
     if is_torch_available():
         from ..file_utils import torch_version
@@ -307,18 +324,26 @@ def validate_model_outputs(
 ):
     from onnxruntime import InferenceSession, SessionOptions
 
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
+
     logger.info("Validating ONNX model...")
+
+    if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
+        raise ValueError("You cannot provide both a tokenizer and a preprocessor to validate model inputs.")
+    if tokenizer is not None:
+        warnings.warn(
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            FutureWarning,
+        )
+        logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        preprocessor = tokenizer
 
     # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
     # dynamic input shapes.
     if issubclass(type(reference_model), PreTrainedModel):
-        reference_model_inputs = config.generate_dummy_inputs(
-            preprocessor, tokenizer=tokenizer, framework=TensorType.PYTORCH
-        )
+        reference_model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.PYTORCH)
     else:
-        reference_model_inputs = config.generate_dummy_inputs(
-            preprocessor, tokenizer=tokenizer, framework=TensorType.TENSORFLOW
-        )
+        reference_model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.TENSORFLOW)
 
     # Create ONNX Runtime session
     options = SessionOptions()
