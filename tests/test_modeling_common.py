@@ -128,6 +128,7 @@ class ModelTesterMixin:
     test_missing_keys = True
     test_model_parallel = False
     is_encoder_decoder = False
+    has_attentions = True
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -454,119 +455,123 @@ class ModelTesterMixin:
             loss.backward()
 
     def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
+        if not self.has_attentions:
+            pass
 
-        seq_len = getattr(self.model_tester, "seq_length", None)
-        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-        chunk_length = getattr(self.model_tester, "chunk_length", None)
-        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
-            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
+        else:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            seq_len = getattr(self.model_tester, "seq_length", None)
+            decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+            encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+            decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
+            encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+            chunk_length = getattr(self.model_tester, "chunk_length", None)
+            if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
+                encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
-            out_len = len(outputs)
+            for model_class in self.all_model_classes:
+                inputs_dict["output_attentions"] = True
+                inputs_dict["output_hidden_states"] = False
+                config.return_dict = True
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-            if self.is_encoder_decoder:
-                correct_outlen = 5
+                # check that output_attentions also work using config
+                del inputs_dict["output_attentions"]
+                config.output_attentions = True
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-                # loss is at first position
-                if "labels" in inputs_dict:
-                    correct_outlen += 1  # loss is added to beginning
-                # Question Answering model returns start_logits and end_logits
-                if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
-                    correct_outlen += 1  # start_logits and end_logits instead of only 1 output
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if chunk_length is not None:
+                    self.assertListEqual(
+                        list(attentions[0].shape[-4:]),
+                        [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                    )
+                else:
+                    self.assertListEqual(
+                        list(attentions[0].shape[-3:]),
+                        [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                    )
+                out_len = len(outputs)
 
-                self.assertEqual(out_len, correct_outlen)
+                if self.is_encoder_decoder:
+                    correct_outlen = 5
 
-                # decoder attentions
-                decoder_attentions = outputs.decoder_attentions
-                self.assertIsInstance(decoder_attentions, (list, tuple))
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
-                )
+                    # loss is at first position
+                    if "labels" in inputs_dict:
+                        correct_outlen += 1  # loss is added to beginning
+                    # Question Answering model returns start_logits and end_logits
+                    if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
+                        correct_outlen += 1  # start_logits and end_logits instead of only 1 output
+                    if "past_key_values" in outputs:
+                        correct_outlen += 1  # past_key_values have been returned
 
-                # cross attentions
-                cross_attentions = outputs.cross_attentions
-                self.assertIsInstance(cross_attentions, (list, tuple))
-                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(cross_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        decoder_seq_length,
-                        encoder_key_length,
-                    ],
-                )
+                    self.assertEqual(out_len, correct_outlen)
 
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                    # decoder attentions
+                    decoder_attentions = outputs.decoder_attentions
+                    self.assertIsInstance(decoder_attentions, (list, tuple))
+                    self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                    self.assertListEqual(
+                        list(decoder_attentions[0].shape[-3:]),
+                        [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                    )
 
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
-            else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
+                    # cross attentions
+                    cross_attentions = outputs.cross_attentions
+                    self.assertIsInstance(cross_attentions, (list, tuple))
+                    self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                    self.assertListEqual(
+                        list(cross_attentions[0].shape[-3:]),
+                        [
+                            self.model_tester.num_attention_heads,
+                            decoder_seq_length,
+                            encoder_key_length,
+                        ],
+                    )
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+                # Check attention is always last and order is fine
+                inputs_dict["output_attentions"] = True
+                inputs_dict["output_hidden_states"] = True
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
+                if hasattr(self.model_tester, "num_hidden_states_types"):
+                    added_hidden_states = self.model_tester.num_hidden_states_types
+                elif self.is_encoder_decoder:
+                    added_hidden_states = 2
+                else:
+                    added_hidden_states = 1
+                self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+                self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+
+                self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+                if chunk_length is not None:
+                    self.assertListEqual(
+                        list(self_attentions[0].shape[-4:]),
+                        [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                    )
+                else:
+                    self.assertListEqual(
+                        list(self_attentions[0].shape[-3:]),
+                        [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                    )
 
     @slow
     def test_torchscript(self):
@@ -1040,7 +1045,7 @@ class ModelTesterMixin:
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
-        config.output_attentions = True
+        config.output_attentions = self.has_attentions
 
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
@@ -1056,37 +1061,45 @@ class ModelTesterMixin:
         if config.is_encoder_decoder:
             # Seq2Seq models
             encoder_hidden_states = outputs.encoder_hidden_states[0]
-            encoder_attentions = outputs.encoder_attentions[0]
             encoder_hidden_states.retain_grad()
-            encoder_attentions.retain_grad()
 
             decoder_hidden_states = outputs.decoder_hidden_states[0]
-            decoder_attentions = outputs.decoder_attentions[0]
             decoder_hidden_states.retain_grad()
-            decoder_attentions.retain_grad()
 
-            cross_attentions = outputs.cross_attentions[0]
-            cross_attentions.retain_grad()
+            if self.has_attentions:
+                encoder_attentions = outputs.encoder_attentions[0]
+                encoder_attentions.retain_grad()
+
+                decoder_attentions = outputs.decoder_attentions[0]
+                decoder_attentions.retain_grad()
+
+                cross_attentions = outputs.cross_attentions[0]
+                cross_attentions.retain_grad()
 
             output.flatten()[0].backward(retain_graph=True)
 
             self.assertIsNotNone(encoder_hidden_states.grad)
-            self.assertIsNotNone(encoder_attentions.grad)
             self.assertIsNotNone(decoder_hidden_states.grad)
-            self.assertIsNotNone(decoder_attentions.grad)
-            self.assertIsNotNone(cross_attentions.grad)
+
+            if self.has_attentions:
+                self.assertIsNotNone(encoder_attentions.grad)
+                self.assertIsNotNone(decoder_attentions.grad)
+                self.assertIsNotNone(cross_attentions.grad)
         else:
             # Encoder-/Decoder-only models
             hidden_states = outputs.hidden_states[0]
-            attentions = outputs.attentions[0]
-
             hidden_states.retain_grad()
-            attentions.retain_grad()
+
+            if self.has_attentions:
+                attentions = outputs.attentions[0]
+                attentions.retain_grad()
 
             output.flatten()[0].backward(retain_graph=True)
 
             self.assertIsNotNone(hidden_states.grad)
-            self.assertIsNotNone(attentions.grad)
+
+            if self.has_attentions:
+                self.assertIsNotNone(attentions.grad)
 
     def test_feed_forward_chunking(self):
         (
@@ -1424,23 +1437,24 @@ class ModelTesterMixin:
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+            if self.has_attentions:
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(
-                model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
-            )
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                check_equivalence(
+                    model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+                )
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
