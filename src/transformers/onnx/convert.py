@@ -330,12 +330,12 @@ def validate_model_outputs(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
             FutureWarning,
         )
-        logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
         preprocessor = tokenizer
 
     # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
     # dynamic input shapes.
-    if issubclass(type(reference_model), PreTrainedModel):
+    if is_torch_available() and issubclass(type(reference_model), PreTrainedModel):
         reference_model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.PYTORCH)
     else:
         reference_model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.TENSORFLOW)
@@ -388,7 +388,7 @@ def validate_model_outputs(
 
     # Check the shape and values match
     for name, ort_value in zip(onnx_named_outputs, onnx_outputs):
-        if issubclass(type(reference_model), PreTrainedModel):
+        if is_torch_available() and issubclass(type(reference_model), PreTrainedModel):
             ref_value = ref_outputs_dict[name].detach().numpy()
         else:
             ref_value = ref_outputs_dict[name].numpy()
@@ -422,7 +422,7 @@ def ensure_model_and_config_inputs_match(
 
     :param model_inputs: :param config_inputs: :return:
     """
-    if issubclass(type(model), PreTrainedModel):
+    if is_torch_available() and issubclass(type(model), PreTrainedModel):
         forward_parameters = signature(model.forward).parameters
     else:
         forward_parameters = signature(model.call).parameters
