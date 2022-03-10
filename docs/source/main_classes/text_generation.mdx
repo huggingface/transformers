@@ -1,0 +1,39 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Generation
+
+The methods for auto-regressive text generation, namely [`~generation_utils.GenerationMixin.generate`] (for the PyTorch models), [`~generation_tf_utils.TFGenerationMixin.generate`] (for the TensorFlow models) and [`~generation_flax_utils.FlaxGenerationMixin.generate`] (for the Flax/JAX models), are implemented in [`~generation_utils.GenerationMixin`], [`~generation_tf_utils.TFGenerationMixin`] and [`~generation_flax_utils.FlaxGenerationMixin`] respectively.
+
+The `GenerationMixin` classes are inherited by the corresponding base model classes, *e.g.* [`PreTrainedModel`], [`TFPreTrainedModel`], and [`FlaxPreTrainedModel`] respectively, therefore exposing all 
+methods for auto-regressive text generation to every model class.
+
+## GenerationMixn
+
+[[autodoc]] generation_utils.GenerationMixin
+	- generate
+	- greedy_search
+	- sample
+	- beam_search
+	- beam_sample
+	- group_beam_search
+	- constrained_beam_search
+
+## TFGenerationMixn
+
+[[autodoc]] generation_tf_utils.TFGenerationMixin
+	- generate
+
+## FlaxGenerationMixn
+
+[[autodoc]] generation_flax_utils.FlaxGenerationMixin
+	- generate

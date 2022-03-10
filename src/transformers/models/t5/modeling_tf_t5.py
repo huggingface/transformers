@@ -1256,14 +1256,12 @@ class TFT5Model(TFT5PreTrainedModel):
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
+        past = decoder_outputs[1] if inputs["use_cache"] else None
 
         if not inputs["return_dict"]:
-            past = (inputs["encoder_outputs"], decoder_outputs[1]) if inputs["use_cache"] else None
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             return decoder_outputs + inputs["encoder_outputs"]
-
-        past = (inputs["encoder_outputs"].to_tuple(), decoder_outputs[1]) if inputs["use_cache"] else None
 
         return TFSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1483,8 +1481,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
 
+        past = decoder_outputs[1] if inputs["use_cache"] else None
         if not inputs["return_dict"]:
-            past = (inputs["encoder_outputs"], decoder_outputs[1]) if inputs["use_cache"] else None
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             output = (logits,) + decoder_outputs[1:] + inputs["encoder_outputs"]
@@ -1508,8 +1506,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                 hidden_states=hidden_states,
                 attentions=attentions,
             )
-
-        past = (inputs["encoder_outputs"].to_tuple(), decoder_outputs[1]) if inputs["use_cache"] else None
 
         return TFSeq2SeqLMOutput(
             loss=loss,
@@ -1544,65 +1540,57 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
     def prepare_inputs_for_generation(
         self,
-        inputs,
-        past,
-        attention_mask,
+        input_ids,
+        past=None,
+        attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
         use_cache=None,
-        **kwargs,
+        encoder_outputs=None,
+        **kwargs
     ):
-        assert past is not None, "past has to be defined for encoder_outputs"
-
-        # first step
-        if len(past) < 2:
-            encoder_outputs, past_key_values = past, None
-        else:
-            encoder_outputs, past_key_values = past[0], past[1]
-        if "encoder_hidden_states" in kwargs:
-            encoder_outputs = (*encoder_outputs, kwargs["encoder_hidden_states"])
-        if "encoder_attentions" in kwargs:
-            encoder_outputs = (*encoder_outputs, kwargs["encoder_attentions"])
 
         # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            inputs = inputs[:, -1:]
+        if past is not None:
+            input_ids = input_ids[:, -1:]
 
         return {
-            "input_ids": None,  # inputs don't have to be defined, but still need to be passed to make Keras.layer.__call__ happy
-            "decoder_input_ids": inputs,  # inputs are the decoder_input_ids
-            "past_key_values": past_key_values,
+            "input_ids": None,  # needs to be passed to make Keras.layer.__call__ happy
+            "decoder_input_ids": input_ids,
+            "past_key_values": past,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
+            "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
             "use_cache": use_cache,
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return self._shift_right(labels)
 
-    def _reorder_cache(self, past, beam_idx) -> Tuple:
+    def _reorder_cache(self, past, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
-
-        if len(past) < 2:
+        if past is None:
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
             return past
 
-        decoder_past = past[1]
-        past = (past[0],)
         reordered_decoder_past = ()
-
-        for layer_past_states in decoder_past:
+        for layer_past_states in past:
             # get the correct batch idx from layer past batch dim
             # batch dim of `past` is at 2nd position
             reordered_layer_past_states = ()
             for layer_past_state in layer_past_states:
                 # need to set correct `past` for each of the four key / value states
-                reordered_layer_past_states = reordered_layer_past_states + (tf.gather(layer_past_state, beam_idx),)
+                reordered_layer_past_states = reordered_layer_past_states + (
+                    tf.gather(layer_past_state, beam_idx, axis=0),
+                )
 
-            assert shape_list(reordered_layer_past_states[0]) == shape_list(layer_past_states[0])
+            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
             assert len(reordered_layer_past_states) == len(layer_past_states)
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
-        return past + (reordered_decoder_past,)
+        return reordered_decoder_past
 
 
 @add_start_docstrings(

@@ -311,9 +311,10 @@ def booleans_processing(config, **kwargs):
     final_booleans = {}
 
     if tf.executing_eagerly():
-        final_booleans["output_attentions"] = (
-            kwargs["output_attentions"] if kwargs["output_attentions"] is not None else config.output_attentions
-        )
+        # Pure conv models (such as ConvNext) do not have `output_attentions`
+        final_booleans["output_attentions"] = kwargs.get("output_attentions", None)
+        if final_booleans["output_attentions"] is None:
+            final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = (
             kwargs["output_hidden_states"]
             if kwargs["output_hidden_states"] is not None
@@ -884,7 +885,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def train_step(self, data):
         """
-        A modification of Keras's default train_step that cleans up the printed metrics when we use a dummy loss.
+        A modification of Keras's default `train_step` that cleans up the printed metrics when we use a dummy loss. If
+        a user specifies a loss at model compile time, this function behaves as the original Keras `train_step`. In
+        this case, it expects the same `data` as the original function (i.e. `(inputs, labels)`).
+
+        However, when the model is compiled without specifying the loss AND the expected label columns are passed as
+        part of the input dictionary, the loss is computed internally (inside the model class) and is used in the
+        backwards pass. In this case, `data` is a singleton tuple containing `(inputs,)`.
+
+        This is possible under the aforementioned circumstances because our overriden compile function can set an
+        additional loss function that reduces a `loss` output, and the model will output a `loss` component (notice the
+        name matching) containing the loss that was used to train the pre-trained model.
         """
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.

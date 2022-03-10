@@ -559,6 +559,10 @@ jobs:
                   if [ -f test_list.txt ]; then
                     python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py ./tests/test_tokenization_openai.py | tee tests_output.txt
                   fi
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 1 tests/test_tokenization_clip.py --dist=loadfile -s --make-reports=tests_tokenization_clip --durations=100 | tee tests_output.txt
+                  fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -779,7 +783,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime]
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:
@@ -812,7 +816,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime]
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:

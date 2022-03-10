@@ -1580,8 +1580,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         loaded_keys = list(state_dict.keys())
         prefix = model.base_model_prefix
 
-        has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
-        expects_prefix_module = any(s.startswith(prefix) for s in expected_keys)
+        if len(prefix) > 0:
+            has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
+            expects_prefix_module = any(s.startswith(prefix) for s in expected_keys)
+        else:
+            has_prefix_module = False
+            expects_prefix_module = False
 
         # key re-naming operations are never done on the keys
         # that are loaded, but always on the keys of the newly initialized model
@@ -1669,9 +1673,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ""
         model_to_load = model
-        if not hasattr(model, cls.base_model_prefix) and has_prefix_module:
+        if len(cls.base_model_prefix) > 0 and not hasattr(model, cls.base_model_prefix) and has_prefix_module:
             start_prefix = cls.base_model_prefix + "."
-        if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
+        if len(cls.base_model_prefix) > 0 and hasattr(model, cls.base_model_prefix) and not has_prefix_module:
             model_to_load = getattr(model, cls.base_model_prefix)
             if any(key in expected_keys_not_prefixed for key in loaded_keys):
                 raise ValueError(

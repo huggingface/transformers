@@ -212,8 +212,8 @@ class TFRemBertSelfAttention(tf.keras.layers.Layer):
         elif past_key_value is not None:
             key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
             value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
-            key_layer = tf.concatenate([past_key_value[0], key_layer], dim=2)
-            value_layer = tf.concatenate([past_key_value[1], value_layer], dim=2)
+            key_layer = tf.concat([past_key_value[0], key_layer], axis=2)
+            value_layer = tf.concat([past_key_value[1], value_layer], axis=2)
         else:
             key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
             value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
@@ -740,6 +740,9 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
             extended_attention_mask = tf.reshape(
                 extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2])
             )
+            if inputs["past_key_values"][0] is not None:
+                # attention_mask needs to be sliced to the shape `[batch_size, 1, from_seq_length - cached_seq_length, to_seq_length]
+                extended_attention_mask = extended_attention_mask[:, :, -seq_length:, :]
         else:
             extended_attention_mask = tf.reshape(
                 inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
@@ -1173,17 +1176,17 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
         return self.mlm.predictions
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(self, inputs, past=None, attention_mask=None, **model_kwargs):
-        # cut decoder_input_ids if past is used
-        if past:
-            inputs = tf.expand_dims(inputs[:, -1], -1)
+    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+        input_shape = input_ids.shape
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = tf.ones(input_shape)
 
-        return {
-            "input_ids": inputs,
-            "attention_mask": attention_mask,
-            "past_key_values": past,
-            "use_cache": model_kwargs["use_cache"],
-        }
+        # cut decoder_input_ids if past is used
+        if past is not None:
+            input_ids = input_ids[:, -1:]
+
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
 
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1305,6 +1308,14 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
         return TFCausalLMOutputWithCrossAttentions(
             logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
         )
+
+    @staticmethod
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel._reorder_cache
+    def _reorder_cache(past, beam_idx):
+        reordered_past = ()
+        for layer_past in past:
+            reordered_past += (tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past),)
+        return reordered_past
 
 
 @add_start_docstrings(

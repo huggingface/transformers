@@ -220,6 +220,10 @@ class TrainingArguments:
         seed (`int`, *optional*, defaults to 42):
             Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use the
             [`~Trainer.model_init`] function to instantiate the model if it has some randomly initialized parameters.
+        data_seed (`int`, *optional*):
+            Random seed to be used with data samplers. If not set, random generators for data sampling will use the
+            same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
+            seed.
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
             NVIDIA architecture. This is an experimental API and it may change.
@@ -539,6 +543,7 @@ class TrainingArguments:
     )
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
+    data_seed: int = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
     bf16: bool = field(
         default=False,
         metadata={
@@ -1126,7 +1131,7 @@ class TrainingArguments:
         if is_torch_tpu_available():
             return xm.xrt_world_size()
         elif is_sagemaker_mp_enabled():
-            return smp.dp_size()
+            return smp.dp_size() if not smp.state.cfg.prescaled_batch else smp.rdp_size()
         elif is_sagemaker_dp_enabled():
             return sm_dist.get_world_size()
         elif self.local_rank != -1:
@@ -1142,7 +1147,7 @@ class TrainingArguments:
         if is_torch_tpu_available():
             return xm.get_ordinal()
         elif is_sagemaker_mp_enabled():
-            return smp.dp_rank()
+            return smp.dp_rank() if not smp.state.cfg.prescaled_batch else smp.rdp_rank()
         elif is_sagemaker_dp_enabled():
             return sm_dist.get_rank()
         elif self.local_rank != -1:
@@ -1244,12 +1249,14 @@ class TrainingArguments:
 
         """
         if is_torch_available() and self.world_size > 1:
+            main_process_desc = "main process"
             if local:
                 is_main_process = self.local_process_index == 0
                 main_process_desc = "main local process"
+            elif is_sagemaker_mp_enabled():
+                is_main_process = smp.rank() == 0
             else:
                 is_main_process = self.process_index == 0
-                main_process_desc = "main process"
 
             try:
                 if not is_main_process:

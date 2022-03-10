@@ -14,6 +14,9 @@
 # limitations under the License.
 """ UniSpeech model configuration"""
 
+import functools
+import operator
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -289,3 +292,7 @@ class UniSpeechConfig(PretrainedConfig):
 
         # pretraining loss
         self.replace_prob = replace_prob
+
+    @property
+    def inputs_to_logits_ratio(self):
+        return functools.reduce(operator.mul, self.conv_stride, 1)

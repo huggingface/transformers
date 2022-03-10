@@ -65,12 +65,7 @@ Those processors are:
 Additionally, the following method can be used to load values from a data file and convert them to a list of
 [`~data.processors.utils.InputExample`].
 
-automethod,transformers.data.processors.glue.glue_convert_examples_to_features
-
-
-### Example usage
-
-An example using these processors is given in the [run_glue.py](https://github.com/huggingface/transformers/tree/master/examples/legacy/text-classification/run_glue.py) script.
+[[autodoc]] data.processors.glue.glue_convert_examples_to_features
 
 
 ## XNLI
@@ -114,7 +109,7 @@ They both inherit from the abstract class [`~data.processors.utils.SquadProcesso
 Additionally, the following method can be used to convert SQuAD examples into
 [`~data.processors.utils.SquadFeatures`] that can be used as model inputs.
 
-automethod,transformers.data.processors.squad.squad_convert_examples_to_features
+[[autodoc]] data.processors.squad.squad_convert_examples_to_features
 
 
 These processors as well as the aforementionned method can be used with files containing the data as well as with the
