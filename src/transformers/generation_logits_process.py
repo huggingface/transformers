@@ -656,8 +656,8 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
 
     Args:
         exponential_decay_length_penalty (`tuple(int, float)`, *optional*):
-            This tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where
-            penalty starts and `decay_factor` represents the factor of exponential decay
+            This tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where penalty
+            starts and `decay_factor` represents the factor of exponential decay
         eos_token_id (`int`):
             The id of the *end-of-sequence* token.
     """
