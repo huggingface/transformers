@@ -18,49 +18,45 @@ Fine-tuning the Flax library models for sequence to sequence speech recognition.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
-import json
 import logging
 import os
-import random
 import sys
 import time
-from dataclasses import asdict, dataclass, field
-from enum import Enum
+from dataclasses import field
 from functools import partial
-from itertools import chain
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Union, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import datasets
 import numpy as np
-from datasets import Dataset, DatasetDict, load_dataset, load_metric
+from datasets import DatasetDict, load_dataset, load_metric
 from tqdm import tqdm
 
+import flax
 import jax
 import jax.numpy as jnp
 import optax
 import transformers
-import flax
 from flax import jax_utils, traverse_util
-from flax.jax_utils import replicate, unreplicate
+from flax.jax_utils import unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from huggingface_hub import Repository
 from transformers import (
-    CONFIG_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
-    FlaxAutoModelForSpeechSeq2Seq,
     AutoProcessor,
     AutoTokenizer,
+    FlaxAutoModelForSpeechSeq2Seq,
     HfArgumentParser,
     Seq2SeqTrainingArguments,
     is_tensorboard_available,
 )
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.file_utils import get_full_repo_name
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
+
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.17.0.dev0")
@@ -110,6 +106,7 @@ class ModelArguments:
     freeze_feature_encoder: bool = field(
         default=True, metadata={"help": "Whether to freeze the feature encoder layers of the model."}
     )
+
 
 @flax.struct.dataclass
 class DataTrainingArguments:
@@ -191,11 +188,13 @@ class DataTrainingArguments:
         metadata={"help": "Whether the target text should be lower cased."},
     )
 
+
 class TrainState(train_state.TrainState):
     dropout_rng: jnp.ndarray
 
     def replicate(self):
         return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
+
 
 def shift_tokens_right(label_ids: jnp.array, decoder_start_token_id: int) -> np.ndarray:
     """
@@ -207,6 +206,7 @@ def shift_tokens_right(label_ids: jnp.array, decoder_start_token_id: int) -> np.
 
     return shifted_label_ids
 
+
 @flax.struct.dataclass
 class FlaxDataCollatorSpeechSeq2SeqWithPadding:
     """
@@ -217,6 +217,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
         decoder_start_token_id (`int`)
             The begin-of-sentence of the decoder.
     """
+
     processor: Any
     decoder_start_token_id: int
 
@@ -231,7 +232,9 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
         labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="np")
 
         # replace padding with -100 to ignore loss correctly
-        labels_batch["input_ids"] = np.ma.array(labels_batch["input_ids"], mask=np.not_equal(labels_batch.attention_mask, 1))
+        labels_batch["input_ids"] = np.ma.array(
+            labels_batch["input_ids"], mask=np.not_equal(labels_batch.attention_mask, 1)
+        )
         labels = labels_batch["input_ids"].filled(fill_value=-100)
 
         # if bos token is appended in previous tokenization step,
@@ -240,13 +243,13 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
             labels = labels[:, 1:]
             labels_batch.attention_mask = labels_batch.attention_mask[:, 1:]
 
-        batch['inputs'] = batch.pop("input_values")
+        batch["inputs"] = batch.pop("input_values")
 
-        batch['labels'] = labels
+        batch["labels"] = labels
 
         batch["decoder_input_ids"] = shift_tokens_right(labels, self.decoder_start_token_id)
 
-        batch['decoder_attention_mask'] = labels_batch.attention_mask
+        batch["decoder_attention_mask"] = labels_batch.attention_mask
 
         return batch
 
@@ -277,6 +280,7 @@ def create_learning_rate_fn(
     schedule_fn = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[num_warmup_steps])
     return schedule_fn
 
+
 def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
     num_samples = len(samples_idx)
     samples_to_remove = num_samples % batch_size
@@ -286,6 +290,7 @@ def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndar
     sections_split = num_samples // batch_size
     batch_idx = np.split(samples_idx, sections_split)
     return batch_idx
+
 
 def main():
     # 1. Parse input arguments
@@ -492,7 +497,9 @@ def main():
 
     processor = AutoProcessor.from_pretrained(training_args.output_dir)
 
-    data_collator = FlaxDataCollatorSpeechSeq2SeqWithPadding(processor=processor, decoder_start_token_id=model.config.decoder_start_token_id)
+    data_collator = FlaxDataCollatorSpeechSeq2SeqWithPadding(
+        processor=processor, decoder_start_token_id=model.config.decoder_start_token_id
+    )
 
     # Enable tensorboard only on the master node
     has_tensorboard = is_tensorboard_available()
@@ -598,7 +605,13 @@ def main():
 
         def compute_loss(params):
             labels = batch.pop("labels")
-            logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, freeze_feature_encoder=model_args.freeze_feature_encoder, train=True)[0]
+            logits = state.apply_fn(
+                **batch,
+                params=params,
+                dropout_rng=dropout_rng,
+                freeze_feature_encoder=model_args.freeze_feature_encoder,
+                train=True,
+            )[0]
             loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
             return loss
 

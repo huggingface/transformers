@@ -228,14 +228,14 @@ class FlaxAutoModelForSeq2SeqLM(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
-class FlaxAutoModelForSpeechSeq2Seq(metaclass=DummyObject):
+class FlaxAutoModelForSequenceClassification(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
 
-class FlaxAutoModelForSequenceClassification(metaclass=DummyObject):
+class FlaxAutoModelForSpeechSeq2Seq(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):
