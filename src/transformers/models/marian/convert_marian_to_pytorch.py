@@ -418,7 +418,6 @@ def check_equal(marian_cfg, k1, k2):
 
 def check_marian_cfg_assumptions(marian_cfg):
     assumed_settings = {
-        # "tied-embeddings-all": True,
         "layer-normalization": False,
         "right-left": False,
         "transformer-ffn-depth": 2,
@@ -437,9 +436,6 @@ def check_marian_cfg_assumptions(marian_cfg):
         actual = marian_cfg[k]
         if actual != v:
             raise ValueError(f"Unexpected config value for {k} expected {v} got {actual}")
-    # check_equal(marian_cfg, "transformer-ffn-activation", "transformer-aan-activation")
-    # check_equal(marian_cfg, "transformer-ffn-depth", "transformer-aan-depth")
-    # check_equal(marian_cfg, "transformer-dim-ffn", "transformer-dim-aan")
 
 
 BIAS_KEY = "decoder_ff_logit_out_b"
@@ -485,6 +481,20 @@ class OpusState:
             raise ValueError("Wpos key in state dictionary")
         self.state_dict = dict(self.state_dict)
         self.share_encoder_decoder_embeddings = cfg["tied-embeddings-src"]
+
+        # create the tokenizer here because we need to know the eos_token_id
+        self.tokenizer = self.load_tokenizer()
+        # retrieve EOS token and set correctly
+        tokenizer_has_eos_token_id = (
+            hasattr(self.tokenizer, "eos_token_id") and self.tokenizer.eos_token_id is not None
+        )
+        eos_token_id = self.tokenizer.eos_token_id if tokenizer_has_eos_token_id else 0
+
+        if cfg["vocab_size"] != self.tokenizer.vocab_size:
+            raise ValueError(
+                f"Original vocab size {cfg['vocab_size']} and new vocab size {len(self.tokenizer.encoder)} mismatched."
+            )
+
         if cfg["tied-embeddings-src"]:
             self.wemb, self.final_bias = add_emb_entries(self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
             self.pad_token_id = self.wemb.shape[0] - 1
@@ -507,8 +517,8 @@ class OpusState:
         self.source_dir = source_dir
         self.cfg = cfg
         hidden_size, intermediate_shape = self.state_dict["encoder_l1_ffn_W1"].shape
-        # if hidden_size != 512 or cfg["dim-emb"] != 512:
-        #     raise ValueError(f"Hidden size {hidden_size} and configured size {cfg['dim_emb']} mismatched or not 512")
+        if hidden_size != cfg["dim-emb"]:
+            raise ValueError(f"Hidden size {hidden_size} and configured size {cfg['dim_emb']} mismatched")
 
         # Process decoder.yml
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
@@ -569,6 +579,11 @@ class OpusState:
 
     def sub_keys(self, layer_prefix):
         return [remove_prefix(k, layer_prefix) for k in self.state_dict if k.startswith(layer_prefix)]
+
+    def load_tokenizer(self):
+        # save tokenizer
+        add_special_tokens_to_vocab(self.source_dir, not self.share_encoder_decoder_embeddings)
+        return MarianTokenizer.from_pretrained(str(self.source_dir))
 
     def load_marian_model(self) -> MarianMTModel:
         state_dict, cfg = self.state_dict, self.hf_config
@@ -639,27 +654,11 @@ def convert(source_dir: Path, dest_dir):
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(exist_ok=True)
 
-    # add_special_tokens_to_vocab(source_dir)
-    # tokenizer = MarianTokenizer.from_pretrained(str(source_dir))
-    # tokenizer.save_pretrained(dest_dir)
-
-    # retrieve EOS token and set correctly
-    # tokenizer_has_eos_token_id = hasattr(tokenizer, "eos_token_id") and tokenizer.eos_token_id is not None
-    # eos_token_id = tokenizer.eos_token_id if tokenizer_has_eos_token_id else 0
-    # TODO: ^^
-    eos_token_id = 2
-
-    opus_state = OpusState(source_dir, eos_token_id=eos_token_id)
+    opus_state = OpusState(source_dir)
 
     # save tokenizer
-    add_special_tokens_to_vocab(source_dir, not opus_state.share_encoder_decoder_embeddings)
-    tokenizer = MarianTokenizer.from_pretrained(str(source_dir))
-    tokenizer.save_pretrained(dest_dir)
+    opus_state.tokenizer.save_pretrained(dest_dir)
 
-    if opus_state.cfg["vocab_size"] != tokenizer.vocab_size:
-        raise ValueError(
-            f"Original vocab size {opus_state.cfg['vocab_size']} and new vocab size {len(tokenizer.encoder)} mismatched"
-        )
     # save_json(opus_state.cfg, dest_dir / "marian_original_config.json")
     # ^^ Uncomment to save human readable marian config for debugging
 
