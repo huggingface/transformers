@@ -1149,12 +1149,6 @@ class MarianModel(MarianPreTrainedModel):
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
         self.set_decoder_input_embeddings(new_embeddings)
 
-        # if word embeddings are not tied, make sure that lm head is resized as well
-        # if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
-        #     old_lm_head = self.get_output_embeddings()
-        #     new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens)
-        #     self.set_output_embeddings(new_lm_head)
-
         model_embeds = self.get_decoder_input_embeddings()
 
         if new_num_tokens is None:
@@ -1165,6 +1159,8 @@ class MarianModel(MarianPreTrainedModel):
 
         # Tie weights again if needed
         self.tie_weights()
+
+        return model_embeds
 
     @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)

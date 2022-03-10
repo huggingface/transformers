@@ -317,19 +317,6 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         model.resize_decoder_token_embeddings(config.vocab_size + 1)
         self.assertEqual(model.lm_head.weight.shape, (config.vocab_size + 1, config.d_model))
 
-    def test_resize_token_embeddings_unshared(self):
-        config, _ = self.model_tester.prepare_config_and_inputs()
-        config.share_encoder_decoder_embeddings = False
-
-        # check that resize_token_embeddings only resizes encoder embed_tokens
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            print(model_class)
-            vocab_size = config.vocab_size
-            model.resize_token_embeddings(vocab_size + 1)
-            self.assertEqual(model.get_encoder().embed_tokens.weight.shape, (vocab_size + 1, config.d_model))
-            self.assertEqual(model.get_decoder().embed_tokens.weight.shape, (config.decoder_vocab_size, config.d_model))
-
     def test_tie_word_embeddings_decoder(self):
         pass
     
