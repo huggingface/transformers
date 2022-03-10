@@ -751,8 +751,8 @@ class DPTViTPooler(nn.Module):
 
 class DPTNeck(nn.Module):
     """
-    DPTNeck. A neck is a module that is normally used between the backbone and the head. It takes a list of tensors as input and
-    produces another list of tensors as output. For DPT, it includes:
+    DPTNeck. A neck is a module that is normally used between the backbone and the head. It takes a list of tensors as
+    input and produces another list of tensors as output. For DPT, it includes:
 
     * DPTReassembleBlocks
     * FeatureFusionBlocks.
@@ -780,7 +780,7 @@ class DPTNeck(nn.Module):
         self.fusion_blocks = nn.ModuleList()
         for _ in range(len(self.convs)):
             self.fusion_blocks.append(DPTFeatureFusionBlock(config))
-        self.fusion_blocks[0].res_conv_unit1 = None  # not sure why this is done in mmseg
+        self.fusion_blocks[0].res_conv_unit1 = None
 
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         if not isinstance(hidden_states, list):
@@ -804,32 +804,6 @@ class DPTNeck(nn.Module):
         return output
 
 
-class DPTInterpolate(nn.Module):
-    """Interpolation module.
-
-    Args:
-        scale_factor (`float`):
-            Scaling factor.
-        mode (`str`):
-            Interpolation mode to use.
-        align_corners (`bool`, *optional*, defaults to `False`):
-            Multiplier for spatial size.
-    """
-
-    def __init__(self, scale_factor, mode, align_corners=False):
-        super().__init__()
-
-        self.interpolate = nn.functional.interpolate
-        self.scale_factor = scale_factor
-        self.mode = mode
-        self.align_corners = align_corners
-
-    def forward(self, hidden_states):
-        hidden_states = self.interpolate(hidden_states, scale_factor=self.scale_factor, mode=self.mode, align_corners=self.align_corners)
-
-        return hidden_states
-
-
 class DPTDepthEstimationHead(nn.Module):
     """
     Output head head consisting of 3 convolutional layers. It progressively halves the feature dimension and upsamples
@@ -845,7 +819,7 @@ class DPTDepthEstimationHead(nn.Module):
         features = config.channels
         self.head = nn.Sequential(
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
-            DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
+            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
             ACT2FN["relu"],
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
@@ -973,7 +947,7 @@ class DPTSemanticSegmentationHead(nn.Module):
             ACT2FN["relu"],
             nn.Dropout(0.1, False),
             nn.Conv2d(features, config.num_labels, kernel_size=1),
-            DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
+            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
         )
 
     def forward(self, hidden_states):
