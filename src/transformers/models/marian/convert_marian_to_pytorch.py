@@ -483,17 +483,13 @@ class OpusState:
         self.share_encoder_decoder_embeddings = cfg["tied-embeddings-src"]
 
         # create the tokenizer here because we need to know the eos_token_id
+        self.source_dir = source_dir
         self.tokenizer = self.load_tokenizer()
         # retrieve EOS token and set correctly
         tokenizer_has_eos_token_id = (
             hasattr(self.tokenizer, "eos_token_id") and self.tokenizer.eos_token_id is not None
         )
         eos_token_id = self.tokenizer.eos_token_id if tokenizer_has_eos_token_id else 0
-
-        if cfg["vocab_size"] != self.tokenizer.vocab_size:
-            raise ValueError(
-                f"Original vocab size {cfg['vocab_size']} and new vocab size {len(self.tokenizer.encoder)} mismatched."
-            )
 
         if cfg["tied-embeddings-src"]:
             self.wemb, self.final_bias = add_emb_entries(self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
@@ -508,13 +504,17 @@ class OpusState:
             self.pad_token_id = self.wemb.shape[0] - 1
             cfg["vocab_size"] = self.pad_token_id + 1
             cfg["decoder_vocab_size"] = self.pad_token_id + 1
+        
+        if cfg["vocab_size"] != self.tokenizer.vocab_size:
+            raise ValueError(
+                f"Original vocab size {cfg['vocab_size']} and new vocab size {len(self.tokenizer.encoder)} mismatched."
+            )
 
         # self.state_dict['Wemb'].sha
         self.state_keys = list(self.state_dict.keys())
         if "Wtype" in self.state_dict:
             raise ValueError("Wtype key in state dictionary")
         self._check_layer_entries()
-        self.source_dir = source_dir
         self.cfg = cfg
         hidden_size, intermediate_shape = self.state_dict["encoder_l1_ffn_W1"].shape
         if hidden_size != cfg["dim-emb"]:
