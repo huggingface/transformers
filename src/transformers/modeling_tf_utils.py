@@ -21,7 +21,8 @@ import os
 import pickle
 import re
 import warnings
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, get_type_hints
+from dataclasses import fields, is_dataclass
 
 import h5py
 import numpy as np
@@ -918,6 +919,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             )
             loss = {"loss": dummy_loss}
             self._using_dummy_loss = True
+            if metrics is not None and not isinstance(metrics, dict):
+                return_types = get_type_hints(self.call)['return'].__args__
+                output_types = [return_type for return_type in return_types if is_dataclass(return_type)]
+                assert len(output_types) == 1
+                output_type = output_types[0]
+                # Optional fields that allow NoneType (this includes loss) are not the main model outputs
+                outputs = [field.name for field in fields(output_type) if
+                           type(None) not in getattr(field.type, "__args__", [])]
+                metrics = {output: metrics for output in outputs}
         else:
             self._using_dummy_loss = False
         super().compile(
@@ -959,7 +969,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         additional loss function that reduces a `loss` output, and the model will output a `loss` component (notice the
         name matching) containing the loss that was used to train the pre-trained model.
         """
-        possible_label_cols = {"labels", "label", "label_ids", "start_position", "end_position", "next_sentence_label"}
+        possible_label_cols = {"labels", "label", "label_ids", "start_positions", "start_position", "end_positions", "end_position", "next_sentence_label"}
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
         data = data_adapter.expand_1d(data)
@@ -987,8 +997,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 if isinstance(x, tf.Tensor):
                     x = {arg_names[0]: x}
                 label_kwarg = next(iter(label_kwargs))
-                print(y.shape)
-                print(label_kwarg)
                 if label_kwarg not in x:
                     x[label_kwarg] = y
             elif isinstance(y, dict) and set(y.keys()).issubset(label_kwargs):
@@ -1006,12 +1014,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
-        # When y_pred is a ModelOutput and y is a tf.Tensor the metrics update
-        # should be done only with the relevant ModelOutput param that is
-        # considered by the loss.
+        # When using dummy_loss, reorder things so the loss key isn't in position[0]
         if isinstance(y_pred, ModelOutput) and self._using_dummy_loss:
             output_keys = list(y_pred.keys())
-            if output_keys[0] == loss and y_pred.loss is not None:
+            if output_keys[0] == "loss" and y_pred.loss is not None:
                 reordered_keys = output_keys[1:] + output_keys[:1]
                 reordered_output = IndexableOrderedDict()
                 for key in reordered_keys:
