@@ -18,6 +18,7 @@ src/transformers/models/swin/modeling_swin.py
 src/transformers/models/convnext/modeling_convnext.py
 src/transformers/models/poolformer/modeling_poolformer.py
 src/transformers/models/vit_mae/modeling_vit_mae.py
+src/transformers/models/van/modeling_van.py
 src/transformers/models/segformer/modeling_segformer.py
 src/transformers/models/vision_encoder_decoder/modeling_vision_encoder_decoder.py
 src/transformers/models/bart/modeling_bart.py
