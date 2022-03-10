@@ -167,7 +167,8 @@ python run_wikitablequestions_with_tapex.py \
   --num_beams 5 \
   --weight_decay 1e-2 \
   --label_smoothing_factor 0.1 \
-  --max_steps 20000
+  --max_steps 20000 \
+  --fp16
 ```
 
 ### How to Evaluate TAPEX Fine-tuned Models on TableQA
