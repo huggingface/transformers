@@ -198,7 +198,6 @@ class VanLargeKernelAttention(nn.Sequential):
 class VanLargeKernelAttentionLayer(nn.Module):
     """
     Computes attention using Large Kernel Attention (LKA) and attends the input.
-
     """
 
     def __init__(self, hidden_size: int):
@@ -213,7 +212,7 @@ class VanLargeKernelAttentionLayer(nn.Module):
 
 class VanSpatialAttentionLayer(nn.Module):
     """
-    VAN spatial attention layer composed by projection (via conv) -> act -> Large Kernel Attention (LKA) attention ->
+    Van spatial attention layer composed by projection (via conv) -> act -> Large Kernel Attention (LKA) attention ->
     projection (via conv) + residual connetion.
     """
 
@@ -244,6 +243,10 @@ class VanSpatialAttentionLayer(nn.Module):
 
 
 class VanLayerScaling(nn.Module):
+    """
+    Scales the inputs by a learnable parameter initialized by `initial_value`.
+    """
+
     def __init__(self, hidden_size: int, initial_value: float = 1e-2):
         super().__init__()
         self.weight = nn.Parameter(initial_value * torch.ones((hidden_size)), requires_grad=True)
@@ -255,6 +258,10 @@ class VanLayerScaling(nn.Module):
 
 
 class VanLayer(nn.Module):
+    """
+    Van layer.
+    """
+
     def __init__(
         self,
         hidden_size: int,
