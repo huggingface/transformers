@@ -97,15 +97,15 @@ class DPTViTEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-    def _resize_pos_embed(self, posemb, gs_h, gs_w, start_index=1):
+    def _resize_pos_embed(self, posemb, grid_size_height, grid_size_width, start_index=1):
         posemb_tok = posemb[:, :start_index]
         posemb_grid = posemb[0, start_index:]
 
-        gs_old = int(math.sqrt(len(posemb_grid)))
+        old_grid_size = int(math.sqrt(len(posemb_grid)))
 
-        posemb_grid = posemb_grid.reshape(1, gs_old, gs_old, -1).permute(0, 3, 1, 2)
-        posemb_grid = nn.functional.interpolate(posemb_grid, size=(gs_h, gs_w), mode="bilinear")
-        posemb_grid = posemb_grid.permute(0, 2, 3, 1).reshape(1, gs_h * gs_w, -1)
+        posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
+        posemb_grid = nn.functional.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
+        posemb_grid = posemb_grid.permute(0, 2, 3, 1).reshape(1, grid_size_height * grid_size_width, -1)
 
         posemb = torch.cat([posemb_tok, posemb_grid], dim=1)
 
@@ -498,7 +498,7 @@ class DPTPreActResidualLayer(nn.Module):
         super().__init__()
 
         self.use_batch_norm = config.use_batch_norm
-        self.act1 = nn.ReLU()
+        self.act1 = ACT2FN["relu"]
         self.conv1 = nn.Conv2d(
             config.channels,
             config.channels,
@@ -508,7 +508,7 @@ class DPTPreActResidualLayer(nn.Module):
             bias=not self.use_batch_norm,
         )
 
-        self.act2 = nn.ReLU()
+        self.act2 = ACT2FN["relu"]
         self.conv2 = nn.Conv2d(
             config.channels,
             config.channels,
@@ -751,7 +751,7 @@ class DPTViTPooler(nn.Module):
 
 class DPTNeck(nn.Module):
     """
-    DPTNeck. A neck is a module that isused between the backbone and the head. It takes a list of tensors as input and
+    DPTNeck. A neck is a module that is normally used between the backbone and the head. It takes a list of tensors as input and
     produces another list of tensors as output. For DPT, it includes:
 
     * DPTReassembleBlocks
@@ -769,7 +769,7 @@ class DPTNeck(nn.Module):
         # postprocessing
         self.reassemble_blocks = DPTReassembleBlocks(config)
         self.post_process_channels = [
-            channel * math.pow(2, i) if config.expand_channels else channel
+            channel * 2**i if config.expand_channels else channel
             for i, channel in enumerate(config.post_process_channels)
         ]
         self.convs = nn.ModuleList()
@@ -796,11 +796,9 @@ class DPTNeck(nn.Module):
 
         # fusion blocks
         output = []
-        for i in range(len(self.fusion_blocks)):
-            if i == 0:
-                out = self.fusion_blocks[i](features[-1])
-            else:
-                out = self.fusion_blocks[i](out, features[-(i + 1)])
+        out = self.fusion_blocks[0](features[-1])
+        for i in range(1, len(self.fusion_blocks)):
+            out = self.fusion_blocks[i](out, features[-(i + 1)])
             output.append(out)
 
         return output
@@ -826,10 +824,10 @@ class DPTInterpolate(nn.Module):
         self.mode = mode
         self.align_corners = align_corners
 
-    def forward(self, x):
-        x = self.interpolate(x, scale_factor=self.scale_factor, mode=self.mode, align_corners=self.align_corners)
+    def forward(self, hidden_states):
+        hidden_states = self.interpolate(hidden_states, scale_factor=self.scale_factor, mode=self.mode, align_corners=self.align_corners)
 
-        return x
+        return hidden_states
 
 
 class DPTDepthEstimationHead(nn.Module):
@@ -849,9 +847,9 @@ class DPTDepthEstimationHead(nn.Module):
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
             DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(True),
+            ACT2FN["relu"],
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
-            nn.ReLU(True),
+            ACT2FN["relu"],
             nn.Identity(),
         )
 
@@ -972,7 +970,7 @@ class DPTSemanticSegmentationHead(nn.Module):
         self.head = nn.Sequential(
             nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(features),
-            nn.ReLU(True),
+            ACT2FN["relu"],
             nn.Dropout(0.1, False),
             nn.Conv2d(features, config.num_labels, kernel_size=1),
             DPTInterpolate(scale_factor=2, mode="bilinear", align_corners=True),
@@ -995,7 +993,7 @@ class DPTAuxiliaryHead(nn.Module):
         self.head = nn.Sequential(
             nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(features),
-            nn.ReLU(True),
+            ACT2FN["relu"],
             nn.Dropout(0.1, False),
             nn.Conv2d(features, config.num_labels, kernel_size=1),
         )
