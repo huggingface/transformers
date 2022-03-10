@@ -49,7 +49,9 @@ We provide a fine-tuning script of tapex for TableQA on the WikiSQL benchmark: [
 This script is customized for tapex models, and can be easily adapted to other benchmarks such as WikiTableQuestion
 (only some tweaks in the function `preprocess_tableqa_function`).
 
-Here is how to run the script on the WikiSQL:
+#### TAPEX-Base on WikiSQL
+
+Here is how to run the script on the WikiSQL with `tapex-base`:
 > The default hyper-parameter may allow you to reproduce our reported tapex-base results within the memory budget of 16GB and 1 GPU card. If you have more GPU cards, you could reduce `gradient_accumulation_steps` accordingly.
 
 ```bash
@@ -77,10 +79,101 @@ python run_wikisql_with_tapex.py \
   --max_steps 20000
 ```
 
+#### TAPEX-Large on WikiSQL
+
+Here is how to run the script on the WikiSQL with `tapex-large`:
+> The default hyper-parameter may allow you to reproduce our reported tapex-large results within the memory budget of 16GB and 1 GPU card with fp16. If you have more GPU cards, you could reduce `gradient_accumulation_steps` accordingly. If you do not install apex or other mixed-precision-training libs, you could disable the `predict_with_generate` option to save GPU memory and manually evaluate the model once the fine-tuning finished. Or just pick up the last checkpoint, which usually performs good enough on the dataset.
+
+```bash
+export EXP_NAME=wikisql_tapex_large
+
+python run_wikisql_with_tapex.py \
+  --do_train \
+  --do_eval \
+  --output_dir $EXP_NAME \
+  --model_name_or_path microsoft/tapex-large \
+  --overwrite_output_dir \
+  --per_device_train_batch_size 1 \
+  --gradient_accumulation_steps 32 \
+  --per_device_eval_batch_size 4 \
+  --learning_rate 3e-5 \
+  --logging_steps 10 \
+  --eval_steps 1000 \
+  --save_steps 1000 \
+  --warmup_steps 1000 \
+  --evaluation_strategy steps \
+  --predict_with_generate \
+  --num_beams 5 \
+  --weight_decay 1e-2 \
+  --label_smoothing_factor 0.1 \
+  --max_steps 20000 \
+  --fp16
+```
+
+#### TAPEX-Base on WikiTableQuestions
+
+Here is how to run the script on the WikiTableQuestions with `tapex-base`:
+> The default hyper-parameter may allow you to reproduce our reported tapex-base results within the memory budget of 16GB and 1 GPU card. If you have more GPU cards, you could reduce `gradient_accumulation_steps` accordingly.
+
+```bash
+export EXP_NAME=wikitablequestions_tapex_base
+
+python run_wikitablequestions_with_tapex.py \
+  --do_train \
+  --do_eval \
+  --output_dir $EXP_NAME \
+  --model_name_or_path microsoft/tapex-base \
+  --overwrite_output_dir \
+  --per_device_train_batch_size 4 \
+  --gradient_accumulation_steps 8 \
+  --per_device_eval_batch_size 4 \
+  --learning_rate 3e-5 \
+  --logging_steps 10 \
+  --eval_steps 1000 \
+  --save_steps 1000 \
+  --warmup_steps 1000 \
+  --evaluation_strategy steps \
+  --predict_with_generate \
+  --num_beams 5 \
+  --weight_decay 1e-2 \
+  --label_smoothing_factor 0.1 \
+  --max_steps 20000
+```
+
+#### TAPEX-Large on WikiTableQuestions
+
+Here is how to run the script on the WikiTableQuestions with `tapex-large`:
+> The default hyper-parameter may allow you to reproduce our reported tapex-large results within the memory budget of 16GB and 1 GPU card with fp16. If you have more GPU cards, you could reduce `gradient_accumulation_steps` accordingly. If you do not install apex or other mixed-precision-training libs, you could reduce the `per_device_train_batch_size` and `per_device_eval_batch_size` and have another try. Or you could disable the `predict_with_generate` option to save GPU memory and manually evaluate the model once the fine-tuning finished. Or just pick up the last checkpoint, which usually performs good enough on the dataset.
+
+```bash
+export EXP_NAME=wikitablequestions_tapex_large
+
+python run_wikitablequestions_with_tapex.py \
+  --do_train \
+  --do_eval \
+  --output_dir $EXP_NAME \
+  --model_name_or_path microsoft/tapex-large \
+  --overwrite_output_dir \
+  --per_device_train_batch_size 2 \
+  --gradient_accumulation_steps 12 \
+  --per_device_eval_batch_size 4 \
+  --learning_rate 3e-5 \
+  --logging_steps 10 \
+  --eval_steps 1000 \
+  --save_steps 1000 \
+  --warmup_steps 1000 \
+  --evaluation_strategy steps \
+  --predict_with_generate \
+  --num_beams 5 \
+  --weight_decay 1e-2 \
+  --label_smoothing_factor 0.1 \
+  --max_steps 20000
+```
+
 ### How to Evaluate TAPEX Fine-tuned Models on TableQA
 
 We provide fine-tuned model weights to reproduce our results. You can evaluate them using the following command:
-> You can also replace `microsoft/tapex-base-finetuned-wikisql` with your local directory to evaluate your fine-tuned models
+> You can also replace `microsoft/tapex-base-finetuned-wikisql` with your local directory to evaluate your fine-tuned models. Notice that if the model has a larger size, you should reduce `per_device_eval_batch_size` to fit the memory requirement.
 
 ```bash
 export EXP_NAME=wikisql_tapex_base_eval
@@ -103,6 +196,8 @@ python run_wikisql_with_tapex.py \
 The task of Table Fact Verification (TableFV) is to empower machines to justify if a statement follows facts in a given table. The result is a binary classification belonging to `1` (entailed) or `0` (refused).
 
 ### How to Fine-tune TAPEX on TableFV
+
+#### TAPEX-Base on TabFact
 
 We provide a fine-tuning script of tapex for TableFV on the TabFact benchmark: [TabFact](https://github.com/wenhuchen/Table-Fact-Checking).
 
@@ -133,10 +228,39 @@ python run_tabfact_with_tapex.py \
   --max_grad_norm 0.1
 ```
 
+#### TAPEX-Large on TabFact
+
+Here is how to run the script on the TabFact:
+> The default hyper-parameter may allow you to reproduce our reported tapex-base results within the memory budget of 24GB and 1 GPU card. Sorry we cannot reduce the memory consumption since the model input in TabFact usually contains nearly ~1000 tokens. If you have more GPU cards, you could reduce `gradient_accumulation_steps` accordingly. Note that the `eval_accumulation_steps` is necessary, otherwise GPU memory leaks will occur during the evaluation.
+
+```bash
+export EXP_NAME=tabfact_tapex_large
+
+python run_tabfact_with_tapex.py \
+  --do_train \
+  --do_eval \
+  --output_dir $EXP_NAME \
+  --model_name_or_path microsoft/tapex-large \
+  --overwrite_output_dir \
+  --per_device_train_batch_size 2 \
+  --gradient_accumulation_steps 18 \
+  --per_device_eval_batch_size 4 \
+  --eval_accumulation_steps 12 \
+  --warm_steps 1000 \
+  --logging_steps 10 \
+  --learning_rate 3e-5 \
+  --eval_steps 1000 \
+  --save_steps 1000 \
+  --evaluation_strategy steps \
+  --weight_decay 1e-2 \
+  --max_steps 30000 \
+  --max_grad_norm 0.1
+```
+
 ### How to Evaluate TAPEX Fine-tuned Models on TableFV
 
 We provide fine-tuned model weights to reproduce our results. You can evaluate them using the following command:
-> You can also replace `microsoft/tapex-base-finetuned-tabfact` with your local directory to evaluate your fine-tuned models
+> You can also replace `microsoft/tapex-base-finetuned-tabfact` with your local directory to evaluate your fine-tuned models. Notice that if the model has a larger size, you should reduce `per_device_eval_batch_size` to fit the memory requirement.
 
 ```bash
 export EXP_NAME=tabfact_tapex_base_eval
@@ -152,11 +276,12 @@ python run_tabfact_with_tapex.py \
 ## Reproduced Results
 
 We get the following results on the dev set of the benchmark with the previous commands:
-> ⚠️ It is worth noting that `tapex-large` cannot be successfully fine-tuned using this fine-tuning script now. We found there is a strange bug in `bart-large`, which also affects `tapex-large`. Hope it is solved in the near future.
-
 
 | Task | Model Size | Metric | Result |
 |:---:|:---:|:---:|:---:|
 | WikiSQL (Weak) | Base | Denotation Accuracy | 88.1 |
+| WikiSQL (Weak) | Large | Denotation Accuracy | 89.5 |
 | WikiTableQuestion | Base | Denotation Accuracy | 47.1 |
+| WikiTableQuestion | Large | Denotation Accuracy | 57.2 |
 | TabFact | Base | Accuracy | 78.7 |
+| TabFact | Large | Accuracy | 83.6 |
