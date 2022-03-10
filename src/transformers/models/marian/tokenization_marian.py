@@ -153,6 +153,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             model_max_length=model_max_length,
             sp_model_kwargs=self.sp_model_kwargs,
+            target_vocab_file=target_vocab_file,
             separate_vocabs=separate_vocabs,
             **kwargs,
         )
