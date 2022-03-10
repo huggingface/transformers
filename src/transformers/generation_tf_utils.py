@@ -2146,7 +2146,7 @@ class TFGenerationMixin:
 
             # write prompt to generated
             for i in range(seq_length):
-                generated.write(i, input_ids[:, i:i + 1])
+                generated = generated.write(i, input_ids[:, i:i + 1])
 
             if use_xla:
                 model_inputs = self.new_prepare_inputs_for_generation(input_ids, attention_mask, max_length=max_length)
@@ -2200,7 +2200,7 @@ class TFGenerationMixin:
             current_pos = tf.ones(shape=(1,), dtype=tf.int32) * seq_length
 
             next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int32)
-            generated.write(current_pos[0], next_tokens)
+            generated = generated.write(current_pos[0], next_tokens)
             max_tokens_to_generate = max_length - seq_length
 
             current_pos += 1
