@@ -1556,9 +1556,10 @@ class TFGenerationMixin:
                 raise ValueError(
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
                 )
+#            if hasattr(self, "new_prepare_inputs_for_generation") and hasattr(self, "update_cache_for_generation"):
 
             # 8. run greedy search
-            return self.greedy_search(
+            return self.xla_greedy_generate(
                 input_ids,
                 max_length=max_length,
                 pad_token_id=pad_token_id,
@@ -1569,6 +1570,18 @@ class TFGenerationMixin:
                 use_xla=use_xla,
                 **model_kwargs,
             )
+
+#                return self.greedy_search(
+#                    input_ids,
+#                    max_length=max_length,
+#                    pad_token_id=pad_token_id,
+#                    eos_token_id=eos_token_id,
+#                    logits_processor=logits_processor,
+#                    output_scores=output_scores,
+#                    return_dict_in_generate=return_dict_in_generate,
+#                    use_xla=use_xla,
+#                    **model_kwargs,
+#            )
 
         elif is_sample_gen_mode:
             # 8. prepare logits warper
@@ -1915,16 +1928,6 @@ class TFGenerationMixin:
         unfinished_sequences = tf.ones_like(input_ids[:, 0])
         cur_len = input_ids.shape[-1]
 
-        if hasattr(self, "new_prepare_inputs_for_generation") and hasattr(self, "update_cache_for_generation"):
-            # For now, we make some hard assumptions
-            # 1) No stopping based on stop tokens
-            # 2) No model_kwargs
-            # 3) Only returning the token IDs, nothing else like attentions/past
-            # Notes: new_prepare_inputs_for_generation should return constant-size arrays
-            max_length = self.config.max_length if max_length is None else max_length
-            return self.xla_greedy_generate(input_ids, max_length=max_length,
-                                            attention_mask=attention_mask, eos_token_id=eos_token_id, use_xla=use_xla)
-
         while cur_len < max_length:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -2012,10 +2015,126 @@ class TFGenerationMixin:
         else:
             return input_ids
 
-    def xla_greedy_generate(self, input_ids, attention_mask, max_length, eos_token_id, use_xla=False, **model_kwargs):
+    def xla_greedy_generate(
+        self,
+        input_ids: tf.Tensor,
+        max_length: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        logits_processor: Optional[TFLogitsProcessorList] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_scores: Optional[bool] = None,
+        return_dict_in_generate: Optional[bool] = None,
+        use_xla: bool = False,
+        **model_kwargs,
+    ) -> Union[TFGreedySearchOutput, tf.Tensor]:
+        r"""
+        Generates sequences for models with a language modeling head using greedy decoding.
+
+        Parameters:
+
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
+                The sequence used as a prompt for the generation.
+            logits_processor (`TFLogitsProcessorList`, *optional*):
+                An instance of [`TFLogitsProcessorList`]. List of instances of class derived from [`TFLogitsProcessor`]
+                used to modify the prediction scores of the language modeling head applied at each generation step.
+            max_length (`int`, *optional*, defaults to 20):
+                The maximum length of the sequence to be generated.
+            pad_token_id (`int`, *optional*):
+                The id of the *padding* token.
+            eos_token_id (`int`, *optional*):
+                The id of the *end-of-sequence* token.
+            output_attentions (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more details.
+            output_hidden_states (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more details.
+            output_scores (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
+            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            model_kwargs:
+                Additional model specific keyword arguments will be forwarded to the `call` function of the model. If
+                model is an encoder-decoder model the kwargs should include `encoder_outputs`.
+
+        Return:
+            [`~generation_tf_utils.TFGreedySearchDecoderOnlyOutput`],
+            [`~generation_tf_utils.TFGreedySearchEncoderDecoderOutput`] or `tf.Tensor`: A `tf.Tensor` containing the
+            generated tokens (default behaviour) or a [`~generation_tf_utils.TFGreedySearchDecoderOnlyOutput`] if
+            `model.config.is_encoder_decoder=False` and `return_dict_in_generate=True` or a
+            [`~generation_tf_utils.TFGreedySearchEncoderDecoderOutput`] if `model.config.is_encoder_decoder=True`.
+
+        Examples:
+
+        ```python
+        >>> from transformers import (
+        ...     AutoTokenizer,
+        ...     TFAutoModelForCausalLM,
+        ...     TFLogitsProcessorList,
+        ...     TFMinLengthLogitsProcessor,
+        ... )
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
+
+        >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
+        >>> model.config.pad_token_id = model.config.eos_token_id
+
+        >>> input_prompt = "Today is a beautiful day, and"
+        >>> input_ids = tokenizer(input_prompt, return_tensors="tf").input_ids
+
+        >>> # instantiate logits processors
+        >>> logits_processor = TFLogitsProcessorList(
+        ...     [
+        ...         TFMinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
+        ...     ]
+        ... )
+
+        >>> outputs = model.greedy_search(input_ids, logits_processor=logits_processor)
+
+        >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        ```"""
         @xla_compile(do_compile=use_xla)
-        def _xla_greedy_generate(self, input_ids, attention_mask, max_length, eos_token_id, use_xla: bool = False):
+        def _xla_greedy_generate(
+            self,
+            input_ids: tf.Tensor,
+            max_length: Optional[int] = None,
+            pad_token_id: Optional[int] = None,
+            eos_token_id: Optional[int] = None,
+            logits_processor: Optional[TFLogitsProcessorList] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            output_scores: Optional[bool] = None,
+            return_dict_in_generate: Optional[bool] = None,
+            **model_kwargs,
+        ) -> Union[TFGreedySearchOutput, tf.Tensor]:
+            # init values
+            logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
+
+            pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
+            eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+            output_scores = output_scores if output_scores is not None else self.config.output_scores
+            output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+            output_hidden_states = (
+                output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            )
+            return_dict_in_generate = (
+                return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
+            )
+
+            # init attention / hidden states / scores tuples
+            scores = () if (return_dict_in_generate and output_scores) else None
+            decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+            cross_attentions = () if (return_dict_in_generate and output_attentions) else None
+            decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+
             batch_size, seq_length = input_ids.shape
+
+
+            # TODO(Patrick) - clean up
+            attention_mask = model_kwargs.pop("attention_mask", None)
 
             if use_xla:
                 model_inputs = self.new_prepare_inputs_for_generation(input_ids, attention_mask, max_length=max_length)
@@ -2036,8 +2155,8 @@ class TFGenerationMixin:
                 outputs = self(
                     **model_inputs,
                     return_dict=True,
-#                    output_attentions=output_attentions,
-#                    output_hidden_states=output_hidden_states,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
                 )
                 generated = tf.TensorArray(element_shape=(batch_size, 1), dtype=tf.int32, dynamic_size=False, size=max_length - seq_length, clear_after_read=False)
 
@@ -2090,7 +2209,18 @@ class TFGenerationMixin:
             output = tf.concat((input_ids, output), axis=-1)
 
             return output
-        return _xla_greedy_generate(self, input_ids, attention_mask, max_length, eos_token_id, use_xla=use_xla)
+
+        return _xla_greedy_generate(
+            self,
+            input_ids,
+            max_length=max_length,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            logits_processor=logits_processor,
+            output_scores=output_scores,
+            return_dict_in_generate=return_dict_in_generate,
+            **model_kwargs,
+        )
 
     def sample(
         self,
