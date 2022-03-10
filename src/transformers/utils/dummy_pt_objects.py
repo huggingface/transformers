@@ -3044,6 +3044,83 @@ class ProphetNetPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class QDQBertForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class QDQBertForMultipleChoice(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class QDQBertForNextSentencePrediction(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class QDQBertForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class QDQBertForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class QDQBertForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class QDQBertLayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class QDQBertLMHeadModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class QDQBertModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class QDQBertPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_qdqbert(*args, **kwargs):
+    requires_backends(load_tf_weights_in_qdqbert, ["torch"])
+
+
 class RagModel(metaclass=DummyObject):
     _backends = ["torch"]
 
