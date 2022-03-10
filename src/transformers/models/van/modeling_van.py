@@ -57,7 +57,6 @@ VAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextEncoderOutput with ConvNext->Van
 class VanEncoderOutput(ModelOutput):
     """
     Class for [`VanEncoder`]'s outputs, with potential hidden states (feature maps).
@@ -75,7 +74,6 @@ class VanEncoderOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextModelOutput with ConvNext->Van
 class VanModelOutput(ModelOutput):
     """
     Class for [`VanModel`]'s outputs, with potential hidden states (feature maps).
@@ -96,7 +94,6 @@ class VanModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextClassifierOutput with ConvNext->Van
 class VanClassifierOutput(ModelOutput):
     """
     Class for [`VanForImageClassification`]'s outputs, with potential hidden states (feature maps).
