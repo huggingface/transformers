@@ -23,10 +23,10 @@ from typing import Optional, Tuple
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch.utils._pytree import tree_map
 from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.utils._pytree import tree_map
 
 from ...activations import ACT2FN
 from ...file_utils import (
