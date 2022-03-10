@@ -194,9 +194,9 @@ class VanModelTest(ModelTesterMixin, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
                 elif isinstance(module, nn.Conv2d):
-                    fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
-                    fan_out //= module.groups
-                    std = math.sqrt(2.0 / fan_out)
+                    # fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
+                    # fan_out //= module.groups
+                    # std = math.sqrt(2.0 / fan_out)
                     # we should use shapiro test https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.shapiro.html
                     # but I can't import scipy
                     # # impossibile to have numbers outside 6 x std
@@ -205,6 +205,7 @@ class VanModelTest(ModelTesterMixin, unittest.TestCase):
                     # self.assertTrue(torch.all(module.weight.data <= normal_range[1]))
                     # # check bias
                     # self.assertTrue(torch.all(module.bias == 0))
+                    pass
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
