@@ -28,7 +28,8 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
-    add_end_docstrings, add_start_docstrings,
+    add_end_docstrings,
+    add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
@@ -1090,14 +1091,14 @@ class MarianModel(MarianPreTrainedModel):
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
-        
+
         if self.config.share_encoder_decoder_embeddings:
             encoder_embed_tokens = decoder_embed_tokens = self.shared
         else:
             encoder_embed_tokens = copy.deepcopy(self.shared)
             decoder_embed_tokens = copy.deepcopy(self.shared)
             self.shared = None
-        
+
         self.encoder = MarianEncoder(config, encoder_embed_tokens)
         self.decoder = MarianDecoder(config, decoder_embed_tokens)
 
@@ -1127,8 +1128,9 @@ class MarianModel(MarianPreTrainedModel):
     def set_decoder_input_embeddings(self, value):
         if self.config.share_encoder_decoder_embeddings:
             raise ValueError(
-                "`set_decoder_input_embeddings` should not be called if `config.share_encoder_decoder_embeddings` "
-                "is `True`. Please use `set_input_embeddings` instead."
+                "`config.share_encoder_decoder_embeddings` is set to `True` meaning the decoder input embeddings "
+                "are shared with the encoder. In order to set the decoder input embeddings, you should simply set "
+                "the encoder input embeddings by calling `set_input_embeddings` with the appropriate embeddings."
             )
         self.decoder.embed_tokens = value
 
@@ -1137,7 +1139,7 @@ class MarianModel(MarianPreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
-    
+
     def resize_decoder_token_embeddings(self, new_num_tokens):
         if self.config.share_encoder_decoder_embeddings:
             raise ValueError(
@@ -1283,9 +1285,11 @@ class MarianMTModel(MarianPreTrainedModel):
         super().__init__(config)
         self.model = MarianModel(config)
 
-        self.output_size = config.vocab_size if config.share_encoder_decoder_embeddings else config.decoder_vocab_size
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.output_size)))
-        self.lm_head = nn.Linear(config.d_model, self.output_size, bias=False)
+        self.target_vocab_size = (
+            config.vocab_size if config.share_encoder_decoder_embeddings else config.decoder_vocab_size
+        )
+        self.register_buffer("final_logits_bias", torch.zeros((1, self.target_vocab_size)))
+        self.lm_head = nn.Linear(config.d_model, self.target_vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1453,7 +1457,7 @@ class MarianMTModel(MarianPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(lm_logits.view(-1, self.output_size), labels.view(-1))
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.target_vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
