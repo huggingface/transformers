@@ -118,7 +118,16 @@ class BeamSearchState:
 
 class FlaxGenerationMixin:
     """
-    A class containing all of the functions supporting generation, to be used as a mixin in [`FlaxPreTrainedModel`].
+    A class containing all functions for auto-regressive text generation, to be used as a mixin in
+    [`FlaxPreTrainedModel`].
+
+    The class exposes [`~generation_flax_utils.FlaxGenerationMixin.generate`], which can be used for:
+            - *greedy decoding* by calling [`~generation_flax_utils.FlaxGenerationMixin._greedy_search`] if
+              `num_beams=1` and `do_sample=False`.
+            - *multinomial sampling* by calling [`~generation_flax_utils.FlaxGenerationMixin._sample`] if `num_beams=1`
+              and `do_sample=True`.
+            - *beam-search decoding* by calling [`~generation_utils.FlaxGenerationMixin._beam_search`] if `num_beams>1`
+              and `do_sample=False`.
     """
 
     @staticmethod
@@ -176,12 +185,23 @@ class FlaxGenerationMixin:
         **model_kwargs,
     ):
         r"""
-        Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
-        and, multinomial sampling.
+        Generates sequences of token ids for models with a language modeling head. The method supports the following
+        generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
-        Apart from `input_ids`, all the arguments below will default to the value of the attribute of the same name
-        inside the [`PretrainedConfig`] of the model. The default values indicated are the default values of those
-        config.
+            - *greedy decoding* by calling [`~generation_flax_utils.FlaxGenerationMixin._greedy_search`] if
+              `num_beams=1` and `do_sample=False`.
+            - *multinomial sampling* by calling [`~generation_flax_utils.FlaxGenerationMixin._sample`] if `num_beams=1`
+              and `do_sample=True`.
+            - *beam-search decoding* by calling [`~generation_utils.FlaxGenerationMixin._beam_search`] if `num_beams>1`
+              and `do_sample=False`.
+
+        <Tip warning={true}>
+
+        Apart from `inputs`, all the arguments below will default to the value of the attribute of the same name as
+        defined in the model's config (`config.json`) which in turn defaults to the
+        [`~modeling_utils.PretrainedConfig`] of the model.
+
+        </Tip>
 
         Most of these parameters are explained in more detail in [this blog
         post](https://huggingface.co/blog/how-to-generate).
@@ -236,7 +256,7 @@ class FlaxGenerationMixin:
         >>> input_ids = tokenizer(input_context, return_tensors="np").input_ids
         >>> # generate candidates using sampling
         >>> outputs = model.generate(input_ids=input_ids, max_length=20, top_k=30, do_sample=True)
-        >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
+        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ```"""
         # set init values
         max_length = max_length if max_length is not None else self.config.max_length
