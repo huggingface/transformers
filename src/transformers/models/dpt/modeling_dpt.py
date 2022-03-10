@@ -405,14 +405,18 @@ class DPTViTEncoder(nn.Module):
 
 class DPTReassembleBlocks(nn.Module):
     """
+    This class reassembles the hidden states of the backbone into image-like feature representations at various
+    resolutions.
 
-    ViTPostProcessBlock, process cls_token in ViT backbone output and rearranges the feature vector to feature map.
+    This happens in 3 stages:
+    1. Map the N + 1 tokens to a set of N tokens, by taking into account the readout ([CLS]) token according to
+       `config.readout_type`.
+    2. Project the channel dimension of the hidden states according to `config.post_process_channels`.
+    3. Resizing the spatial dimensions (height, width).
 
     Args:
-        in_channels (int): ViT feature channels. Default: 768. out_channels (List): output channels of each stage.
-            Default: [96, 192, 384, 768].
-        readout_type (str): Type of readout operation. Default: 'ignore'. patch_size (int): The patch size. Default:
-        16. init_cfg (dict, optional): Initialization config dict. Default: None.
+        config (`[DPTConfig]`):
+            Model configuration class defining the model architecture.
     """
 
     def __init__(self, config):
@@ -449,13 +453,15 @@ class DPTReassembleBlocks(nn.Module):
                     nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
                 )
 
-    def forward(self, inputs):
+    def forward(self, hidden_states):
         """
-        Inputs: list of torch.FloatTensor, each of shape (B, L + 1, C).
+        Args:
+            hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+                List of hidden states from the backbone.
         """
         out = []
 
-        for i, x in enumerate(inputs):
+        for i, x in enumerate(hidden_states):
             # reshape to (B, C, H, W)
             x, cls_token = x[:, 1:], x[:, 0]
             B, L, C = x.shape
@@ -479,17 +485,13 @@ class DPTReassembleBlocks(nn.Module):
         return out
 
 
-class DPTPreActResidualConvUnit(nn.Module):
+class DPTPreActResidualLayer(nn.Module):
     """
     ResidualConvUnit, pre-activate residual unit.
 
     Args:
-        in_channels (int): number of channels in the input feature map.
-        act_cfg (dict): dictionary to construct and config activation layer.
-        norm_cfg (dict): dictionary to construct and config norm layer.
-        stride (int): stride of the first block. Default: 1
-        dilation (int): dilation rate for convs layers. Default: 1.
-        init_cfg (dict, optional): Initialization config dict. Default: None.
+        config (`[DPTConfig]`):
+            Model configuration class defining the model architecture.
     """
 
     def __init__(self, config):
@@ -520,9 +522,9 @@ class DPTPreActResidualConvUnit(nn.Module):
             self.batch_norm1 = nn.BatchNorm2d(config.channels)
             self.batch_norm2 = nn.BatchNorm2d(config.channels)
 
-    def forward(self, inputs):
-        inputs_ = inputs.clone()
-        x = self.act1(inputs)
+    def forward(self, hidden_states):
+        residual = hidden_states
+        x = self.act1(hidden_states)
 
         x = self.conv1(x)
 
@@ -535,7 +537,7 @@ class DPTPreActResidualConvUnit(nn.Module):
         if self.use_batch_norm:
             x = self.batch_norm2(x)
 
-        return x + inputs_
+        return x + residual
 
 
 class DPTFeatureFusionBlock(nn.Module):
@@ -562,9 +564,9 @@ class DPTFeatureFusionBlock(nn.Module):
         out_channels = config.channels // 2 if self.expand else config.channels
         self.project = nn.Conv2d(config.channels, out_channels, kernel_size=1, bias=True)
 
-        self.res_conv_unit1 = DPTPreActResidualConvUnit(config)
+        self.res_conv_unit1 = DPTPreActResidualLayer(config)
 
-        self.res_conv_unit2 = DPTPreActResidualConvUnit(config)
+        self.res_conv_unit2 = DPTPreActResidualLayer(config)
 
     def forward(self, *inputs):
         x = inputs[0]
@@ -731,6 +733,7 @@ class DPTModel(DPTPreTrainedModel):
         )
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTPooler
 class DPTViTPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -804,14 +807,18 @@ class DPTNeck(nn.Module):
 
 
 class DPTInterpolate(nn.Module):
-    """Interpolation module."""
+    """Interpolation module.
+
+    Args:
+        scale_factor (`float`):
+            Scaling factor.
+        mode (`str`):
+            Interpolation mode to use.
+        align_corners (`bool`, *optional*, defaults to `False`):
+            Multiplier for spatial size.
+    """
 
     def __init__(self, scale_factor, mode, align_corners=False):
-        """Init.
-        Args:
-            scale_factor (float): scaling
-            mode (str): interpolation mode
-        """
         super().__init__()
 
         self.interpolate = nn.functional.interpolate
@@ -820,13 +827,6 @@ class DPTInterpolate(nn.Module):
         self.align_corners = align_corners
 
     def forward(self, x):
-        """Forward pass.
-        Args:
-            x (tensor): input
-        Returns:
-            tensor: interpolated data
-        """
-
         x = self.interpolate(x, scale_factor=self.scale_factor, mode=self.mode, align_corners=self.align_corners)
 
         return x
