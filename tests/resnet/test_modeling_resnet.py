@@ -331,11 +331,7 @@ class ResNetModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = (
-            ResNetForImageClassification.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-            .to(torch_device)
-            .eval()
-        )
+        model = ResNetForImageClassification.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
