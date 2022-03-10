@@ -675,6 +675,12 @@ class MarianEncoder(MarianPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
     def forward(
         self,
         input_ids=None,
@@ -824,7 +830,7 @@ class MarianDecoder(MarianPreTrainedModel):
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
         else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+            self.embed_tokens = nn.Embedding(config.decoder_vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = MarianSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -1084,27 +1090,82 @@ class MarianModel(MarianPreTrainedModel):
         super().__init__(config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = MarianEncoder(config, self.shared)
-        self.decoder = MarianDecoder(config, self.shared)
+        # We always use self.shared for token embeddings to ensure compatibility with all marian models
+        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
+        if self.config.share_encoder_decoder_embeddings:
+            encoder_embed_tokens = decoder_embed_tokens = self.shared
+        else:
+            # Since the embeddings are not shared, deepcopy the embeddings here for encoder
+            # and decoder to make sure they are not tied.
+            encoder_embed_tokens = copy.deepcopy(self.shared)
+            decoder_embed_tokens = copy.deepcopy(self.shared)
+            self.shared = None
+
+        self.encoder = MarianEncoder(config, encoder_embed_tokens)
+        self.decoder = MarianDecoder(config, decoder_embed_tokens)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.shared
+        # This will return shared embeddings if they are shared else specific to encoder.
+        return self.get_encoder().get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.shared = value
-        self.encoder.embed_tokens = self.shared
-        self.decoder.embed_tokens = self.shared
+        if self.config.share_encoder_decoder_embeddings:
+            self.shared = value
+            self.encoder.embed_tokens = self.shared
+            self.decoder.embed_tokens = self.shared
+        else:  # if not shared only set encoder embeedings
+            self.encoder.embed_tokens = value
+
+    def get_decoder_input_embeddings(self):
+        if self.config.share_encoder_decoder_embeddings:
+            raise ValueError(
+                "`get_decoder_input_embeddings` should not be called if `config.share_encoder_decoder_embeddings` "
+                "is `True`. Please use `get_input_embeddings` instead."
+            )
+        return self.get_decoder().get_input_embeddings()
+
+    def set_decoder_input_embeddings(self, value):
+        if self.config.share_encoder_decoder_embeddings:
+            raise ValueError(
+                "`config.share_encoder_decoder_embeddings` is set to `True` meaning the decoder input embeddings "
+                "are shared with the encoder. In order to set the decoder input embeddings, you should simply set "
+                "the encoder input embeddings by calling `set_input_embeddings` with the appropriate embeddings."
+            )
+        self.decoder.embed_tokens = value
 
     def get_encoder(self):
         return self.encoder
 
     def get_decoder(self):
         return self.decoder
+
+    def resize_decoder_token_embeddings(self, new_num_tokens):
+        if self.config.share_encoder_decoder_embeddings:
+            raise ValueError(
+                "`resize_decoder_token_embeddings` should not be called if `config.share_encoder_decoder_embeddings` "
+                "is `True`. Please use `resize_token_embeddings` instead."
+            )
+
+        old_embeddings = self.get_decoder_input_embeddings()
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        self.set_decoder_input_embeddings(new_embeddings)
+
+        model_embeds = self.get_decoder_input_embeddings()
+
+        if new_num_tokens is None:
+            return model_embeds
+
+        # Update base model and current model config
+        self.config.decoder_vocab_size = new_num_tokens
+
+        # Tie weights again if needed
+        self.tie_weights()
+
+        return model_embeds
 
     @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1226,8 +1287,12 @@ class MarianMTModel(MarianPreTrainedModel):
     def __init__(self, config: MarianConfig):
         super().__init__(config)
         self.model = MarianModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
-        self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
+
+        self.target_vocab_size = (
+            config.vocab_size if config.share_encoder_decoder_embeddings else config.decoder_vocab_size
+        )
+        self.register_buffer("final_logits_bias", torch.zeros((1, self.target_vocab_size)))
+        self.lm_head = nn.Linear(config.d_model, self.target_vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1240,8 +1305,58 @@ class MarianMTModel(MarianPreTrainedModel):
 
     def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        self._resize_final_logits_bias(new_num_tokens)
+        if self.config.share_encoder_decoder_embeddings:
+            self._resize_final_logits_bias(new_num_tokens)
         return new_embeddings
+
+    def _resize_token_embeddings(self, new_num_tokens):
+        old_embeddings = self.get_input_embeddings()
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        self.set_input_embeddings(new_embeddings)
+
+        # if word embeddings are not tied, make sure that lm head is resized as well
+        if (
+            self.config.share_encoder_decoder_embeddings
+            and self.get_output_embeddings() is not None
+            and not self.config.tie_word_embeddings
+        ):
+            old_lm_head = self.get_output_embeddings()
+            new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens)
+            self.set_output_embeddings(new_lm_head)
+
+        return self.get_input_embeddings()
+
+    def resize_decoder_token_embeddings(self, new_num_tokens):
+        if self.config.share_encoder_decoder_embeddings:
+            raise ValueError(
+                "`resize_decoder_token_embeddings` should not be called if `config.share_encoder_decoder_embeddings` "
+                "is `True`. Please use `resize_token_embeddings` instead."
+            )
+
+        old_embeddings = self.model.get_decoder_input_embeddings()
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        self.model.set_decoder_input_embeddings(new_embeddings)
+
+        # if word embeddings are not tied, make sure that lm head is resized as well
+        if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
+            old_lm_head = self.get_output_embeddings()
+            new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens)
+            self.set_output_embeddings(new_lm_head)
+
+        model_embeds = self.model.get_decoder_input_embeddings()
+
+        if new_num_tokens is None:
+            return model_embeds
+
+        # Update base model and current model config
+        self.config.decoder_vocab_size = new_num_tokens
+
+        # Tie weights again if needed
+        self.tie_weights()
+
+        self._resize_final_logits_bias(new_num_tokens)
+
+        return model_embeds
 
     def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
         old_num_tokens = self.final_logits_bias.shape[-1]
@@ -1257,6 +1372,28 @@ class MarianMTModel(MarianPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def tie_weights(self):
+        """
+        Tie the weights between the input embeddings and the output embeddings.
+
+        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
+        weights instead.
+        """
+        output_embeddings = self.get_output_embeddings()
+        if output_embeddings is not None and getattr(self.config, "tie_word_embeddings", True):
+            # if embeddings are shared this will return shared embeddings otherwise decoder embed_tokens
+            word_embeddings = self.get_decoder().get_input_embeddings()
+            self._tie_or_clone_weights(output_embeddings, word_embeddings)
+
+        if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
+            if hasattr(self, self.base_model_prefix):
+                self = getattr(self, self.base_model_prefix)
+            self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
+
+        for module in self.modules():
+            if hasattr(module, "_tie_weights"):
+                module._tie_weights()
 
     @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1322,7 +1459,7 @@ class MarianMTModel(MarianPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.target_vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
