@@ -1517,7 +1517,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `ElectraLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `ElectraForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.electra = ElectraModel(config)
         self.generator_predictions = ElectraGeneratorPredictions(config)

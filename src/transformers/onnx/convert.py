@@ -12,18 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from inspect import signature
 from itertools import chain
 from pathlib import Path
-from typing import Iterable, List, Tuple, Union
+from typing import TYPE_CHECKING, Iterable, List, Tuple, Union
 
 import numpy as np
 from packaging.version import Version, parse
 
-from transformers import PreTrainedModel, PreTrainedTokenizer, TensorType, TFPreTrainedModel, is_torch_available
-from transformers.file_utils import is_tf_available, is_torch_onnx_dict_inputs_support_available
-from transformers.onnx.config import OnnxConfig
-from transformers.utils import logging
+from ..file_utils import TensorType, is_tf_available, is_torch_available, is_torch_onnx_dict_inputs_support_available
+from ..utils import logging
+from .config import OnnxConfig
+
+
+if is_torch_available():
+    from ..modeling_utils import PreTrainedModel
+
+if is_tf_available():
+    from ..modeling_tf_utils import TFPreTrainedModel
+
+if TYPE_CHECKING:
+    from ..feature_extraction_utils import FeatureExtractionMixin
+    from ..tokenization_utils import PreTrainedTokenizer
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -63,18 +74,19 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 
 def export_pytorch(
-    tokenizer: PreTrainedTokenizer,
-    model: PreTrainedModel,
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    model: "PreTrainedModel",
     config: OnnxConfig,
     opset: int,
     output: Path,
+    tokenizer: "PreTrainedTokenizer" = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a PyTorch model to an ONNX Intermediate Representation (IR)
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data.
+        preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
+            The preprocessor used for encoding the data.
         model ([`PreTrainedModel`]):
             The model to export.
         config ([`~onnx.config.OnnxConfig`]):
@@ -88,6 +100,11 @@ def export_pytorch(
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
+    if tokenizer is not None:
+        warnings.warn(
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            FutureWarning,
+        )
     if issubclass(type(model), PreTrainedModel):
         import torch
         from torch.onnx import export as onnx_export
@@ -106,7 +123,9 @@ def export_pytorch(
 
             # Ensure inputs match
             # TODO: Check when exporting QA we provide "is_pair=True"
-            model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
+            model_inputs = config.generate_dummy_inputs(
+                preprocessor, tokenizer=tokenizer, framework=TensorType.PYTORCH
+            )
             inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
             onnx_outputs = list(config.outputs.keys())
 
@@ -163,18 +182,19 @@ def export_pytorch(
 
 
 def export_tensorflow(
-    tokenizer: PreTrainedTokenizer,
-    model: TFPreTrainedModel,
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    model: "TFPreTrainedModel",
     config: OnnxConfig,
     opset: int,
     output: Path,
+    tokenizer: "PreTrainedTokenizer" = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a TensorFlow model to an ONNX Intermediate Representation (IR)
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data.
+        preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
+            The preprocessor used for encoding the data.
         model ([`TFPreTrainedModel`]):
             The model to export.
         config ([`~onnx.config.OnnxConfig`]):
@@ -193,6 +213,12 @@ def export_tensorflow(
     import onnx
     import tf2onnx
 
+    if tokenizer is not None:
+        warnings.warn(
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            FutureWarning,
+        )
+
     model.config.return_dict = True
 
     # Check if we need to override certain configuration item
@@ -203,7 +229,7 @@ def export_tensorflow(
             setattr(model.config, override_config_key, override_config_value)
 
     # Ensure inputs match
-    model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.TENSORFLOW)
+    model_inputs = config.generate_dummy_inputs(preprocessor, tokenizer=tokenizer, framework=TensorType.TENSORFLOW)
     inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
     onnx_outputs = list(config.outputs.keys())
 
@@ -216,18 +242,19 @@ def export_tensorflow(
 
 
 def export(
-    tokenizer: PreTrainedTokenizer,
-    model: Union[PreTrainedModel, TFPreTrainedModel],
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    model: Union["PreTrainedModel", "TFPreTrainedModel"],
     config: OnnxConfig,
     opset: int,
     output: Path,
+    tokenizer: "PreTrainedTokenizer" = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a Pytorch or TensorFlow model to an ONNX Intermediate Representation (IR)
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data.
+        preprocessor: ([`PreTrainedTokenizer`] or [`FeatureExtractionMixin`]):
+            The preprocessor used for encoding the data.
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model to export.
         config ([`~onnx.config.OnnxConfig`]):
@@ -246,26 +273,37 @@ def export(
             "Cannot convert because neither PyTorch nor TensorFlow are not installed. "
             "Please install torch or tensorflow first."
         )
+    if tokenizer is not None:
+        warnings.warn(
+            "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+            FutureWarning,
+        )
 
     if is_torch_available():
-        from transformers.file_utils import torch_version
+        from ..file_utils import torch_version
 
         if not is_torch_onnx_dict_inputs_support_available():
             raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
 
+        if not config.is_torch_support_available:
+            logger.warning(
+                f"Unsupported PyTorch version for this model. Minimum required is {config.torch_onnx_minimum_version}, got: {torch_version}"
+            )
+
     if is_torch_available() and issubclass(type(model), PreTrainedModel):
-        return export_pytorch(tokenizer, model, config, opset, output)
+        return export_pytorch(preprocessor, model, config, opset, output, tokenizer=tokenizer)
     elif is_tf_available() and issubclass(type(model), TFPreTrainedModel):
-        return export_tensorflow(tokenizer, model, config, opset, output)
+        return export_tensorflow(preprocessor, model, config, opset, output, tokenizer=tokenizer)
 
 
 def validate_model_outputs(
     config: OnnxConfig,
-    tokenizer: PreTrainedTokenizer,
-    reference_model: Union[PreTrainedModel, TFPreTrainedModel],
+    preprocessor: Union["PreTrainedTokenizer", "FeatureExtractionMixin"],
+    reference_model: Union["PreTrainedModel", "TFPreTrainedModel"],
     onnx_model: Path,
     onnx_named_outputs: List[str],
     atol: float,
+    tokenizer: "PreTrainedTokenizer" = None,
 ):
     from onnxruntime import InferenceSession, SessionOptions
 
@@ -274,9 +312,13 @@ def validate_model_outputs(
     # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
     # dynamic input shapes.
     if issubclass(type(reference_model), PreTrainedModel):
-        reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.PYTORCH)
+        reference_model_inputs = config.generate_dummy_inputs(
+            preprocessor, tokenizer=tokenizer, framework=TensorType.PYTORCH
+        )
     else:
-        reference_model_inputs = config.generate_dummy_inputs(tokenizer, framework=TensorType.TENSORFLOW)
+        reference_model_inputs = config.generate_dummy_inputs(
+            preprocessor, tokenizer=tokenizer, framework=TensorType.TENSORFLOW
+        )
 
     # Create ONNX Runtime session
     options = SessionOptions()
@@ -354,7 +396,7 @@ def validate_model_outputs(
 
 
 def ensure_model_and_config_inputs_match(
-    model: Union[PreTrainedModel, TFPreTrainedModel], model_inputs: Iterable[str]
+    model: Union["PreTrainedModel", "TFPreTrainedModel"], model_inputs: Iterable[str]
 ) -> Tuple[bool, List[str]]:
     """
 

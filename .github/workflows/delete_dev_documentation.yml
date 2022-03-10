@@ -44,20 +44,20 @@ jobs:
           fi
         shell: bash
 
-#      - name: Find Comment
-#        if: ${{ always() }}
-#        uses: peter-evans/find-comment@v1
-#        id: fc
-#        with:
-#          issue-number: ${{ env.PR_NUMBER }}
-#          comment-author: HuggingFaceDocBuilder
+      - name: Find Comment
+        if: ${{ always() }}
+        uses: peter-evans/find-comment@v1
+        id: fc
+        with:
+          issue-number: ${{ env.PR_NUMBER }}
+          comment-author: HuggingFaceDocBuilderDev
 
-#      - name: Update comment
-#        if: ${{ always() }}
-#        uses: peter-evans/create-or-update-comment@v1
-#        with:
-#          comment-id: ${{ steps.fc.outputs.comment-id }}
-#          token: ${{ env.WRITE }}
-#          edit-mode: replace
-#          body: |
-#            _The documentation is not available anymore as the PR was closed or merged._
+      - name: Update comment
+        if: ${{ always() }}
+        uses: peter-evans/create-or-update-comment@v1
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          token: ${{ env.WRITE }}
+          edit-mode: replace
+          body: |
+            _The documentation is not available anymore as the PR was closed or merged._

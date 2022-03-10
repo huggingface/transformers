@@ -783,7 +783,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime]
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:
@@ -816,7 +816,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime]
+            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
             - save_cache:
                   key: v0.4-onnx-{{ checksum "setup.py" }}
                   paths:

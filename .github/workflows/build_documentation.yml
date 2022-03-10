@@ -97,6 +97,7 @@ jobs:
           cd doc-build &&
           if [[ `git status --porcelain` ]]; then 
             git add . &&
+            git stash && git pull && git stash apply &&
             git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}" &&
             git push origin main
           else

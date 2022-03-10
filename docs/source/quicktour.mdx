@@ -99,12 +99,13 @@ The [`pipeline`] can also iterate over an entire dataset. Start by installing th
 pip install datasets 
 ```
 
-Create a [`pipeline`] with the task you want to solve for and the model you want to use. Set the `device` parameter to `0` to place the tensors on a CUDA device:
+Create a [`pipeline`] with the task you want to solve for and the model you want to use.
 
 ```py
+>>> import torch
 >>> from transformers import pipeline
 
->>> speech_recognizer = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
+>>> speech_recognizer = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h")
 ```
 
 Next, load a dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) for more details) you'd like to iterate over. For example, let's load the [SUPERB](https://huggingface.co/datasets/superb) dataset:
@@ -264,10 +265,10 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> import tensorflow as tf
 
 >>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
->>> print(tf_predictions)
+>>> print(tf.math.round(tf_predictions * 10**4) / 10**4)
 tf.Tensor(
-[[0.00206 0.00177 0.01155 0.21209 0.77253]
- [0.20842 0.18262 0.19693 0.1755  0.23652]], shape=(2, 5), dtype=float32)
+[[0.0021 0.0018 0.0116 0.2121 0.7725]
+ [0.2084 0.1826 0.1969 0.1755  0.2365]], shape=(2, 5), dtype=float32)
 ```
 
 <Tip>

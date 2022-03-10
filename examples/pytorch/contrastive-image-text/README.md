@@ -39,13 +39,14 @@ wget http://images.cocodataset.org/annotations/annotations_trainval2017.zip
 wget http://images.cocodataset.org/annotations/image_info_test2017.zip
 cd ..
 ```
-```suggestion
 
 Having downloaded COCO dataset manually you should be able to load with the `ydshieh/coc_dataset_script` dataset loading script:
 
 ```py
 COCO_DIR = "data"
 ds = datasets.load_dataset("ydshieh/coco_dataset_script", "2017", data_dir=COCO_DIR)
+```
+
 ### Create a model from a vision encoder model and a text decoder model
 Next, we create a [VisionTextDualEncoderModel](https://huggingface.co/docs/transformers/model_doc/vision-text-dual-encoder#visiontextdualencoder).
 The `VisionTextDualEncoderModel` class let's you load any vision and text encoder model to create a dual encoder. 

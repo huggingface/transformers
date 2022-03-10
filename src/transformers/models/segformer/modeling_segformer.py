@@ -49,7 +49,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 256, 16, 16]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "nvidia/segformer-b0-finetuned-ade-512-512",

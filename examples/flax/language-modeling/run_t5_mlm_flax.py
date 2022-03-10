@@ -810,7 +810,7 @@ def main():
 
         # Generate an epoch by shuffling sampling indices from the train dataset
         num_train_samples = len(tokenized_datasets["train"])
-        train_samples_idx = jax.random.permutation(input_rng, jnp.arange(num_train_samples))
+        train_samples_idx = np.random.permutation(np.arange(num_train_samples))
         train_batch_idx = generate_batch_splits(train_samples_idx, train_batch_size)
 
         # Gather the indexes for creating the batch and do a training step

@@ -16,35 +16,43 @@ env:
   OMP_NUM_THREADS: 16
   MKL_NUM_THREADS: 16
   PYTEST_TIMEOUT: 600
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
 
 jobs:
   run_doctests:
-    runs-on: [self-hosted, docker-gpu-test, single-gpu]
+    runs-on: [self-hosted, doc-tests-gpu]
     container:
-      image: pytorch/pytorch:1.9.0-cuda11.1-cudnn8-runtime
+      image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: Launcher docker
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v2
+        with:
+          repository: 'huggingface/transformers'
+          path: transformers
 
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
 
-      - name: Install dependencies
+      - name: GPU visibility
+        working-directory: transformers
         run: |
-          apt -y update && apt install -y libsndfile1-dev
-          pip install --upgrade pip
-          pip install .[testing,torch-speech]
+          utils/print_env_pt.py
+          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
+          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
       - name: Prepare files for doctests
+        working-directory: transformers
         run: |
-          python utils/prepare_for_doc_test.py src docs
+          python3 utils/prepare_for_doc_test.py src docs
 
       - name: Run doctests
+        working-directory: transformers
         run: |
-          pytest --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
+          python3 -m pytest --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
 
       - name: Clean files after doctests
+        working-directory: transformers
         run: |
-          python utils/prepare_for_doc_test.py src docs --remove_new_line
+          python3 utils/prepare_for_doc_test.py src docs --remove_new_line

@@ -16,7 +16,7 @@
 
 
 import random
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -1050,9 +1050,6 @@ class TFMarianDecoder(tf.keras.layers.Layer):
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
 
-        if inputs["use_cache"]:
-            present_key_values = (inputs["encoder_hidden_states"], present_key_values)
-
         if not inputs["return_dict"]:
             return hidden_states, present_key_values, all_hidden_states, all_self_attns, all_cross_attns
         else:
@@ -1477,43 +1474,23 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past,
-        attention_mask,
+        past=None,
+        attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
         use_cache=None,
-        **kwargs,
-    ) -> Dict:
-        assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
-        if len(past) == 1:
-            assert isinstance(past[0], tf.Tensor), f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}"
-            encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
-            past_key_values = None
-        else:
-            assert (
-                len(past) == 2
-            ), "`past` has to be of length 2 with the encoder_outputs at the first position and past_key_values at the second position."
-            encoder_outputs, past_key_values = past
-            if isinstance(encoder_outputs, tuple):
-                assert isinstance(
-                    encoder_outputs[0], tf.Tensor
-                ), f"`encoder_outputs[0]` has to be of type `tf.Tensor`, but is {type(encoder_outputs[0])}"
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs[0])
-            elif isinstance(encoder_outputs, tf.Tensor):
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs)
-            assert (
-                past_key_values
-            ), f"decoder cached states must be truthy. got {past_key_values} from the 2nd element of past"
+        encoder_outputs=None,
+        **kwargs
+    ):
+        # cut decoder_input_ids if past is used
+        if past is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
-        assert isinstance(
-            encoder_outputs, TFBaseModelOutput
-        ), f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}."
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
+            "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -1528,18 +1505,13 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
     @staticmethod
     # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration._reorder_cache
     def _reorder_cache(past, beam_idx):
-        if len(past) == 1:
-            return past
-
-        past_key_values = past[1]
-
         reordered_past = ()
-        for layer_past_key_values in past_key_values:
+        for layer_past in past:
+            # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
-                tuple(tf.gather(layer_past_key_value, beam_idx) for layer_past_key_value in layer_past_key_values[:2])
-                + layer_past_key_values[2:],
+                tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past[:2]) + layer_past[2:],
             )
-        return (past[0], reordered_past)
+        return reordered_past
 
     def adjust_logits_during_generation(
         self, logits, cur_len, max_length, forced_bos_token_id, forced_eos_token_id, **kwargs
