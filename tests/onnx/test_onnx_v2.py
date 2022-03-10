@@ -204,9 +204,9 @@ TENSORFLOW_EXPORT_DEFAULT_MODELS = {
     ("roberta", "roberta-base"),
 }
 
+# TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_WITH_PAST_MODELS` once TensorFlow has parity with the PyTorch model implementations.
 TENSORFLOW_EXPORT_WITH_PAST_MODELS = {
     ("gpt2", "gpt2"),
-    ("gpt-neo", "EleutherAI/gpt-neo-125M"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS` once TensorFlow has parity with the PyTorch model implementations.
