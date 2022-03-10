@@ -1358,7 +1358,8 @@ class Trainer:
                 for _ in train_dataloader:
                     break
 
-        if self.use_amp and hasattr(self, "qat_active") and callable(self.qat_active) and self.qat_active(epoch):
+        for epoch in range(epochs_trained, num_train_epochs):
+            if self.use_amp and hasattr(self, "qat_active") and callable(self.qat_active) and self.qat_active(epoch):
                 logger.info("entering QAT phase, disabling FP16 training")
                 self.scaler._enabled = False
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):

@@ -53,6 +53,7 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from ...qat import QATMatMul
 from ...utils import logging
 from .configuration_bert import BertConfig
 
