@@ -399,7 +399,7 @@ def add_special_tokens_to_vocab(model_dir: Path, separate_vocab=False) -> None:
         vocab = load_yaml(find_tgt_vocab_file(model_dir))
         vocab = {k: int(v) for k, v in vocab.items()}
         num_added = add_to_vocab_(vocab, ["<pad>"])
-        save_json(vocab, model_dir / "vocab-target.json")
+        save_json(vocab, model_dir / "target_vocab.json")
         save_tokenizer_config(model_dir, separate_vocabs=separate_vocab)
     else:
         vocab = load_yaml(find_vocab_file(model_dir))
@@ -504,7 +504,7 @@ class OpusState:
             self.pad_token_id = self.wemb.shape[0] - 1
             cfg["vocab_size"] = self.pad_token_id + 1
             cfg["decoder_vocab_size"] = self.pad_token_id + 1
-        
+
         if cfg["vocab_size"] != self.tokenizer.vocab_size:
             raise ValueError(
                 f"Original vocab size {cfg['vocab_size']} and new vocab size {len(self.tokenizer.encoder)} mismatched."

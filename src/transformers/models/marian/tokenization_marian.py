@@ -32,7 +32,7 @@ VOCAB_FILES_NAMES = {
     "source_spm": "source.spm",
     "target_spm": "target.spm",
     "vocab": "vocab.json",
-    "target_vocab_file": "vocab-target.json",
+    "target_vocab_file": "target_vocab.json",
     "tokenizer_config_file": "tokenizer_config.json",
 }
 
