@@ -27,8 +27,8 @@ VAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class VanConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VanModel`]. It is used to instantiate an ConvNeXT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    This is the configuration class to store the configuration of a [`VanModel`]. It is used to instantiate a Van model
+    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ConvNeXT [van-base](https://huggingface.co/van-base)
     architecture.
 
@@ -36,10 +36,14 @@ class VanConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        image_size (`int`, *optional*, defaults to 224):
+            The image size the network is train on.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_size (`int`, optional, defaults to 4):
-            Patch size to use in the patch embedding layer.
+        patch_sizes (`List[int]`, *optional*, defaults to [7, 3, 3, 3]):
+            Patch size to use in each stage's embedding layer.
+        strides (`List[int]`, *optional*, defaults to [4, 2, 2, 2]):
+            Stride size to use in each stage's embedding layer allowing to downsample the input.
         hidden_sizes (`List[int]`, *optional*, defaults to [64, 128, 320, 512]):
             Dimensionality (hidden size) at each stage.
         depths (`List[int]`, *optional*, defaults to [3, 3, 12, 3]):
@@ -53,18 +57,20 @@ class VanConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        layer_scale_init_value (`float`, *optional*, defaults to 1e-6):
+        layer_scale_init_value (`float`, *optional*, defaults to 1e-2):
             The initial value for the layer scale.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
+        dropout_rate (`float`, *optional*, defaults to 0.0):
+            The drop rate for dropout.
 
     Example:
     ```python
     >>> from transformers import VanModel, VanConfig
 
-    >>> # Initializing a Van van-tiny-224 style configuration
+    >>> # Initializing a Van van-base style configuration
     >>> configuration = VanConfig()
-    >>> # Initializing a model from the van-tiny-224 style configuration
+    >>> # Initializing a model from the van-base style configuration
     >>> model = VanModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -73,6 +79,7 @@ class VanConfig(PretrainedConfig):
 
     def __init__(
         self,
+        image_size=224,
         num_channels=3,
         patch_sizes=[7, 3, 3, 3],
         strides=[4, 2, 2, 2],
@@ -85,11 +92,10 @@ class VanConfig(PretrainedConfig):
         layer_scale_init_value=1e-2,
         drop_path_rate=0.0,
         dropout_rate=0.0,
-        image_size=224,
         **kwargs
     ):
         super().__init__(**kwargs)
-
+        self.image_size = image_size
         self.num_channels = num_channels
         self.patch_sizes = patch_sizes
         self.strides = strides
@@ -102,4 +108,3 @@ class VanConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.dropout_rate = dropout_rate
-        self.image_size = image_size

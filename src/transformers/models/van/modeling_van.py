@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch Van model."""
 
+import math
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -43,7 +44,7 @@ _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "van-base"
-_EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
+_EXPECTED_OUTPUT_SHAPE = [1, 512, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "van-base"
@@ -65,9 +66,8 @@ class VanEncoderOutput(ModelOutput):
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Last hidden states (final feature map) of the last stage of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
+            Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, num_channels,
+            height, width)`. Hidden-states (also called feature maps) of the model at the output of each stage.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -86,9 +86,8 @@ class VanModelOutput(ModelOutput):
         pooler_output (`torch.FloatTensor` of shape `(batch_size, config.dim[-1])`):
             Global average pooling of the last feature map followed by a layernorm.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
+            Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, num_channels,
+            height, width)`. Hidden-states (also called feature maps) of the model at the output of each stage.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -108,9 +107,8 @@ class VanClassifierOutput(ModelOutput):
         logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the model at
-            the output of each stage.
+            Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, num_channels,
+            height, width)`. Hidden-states (also called feature maps) of the model at the output of each stage.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -150,24 +148,23 @@ class VanDropPath(nn.Module):
         return drop_path(x, self.drop_prob, self.training)
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextEmbeddings with ConvNext->Van
 class VanOverlappingPatchEmbedder(nn.Sequential):
     """
-    Downsamples the input using a patchfy operation with a `stride` of 4 by default. From [PVTv2: Improved Baselines
-    with Pyramid Vision Transformer](https://arxiv.org/abs/2106.13797)
+    Downsamples the input using a patchfy operation with a `stride` of 4 by default making adjacent windows overlap by
+    half of the area. From [PVTv2: Improved Baselines with Pyramid Vision
+    Transformer](https://arxiv.org/abs/2106.13797).
     """
 
     def __init__(self, in_channels: int, hidden_size: int, patch_size: int = 7, stride: int = 4):
         super().__init__()
-        self.embeddings = nn.Conv2d(
-            in_channels, hidden_size, kernel_size=patch_size, stride=stride, padding=patch_size // 2
-        )
+        self.conv = nn.Conv2d(in_channels, hidden_size, kernel_size=patch_size, stride=stride, padding=patch_size // 2)
         self.norm = nn.BatchNorm2d(hidden_size)
 
 
 class VanMlpLayer(nn.Sequential):
     """
-    MLP from [PVTv2: Improved Baselines with Pyramid Vision Transformer](https://arxiv.org/abs/2106.13797)
+    MLP with depth-wise convolution, from [PVTv2: Improved Baselines with Pyramid Vision
+    Transformer](https://arxiv.org/abs/2106.13797).
     """
 
     def __init__(
@@ -188,7 +185,11 @@ class VanMlpLayer(nn.Sequential):
 
 
 class VanLargeKernelAttention(nn.Sequential):
-    def __init__(self, hidden_size):
+    """
+    Basic Large Kernel Attention (LKA).
+    """
+
+    def __init__(self, hidden_size: int):
         super().__init__()
         self.depth_wise = nn.Conv2d(hidden_size, hidden_size, kernel_size=5, padding=2, groups=hidden_size)
         self.depth_wise_dilated = nn.Conv2d(
@@ -198,7 +199,12 @@ class VanLargeKernelAttention(nn.Sequential):
 
 
 class VanLargeKernelAttentionLayer(nn.Module):
-    def __init__(self, hidden_size):
+    """
+    Computes attention using Large Kernel Attention (LKA) and attends the input.
+
+    """
+
+    def __init__(self, hidden_size: int):
         super().__init__()
         self.attention = VanLargeKernelAttention(hidden_size)
 
@@ -210,9 +216,8 @@ class VanLargeKernelAttentionLayer(nn.Module):
 
 class VanSpatialAttentionLayer(nn.Module):
     """
-    VAN spatial attention layer composed projection (conv) -> act -> LKA attention -> projection (conv) + residual
-    connetion.
-
+    VAN spatial attention layer composed by projection (via conv) -> act -> Large Kernel Attention (LKA) attention ->
+    projection (via conv) + residual connetion.
     """
 
     def __init__(
@@ -237,8 +242,8 @@ class VanSpatialAttentionLayer(nn.Module):
         hidden_state = self.pre_projection(hidden_state)
         hidden_state = self.attention_layer(hidden_state)
         hidden_state = self.post_projection(hidden_state)
-
-        return hidden_state + residual
+        hidden_state = hidden_state + residual
+        return hidden_state
 
 
 class VanLayerScaling(nn.Module):
@@ -247,7 +252,7 @@ class VanLayerScaling(nn.Module):
         self.weight = nn.Parameter(initial_value * torch.ones((hidden_size)), requires_grad=True)
 
     def forward(self, hidden_state):
-        # unsqueeze for broadcasting
+        # unsqueezing for broadcasting
         hidden_state = self.weight.unsqueeze(-1).unsqueeze(-1) * hidden_state
         return hidden_state
 
@@ -260,15 +265,16 @@ class VanLayer(nn.Module):
         dropout_rate: float = 0.0,
         drop_path_rate: float = 0.5,
         hidden_act: str = "gelu",
+        layer_scale_init_value: float = 1e-2,
     ):
         super().__init__()
         self.drop_path = VanDropPath(drop_path) if drop_path_rate > 0.0 else nn.Identity()
         self.pre_norm = nn.BatchNorm2d(hidden_size)
         self.attention = VanSpatialAttentionLayer(hidden_size, hidden_act)
-        self.attention_scaling = VanLayerScaling(hidden_size)
+        self.attention_scaling = VanLayerScaling(hidden_size, layer_scale_init_value)
         self.post_norm = nn.BatchNorm2d(hidden_size)
         self.mlp = VanMlpLayer(hidden_size, hidden_size * mlp_expansion, hidden_size, hidden_act, dropout_rate)
-        self.mlp_scaling = VanLayerScaling(hidden_size)
+        self.mlp_scaling = VanLayerScaling(hidden_size, layer_scale_init_value)
 
     def forward(self, hidden_state):
         residual = hidden_state
@@ -291,13 +297,8 @@ class VanLayer(nn.Module):
 
 
 class VanStage(nn.Module):
-    """VanStage stage, consisting of an optional downsampling layer + multiple layers.
-
-    Args:
-        in_channels (`int`): Number of input channels.
-        out_channels (`int`): Number of output channels.
-        depth (`int`): Number of residual blocks.
-        drop_path_rates(`List[float]`): Stochastic depth rates for each layer.
+    """
+    VanStage, consisting of multiple layers.
     """
 
     def __init__(
@@ -312,6 +313,7 @@ class VanStage(nn.Module):
         dropout_rate: float = 0.0,
         hidden_act: str = "gelu",
         layer_norm_eps: float = 1e-6,
+        layer_scale_init_value: float = 1e-2,
     ):
         super().__init__()
         self.embeddings = VanOverlappingPatchEmbedder(in_channels, hidden_size, patch_size, stride)
@@ -323,6 +325,7 @@ class VanStage(nn.Module):
                     drop_path_rate=drop_path_rate,
                     dropout_rate=dropout_rate,
                     hidden_act=hidden_act,
+                    layer_scale_init_value=layer_scale_init_value,
                 )
                 for _ in range(depth)
             ]
@@ -336,13 +339,15 @@ class VanStage(nn.Module):
         batch_size, hidden_size, height, width = hidden_state.shape
         hidden_state = hidden_state.flatten(2).transpose(1, 2)
         hidden_state = self.norm(hidden_state)
+        # rearrange  b (h w) c- > b c h w
         hidden_state = hidden_state.view(batch_size, height, width, hidden_size).permute(0, 3, 1, 2)
         return hidden_state
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextEncoder with ConvNext->Van
 class VanEncoder(nn.Module):
-    """_summary_"""
+    """
+    VanEncoder, consisting of multiple stages.
+    """
 
     def __init__(self, config: VanConfig):
         super().__init__()
@@ -372,6 +377,7 @@ class VanEncoder(nn.Module):
                     drop_path_rate=drop_path_rate,
                     dropout_rate=config.dropout_rate,
                     layer_norm_eps=config.layer_norm_eps,
+                    layer_scale_init_value=config.layer_scale_init_value,
                 )
             )
 
@@ -379,13 +385,10 @@ class VanEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
 
         for _, stage_module in enumerate(self.stages):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_state,)
-
             hidden_state = stage_module(hidden_state)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_state,)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_state,)
 
         if not return_dict:
             return tuple(v for v in [hidden_state, all_hidden_states] if v is not None)
@@ -396,7 +399,6 @@ class VanEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->Van,convnext->van
 class VanPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -410,15 +412,19 @@ class VanPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, nn.Linear):
+            nn.init.trunc_normal_(module.weight, std=0.02)
+            if isinstance(module, nn.Linear) and module.bias is not None:
+                nn.init.constant_(module.bias, 0)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.constant_(module.bias, 0)
+            nn.init.constant_(module.weight, 1.0)
+        elif isinstance(module, nn.Conv2d):
+            fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
+            fan_out //= module.groups
+            module.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, VanModel):
@@ -451,20 +457,16 @@ VAN_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Van model outputting raw features without any specific head on top.",
+    "The bare Van model outputting raw features without any specific head on top. Note, van does not have an embedding layer.",
     VAN_START_DOCSTRING,
 )
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->VAN,ConvNext->Van
 class VanModel(VanPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-
         self.encoder = VanEncoder(config)
-
         # final layernorm layer
         self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -488,11 +490,9 @@ class VanModel(VanPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         last_hidden_state = encoder_outputs[0]
-
-        # global average pooling, (N, C, H, W) -> (N, C)
-        pooled_output = last_hidden_state.mean([-2, -1])
+        # global average pooling, n c w h -> n c
+        pooled_output = last_hidden_state.mean(dim=[-2, -1])
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -514,10 +514,7 @@ class VanModel(VanPreTrainedModel):
 class VanForImageClassification(VanPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
-        self.num_labels = config.num_labels
         self.van = VanModel(config)
-
         # Classifier head
         self.classifier = (
             nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
@@ -525,6 +522,31 @@ class VanForImageClassification(VanPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def maybe_get_loss(self, logits, labels, num_labels):
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+        return loss
 
     @add_start_docstrings_to_model_forward(VAN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -549,28 +571,8 @@ class VanForImageClassification(VanPreTrainedModel):
 
         logits = self.classifier(pooled_output)
 
-        loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
+        loss = self.maybe_get_loss(logits, labels, self.config.num_labels)
 
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
