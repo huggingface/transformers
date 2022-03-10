@@ -16,18 +16,17 @@
 import unittest
 
 from transformers import is_torch_available, is_vision_available
-from transformers.testing_utils import require_vision, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 
 if is_torch_available():
     import torch
 
-    from transformers import AutoModel
+    from transformers import AutoModelForImageClassification
 
 if is_vision_available():
-    from PIL import Image
+    from transformers import AutoFeatureExtractor
 
-    from transformers import AutoFeatureExtractor, AutoModelForImageClassification
 
 @require_torch
 @require_vision
@@ -42,18 +41,18 @@ class DiTIntegrationTest(unittest.TestCase):
 
         dataset = load_dataset("nielsr/rvlcdip-demo")
 
-        image = dataset['train'][0]['image'].convert("RGB")
-        
+        image = dataset["train"][0]["image"].convert("RGB")
+
         inputs = feature_extractor(image, return_tensors="pt")
 
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
             logits = outputs.logits
-        
+
         expected_shape = torch.Size((1, 16))
         self.assertEqual(logits.shape, expected_shape)
-        
+
         expected_slice = torch.tensor(
             [-0.4158, -0.4092, -0.4347],
             device=torch_device,
