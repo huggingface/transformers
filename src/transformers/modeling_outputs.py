@@ -894,7 +894,7 @@ class SemanticSegmentationModelOutput(ModelOutput):
 
 
 @dataclass
-class ImageClassificationModelOutput(ModelOutput):
+class ImageClassifierOutput(ModelOutput):
     """
     Base class for outputs of image classification models.
 

@@ -26,7 +26,7 @@ from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithNoAttentionAndWithPooling,
-    ImageClassificationModelOutput,
+    ImageClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -378,7 +378,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassificationModelOutput,
+        output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -388,7 +388,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         labels: Tensor = None,
         output_hidden_states: bool = None,
         return_dict: bool = None,
-    ) -> ImageClassificationModelOutput:
+    ) -> ImageClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -429,4 +429,4 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
             output = (logits,) + outputs[2:]
             return (loss,) + output if loss is not None else output
 
-        return ImageClassificationModelOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
