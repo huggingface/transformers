@@ -197,6 +197,16 @@ class TrainState(train_state.TrainState):
     def replicate(self):
         return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
 
+def shift_tokens_right(label_ids: jnp.array, decoder_start_token_id: int) -> np.ndarray:
+    """
+    Shift label ids one token to the right.
+    """
+    shifted_label_ids = jnp.zeros_like(label_ids)
+    shifted_label_ids = shifted_label_ids.at[:, 1:].set(label_ids[:, :-1])
+    shifted_label_ids = shifted_label_ids.at[:, 0].set(decoder_start_token_id)
+
+    return shifted_label_ids
+
 @flax.struct.dataclass
 class FlaxDataCollatorSpeechSeq2SeqWithPadding:
     """
@@ -218,7 +228,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
 
         batch = self.processor.feature_extractor.pad(input_features, return_tensors="np")
 
-        labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="np", )
+        labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="np")
 
         # replace padding with -100 to ignore loss correctly
         labels_batch["input_ids"] = np.ma.array(labels_batch["input_ids"], mask=np.not_equal(labels_batch.attention_mask, 1))
@@ -228,10 +238,13 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
         # cut bos token here as it's append later anyways
         if (labels[:, 0] == self.decoder_start_token_id).all().item():
             labels = labels[:, 1:]
-
-        batch["labels"] = labels
+            labels_batch.attention_mask = labels_batch.attention_mask[:, 1:]
 
         batch['inputs'] = batch.pop("input_values")
+
+        batch['labels'] = labels
+
+        batch["decoder_input_ids"] = shift_tokens_right(labels, self.decoder_start_token_id)
 
         batch['decoder_attention_mask'] = labels_batch.attention_mask
 
@@ -380,7 +393,6 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    import ipdb; ipdb.set_trace()
     model = FlaxAutoModelForSpeechSeq2Seq.from_pretrained(
         model_args.model_name_or_path,
         config=config,
@@ -460,8 +472,8 @@ def main():
     # 8. Load Metric
     metric = load_metric("wer")
 
-    def compute_metrics(pred_ids, label_ids):
-        label_ids[label_ids == -100] = tokenizer.pad_token_id
+    def compute_metrics(pred_ids: List[List[int]], label_ids: List[List[int]]):
+        label_ids = np.where(np.asarray(label_ids) == -100, tokenizer.pad_token_id, label_ids)
 
         pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
         # we do not want to group tokens when computing the metrics
@@ -586,7 +598,7 @@ def main():
 
         def compute_loss(params):
             labels = batch.pop("labels")
-            logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
+            logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, freeze_feature_encoder=model_args.freeze_feature_encoder, train=True)[0]
             loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
             return loss
 
@@ -613,11 +625,11 @@ def main():
         return metrics
 
     # Define generation function
-    gen_kwargs = {"max_length": model.config.max_length, "num_beams": model.config.num_beams}
+    gen_kwargs = {"max_length": training_args.generation_max_length, "num_beams": training_args.generation_num_beams}
 
     def generate_step(params, batch):
         model.params = params
-        output_ids = model.generate(batch["input_ids"], attention_mask=batch["attention_mask"], **gen_kwargs)
+        output_ids = model.generate(batch["inputs"], **gen_kwargs)
         return output_ids.sequences
 
     # Create parallel version of the train and eval step
@@ -679,14 +691,14 @@ def main():
         for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
             samples = [vectorized_datasets["validation"][int(idx)] for idx in batch_idx]
             batch = data_collator(samples)
-            batch = shard(batch)
+            batch = shard(batch.data)
             labels = batch["labels"]
 
             metrics = p_eval_step(state.params, batch)
             eval_metrics.append(metrics)
 
             # generation
-            if data_args.predict_with_generate:
+            if training_args.predict_with_generate:
                 generated_ids = p_generate_step(state.params, batch)
                 eval_preds.extend(jax.device_get(generated_ids.reshape(-1, gen_kwargs["max_length"])))
                 eval_labels.extend(jax.device_get(labels.reshape(-1, labels.shape[-1])))
@@ -697,7 +709,7 @@ def main():
 
         # compute WER metric
         wer_desc = ""
-        if data_args.predict_with_generate:
+        if training_args.predict_with_generate:
             wer_metric = compute_metrics(eval_preds, eval_labels)
             eval_metrics.update(wer_metric)
             wer_desc = " ".join([f"Eval {key}: {value} |" for key, value in wer_metric.items()])
