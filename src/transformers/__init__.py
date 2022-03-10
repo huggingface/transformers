@@ -532,7 +532,6 @@ if is_vision_available():
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
-    _import_structure["models.van"].append("VanFeatureExtractor")
     _import_structure["models.vilt"].append("ViltFeatureExtractor")
     _import_structure["models.vilt"].append("ViltProcessor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
@@ -2075,13 +2074,6 @@ if is_tf_available():
             "TFTransfoXLMainLayer",
             "TFTransfoXLModel",
             "TFTransfoXLPreTrainedModel",
-        ]
-    )
-    _import_structure["models.van"].extend(
-        [
-            "TFVanForImageClassification",
-            "TFVanModel",
-            "TFVanPreTrainedModel",
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["TFVisionEncoderDecoderModel"])
