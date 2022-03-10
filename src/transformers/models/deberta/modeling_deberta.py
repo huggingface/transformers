@@ -18,8 +18,7 @@ import math
 from collections.abc import Sequence
 
 import torch
-from packaging import version
-from torch import _softmax_backward_data, nn
+from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -32,14 +31,12 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import softmax_backward_data
 from ...utils import logging
 from .configuration_deberta import DebertaConfig
 
 
 logger = logging.get_logger(__name__)
-
-convert_to_dtype = not version.parse(torch.__version__) < version.parse("1.11")
-
 _CONFIG_FOR_DOC = "DebertaConfig"
 _TOKENIZER_FOR_DOC = "DebertaTokenizer"
 _CHECKPOINT_FOR_DOC = "microsoft/deberta-base"
@@ -118,7 +115,7 @@ class XSoftmax(torch.autograd.Function):
     @staticmethod
     def backward(self, grad_output):
         (output,) = self.saved_tensors
-        inputGrad = _softmax_backward_data(grad_output, output, self.dim, output.dtype if convert_to_dtype else output)
+        inputGrad = softmax_backward_data(self, grad_output, output, self.dim, output)
         return inputGrad, None, None
 
     @staticmethod
