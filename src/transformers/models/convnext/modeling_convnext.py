@@ -297,7 +297,7 @@ class ConvNextEncoder(nn.Module):
             self.layernorm = nn.ModuleList()
             for i in range(config.num_stages):
                 norm_size = config.hidden_sizes[i]
-                self.layernorm.append(nn.LayerNorm(norm_size, eps=1e-6))
+                self.layernorm.append(ConvNextLayerNorm(norm_size, eps=1e-6, data_format="channels_first"))
 
     def forward(self, hidden_states, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
@@ -432,9 +432,11 @@ class ConvNextModel(ConvNextPreTrainedModel):
         # global average pooling, (N, C, H, W) -> (N, C)
         if not self.config.apply_norm_after_stage:
             pooled_output = self.layernorm(last_hidden_state.mean([-2, -1]))
-
+        else:
+            pooled_output = last_hidden_state
+        
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+            return (last_hidden_state, None) + encoder_outputs[1:]
 
         return ConvNextModelOutput(
             last_hidden_state=last_hidden_state,
@@ -529,7 +531,7 @@ class ConvNextConvModule(nn.Module):
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size, padding=0, bias=False, dilation=1):
+    def __init__(self, in_channels, out_channels, kernel_size, padding=0, bias=False, dilation=1, in_place=True):
         super().__init__()
         self.conv = nn.Conv2d(
             in_channels=in_channels,
@@ -540,7 +542,7 @@ class ConvNextConvModule(nn.Module):
             dilation=dilation,
         )
         self.bn = nn.BatchNorm2d(out_channels)
-        self.activation = nn.ReLU(inplace=True)
+        self.activation = nn.ReLU(inplace=in_place)
 
     def forward(self, input):
         output = self.conv(input)
@@ -623,8 +625,8 @@ class ConvNextUperHead(nn.Module):
         self.lateral_convs = nn.ModuleList()
         self.fpn_convs = nn.ModuleList()
         for in_channels in self.in_channels[:-1]:  # skip the top layer
-            l_conv = ConvNextConvModule(in_channels, self.channels, kernel_size=1)
-            fpn_conv = ConvNextConvModule(self.channels, self.channels, kernel_size=3, padding=1)
+            l_conv = ConvNextConvModule(in_channels, self.channels, kernel_size=1, in_place=False)
+            fpn_conv = ConvNextConvModule(self.channels, self.channels, kernel_size=3, padding=1, in_place=False)
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
 
@@ -646,7 +648,13 @@ class ConvNextUperHead(nn.Module):
 
     def forward(self, encoder_hidden_states):
         # build laterals
-        laterals = [lateral_conv(encoder_hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
+        laterals = []
+        for i, conv in enumerate(self.lateral_convs):
+            print(f"Pre-lateral shape - {i}", encoder_hidden_states[i].shape)
+            op = conv(encoder_hidden_states[i])
+            print(f"Post-lateral shape - {i}", op.shape)
+            laterals.append(op)
+        # laterals = [lateral_conv(encoder_hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
 
         laterals.append(self.psp_forward(encoder_hidden_states))
 
@@ -770,9 +778,7 @@ class ConvNextForSemanticSegmentation(ConvNextPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
-        head_mask=None,
         labels=None,
-        output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
         legacy_output=None,
@@ -822,8 +828,6 @@ class ConvNextForSemanticSegmentation(ConvNextPreTrainedModel):
 
         outputs = self.convnext(
             pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
             output_hidden_states=True,  # we need the intermediate hidden states
             return_dict=return_dict,
         )
@@ -833,11 +837,6 @@ class ConvNextForSemanticSegmentation(ConvNextPreTrainedModel):
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
         features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
-        batch_size = pixel_values.shape[0]
-        patch_resolution = self.config.image_size // self.config.patch_size
-        features = [
-            x[:, 1:, :].permute(0, 2, 1).reshape(batch_size, -1, patch_resolution, patch_resolution) for x in features
-        ]
 
         logits = self.decode_head(features)
 

@@ -113,6 +113,7 @@ class ConvNextConfig(PretrainedConfig):
         semantic_loss_ignore_index=255,
         apply_norm_after_stage=False,
         legacy_output=False,
+        image_size=224,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -139,3 +140,4 @@ class ConvNextConfig(PretrainedConfig):
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
         self.apply_norm_after_stage = apply_norm_after_stage
         self.legacy_output = legacy_output
+        self.image_size = image_size
