@@ -22,6 +22,7 @@ import numpy as np
 from packaging.version import Version, parse
 
 from ..file_utils import TensorType, is_tf_available, is_torch_available, is_torch_onnx_dict_inputs_support_available
+from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import logging
 from .config import OnnxConfig
 
@@ -100,7 +101,6 @@ def export_pytorch(
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
-    from ..tokenization_utils_base import PreTrainedTokenizerBase
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
         raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
@@ -109,7 +109,7 @@ def export_pytorch(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
             FutureWarning,
         )
-        logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
         preprocessor = tokenizer
 
     if issubclass(type(model), PreTrainedModel):
@@ -218,8 +218,6 @@ def export_tensorflow(
     import onnx
     import tf2onnx
 
-    from ..tokenization_utils_base import PreTrainedTokenizerBase
-
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
         raise ValueError("You cannot provide both a tokenizer and preprocessor to export the model.")
     if tokenizer is not None:
@@ -227,7 +225,7 @@ def export_tensorflow(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
             FutureWarning,
         )
-        logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
         preprocessor = tokenizer
 
     model.config.return_dict = True
@@ -284,7 +282,6 @@ def export(
             "Cannot convert because neither PyTorch nor TensorFlow are not installed. "
             "Please install torch or tensorflow first."
         )
-    from ..tokenization_utils_base import PreTrainedTokenizerBase
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
         raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
@@ -293,7 +290,7 @@ def export(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
             FutureWarning,
         )
-        logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+        logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
         preprocessor = tokenizer
 
     if is_torch_available():
@@ -323,8 +320,6 @@ def validate_model_outputs(
     tokenizer: "PreTrainedTokenizer" = None,
 ):
     from onnxruntime import InferenceSession, SessionOptions
-
-    from ..tokenization_utils_base import PreTrainedTokenizerBase
 
     logger.info("Validating ONNX model...")
 
