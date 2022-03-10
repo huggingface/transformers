@@ -267,7 +267,7 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
-    
+
     def test_share_encoder_decoder_embeddings(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
 
@@ -276,7 +276,7 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             model = model_class(config)
             self.assertIs(model.get_encoder().embed_tokens, model.get_decoder().embed_tokens)
             self.assertIs(model.get_encoder().embed_tokens.weight, model.get_decoder().embed_tokens.weight)
-        
+
         # check if embeddings are not shared when config.share_encoder_decoder_embeddings = False
         config.share_encoder_decoder_embeddings = False
         for model_class in self.all_model_classes:
@@ -293,7 +293,7 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
                 model = model_class.from_pretrained(tmpdirname, share_encoder_decoder_embeddings=False)
                 self.assertIsNot(model.get_encoder().embed_tokens, model.get_decoder().embed_tokens)
                 self.assertIsNot(model.get_encoder().embed_tokens.weight, model.get_decoder().embed_tokens.weight)
-    
+
     def test_resize_decoder_token_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs()
 
@@ -302,14 +302,14 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             model = model_class(config)
             with self.assertRaises(ValueError):
                 model.resize_decoder_token_embeddings(config.vocab_size + 1)
-        
+
         # check if decoder embeddings are resized when config.share_encoder_decoder_embeddings = False
         config.share_encoder_decoder_embeddings = False
         for model_class in self.all_model_classes:
             model = model_class(config)
             model.resize_decoder_token_embeddings(config.vocab_size + 1)
             self.assertEqual(model.get_decoder().embed_tokens.weight.shape, (config.vocab_size + 1, config.d_model))
-        
+
         # check if lm_head is also resized
         config, _ = self.model_tester.prepare_config_and_inputs()
         config.share_encoder_decoder_embeddings = False
@@ -319,7 +319,6 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     def test_tie_word_embeddings_decoder(self):
         pass
-    
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
