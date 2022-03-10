@@ -205,9 +205,7 @@ TENSORFLOW_EXPORT_DEFAULT_MODELS = {
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_WITH_PAST_MODELS` once TensorFlow has parity with the PyTorch model implementations.
-TENSORFLOW_EXPORT_WITH_PAST_MODELS = {
-    ("gpt2", "gpt2"),
-}
+TENSORFLOW_EXPORT_WITH_PAST_MODELS = {}
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS` once TensorFlow has parity with the PyTorch model implementations.
 TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {}
@@ -305,7 +303,7 @@ class OnnxExportTestCaseV2(TestCase):
     def test_tensorflow_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
 
-    @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_WITH_PAST_MODELS))
+    @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_WITH_PAST_MODELS), skip_on_empty=True)
     @slow
     @require_tf
     def test_tensorflow_export_with_past(self, test_name, name, model_name, feature, onnx_config_class_constructor):
