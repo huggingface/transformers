@@ -581,6 +581,27 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
         self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
 
 
+@require_sentencepiece
+@require_tokenizers
+class TestMarian_FI_EN_V2(MarianIntegrationTest):
+    src = "fi"
+    tgt = "en"
+    src_text = [
+        "minä tykkään kirjojen lukemisesta",
+        "Pidän jalkapallon katsomisesta",
+    ]
+    expected_text = ["I like to read books", "I like watching football"]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.model_name = "hf-internal-testing/test-opus-tatoeba-fi-en-v2"
+        return cls
+
+    @slow
+    def test_batch_generation_en_fr(self):
+        self._assert_generated_batch_equal_expected()
+
+
 @require_torch
 class TestConversionUtils(unittest.TestCase):
     def test_renaming_multilingual(self):
