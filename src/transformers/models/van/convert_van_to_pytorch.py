@@ -165,7 +165,6 @@ def convert_weight_and_push(
 def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
-    expected_shape = (1, num_labels)
 
     repo_id = "datasets/huggingface/label-files"
     num_labels = num_labels
@@ -227,7 +226,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         for model_name, config in names_to_config.items():
             convert_weight_and_push(
                 model_name,
-                names_to_config[model_name],
+                config,
                 checkpoint=names_to_original_checkpoints[model_name],
                 from_model=names_to_original_models[model_name](),
                 save_directory=save_directory,
