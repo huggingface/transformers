@@ -330,6 +330,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("layoutxlm", "LayoutXLM"),
         ("data2vec-audio", "Data2VecAudio"),
         ("data2vec-text", "Data2VecText"),
+        ("dit", "DiT"),
     ]
 )
 
