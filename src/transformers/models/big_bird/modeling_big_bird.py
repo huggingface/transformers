@@ -23,6 +23,7 @@ from typing import Optional, Tuple
 import numpy as np
 import torch
 import torch.utils.checkpoint
+from torch.utils._pytree import tree_map
 from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -1397,7 +1398,7 @@ class BigBirdAttention(nn.Module):
                 hidden_states, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
             )
 
-        self_outputs = tuple(map(lambda x: x.to(hidden_states.dtype), self_outputs)) # fp16 compatibility
+        self_outputs = tuple(tree_map(lambda x: x.to(hidden_states.dtype) if isinstance(x, torch.Tensor) else x, self_outputs)) # fp16 compatibility
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
