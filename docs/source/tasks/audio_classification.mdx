@@ -72,14 +72,14 @@ Load the Wav2Vec2 feature extractor to process the audio signal:
 
 The preprocessing function needs to:
 
-1. Call the `audio` column to load and resample the audio file.
-2. Set the sampling rate for the audio file. The sampling rate of the audio data should match the sampling rate of the audio data a model was pretrained with. You can find this information on the Wav2Vec2 [model card]((https://huggingface.co/facebook/wav2vec2-base)).
+1. Call the `audio` column to load and if necessary resample the audio file.
+2. Check the sampling rate of the audio file matches the sampling rate of the audio data a model was pretrained with. You can find this information on the Wav2Vec2 [model card]((https://huggingface.co/facebook/wav2vec2-base)).
 3. Set a maximum input length so longer inputs are batched without being truncated.
 
 ```py
 >>> def preprocess_function(examples):
-...     audio_arrays = [x["array"] for x in examples["audio"]]
-...     inputs = feature_extractor(audio_arrays, sampling_rate=16000, max_length=16000, truncation=True)
+...     audio_arrays, sampling_rates = zip(*[x["array"], x["sampling_rate"] for x in examples["audio"]])
+...     inputs = feature_extractor(audio_arrays, sampling_rate=set(sampling_rates).pop(), max_length=16000, truncation=True)
 ...     return inputs
 ```
 
