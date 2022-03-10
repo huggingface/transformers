@@ -879,9 +879,13 @@ class GenerationMixin:
               [`~generation_utils.GenerationMixin.constrained_beam_search`], if `constraints!=None` or
               `force_words_ids!=None`.
 
+        <Tip warning={true}>
+
         Apart from `inputs`, all the arguments below will default to the value of the attribute of the same name as
         defined in the model's config (`config.json`) which in turn defaults to the
         [`~modeling_utils.PretrainedConfig`] of the model.
+
+        </Tip>
 
         Most of these parameters are explained in more detail in [this blog
         post](https://huggingface.co/blog/how-to-generate).

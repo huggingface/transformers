@@ -195,9 +195,13 @@ class FlaxGenerationMixin:
             - *beam-search decoding* by calling [`~generation_utils.FlaxGenerationMixin._beam_search`] if `num_beams>1`
               and `do_sample=False`.
 
+        <Tip warning={true}>
+
         Apart from `inputs`, all the arguments below will default to the value of the attribute of the same name as
         defined in the model's config (`config.json`) which in turn defaults to the
         [`~modeling_utils.PretrainedConfig`] of the model.
+
+        </Tip>
 
         Most of these parameters are explained in more detail in [this blog
         post](https://huggingface.co/blog/how-to-generate).
