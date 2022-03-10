@@ -91,16 +91,6 @@ class ResNetShortCut(nn.Sequential):
 class ResNetBasicLayer(nn.Module):
     """
     A classic ResNet's residual layer composed by a two `3x3` convolutions.
-
-    Args:
-        in_channels (`int`):
-            The number of input channels.
-        out_channels (`int`):
-            The number of outputs channels.
-        stride (`int`, *optional*, defaults to 1):
-            The stride used in the first convolution.
-        activation (`int`, *optional*, defaults to `"relu"`):
-            The activation used by the layer.
     """
 
     def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu"):
@@ -130,18 +120,6 @@ class ResNetBottleNeckLayer(nn.Module):
 
     The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
     convolution faster. The last `1x1` convolution remap the reduced features to `out_channels`.
-
-    Args:
-        in_channels (`int`):
-            The number of input channels.
-        out_channels (`int`):
-            The number of outputs channels.
-        stride (`int`, *optional*, defaults to 1):
-            The stride used in the first convolution.
-        activation (`int`, *optional*, defaults to `"relu"`):
-            The activation used by the layer.
-        reduction (`int`, *optional*, defaults to 4):
-            The reduction factor the block applies in the first `1x1` convolution.
     """
 
     def __init__(
@@ -172,21 +150,6 @@ class ResNetBottleNeckLayer(nn.Module):
 class ResNetStage(nn.Sequential):
     """
     A ResNet stage composed by stacked layers.
-
-    Args:
-        in_channels (`int`):
-            Number of input channels.
-        out_channels (`int`):
-            Number of output channels.
-        stride (`int`, *optional*, defaults to 1):
-            The first layer stride, used to downsample the input.
-        depth (`int`,*optional*, defaults to 2):
-            The number of layers.
-        layer_type (`str`, *optional*, defaults to `"basic"`):
-            The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or
-            `"bottleneck"` (used for larger models like resnet-50 and above).
-        activation (`int`, *optional*, defaults to `"relu"`):
-            The activation used by all layers.
     """
 
     def __init__(
