@@ -95,7 +95,7 @@ class ModuleTransfer:
 
 
 def copy_parameters(from_model: nn.Module, our_model: nn.Module) -> nn.Module:
-
+    # nn.Parameter cannot be tracked by the Tracker, thus we need to manually convert them
     from_state_dict = from_model.state_dict()
     our_state_dict = our_model.state_dict()
     config = our_model.config
@@ -112,7 +112,6 @@ def copy_parameters(from_model: nn.Module, our_model: nn.Module) -> nn.Module:
             all_keys.append((from_key, to_key))
 
     for from_key, to_key in all_keys:
-        # print(f'converting {from_key}->{to_key}')
         our_state_dict[to_key] = from_state_dict.pop(from_key)
 
     our_model.load_state_dict(our_state_dict)
@@ -234,7 +233,6 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
                 save_directory=save_directory,
                 push_to_hub=push_to_hub,
             )
-    return config, expected_shape
 
 
 if __name__ == "__main__":
