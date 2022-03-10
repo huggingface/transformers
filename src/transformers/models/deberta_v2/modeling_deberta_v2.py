@@ -19,6 +19,7 @@ from collections.abc import Sequence
 
 import numpy as np
 import torch
+from packaging import version
 from torch import _softmax_backward_data, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
@@ -48,6 +49,8 @@ DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/deberta-v2-xlarge-mnli",
     "microsoft/deberta-v2-xxlarge-mnli",
 ]
+
+convert_to_dtype = not version.parse(torch.__version__) < version.parse("1.11")
 
 
 # Copied from transformers.models.deberta.modeling_deberta.ContextPooler
@@ -116,7 +119,7 @@ class XSoftmax(torch.autograd.Function):
     @staticmethod
     def backward(self, grad_output):
         (output,) = self.saved_tensors
-        inputGrad = _softmax_backward_data(grad_output, output, self.dim, output)
+        inputGrad = _softmax_backward_data(grad_output, output, self.dim, output.dtype if convert_to_dtype else output)
         return inputGrad, None, None
 
     @staticmethod

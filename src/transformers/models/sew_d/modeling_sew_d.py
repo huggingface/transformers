@@ -22,6 +22,7 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
+from packaging import version
 from torch import _softmax_backward_data, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
@@ -37,7 +38,7 @@ from .configuration_sew_d import SEWDConfig
 
 
 logger = logging.get_logger(__name__)
-
+convert_to_dtype = not version.parse(torch.__version__) < version.parse("1.11")
 
 _HIDDEN_STATES_START_POSITION = 1
 
@@ -545,7 +546,7 @@ class XSoftmax(torch.autograd.Function):
     @staticmethod
     def backward(self, grad_output):
         (output,) = self.saved_tensors
-        inputGrad = _softmax_backward_data(grad_output, output, self.dim, output)
+        inputGrad = _softmax_backward_data(grad_output, output, self.dim, output.dtype if convert_to_dtype else output)
         return inputGrad, None, None
 
     @staticmethod
