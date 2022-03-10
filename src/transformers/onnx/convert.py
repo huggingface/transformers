@@ -103,7 +103,7 @@ def export_pytorch(
     from ..tokenization_utils_base import PreTrainedTokenizerBase
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
-        raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
+        raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
@@ -221,7 +221,7 @@ def export_tensorflow(
     from ..tokenization_utils_base import PreTrainedTokenizerBase
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
-        raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
+        raise ValueError("You cannot provide both a tokenizer and preprocessor to export the model.")
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
@@ -287,7 +287,7 @@ def export(
     from ..tokenization_utils_base import PreTrainedTokenizerBase
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
-        raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
+        raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
@@ -329,7 +329,7 @@ def validate_model_outputs(
     logger.info("Validating ONNX model...")
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
-        raise ValueError("You cannot provide both a tokenizer and a preprocessor to validate model inputs.")
+        raise ValueError("You cannot provide both a tokenizer and a preprocessor to validatethe model outputs.")
     if tokenizer is not None:
         warnings.warn(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
