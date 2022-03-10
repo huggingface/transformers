@@ -1200,30 +1200,6 @@ class ConvNextPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-VAN_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class VanForImageClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class VanModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class VanPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -3955,6 +3931,30 @@ class UniSpeechSatModel(metaclass=DummyObject):
 
 
 class UniSpeechSatPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+VAN_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class VanForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VanModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VanPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
