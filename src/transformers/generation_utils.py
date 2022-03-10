@@ -738,7 +738,9 @@ class GenerationMixin:
         if remove_invalid_values is True:
             processors.append(InfNanRemoveLogitsProcessor())
         if exponential_decay_length_penalty is not None:
-            processors.append(ExponentialDecayLengthPenalty(exponential_decay_length_penalty, eos_token_id, input_ids_seq_length))
+            processors.append(
+                ExponentialDecayLengthPenalty(exponential_decay_length_penalty, eos_token_id, input_ids_seq_length)
+            )
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         return processors
 
