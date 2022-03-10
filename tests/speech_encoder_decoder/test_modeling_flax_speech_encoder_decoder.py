@@ -224,7 +224,7 @@ class FlaxEncoderDecoderMixin:
                     decoder_use_cache=not decoder_config.use_cache,
                 )
 
-        # assert that setting opposite encoder and decoder kwargs to the configs has correctly been applied
+        # assert that setting encoder and decoder kwargs opposite to those in the configs has correctly been applied
         self.assertNotEqual(config.add_adapter, enc_dec_model.config.encoder.add_adapter)
         self.assertNotEqual(decoder_config.use_cache, enc_dec_model.config.decoder.use_cache)
 
