@@ -39,9 +39,36 @@ jobs:
           push: true
           tags: huggingface/transformers-all-latest-gpu
 
+  pytorch-nightly:
+    name: "PyTorch Nightly [dev]"
+    needs: latest-docker
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      -
+        name: Check out code
+        uses: actions/checkout@v2
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: ./docker/transformers-pytorch-nightly-gpu
+          build-args: |
+            REF=master
+          push: true
+          tags: huggingface/transformers-pytorch-nightly-gpu
+
   latest-torch-deepspeed-docker:
     name: "Latest PyTorch + DeepSpeed"
-    needs: latest-docker
+    needs: pytorch-nightly
     runs-on: ubuntu-latest
     steps:
       -
