@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - doc_builder*
       - doc-builder*
       - v*-release
 
@@ -75,42 +76,54 @@ jobs:
         run: |
           git config --global user.name "Hugging Face Doc Builder"
           git config --global user.email docs@huggingface.co
-          
+      
+      - name: Create build directory
+        run: |
           cd doc-build
-          git pull origin main
+          git pull
           cd ..
-
-          cd notebooks
-          git pull origin master
-          cd ..
-
+          mkdir build_dir
+          mkdir build_dir/transformers
+          cp doc-build/transformers/_versions.yml build_dir/transformers
+          
       - name: Make documentation
         run: |
           cd doc-builder &&
-          doc-builder build transformers ../transformers/docs/source --build_dir ../doc-build --notebook_dir notebooks/transformers_doc --clean --html &&
+          doc-builder build transformers ../transformers/docs/source --build_dir ../build_dir --notebook_dir ../notebooks_dir --clean --html &&
           cd ..
         env:
           NODE_OPTIONS: --max-old-space-size=6656
 
       - name: Push to repositories
         run: |
-          cd doc-build &&
+          cd doc-build
+          git pull
+          mv ../build_dir/transformers/_versions.yml transformers/
+          rm -rf transformers/$(ls ../build_dir/transformers)
+          mv ../build_dir/transformers/$(ls ../build_dir/transformers) transformers/$(ls ../build_dir/transformers)
+          git status
+
           if [[ `git status --porcelain` ]]; then 
-            git add . &&
-            git stash && git pull && git stash apply &&
-            git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}" &&
+            git add .
+            git commit -m "Updated with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}"
             git push origin main
           else
             echo "No diff in the documentation."
-          fi &&
-          cd .. &&
+          fi
 
-          cd notebooks &&
+          cd ..
+
+          cd notebooks
+          git pull
+          cp -r ../notebooks_dir/. transformers_doc/
+          git status
+
           if [[ `git status --porcelain` ]]; then
-            git add transformers_doc &&
+            git add transformers_doc
             git commit -m "Updated Transformer doc notebooks with commit ${{ github.sha }} \n\nSee: https://github.com/huggingface/transformers/commit/${{ github.sha }}" &&
             git push origin master
           else
             echo "No diff in the notebooks."
-          fi &&
+          fi
+
           cd ..
