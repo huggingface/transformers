@@ -880,8 +880,8 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         for i in range(len(past_key_values)):
             past_key_values[i] = tf.pad(past_key_values[i], padding_values)
         past_key_values = tuple(past_key_values)
-        generated = tf.TensorArray(element_shape=(batch_size, 1), dtype=tf.int32, dynamic_size=False,
-                                   size=max_length - seq_length, clear_after_read=False)
+#        generated = tf.TensorArray(element_shape=(batch_size, 1), dtype=tf.int32, dynamic_size=False,
+#                                   size=max_length - seq_length, clear_after_read=False)
         if attention_mask is None:
             attention_mask = tf.ones((batch_size, seq_length), dtype=tf.int32)
         # Zeros for the currently-unfilled locations in the past tensor, ones for the actual input_ids
@@ -892,7 +892,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
 
         return {
             "past_key_values": past_key_values,
-            "generated": generated,
+#            "generated": generated,
             "next_logits": logits,
             "attention_mask": attention_mask,
             "position_ids": position_ids
