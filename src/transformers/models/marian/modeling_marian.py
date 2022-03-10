@@ -829,7 +829,6 @@ class MarianDecoder(MarianPreTrainedModel):
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
         else:
-            # TODO: can we assume if embeddings are not shared the vocabs are also not shared ?
             self.embed_tokens = nn.Embedding(config.decoder_vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = MarianSinusoidalPositionalEmbedding(
@@ -1090,11 +1089,14 @@ class MarianModel(MarianPreTrainedModel):
         super().__init__(config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
+        # We always use self.shared for token embeddings to ensure compatibility with all marian models
+        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
         if self.config.share_encoder_decoder_embeddings:
             encoder_embed_tokens = decoder_embed_tokens = self.shared
         else:
+            # Since the embeddings are not shared, deepcopy the embeddings here for encoder
+            # and decoder to make sure they are not tied.
             encoder_embed_tokens = copy.deepcopy(self.shared)
             decoder_embed_tokens = copy.deepcopy(self.shared)
             self.shared = None
@@ -1307,7 +1309,6 @@ class MarianMTModel(MarianPreTrainedModel):
         return new_embeddings
 
     def _resize_token_embeddings(self, new_num_tokens):
-        # TODO: override this method to handle shared not shared
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
         self.set_input_embeddings(new_embeddings)

@@ -631,7 +631,6 @@ class OpusState:
         if self.extra_keys:
             raise ValueError(f"Failed to convert {self.extra_keys}")
 
-        # TODO: check this for decoder embeddings as well
         if model.get_input_embeddings().padding_idx != self.pad_token_id:
             raise ValueError(
                 f"Padding tokens {model.get_input_embeddings().padding_idx} and {self.pad_token_id} mismatched"
