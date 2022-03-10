@@ -19,7 +19,7 @@ from collections.abc import Sequence
 
 import numpy as np
 import torch
-from torch import _softmax_backward_data, nn
+from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
 from ...activations import ACT2FN
@@ -32,6 +32,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import softmax_backward_data
 from ...utils import logging
 from .configuration_deberta_v2 import DebertaV2Config
 
@@ -116,7 +117,7 @@ class XSoftmax(torch.autograd.Function):
     @staticmethod
     def backward(self, grad_output):
         (output,) = self.saved_tensors
-        inputGrad = _softmax_backward_data(grad_output, output, self.dim, output)
+        inputGrad = softmax_backward_data(self, grad_output, output, self.dim, output)
         return inputGrad, None, None
 
     @staticmethod
