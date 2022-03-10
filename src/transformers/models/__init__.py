@@ -47,6 +47,7 @@ from . import (
     detr,
     dialogpt,
     distilbert,
+    dit,
     dpr,
     electra,
     encoder_decoder,
