@@ -1583,6 +1583,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             dtype=torch.long,
             device=next(self.parameters()).device,
         )
+        input_ids_seq_length = input_ids.shape[-1]
         last_hidden_state = encoder_outputs["last_hidden_state"]
 
         def extend_enc_output(tensor, num_beams=None):
@@ -1609,7 +1610,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
             encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
-            input_ids=input_ids,
+            input_ids_seq_length=input_ids_seq_length,
             encoder_input_ids=context_input_ids,
             bad_words_ids=bad_words_ids,
             min_length=min_length,
