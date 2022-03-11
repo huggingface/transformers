@@ -64,7 +64,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         image_std (`int`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
             ImageNet std.
-        ignore_index (`int`, *optional*, default to 255):
+        ignore_index (`int`, *optional*):
             Value of the index (label) to ignore.
         num_labels (`int`, *optional*):
             The number of labels in the dataset. Needed to create the binary masks of shape `(batch, num_labels,
@@ -82,7 +82,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         do_normalize=True,
         image_mean=None,
         image_std=None,
-        ignore_index=255,
+        ignore_index=None,
         num_labels=None,
         **kwargs
     ):
@@ -299,8 +299,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
     def convert_segmentation_map_to_binary_masks(self, segmentation_map: "np.ndarray", num_labels: int):
         # get all the labels in the image
         labels = np.unique(segmentation_map)
-        # remove ignore index
-        labels = labels[labels != self.ignore_index]
+        # remove ignore index (if we have one)
+        if self.ignore_index is not None:
+            labels = labels[labels != self.ignore_index]
         # sanity check
         max_label = labels.max().item()
         if max_label > num_labels:
