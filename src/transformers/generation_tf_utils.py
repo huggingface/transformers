@@ -2210,6 +2210,9 @@ class TFGenerationMixin:
                 # argmax
                 next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int32)
 
+                next_tokens = next_tokens * (1 - tf.cast(finished_sequences, tf.int32)) + pad_token_id * tf.cast(
+                    finished_sequences, tf.int32
+                )
                 finished_sequences = finished_sequences | (next_tokens == eos_token_id)
 
                 # update `generated` and `current_pos`
