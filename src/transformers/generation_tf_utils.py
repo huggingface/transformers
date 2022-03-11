@@ -1560,7 +1560,7 @@ class TFGenerationMixin:
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
                 )
             # 8. run greedy search
-            return self.greedy_generate(
+            return self.greedy_search(
                 input_ids,
                 max_length=max_length,
                 pad_token_id=pad_token_id,
@@ -1810,7 +1810,7 @@ class TFGenerationMixin:
 
         return processors
 
-    def greedy_generate(
+    def greedy_search(
         self,
         input_ids: tf.Tensor,
         max_length: Optional[int] = None,
@@ -1893,7 +1893,7 @@ class TFGenerationMixin:
         ```"""
 
         @xla_compile(do_compile=use_xla)
-        def _xla_greedy_generate(
+        def _xla_greedy_search(
             self,
             input_ids: tf.Tensor,
             max_length: Optional[int] = None,
@@ -2084,7 +2084,7 @@ class TFGenerationMixin:
             else:
                 return output_ids
 
-        return _xla_greedy_generate(
+        return _xla_greedy_search(
             self,
             input_ids,
             max_length=max_length,
