@@ -35,7 +35,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
     `"zero-shot-image-classification"`.
 
     See the list of available models on
-    [huggingface.co/models](https://huggingface.co/models?filter=zer-shot-image-classification).
+    [huggingface.co/models](https://huggingface.co/models?filter=zero-shot-image-classification).
     """
 
     def __init__(self, **kwargs):
