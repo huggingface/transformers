@@ -50,12 +50,10 @@ Training large models with millions of parameters can be challenging without the
 CUDA out of memory. Tried to allocate 256.00 MiB (GPU 0; 11.17 GiB total capacity; 9.70 GiB already allocated; 179.81 MiB free; 9.85 GiB reserved in total by PyTorch)
 ```
 
-There are several potential solutions you can try:
+Here are some potential solutions you can try to lessen memory use:
 
 - Reduce the [`per_device_train_batch_size`](main_classes/trainer#transformers.TrainingArguments.per_device_train_batch_size) value in [`TrainingArguments`].
 - Try using [`gradient_accumulation_steps`](main_classes/trainer#transformers.TrainingArguments.gradient_accumulation_steps) in [`TrainingArguments`] to effectively increase overall batch size.
-- Try mixed precision training with [`fp16`](main_classes/trainer#transformers.TrainingArguments.fp16).
-
 
 <Tip>
 
