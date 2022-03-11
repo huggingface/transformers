@@ -39,4 +39,5 @@ jobs:
 
       - name: Set env
         run: |
+          cd transformers
           git symbolic-ref refs/remotes/origin/HEAD
