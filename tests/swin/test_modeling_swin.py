@@ -52,7 +52,7 @@ class SwinModelTester:
         self,
         parent,
         batch_size=13,
-        image_size=128,
+        image_size=32,
         patch_size=2,
         num_channels=3,
         embed_dim=16,
@@ -73,7 +73,7 @@ class SwinModelTester:
         scope=None,
         use_labels=True,
         type_sequence_label_size=10,
-        encoder_stride=2,
+        encoder_stride=8,
     ):
         self.parent = parent
         self.batch_size = batch_size
