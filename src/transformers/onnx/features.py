@@ -257,11 +257,13 @@ class FeaturesManager:
         model_type: str, model_name: Optional[str] = None
     ) -> Dict[str, Callable[[PretrainedConfig], OnnxConfig]]:
         """
-        Try to retrieve the feature -> OnnxConfig constructor map from the model type.
+        Tries to retrieve the feature -> OnnxConfig constructor map from the model type.
 
         Args:
-            model_type: The model type to retrieve the supported features for.
-            model_name: The name attribute of the model object, only used for the exception message.
+            model_type (`str`):
+                The model type to retrieve the supported features for.
+            model_name (`str`, *optional*):
+                The name attribute of the model object, only used for the exception message.
 
         Returns:
             The dictionary mapping each feature to a corresponding OnnxConfig constructor.
@@ -298,11 +300,13 @@ class FeaturesManager:
     @staticmethod
     def get_model_class_for_feature(feature: str, framework: str = "pt") -> Type:
         """
-        Attempt to retrieve an AutoModel class from a feature name.
+        Attempts to retrieve an AutoModel class from a feature name.
 
         Args:
-            feature: The feature required.
-            framework: The framework to use for the export.
+            feature (`str`):
+                The feature required.
+            framework (`str`, *optional*, defaults to `"pt"`):
+                The framework to use for the export.
 
         Returns:
             The AutoModel class corresponding to the feature.
@@ -324,12 +328,15 @@ class FeaturesManager:
         feature: str, model: str, framework: str = "pt"
     ) -> Union[PreTrainedModel, TFPreTrainedModel]:
         """
-        Attempt to retrieve a model from a model's name and the feature to be enabled.
+        Attempts to retrieve a model from a model's name and the feature to be enabled.
 
         Args:
-            feature: The feature required.
-            model: The name of the model to export.
-            framework: The framework to use for the export.
+            feature (`str`):
+                The feature required.
+            model (`str`):
+                The name of the model to export.
+            framework (`str`, *optional*, defaults to `"pt"`):
+                The framework to use for the export.
 
         Returns:
             The instance of the model.
