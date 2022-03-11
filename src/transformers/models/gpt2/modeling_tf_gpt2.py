@@ -856,57 +856,69 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         # TODO: (Joao) after the TF generator is complete, update GPT2 TF generation to match PT's. NB -- some GPT2
         # tests will need to be fixed after the change
 
+        attention_mask = kwargs.get("attention_mask", None)
+
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past is not None and attention_mask is not None:
             inputs = tf.expand_dims(inputs[:, -1], -1)
-
-        return {"input_ids": inputs, "past_key_values": past, "use_cache": use_cache}
-
-    def new_prepare_inputs_for_generation(self, input_ids, attention_mask, max_length):
-        # Does one step of generation with the initial input_ids
-        # All steps after this one will have constant size input_ids
-        batch_size, seq_length = input_ids.shape
-        if attention_mask is None:
-            outputs = self(input_ids, use_cache=True)
-        else:
+            position_ids = tf.reduce_sum(attention_mask, axis=1, keepdims=True) - 1
+        elif attention_mask is not None:
             position_ids = tf.math.cumsum(attention_mask, axis=1, exclusive=True)
-            outputs = self(input_ids, attention_mask=attention_mask, position_ids=position_ids, use_cache=True)
-        logits = outputs.logits[:, -1:]
-        past_key_values = outputs.past_key_values
-        padding_values = np.zeros((5, 2), dtype=np.int32)
-        padding_values[3, 1] = max_length - past_key_values[0].shape[3] - 1
-        padding_values = tf.constant(padding_values)
-        past_key_values = list(past_key_values)
-        for i in range(len(past_key_values)):
-            past_key_values[i] = tf.pad(past_key_values[i], padding_values)
-        past_key_values = tuple(past_key_values)
-#        generated = tf.TensorArray(element_shape=(batch_size, 1), dtype=tf.int32, dynamic_size=False,
-#                                   size=max_length - seq_length, clear_after_read=False)
-        if attention_mask is None:
-            attention_mask = tf.ones((batch_size, seq_length), dtype=tf.int32)
-        # Zeros for the currently-unfilled locations in the past tensor, ones for the actual input_ids
-        attention_mask = tf.concat([attention_mask,
-                                    tf.zeros((batch_size, max_length-seq_length-1), dtype=attention_mask.dtype),
-                                    tf.ones((batch_size, 1), dtype=attention_mask.dtype)], axis=1)
-
 
         return {
-            "past_key_values": past_key_values,
-#            "generated": generated,
-            "next_logits": logits,
+            "input_ids": inputs,
             "attention_mask": attention_mask,
-            "position_ids": position_ids
+            "position_ids": position_ids,
+            "past_key_values": past,
+            "use_cache": use_cache
         }
 
-    def update_cache_for_generation(self, past, update_loc):
-        new_past = [None for _ in range(len(past))]
-        slice_start_base = tf.constant([0, 0, 0, 1, 0])
-        for i in range(len(past)):
-            update_slice = past[i][:, :, :, -1:]
-            # Write the last slice to the first open location in the padded past array
-            # and then truncate the last slice off the array
-            new_past[i] = dynamic_update_slice(past[i][:, :, :, :-1], update_slice, slice_start_base * update_loc)
-        return tuple(new_past)
+    def _update_model_kwargs_for_xla_generation(self, outputs, model_kwargs, current_pos, max_length):
+        # TODO(Pvp, Joao, Matt) - this function can be cleaned a bit and refactored
+        # quite some duplicated code patterns it seems
+        # also the `attention_mask` is currently used in a somewhat hacky to
+        # correctly influence the `past_key_values` - not sure if this is the way to go
+
+        past = outputs.past_key_values
+        is_past_initialized = model_kwargs.pop("past", None) is not None
+        attention_mask = model_kwargs.pop("attention_mask")
+        batch_size = attention_mask.shape[0]
+
+        if not is_past_initialized:
+            # past[0].shape[3] is seq_length of prompt
+            num_padding_values = max_length - past[0].shape[3] - 1
+
+            padding_values = np.zeros((5, 2), dtype=np.int32)
+            padding_values[3, 1] = num_padding_values
+            padding_values = tf.constant(padding_values)
+
+            new_past = list(past)
+            for i in range(len(past)):
+                new_past[i] = tf.pad(past[i], padding_values)
+
+            # Zeros for the currently-unfilled locations in the past tensor, ones for the actual input_ids
+            attention_mask = tf.concat([attention_mask, tf.zeros((batch_size, num_padding_values), dtype=attention_mask.dtype), tf.ones((batch_size, 1), dtype=attention_mask.dtype)], axis=1)
+        else:
+            new_past = [None for _ in range(len(past))]
+            slice_start_base = tf.constant([0, 0, 0, 1, 0])
+            attention_mask_update_slice = tf.ones((batch_size, 1), dtype=attention_mask.dtype)
+            # correct 5 here
+            new_past_index = current_pos - 1
+
+            for i in range(len(past)):
+                update_slice = past[i][:, :, :, -1:]
+                # Write the last slice to the first open location in the padded past array
+                # and then truncate the last slice off the array
+                new_past[i] = dynamic_update_slice(past[i][:, :, :, :-1], update_slice, slice_start_base * new_past_index)
+
+            update_start = tf.constant([0, 1], dtype=tf.int32) * new_past_index
+            attention_mask = dynamic_update_slice(attention_mask, attention_mask_update_slice, update_start)
+
+        # set `attention_mask` and `past`
+        model_kwargs["attention_mask"] = attention_mask
+        model_kwargs["past"] = tuple(new_past)
+
+        return model_kwargs
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

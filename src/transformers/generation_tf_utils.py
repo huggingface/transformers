@@ -33,7 +33,7 @@ from .generation_tf_logits_process import (
     TFTopKLogitsWarper,
     TFTopPLogitsWarper,
 )
-from .tf_utils import set_tensor_by_indices_to_value, shape_list, dynamic_update_slice
+from .tf_utils import set_tensor_by_indices_to_value, shape_list
 from .utils import logging
 
 
@@ -1507,9 +1507,12 @@ class TFGenerationMixin:
         batch_size = input_ids.shape[0]
 
         # 3. Prepare other model kwargs
-        model_kwargs["output_attentions"] = output_attentions
-        model_kwargs["output_hidden_states"] = output_hidden_states
-        model_kwargs["use_cache"] = use_cache
+        if output_attentions is not None:
+            model_kwargs["output_attentions"] = output_attentions
+        if output_hidden_states is not None:
+            model_kwargs["output_hidden_states"] = output_hidden_states
+        if use_cache is not None:
+            model_kwargs["use_cache"] = use_cache
 
         requires_attention_mask = "encoder_outputs" not in model_kwargs
 
@@ -1556,8 +1559,6 @@ class TFGenerationMixin:
                 raise ValueError(
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
                 )
-#            if hasattr(self, "new_prepare_inputs_for_generation") and hasattr(self, "update_cache_for_generation"):
-
             # 8. run greedy search
             return self.xla_greedy_generate(
                 input_ids,
@@ -1741,8 +1742,6 @@ class TFGenerationMixin:
             model_kwargs["past"] = outputs.mems
         elif "past_buckets_states" in outputs:
             model_kwargs["past"] = outputs.past_buckets_states
-        else:
-            model_kwargs["past"] = None
 
         # update attention mask
         if not is_encoder_decoder:
@@ -2110,7 +2109,8 @@ class TFGenerationMixin:
             return_dict_in_generate: Optional[bool] = None,
             **model_kwargs,
         ) -> Union[TFGreedySearchOutput, tf.Tensor]:
-            # init values
+
+            # 1. init greedy_search values
             logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
 
             pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
@@ -2124,103 +2124,44 @@ class TFGenerationMixin:
                 return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
             )
 
-            # init attention / hidden states / scores tuples
+            # 2. init `attentions`, `hidden_states`, and `scores` tuples
             scores = [] if (return_dict_in_generate and output_scores) else None
             decoder_attentions = [] if (return_dict_in_generate and output_attentions) else None
             cross_attentions = [] if (return_dict_in_generate and output_attentions) else None
             decoder_hidden_states = [] if (return_dict_in_generate and output_hidden_states) else None
 
-            # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-            if return_dict_in_generate and self.config.is_encoder_decoder:
-                encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
-                encoder_hidden_states = (
-                    model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
-                )
-
-            # TODO(Patrick) - clean up
+            # 3. init tensors to use for "xla-compileable" generate function
+            # define bsz, seq_length
             batch_size, seq_length = input_ids.shape
-            attention_mask = model_kwargs.pop("attention_mask", None)
-            finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
 
+            # initialize `generated`, `finished_sequences`, and `current_pos`
             generated = tf.TensorArray(element_shape=(batch_size, 1), dtype=tf.int32, dynamic_size=False, size=max_length, clear_after_read=False)
 
             # write prompt to generated
             for i in range(seq_length):
                 generated = generated.write(i, input_ids[:, i:i + 1])
 
-            if use_xla:
-                model_inputs = self.new_prepare_inputs_for_generation(input_ids, attention_mask, max_length=max_length)
-                past = model_inputs["past_key_values"]
-                next_token_logits = model_inputs["next_logits"]
-                attention_mask = model_inputs["attention_mask"]
-                attention_mask_slice_start_base = tf.constant([0, 1], dtype=tf.int32)
-                attention_mask_update_slice = tf.ones((batch_size, 1), dtype=attention_mask.dtype)
-            else:
-                # in all models
-                model_kwargs["use_cache"] = None if "use_cache" not in model_kwargs else model_kwargs["use_cache"]
+            finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
+            current_pos = tf.ones(shape=(1,), dtype=tf.int32) * seq_length
 
-                # prepare model inputs
-                model_inputs = self.prepare_inputs_for_generation(input_ids, past=None, **model_kwargs)
+            # 4. define "xla-compile-able" stop-condition and auto-regressive function
+            # define condition fn
+            def greedy_search_cond_fn(generated, finished_sequences, next_tokens, current_pos, model_kwargs):
+                """state termination condition fn."""
+                return ~tf.reduce_all(finished_sequences)
 
-                # forward pass to get next token
+            # define condition fn
+            def greedy_search_body_fn(generated, finished_sequences, next_tokens, current_pos, model_kwargs):
+                """state update fn."""
+                model_inputs = self.prepare_inputs_for_generation(next_tokens, **model_kwargs)
+                # forward pass to get next token logits
                 outputs = self(
                     **model_inputs,
                     return_dict=True,
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
                 )
-
                 next_token_logits = outputs.logits[:, -1:]
-
-                # Store scores, attentions and hidden_states when required
-                if return_dict_in_generate:
-                    if output_scores:
-                        scores.append(next_token_logits)
-                    if output_attentions and self.config.is_encoder_decoder:
-                        decoder_attentions.append(outputs.decoder_attentions)
-                    elif output_attentions and not self.config.is_encoder_decoder:
-                        decoder_attentions.append(outputs.attentions)
-                        if self.config.is_encoder_decoder:
-                            cross_attentions.append(outputs.cross_attentions)
-
-                    if output_hidden_states and self.config.is_encoder_decoder:
-                        decoder_hidden_states.append(outputs.decoder_hidden_states)
-                    elif output_hidden_states and self.config.is_encoder_decoder:
-                        decoder_hidden_states.append(outputs.hidden_states)
-
-                past = outputs.past_key_values
-                attention_mask = tf.concat(
-                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
-                )
-
-            # pre-process distribution
-            next_tokens_scores = logits_processor(input_ids, next_token_logits)
-
-            # argmax
-            current_pos = tf.ones(shape=(1,), dtype=tf.int32) * seq_length
-
-            next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int32)
-            generated = generated.write(current_pos[0], next_tokens)
-            max_tokens_to_generate = max_length - seq_length
-
-            current_pos += 1
-
-            def greedy_search_cond_fn(generated, finished_sequences, attention_mask, next_tokens, past, current_pos):
-                """state termination condition fn."""
-                return ~tf.reduce_all(finished_sequences)
-
-            def greedy_search_body_fn(generated, finished_sequences, attention_mask, next_tokens, past, current_pos):
-                """state update fn."""
-                position_ids = tf.reduce_sum(attention_mask, axis=1, keepdims=True) - 1 if use_xla else None
-
-                model_outputs = self(
-                    input_ids=next_tokens,
-                    past=past,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids
-                )
-
-                next_token_logits = model_outputs.logits[:, -1:]
 
                 # Store scores, attentions and hidden_states when required
                 if not use_xla and return_dict_in_generate:
@@ -2249,27 +2190,59 @@ class TFGenerationMixin:
                 next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int32)
 
                 finished_sequences = finished_sequences | (next_tokens[:, 0] == eos_token_id)
-                past = model_outputs.past_key_values
-                new_past_index = current_pos + seq_length - 1
 
+                # update model_kwargs
                 if use_xla:
-                    past = self.update_cache_for_generation(past, new_past_index)
-                    update_start = attention_mask_slice_start_base * new_past_index
-                    attention_mask = dynamic_update_slice(attention_mask, attention_mask_update_slice, update_start)
+                    model_kwargs = self._update_model_kwargs_for_xla_generation(outputs, model_kwargs, current_pos, max_length)
                 else:
-                    attention_mask = tf.concat(
-                        [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                    model_kwargs = self._update_model_kwargs_for_generation(
+                        outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
                     )
 
+                # update `generated` and `current_pos`
                 generated = generated.write(current_pos[0], next_tokens)
                 current_pos += 1
-                return generated, finished_sequences, attention_mask, next_tokens, past, current_pos
+                return generated, finished_sequences, next_tokens, current_pos, model_kwargs
 
-            generated, _, _, _, _, _ = tf.while_loop(greedy_search_cond_fn, greedy_search_body_fn, (generated, finished_sequences, attention_mask, next_tokens, past, current_pos), maximum_iterations=max_tokens_to_generate - 1)
+            # 5. run generation
+            # 1st generation step has to be run before to initialize `past`
+            generated, finished_sequences, next_tokens, current_pos, model_kwargs = greedy_search_body_fn(generated, finished_sequences, input_ids, current_pos, model_kwargs)
 
-            output = tf.transpose(tf.reshape(generated.concat(), (-1, batch_size)))
+            # 2-to-n generation steps can then be run in autoregressive fashion
+            # only in case 1st generation step does NOT yield EOS token though
+            if greedy_search_cond_fn(generated, finished_sequences, next_tokens, current_pos, model_kwargs):
+                maximum_iterations = max_length - seq_length - 1
+                generated, _, _, _, _ = tf.while_loop(greedy_search_cond_fn, greedy_search_body_fn, (generated, finished_sequences, next_tokens, current_pos, model_kwargs), maximum_iterations=maximum_iterations)
 
-            return output
+            # 6. prepare outputs
+            output_ids = tf.transpose(tf.reshape(generated.concat(), (-1, batch_size)))
+
+            if return_dict_in_generate:
+                if self.config.is_encoder_decoder:
+                    # if model is an encoder-decoder, retrieve encoder attention weights
+                    # and hidden states
+                    encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+                    encoder_hidden_states = (
+                        model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
+                    )
+                    return TFGreedySearchEncoderDecoderOutput(
+                        sequences=output_ids,
+                        scores=tuple(scores),
+                        encoder_attentions=encoder_attentions,
+                        encoder_hidden_states=encoder_hidden_states,
+                        decoder_attentions=tuple(decoder_attentions),
+                        cross_attentions=tuple(cross_attentions),
+                        decoder_hidden_states=tuple(decoder_hidden_states),
+                    )
+                else:
+                    return TFGreedySearchDecoderOnlyOutput(
+                        sequences=output_ids,
+                        scores=tuple(scores),
+                        attentions=tuple(decoder_attentions),
+                        hidden_states=tuple(decoder_hidden_states),
+                    )
+            else:
+                return output_ids
 
         return _xla_greedy_generate(
             self,
