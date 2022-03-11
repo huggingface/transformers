@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The EleutherAI and HuggingFace Teams. All rights reserved.
+# Copyright 2022 The EleutherAI and HuggingFace Teams. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,9 +14,8 @@
 # limitations under the License.
 """ TF 2.0 GPT-J model."""
 
-import operator
-from functools import reduce
-from typing import Optional, Sequence, Tuple
+from turtle import pos
+from typing import Optional, Tuple
 
 import tensorflow as tf
 
@@ -52,18 +51,12 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
 _CONFIG_FOR_DOC = "GPTJConfig"
-_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
+_TOKENIZER_FOR_DOC = "GPTJTokenizer"
 
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EleutherAI/gpt-j-6B",
     # See all GPT-J models at https://huggingface.co/models?filter=gptj
 ]
-
-
-def _product(x: Sequence[int]) -> int:
-    """Return product of elements of a list for python<=3.7."""
-    prod = reduce(operator.mul, x, 1)
-    return prod
 
 
 def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] = None) -> Tuple[tf.Tensor, tf.Tensor]:
@@ -77,8 +70,8 @@ def fixed_pos_embedding(x: tf.Tensor, seq_dim: int = 1, seq_len: Optional[int] =
 
 
 def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
-    rotate_half_tensor = tf.stack((x[:, :, :, 1::2], x[:, :, :, ::2]), axis=-1)
-    new_shape = shape_list(rotate_half_tensor)[:-2] + [_product(shape_list(rotate_half_tensor)[-2:])]
+    rotate_half_tensor = tf.stack((-x[:, :, :, 1::2], x[:, :, :, ::2]), axis=-1)
+    new_shape = shape_list(rotate_half_tensor)[:-2] + [tf.math.reduce_prod(shape_list(rotate_half_tensor)[-2:])]
     rotate_half_tensor = tf.reshape(rotate_half_tensor, new_shape)
     return rotate_half_tensor
 
@@ -133,13 +126,13 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         )
 
         self.max_positions = config.max_position_embeddings
-
-    def get_causal_mask(self, key_length, query_length) -> tf.Tensor:
-        lower_triangle_mask = tf.reshape(
+        self.lower_triangle_mask = tf.reshape(
             tf.cast(tf.experimental.numpy.tril(tf.ones((self.max_positions, self.max_positions))), tf.int8),
             (1, 1, self.max_positions, self.max_positions),
         )
-        return tf.cast(lower_triangle_mask[:, :, key_length - query_length : key_length, :key_length], tf.bool)
+
+    def get_causal_mask(self, key_length, query_length) -> tf.Tensor:
+        return tf.cast(self.lower_triangle_mask[:, :, key_length - query_length : key_length, :key_length], tf.bool)
 
     @staticmethod
     def get_masked_bias(dtype) -> tf.Tensor:
@@ -585,7 +578,7 @@ GPTJ_START_DOCSTRING = r"""
     Parameters:
         config ([`GPTJConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 GPTJ_INPUTS_DOCSTRING = r"""
@@ -596,7 +589,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
 
             If `past` is used, only input IDs that do not have their past calculated should be passed as `input_ids`.
 
-            Indices can be obtained using [`GPT2Tokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`GPTJTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -755,12 +748,31 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
     def set_output_embeddings(self, value):
         self.set_input_embeddings(value)
 
-    def prepare_inputs_for_generation(self, inputs, past, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past=None, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
         if past:
             inputs = tf.expand_dims(inputs[:, -1], -1)
 
-        return {"input_ids": inputs, "past": past, "use_cache": kwargs["use_cache"]}
+        attention_mask = kwargs.get("attention_mask", None)
+        position_ids = kwargs.get("position_ids", None)
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = tf.math.cumsum(tf.cast(attention_mask, tf.int64), axis=-1) - 1
+            position_ids = tf.where(position_ids == 0, 1, position_ids)
+            if past:
+                position_ids = position_ids[:, -1]
+                position_ids = tf.reshape(position_ids, shape_list(position_ids) + [1])
+        else:
+            position_ids = None
+
+        return {
+            "input_ids": inputs,
+            "past": past,
+            "use_cache": kwargs["use_cache"],
+            "position_ids": position_ids,
+            "attention_mask": attention_mask,
+        }
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -901,6 +913,12 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
         training=False,
         **kwargs,
     ):
+        r"""
+        labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1038,6 +1056,16 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
         training=False,
         **kwargs,
     ):
+        r"""
+        start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        end_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        """
         inputs = input_processing(
             func=self.call,
             config=self.config,

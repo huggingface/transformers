@@ -15,12 +15,12 @@
 
 import unittest
 
-from tests.test_modeling_tf_core import TFCoreModelTesterMixin
 from transformers import GPTJConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow, tooslow
 
-from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ..test_configuration_common import ConfigTester
+from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ..utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
 
 if is_tf_available():
@@ -92,13 +92,13 @@ class TFGPTJModelTester:
             n_embd=self.hidden_size,
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
-            # intermediate_size=self.intermediate_size,
-            # hidden_act=self.hidden_act,
-            # hidden_dropout_prob=self.hidden_dropout_prob,
-            # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            intermediate_size=self.intermediate_size,
+            hidden_act=self.hidden_act,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             n_positions=self.max_position_embeddings,
-            # type_vocab_size=self.type_vocab_size,
-            # initializer_range=self.initializer_range
+            type_vocab_size=self.type_vocab_size,
+            initializer_range=self.initializer_range,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
