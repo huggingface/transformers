@@ -56,6 +56,12 @@
       title: Summarization
     - local: tasks/multiple_choice
       title: Multiple choice
+    - local: tasks/audio_classification
+      title: Audio classification
+    - local: tasks/asr
+      title: Automatic speech recognition
+    - local: tasks/image_classification
+      title: Image classification
     title: Fine-tune for downstream tasks
   - local: run_scripts
     title: Train with a script
