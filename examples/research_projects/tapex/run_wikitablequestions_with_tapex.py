@@ -387,7 +387,7 @@ def main():
                   for example_table in example_tables]
 
         # using wikitablequestion's answer set
-        answers = examples["answer"]
+        answers = examples["answers"]
 
         # IMPORTANT: we cannot pass by answers during evaluation, answers passed during training are used to
         # truncate large tables in the train set!
