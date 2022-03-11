@@ -767,8 +767,11 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
 
     def prepare_inputs_for_generation(self, inputs, past=None, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
+        token_type_ids = kwargs.get("token_type_ids", None)
         if past:
             inputs = tf.expand_dims(inputs[:, -1], -1)
+            if token_type_ids is not None:
+                token_type_ids = tf.expand_dims(token_type_ids[:, -1], -1)
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
@@ -789,6 +792,7 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
             "use_cache": kwargs["use_cache"],
             "position_ids": position_ids,
             "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids,
         }
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
