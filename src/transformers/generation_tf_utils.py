@@ -1560,7 +1560,21 @@ class TFGenerationMixin:
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
                 )
             # 8. run greedy search
-            return self.xla_greedy_generate(
+            if True:
+                #            if False:
+                return self.xla_greedy_generate(
+                    input_ids,
+                    max_length=max_length,
+                    pad_token_id=pad_token_id,
+                    eos_token_id=eos_token_id,
+                    logits_processor=logits_processor,
+                    output_scores=output_scores,
+                    return_dict_in_generate=return_dict_in_generate,
+                    use_xla=use_xla,
+                    **model_kwargs,
+                )
+
+            return self.greedy_search(
                 input_ids,
                 max_length=max_length,
                 pad_token_id=pad_token_id,
@@ -1571,18 +1585,6 @@ class TFGenerationMixin:
                 use_xla=use_xla,
                 **model_kwargs,
             )
-
-        #                return self.greedy_search(
-        #                    input_ids,
-        #                    max_length=max_length,
-        #                    pad_token_id=pad_token_id,
-        #                    eos_token_id=eos_token_id,
-        #                    logits_processor=logits_processor,
-        #                    output_scores=output_scores,
-        #                    return_dict_in_generate=return_dict_in_generate,
-        #                    use_xla=use_xla,
-        #                    **model_kwargs,
-        #            )
 
         elif is_sample_gen_mode:
             # 8. prepare logits warper
@@ -2210,6 +2212,11 @@ class TFGenerationMixin:
 
                 finished_sequences = finished_sequences | (next_tokens == eos_token_id)
 
+                # update `generated` and `current_pos`
+                generated = generated.write(current_pos[0], next_tokens)
+                next_tokens = next_tokens[:, None]
+                current_pos += 1
+
                 # update model_kwargs
                 if use_xla:
                     model_kwargs = self._update_model_kwargs_for_xla_generation(
@@ -2219,12 +2226,13 @@ class TFGenerationMixin:
                     model_kwargs = self._update_model_kwargs_for_generation(
                         outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
                     )
+                    # if we don't cache past key values we need the whole input
+                    if model_kwargs.get("past", None) is None:
+                        # let's throw out `past` since we don't want `None` tensors
+                        model_kwargs.pop("past", None)
+                        next_tokens = tf.reshape(generated.concat(), (-1, batch_size))
+                        next_tokens = tf.transpose(next_tokens[: current_pos[0]])
 
-                # update `generated` and `current_pos`
-                generated = generated.write(current_pos[0], next_tokens)
-
-                next_tokens = next_tokens[:, None]
-                current_pos += 1
                 return generated, finished_sequences, next_tokens, current_pos, model_kwargs
 
             # 5. run generation
