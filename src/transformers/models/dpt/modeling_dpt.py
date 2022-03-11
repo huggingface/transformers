@@ -471,9 +471,12 @@ class DPTReassembleBlocks(nn.Module):
 
             feature_shape = x.shape
             if self.config.readout_type == "project":
+                # reshape to (B, H*W, C)
                 x = x.flatten(2).permute((0, 2, 1))
                 readout = cls_token.unsqueeze(1).expand_as(x)
+                # concatenate the readout token to the hidden states and project
                 x = self.readout_projects[i](torch.cat((x, readout), -1))
+                # reshape back to (B, C, H, W)
                 x = x.permute(0, 2, 1).reshape(feature_shape)
             elif self.config.readout_type == "add":
                 x = x.flatten(2) + cls_token.unsqueeze(-1)
