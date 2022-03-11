@@ -14,7 +14,6 @@
 # limitations under the License.
 """ TF 2.0 GPT-J model."""
 
-from turtle import pos
 from typing import Optional, Tuple
 
 import tensorflow as tf
