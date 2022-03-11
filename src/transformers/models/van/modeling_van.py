@@ -81,7 +81,7 @@ class VanModelOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Last hidden states (final feature map) of the last stage of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, config.dim[-1])`):
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, config.hidden_sizes[-1])`):
             Global average pooling of the last feature map followed by a layernorm.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, num_channels,
@@ -216,11 +216,7 @@ class VanSpatialAttentionLayer(nn.Module):
     projection (via conv) + residual connetion.
     """
 
-    def __init__(
-        self,
-        hidden_size: int,
-        hidden_act: str = "gelu",
-    ):
+    def __init__(self, hidden_size: int, hidden_act: str = "gelu"):
         super().__init__()
         self.pre_projection = nn.Sequential(
             OrderedDict(
@@ -397,10 +393,7 @@ class VanEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_state, all_hidden_states] if v is not None)
 
-        return VanEncoderOutput(
-            last_hidden_state=hidden_state,
-            hidden_states=all_hidden_states,
-        )
+        return VanEncoderOutput(last_hidden_state=hidden_state, hidden_states=all_hidden_states)
 
 
 class VanPreTrainedModel(PreTrainedModel):
@@ -581,8 +574,4 @@ class VanForImageClassification(VanPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return VanClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-        )
+        return VanClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)

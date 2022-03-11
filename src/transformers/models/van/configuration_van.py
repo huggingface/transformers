@@ -40,15 +40,15 @@ class VanConfig(PretrainedConfig):
             The image size the network is train on.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_sizes (`List[int]`, *optional*, defaults to [7, 3, 3, 3]):
+        patch_sizes (`List[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
             Patch size to use in each stage's embedding layer.
-        strides (`List[int]`, *optional*, defaults to [4, 2, 2, 2]):
+        strides (`List[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
             Stride size to use in each stage's embedding layer to downsample the input.
-        hidden_sizes (`List[int]`, *optional*, defaults to [64, 128, 320, 512]):
+        hidden_sizes (`List[int]`, *optional*, defaults to `[64, 128, 320, 512]`):
             Dimensionality (hidden size) at each stage.
-        depths (`List[int]`, *optional*, defaults to [3, 3, 12, 3]):
+        depths (`List[int]`, *optional*, defaults to `[3, 3, 12, 3]`):
             Depth (number of layers) for each stage.
-        mlp_expansions (`List[int]`, *optional*, defaults to [8, 8, 4, 4]):
+        mlp_expansions (`List[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
             The expansion factor for mlp layer at each stage.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
@@ -60,9 +60,9 @@ class VanConfig(PretrainedConfig):
         layer_scale_init_value (`float`, *optional*, defaults to 1e-2):
             The initial value for layer scaling.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
-            The drop rate for stochastic depth.
+            The dropout probability for stochastic depth.
         dropout_rate (`float`, *optional*, defaults to 0.0):
-            The drop rate for dropout.
+            The dropout probability for dropout.
 
     Example:
     ```python
