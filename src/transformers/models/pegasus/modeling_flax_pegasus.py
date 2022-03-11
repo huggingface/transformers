@@ -677,8 +677,8 @@ class FlaxPegasusDecoderLayerCollection(nn.Module):
 
 class FlaxPegasusEncoder(nn.Module):
     config: PegasusConfig
+    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    embed_tokens: Optional[nn.Embed] = None
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -687,13 +687,6 @@ class FlaxPegasusEncoder(nn.Module):
         self.padding_idx = self.config.pad_token_id
         self.max_source_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
 
         self.embed_positions = create_sinusoidal_positions(
             self.config.max_position_embeddings, embed_dim, dtype=self.dtype
@@ -746,8 +739,8 @@ class FlaxPegasusEncoder(nn.Module):
 
 class FlaxPegasusDecoder(nn.Module):
     config: PegasusConfig
+    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    embed_tokens: Optional[nn.Embed] = None
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -756,13 +749,6 @@ class FlaxPegasusDecoder(nn.Module):
         self.padding_idx = self.config.pad_token_id
         self.max_target_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
 
         self.embed_positions = create_sinusoidal_positions(
             self.config.max_position_embeddings, embed_dim, dtype=self.dtype

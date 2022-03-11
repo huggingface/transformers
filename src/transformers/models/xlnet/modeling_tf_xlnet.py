@@ -1246,16 +1246,16 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.lm_loss.name
 
-    def prepare_inputs_for_generation(self, inputs, past, use_mems=None, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past=None, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
+
+        effective_batch_size = inputs.shape[0]
+        dummy_token = tf.zeros((effective_batch_size, 1), dtype=inputs.dtype)
 
         # At every pass, the attention values for the new token and the two last generated tokens
         # are computed, the rest is reloaded from the `past` cache. A purely auto-regressive model would have
         # offset = 1; offset = 2 seems to have slightly better computation.
         offset = 2
-
-        effective_batch_size = inputs.shape[0]
-        dummy_token = tf.zeros((effective_batch_size, 1), dtype=inputs.dtype)
 
         if past:
             inputs = tf.concat([inputs[:, -offset:], dummy_token], axis=1)
@@ -1277,7 +1277,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
             "input_ids": inputs,
             "perm_mask": perm_mask,
             "target_mapping": target_mapping,
-            "use_mems": kwargs.get("use_mems"),
+            "use_mems": use_mems,
         }
 
         # if past is defined in model kwargs then use it for faster decoding

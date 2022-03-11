@@ -22,7 +22,7 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import _softmax_backward_data, nn
+from torch import nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
 from transformers.deepspeed import is_deepspeed_zero3_enabled
@@ -31,13 +31,12 @@ from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_int_div
+from ...pytorch_utils import softmax_backward_data, torch_int_div
 from ...utils import logging
 from .configuration_sew_d import SEWDConfig
 
 
 logger = logging.get_logger(__name__)
-
 
 _HIDDEN_STATES_START_POSITION = 1
 
@@ -545,7 +544,7 @@ class XSoftmax(torch.autograd.Function):
     @staticmethod
     def backward(self, grad_output):
         (output,) = self.saved_tensors
-        inputGrad = _softmax_backward_data(grad_output, output, self.dim, output)
+        inputGrad = softmax_backward_data(self, grad_output, output, self.dim, output)
         return inputGrad, None, None
 
     @staticmethod

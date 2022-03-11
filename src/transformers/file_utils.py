@@ -1012,6 +1012,8 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
     >>> from transformers import {processor_class}, {model_class}
     >>> import torch
 
+    >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
+
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
@@ -1022,8 +1024,16 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
 
     >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
     >>> loss = outputs.loss
+    >>> round(loss.item(), 2)
+    {expected_loss}
+
     >>> start_scores = outputs.start_logits
+    >>> list(start_scores.shape)
+    {expected_output}
+
     >>> end_scores = outputs.end_logits
+    >>> list(end_scores.shape)
+    {expected_output}
     ```
 """
 
@@ -1031,33 +1041,40 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     Example of single-label classification:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
     >>> import torch
+    >>> from transformers import {processor_class}, {model_class}
+
+    >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
 
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=2)
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
     >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
     >>> outputs = model(**inputs, labels=labels)
     >>> loss = outputs.loss
     >>> logits = outputs.logits
+    >>> list(logits.shape)
+    {expected_output}
     ```
 
     Example of multi-label classification:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
     >>> import torch
+    >>> from transformers import {processor_class}, {model_class}
+
+    >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
 
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}", problem_type="multi_label_classification")
+    >>> model = {model_class}.from_pretrained("{checkpoint}", problem_type="multi_label_classification", num_labels=2)
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
     >>> labels = torch.tensor([[1, 1]], dtype=torch.float)  # need dtype=float for BCEWithLogitsLoss
     >>> outputs = model(**inputs, labels=labels)
     >>> loss = outputs.loss
-    >>> logits = outputs.logits
+    >>> list(logits.shape)
+    {expected_output}
     ```
 """
 

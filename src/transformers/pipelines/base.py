@@ -105,7 +105,10 @@ def _pad(items, key, padding_value, padding_side):
 
 
 def pad_collate_fn(tokenizer, feature_extractor):
-    padding_side = "right"
+    # Tokenizer
+    t_padding_side = None
+    # Feature extractor
+    f_padding_side = None
     if tokenizer is None and feature_extractor is None:
         raise ValueError("Pipeline without tokenizer or feature_extractor cannot do batching")
     if tokenizer is not None:
@@ -115,12 +118,22 @@ def pad_collate_fn(tokenizer, feature_extractor):
                 "`pipe.tokenizer.pad_token_id = model.config.eos_token_id`."
             )
         else:
-            padding_value = tokenizer.pad_token_id
-            padding_side = tokenizer.padding_side
+            t_padding_value = tokenizer.pad_token_id
+            t_padding_side = tokenizer.padding_side
     if feature_extractor is not None:
         # Feature extractor can be images, where no padding is expected
-        padding_value = getattr(feature_extractor, "padding_value", None)
-        padding_side = getattr(feature_extractor, "padding_side", None)
+        f_padding_value = getattr(feature_extractor, "padding_value", None)
+        f_padding_side = getattr(feature_extractor, "padding_side", None)
+
+    if t_padding_side is not None and f_padding_side is not None and t_padding_side != f_padding_side:
+        raise ValueError(
+            f"The feature extractor, and tokenizer don't agree on padding side {t_padding_side} != {f_padding_side}"
+        )
+    padding_side = "right"
+    if t_padding_side is not None:
+        padding_side = t_padding_side
+    if f_padding_side is not None:
+        padding_side = f_padding_side
 
     def inner(items):
         keys = set(items[0].keys())
@@ -132,11 +145,16 @@ def pad_collate_fn(tokenizer, feature_extractor):
         # input_values, input_pixels, input_ids, ...
         padded = {}
         for key in keys:
-            if key.startswith("input_"):
-                _padding_value = padding_value
-            elif key == "p_mask":
+            if key in {"input_ids"}:
+                _padding_value = t_padding_value
+            elif key in {"input_values", "pixel_values", "input_features"}:
+                _padding_value = f_padding_value
+            elif key in {"p_mask"}:
                 _padding_value = 1
+            elif key in {"attention_mask", "token_type_ids"}:
+                _padding_value = 0
             else:
+                # This is likely another random key maybe even user provided
                 _padding_value = 0
             padded[key] = _pad(items, key, _padding_value, padding_side)
         return padded
