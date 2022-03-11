@@ -698,11 +698,11 @@ def main():
         eval_preds = []
         eval_labels = []
 
-        num_eval_samples = len(vectorized_datasets["validation"])
+        num_eval_samples = len(vectorized_datasets["eval"])
         eval_samples_idx = jnp.arange(num_eval_samples)
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
         for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
-            samples = [vectorized_datasets["validation"][int(idx)] for idx in batch_idx]
+            samples = [vectorized_datasets["eval"][int(idx)] for idx in batch_idx]
             batch = data_collator(samples)
             batch = shard(batch.data)
             labels = batch["labels"]
