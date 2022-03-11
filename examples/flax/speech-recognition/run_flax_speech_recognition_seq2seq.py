@@ -539,6 +539,7 @@ def main():
     eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
     steps_per_epoch = len(vectorized_datasets["train"]) // train_batch_size
     total_train_steps = steps_per_epoch * num_epochs
+    gradient_accumulation_steps = int(training_args.gradient_accumulation_steps)
 
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
@@ -574,8 +575,11 @@ def main():
         mask=decay_mask_fn,
     )
 
+    # augment adam optimizer to facilitate gradient accumulation
+    optim = optax.chain(adamw, optax.apply_every(gradient_accumulation_steps))
+
     # Setup train state
-    state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw, dropout_rng=dropout_rng)
+    state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=optim, dropout_rng=dropout_rng)
 
     # label smoothed cross entropy
     def loss_fn(logits, labels, padding_mask, label_smoothing_factor=0.0):
@@ -613,6 +617,8 @@ def main():
                 train=True,
             )[0]
             loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+            # normalize loss over gradient accumulation steps
+            loss = loss / gradient_accumulation_steps
             return loss
 
         grad_fn = jax.value_and_grad(compute_loss)
