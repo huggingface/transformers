@@ -407,7 +407,7 @@ class TFGenerationMixin:
         return_dict_in_generate=None,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
-        use_xla=bool,
+        use_xla=False,
         **model_kwargs,
     ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
         r"""
@@ -1755,6 +1755,13 @@ class TFGenerationMixin:
 
         return model_kwargs
 
+    def _update_model_kwargs_for_xla_generation(
+        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], current_pos: tf.Tensor, max_length: int
+    ) -> Dict[str, Any]:
+        raise NotImplementedError(
+            f"{self.__class__} is not compileable with XLA at the moment. You should implement a `_update_model_kwargs_for_xla_generation` in the respective modeling file for XLA-compatible generation."
+        )
+
     def _get_logits_warper(
         self,
         top_k: Optional[int] = None,
@@ -2139,7 +2146,7 @@ class TFGenerationMixin:
 
             # initialize `generated`, `finished_sequences`, and `current_pos`
             generated = tf.TensorArray(
-                element_shape=(batch_size, 1),
+                element_shape=(batch_size,),
                 dtype=tf.int32,
                 dynamic_size=False,
                 size=max_length,
@@ -2148,7 +2155,7 @@ class TFGenerationMixin:
 
             # write prompt to generated
             for i in range(seq_length):
-                generated = generated.write(i, input_ids[:, i : i + 1])
+                generated = generated.write(i, input_ids[:, i])
 
             finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
             current_pos = tf.ones(shape=(1,), dtype=tf.int32) * seq_length
@@ -2171,7 +2178,7 @@ class TFGenerationMixin:
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
                 )
-                next_token_logits = outputs.logits[:, -1:]
+                next_token_logits = outputs.logits[:, -1]
 
                 # Store scores, attentions and hidden_states when required
                 if not use_xla and return_dict_in_generate:
@@ -2190,16 +2197,18 @@ class TFGenerationMixin:
                         decoder_hidden_states.append(outputs.hidden_states)
 
                 # pre-process distribution
+                # TODO(pvp, joao, matt) - all the logits processors need to be adapted
+                # to be XLA compatible
                 input_ids = None
                 if not use_xla:
-                    input_ids = tf.transpose(generated.concat()[: current_pos[0]])
-
+                    input_ids = tf.reshape(generated.concat(), (-1, batch_size))
+                    input_ids = tf.transpose(input_ids[: current_pos[0]])
                 next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
                 # argmax
                 next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int32)
 
-                finished_sequences = finished_sequences | (next_tokens[:, 0] == eos_token_id)
+                finished_sequences = finished_sequences | (next_tokens == eos_token_id)
 
                 # update model_kwargs
                 if use_xla:
@@ -2213,6 +2222,8 @@ class TFGenerationMixin:
 
                 # update `generated` and `current_pos`
                 generated = generated.write(current_pos[0], next_tokens)
+
+                next_tokens = next_tokens[:, None]
                 current_pos += 1
                 return generated, finished_sequences, next_tokens, current_pos, model_kwargs
 
@@ -2226,7 +2237,7 @@ class TFGenerationMixin:
             # only in case 1st generation step does NOT yield EOS token though
             if greedy_search_cond_fn(generated, finished_sequences, next_tokens, current_pos, model_kwargs):
                 maximum_iterations = max_length - seq_length - 1
-                generated, _, _, _, _ = tf.while_loop(
+                generated, _, _, current_pos, _ = tf.while_loop(
                     greedy_search_cond_fn,
                     greedy_search_body_fn,
                     (generated, finished_sequences, next_tokens, current_pos, model_kwargs),
@@ -2235,6 +2246,10 @@ class TFGenerationMixin:
 
             # 6. prepare outputs
             output_ids = tf.transpose(tf.reshape(generated.concat(), (-1, batch_size)))
+
+            if not use_xla:
+                # cut for backward compatibility
+                output_ids = output_ids[:, : current_pos[0]]
 
             if return_dict_in_generate:
                 if self.config.is_encoder_decoder:
@@ -2246,21 +2261,27 @@ class TFGenerationMixin:
                     encoder_hidden_states = (
                         model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
                     )
+
+                    scores = tuple(scores) if scores is not None else None
+                    decoder_attentions = tuple(decoder_attentions) if decoder_attentions is not None else None
+                    cross_attentions = tuple(cross_attentions) if cross_attentions is not None else None
+                    decoder_hidden_states = tuple(decoder_hidden_states) if decoder_hidden_states is not None else None
+
                     return TFGreedySearchEncoderDecoderOutput(
                         sequences=output_ids,
-                        scores=tuple(scores),
+                        scores=scores,
                         encoder_attentions=encoder_attentions,
                         encoder_hidden_states=encoder_hidden_states,
-                        decoder_attentions=tuple(decoder_attentions),
-                        cross_attentions=tuple(cross_attentions),
-                        decoder_hidden_states=tuple(decoder_hidden_states),
+                        decoder_attentions=decoder_attentions,
+                        cross_attentions=cross_attentions,
+                        decoder_hidden_states=decoder_hidden_states,
                     )
                 else:
                     return TFGreedySearchDecoderOnlyOutput(
                         sequences=output_ids,
-                        scores=tuple(scores),
-                        attentions=tuple(decoder_attentions),
-                        hidden_states=tuple(decoder_hidden_states),
+                        scores=scores,
+                        attentions=decoder_attentions,
+                        hidden_states=decoder_hidden_states,
                     )
             else:
                 return output_ids
