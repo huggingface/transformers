@@ -291,6 +291,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             elif self.is_encoder_decoder:
                 added_hidden_states = 2
             else:
+                # TODO also another +1 for reshaped_hidden_states
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
@@ -308,34 +309,6 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
                     [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
                 )
 
-    def test_retain_grad_hidden_states_attentions(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = True
-
-        # no need to test all models as different heads yield the same functionality
-        model_class = self.all_model_classes[0]
-        model = model_class(config)
-        model.to(torch_device)
-
-        inputs = self._prepare_for_class(inputs_dict, model_class)
-
-        outputs = model(**inputs)
-
-        output = outputs[0]
-
-        hidden_states = outputs.hidden_states[0]
-        batch_size, num_channels, height, width = hidden_states.shape
-        hidden_states = hidden_states.view(batch_size, num_channels, height * width).permute(0, 2, 1)
-        attentions = outputs.attentions[0]
-
-        hidden_states.retain_grad()
-        attentions.retain_grad()
-
-        output.flatten()[0].backward(retain_graph=True)
-
-        self.assertIsNotNone(hidden_states.grad)
-        self.assertIsNotNone(attentions.grad)
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -427,12 +400,21 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             # Swin has a different seq_length
             image_size = to_2tuple(self.model_tester.image_size)
             patch_size = to_2tuple(self.model_tester.patch_size)
+
             num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
-            batch_size, num_channels, height, width = hidden_states[0].shape
-            hidden_states = hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
             self.assertListEqual(
-                list(hidden_states.shape[-2:]),
+                list(hidden_states[0].shape[-2:]),
+                [num_patches, self.model_tester.embed_dim],
+            )
+
+            reshaped_hidden_states =  outputs.reshaped_hidden_states
+            self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
+
+            batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
+            reshaped_hidden_states = reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
+            self.assertListEqual(
+                list(reshaped_hidden_states.shape[-2:]),
                 [num_patches, self.model_tester.embed_dim],
             )
 
