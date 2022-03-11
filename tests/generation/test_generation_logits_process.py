@@ -28,6 +28,7 @@ if is_torch_available():
 
     from transformers.generation_logits_process import (
         EncoderNoRepeatNGramLogitsProcessor,
+        ExponentialDecayLengthPenalty,
         ForcedBOSTokenLogitsProcessor,
         ForcedEOSTokenLogitsProcessor,
         HammingDiversityLogitsProcessor,
@@ -503,4 +504,36 @@ class LogitsProcessorTest(unittest.TestCase):
                 ),
                 atol=1e-6,
             )
+        )
+
+    def test_exponential_decay_length_penalty(self):
+        vocab_size = 20
+        batch_size = 4
+        eos_token_id = 0
+
+        penalty_start = 5
+        penalty_factor = 1.1
+
+        input_ids = ids_tensor((batch_size, 2), vocab_size=vocab_size)
+        input_ids_seq_length = input_ids.shape[-1]
+
+        length_decay_processor = ExponentialDecayLengthPenalty(
+            exponential_decay_length_penalty=(penalty_start, penalty_factor),
+            eos_token_id=eos_token_id,
+            input_ids_seq_length=input_ids_seq_length,
+        )
+
+        # check that penalty is not applied before start
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores_before_start = length_decay_processor(input_ids, scores)
+        self.assertListEqual(scores_before_start[:, eos_token_id].tolist(), scores[:, eos_token_id].tolist())
+
+        # check that penalty is applied after start
+        input_ids = ids_tensor((batch_size, 20), vocab_size=vocab_size)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores_after_start = length_decay_processor(input_ids, scores)
+        self.assertTrue(
+            torch.gt(
+                scores_after_start[penalty_start + 1 :, eos_token_id], scores[penalty_start + 1 :, eos_token_id]
+            ).all()
         )
