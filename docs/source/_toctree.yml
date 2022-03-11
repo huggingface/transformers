@@ -38,7 +38,7 @@
   - local: multilingual
     title: Inference for multilingual models
   - local: troubleshooting
-    title: Troubleshooting
+    title: Troubleshoot
   - local: custom_datasets
     title: Fine-tuning with custom datasets
   - sections:
