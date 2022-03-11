@@ -139,6 +139,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("camembert", "TFCamembertForCausalLM"),
         ("rembert", "TFRemBertForCausalLM"),
         ("roformer", "TFRoFormerForCausalLM"),
         ("roberta", "TFRobertaForCausalLM"),
@@ -149,7 +150,6 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlnet", "TFXLNetLMHeadModel"),
         ("xlm", "TFXLMWithLMHeadModel"),
         ("ctrl", "TFCTRLLMHeadModel"),
-        ("camembert", "TFCamembertForCausalLM"),
     ]
 )
 
