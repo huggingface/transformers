@@ -91,6 +91,7 @@ Create a preprocessing function that will apply the transforms and return the `p
 ```py
 >>> def transforms(examples):
 ...     examples["pixel_values"] = [_transforms(img.convert("RGB")) for img in examples["image"]]
+...     del examples["image"]
 ...     return examples
 ```
 
@@ -100,16 +101,12 @@ Use 🤗 Dataset's [`with_transform`](https://huggingface.co/docs/datasets/packa
 >>> food = food.with_transform(transforms)
 ```
 
-🤗 Transformers doesn't have a data collator for image classification, so you will need to create one to build a batch of examples:
+Use [`DefaultDataCollator`] to create a batch of examples. Unlike other data collators in 🤗 Transformers, the DefaultDataCollator does not apply additional preprocessing such as padding.
 
 ```py
->>> import torch
+>>> from transformers import DefaultDataCollator
 
-
->>> def data_collator(examples):
-...     pixel_values = torch.stack([example["pixel_values"] for example in examples])
-...     labels = torch.tensor([example["label"] for example in examples])
-...     return {"pixel_values": pixel_values, "labels": labels}
+>>> data_collator = DefaultDataCollator()
 ```
 
 ## Fine-tune with Trainer

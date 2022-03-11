@@ -824,7 +824,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         ...     project_pos_dim=256,
         ...     trainable_position_encoding_kwargs=dict(
         ...         num_channels=256,
-        ...         index_dims=config.image_size ** 2,
+        ...         index_dims=config.image_size**2,
         ...     ),
         ... )
 
@@ -1205,7 +1205,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        trainable_position_encoding_kwargs_preprocessor = dict(num_channels=256, index_dims=config.image_size ** 2)
+        trainable_position_encoding_kwargs_preprocessor = dict(num_channels=256, index_dims=config.image_size**2)
         trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
 
         self.num_labels = config.num_labels
@@ -2485,7 +2485,7 @@ def space_to_depth(frames: torch.Tensor, temporal_block_size: int = 1, spatial_b
             batch_size,
             height // spatial_block_size,
             width // spatial_block_size,
-            (spatial_block_size ** 2) * num_channels,
+            (spatial_block_size**2) * num_channels,
         )
         return frames
     elif len(frames.shape) == 5:
@@ -2509,7 +2509,7 @@ def space_to_depth(frames: torch.Tensor, temporal_block_size: int = 1, spatial_b
             time // temporal_block_size,
             height // spatial_block_size,
             width // spatial_block_size,
-            temporal_block_size * (spatial_block_size ** 2) * num_channels,
+            temporal_block_size * (spatial_block_size**2) * num_channels,
         )
         return frames
     else:
@@ -3059,7 +3059,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
             if self.conv_after_patching:
                 inp_dim = self.out_channels
             else:
-                inp_dim = self.in_channels * self.spatial_downsample ** 2
+                inp_dim = self.in_channels * self.spatial_downsample**2
                 if is_temporal:
                     inp_dim *= self.temporal_downsample
 
