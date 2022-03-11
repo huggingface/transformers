@@ -427,6 +427,7 @@ class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
         # TODO!
         pass
 
+    @slow
     def test_gptj_sample_max_time(self):
         tokenizer = AutoTokenizer.from_pretrained("anton-l/gpt-j-tiny-random")
         model = TFGPTJForCausalLM.from_pretrained("anton-l/gpt-j-tiny-random", from_pt=True)
