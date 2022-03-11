@@ -16,13 +16,13 @@
 """PyTorch RoBERTa model."""
 
 import math
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from typing import Tuple, List, Union, Optional
 
 from ...activations import ACT2FN, gelu
 from ...file_utils import (
