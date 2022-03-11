@@ -1716,7 +1716,7 @@ class TFGenerationMixin:
                 )
             return tf.cast(tf.fill((1, 1), bos_token_id), dtype=tf.int32)
 
-        return tf.cast(inputs, tf.int32)
+        return inputs
 
     @staticmethod
     def _update_model_kwargs_for_generation(
