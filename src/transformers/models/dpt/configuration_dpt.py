@@ -90,6 +90,8 @@ class DPTConfig(PretrainedConfig):
             Weight of the cross-entropy loss of the auxiliary head.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
+        semantic_classifier_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the semantic classification head.
 
     Example:
 
@@ -132,6 +134,7 @@ class DPTConfig(PretrainedConfig):
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
         semantic_loss_ignore_index=255,
+        semantic_classifier_dropout=0.1,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -161,3 +164,4 @@ class DPTConfig(PretrainedConfig):
         self.use_auxiliary_head = use_auxiliary_head
         self.auxiliary_loss_weight = auxiliary_loss_weight
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
+        self.semantic_classifier_dropout = semantic_classifier_dropout

@@ -89,14 +89,14 @@ class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
-    def constrain_to_multiple_of(self, x, min_val=0, max_val=None):
-        y = (np.round(x / self.ensure_multiple_of) * self.ensure_multiple_of).astype(int)
+    def constrain_to_multiple_of(self, size, min_val=0, max_val=None):
+        y = (np.round(size / self.ensure_multiple_of) * self.ensure_multiple_of).astype(int)
 
         if max_val is not None and y > max_val:
-            y = (np.floor(x / self.ensure_multiple_of) * self.ensure_multiple_of).astype(int)
+            y = (np.floor(size / self.ensure_multiple_of) * self.ensure_multiple_of).astype(int)
 
         if y < min_val:
-            y = (np.ceil(x / self.ensure_multiple_of) * self.ensure_multiple_of).astype(int)
+            y = (np.ceil(size / self.ensure_multiple_of) * self.ensure_multiple_of).astype(int)
 
         return y
 

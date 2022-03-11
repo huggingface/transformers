@@ -155,8 +155,8 @@ class DPTViTPatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
-        x = self.projection(pixel_values).flatten(2).transpose(1, 2)
-        return x
+        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        return embeddings
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention
@@ -461,29 +461,29 @@ class DPTReassembleStage(nn.Module):
         """
         out = []
 
-        for i, x in enumerate(hidden_states):
+        for i, hidden_state in enumerate(hidden_states):
             # reshape to (B, C, H, W)
-            x, cls_token = x[:, 1:], x[:, 0]
-            B, L, C = x.shape
-            size = int(math.sqrt(L))
-            x = x.reshape(B, size, size, C)
-            x = x.permute(0, 3, 1, 2).contiguous()
+            hidden_state, cls_token = hidden_state[:, 1:], hidden_state[:, 0]
+            batch_size, sequence_length, num_channels = hidden_state.shape
+            size = int(math.sqrt(sequence_length))
+            hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
+            hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
 
-            feature_shape = x.shape
+            feature_shape = hidden_state.shape
             if self.config.readout_type == "project":
                 # reshape to (B, H*W, C)
-                x = x.flatten(2).permute((0, 2, 1))
-                readout = cls_token.unsqueeze(1).expand_as(x)
+                hidden_state = hidden_state.flatten(2).permute((0, 2, 1))
+                readout = cls_token.unsqueeze(1).expand_as(hidden_state)
                 # concatenate the readout token to the hidden states and project
-                x = self.readout_projects[i](torch.cat((x, readout), -1))
+                hidden_state = self.readout_projects[i](torch.cat((hidden_state, readout), -1))
                 # reshape back to (B, C, H, W)
-                x = x.permute(0, 2, 1).reshape(feature_shape)
+                hidden_state = hidden_state.permute(0, 2, 1).reshape(feature_shape)
             elif self.config.readout_type == "add":
-                x = x.flatten(2) + cls_token.unsqueeze(-1)
-                x = x.reshape(feature_shape)
-            x = self.projects[i](x)
-            x = self.resize_layers[i](x)
-            out.append(x)
+                hidden_state = hidden_state.flatten(2) + cls_token.unsqueeze(-1)
+                hidden_state = hidden_state.reshape(feature_shape)
+            hidden_state = self.projects[i](hidden_state)
+            hidden_state = self.resize_layers[i](hidden_state)
+            out.append(hidden_state)
 
         return out
 
@@ -525,9 +525,9 @@ class DPTPreActResidualLayer(nn.Module):
             self.batch_norm1 = nn.BatchNorm2d(config.channels)
             self.batch_norm2 = nn.BatchNorm2d(config.channels)
 
-    def forward(self, hidden_states):
-        residual = hidden_states
-        x = self.act1(hidden_states)
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        residual = hidden_state
+        x = self.act1(hidden_state)
 
         x = self.conv1(x)
 
@@ -826,7 +826,7 @@ class DPTDepthEstimationHead(nn.Module):
             ACT2FN["relu"],
         )
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
         # use last features
         hidden_states = hidden_states[self.config.in_index]
 
@@ -944,12 +944,12 @@ class DPTSemanticSegmentationHead(nn.Module):
             nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(features),
             ACT2FN["relu"],
-            nn.Dropout(0.1, False),
+            nn.Dropout(config.semantic_classifier_dropout),
             nn.Conv2d(features, config.num_labels, kernel_size=1),
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
         )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
         # use last features
         hidden_states = hidden_states[self.config.in_index]
 
