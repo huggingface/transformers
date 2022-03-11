@@ -88,9 +88,7 @@ class BigBirdConfig(PretrainedConfig):
     Example:
 
     ```python
-
-    ```
-
+    
         >>> from transformers import BigBirdModel, BigBirdConfig
 
         >>> # Initializing a BigBird google/bigbird-roberta-base style configuration >>> configuration =
@@ -100,6 +98,8 @@ class BigBirdConfig(PretrainedConfig):
         BigBirdModel(configuration)
 
         >>> # Accessing the model configuration >>> configuration = model.config
+    ```
+
     """
     model_type = "big_bird"
 
