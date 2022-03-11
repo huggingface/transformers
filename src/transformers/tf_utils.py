@@ -16,7 +16,7 @@ from typing import List, Union
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
+from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice  # noqa: F401
 
 from .utils import logging
 

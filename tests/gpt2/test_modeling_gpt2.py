@@ -668,7 +668,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         # fmt: off
         expected_output_ids = [
             464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290,
-        ]  
+        ]
         # fmt: on
         output_ids = model.generate(input_ids, do_sample=False)
         if verify_outputs:
