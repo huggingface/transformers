@@ -134,7 +134,7 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         return tf.cast(self.lower_triangle_mask[:, :, key_length - query_length : key_length, :key_length], tf.bool)
 
     @staticmethod
-    def get_masked_bias(dtype) -> tf.Tensor:
+    def get_masked_bias(dtype: tf.DType) -> tf.Tensor:
         return tf.cast(tf.constant(-1e9), dtype)
 
     def _split_heads(self, hidden_states: tf.Tensor, rotary: bool) -> tf.Tensor:
@@ -363,7 +363,7 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.wte
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: tf.Tensor):
         self.wte.weight = value
         self.wte.vocab_size = shape_list(value)[0]
 

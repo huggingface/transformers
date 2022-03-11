@@ -424,8 +424,28 @@ class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
     @tooslow
     def test_gptj_sample(self):
         # Marked as @tooslow due to GPU OOM (issue #13676)
-        # TODO!
-        pass
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
+        model = TFGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", from_pt=True)
+
+        tf.random.set_seed(0)
+        tokenized = tokenizer("Today is a nice day and", return_tensors="tf", return_token_type_ids=True)
+        input_ids, token_type_ids = tokenized.input_ids, tokenized.token_type_ids
+        output_ids = model.generate(input_ids, do_sample=True)
+        output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+        output_seq = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5)
+        output_seq_tt = model.generate(
+            input_ids=input_ids, token_type_ids=token_type_ids, do_sample=True, num_return_sequences=5
+        )
+        output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
+        output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
+
+        EXPECTED_OUTPUT_STR = "Today is a nice day and one of those days that feels a bit more alive. I am ready"
+
+        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
+        self.assertTrue(
+            all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
+        )  # token_type_ids should change output
 
     @slow
     def test_gptj_sample_max_time(self):
