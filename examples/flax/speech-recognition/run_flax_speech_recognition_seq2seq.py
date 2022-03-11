@@ -621,6 +621,9 @@ def main():
             loss = loss / gradient_accumulation_steps
             return loss
 
+        if training_args.gradient_checkpointing:
+            compute_loss = jax.checkpoint(compute_loss)
+
         grad_fn = jax.value_and_grad(compute_loss)
         loss, grad = grad_fn(state.params)
         grad = jax.lax.pmean(grad, "batch")
