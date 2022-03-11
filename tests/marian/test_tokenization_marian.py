@@ -134,3 +134,22 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             revision="1a8c2263da11e68e50938f97e10cd57820bd504c",
             decode_kwargs={"use_source_tokenizer": True},
         )
+
+    def test_tokenizer_integration_seperate_vocabs(self):
+        tokenizer = MarianTokenizer.from_pretrained("hf-internal-testing/test-marian-two-vocabs")
+
+        source_text = "Tämä on testi"
+        target_text = "This is a test"
+
+        expected_src_ids = [76, 7, 2047, 2]
+        expected_target_ids = [69, 12, 11, 940, 2]
+
+        src_ids = tokenizer(source_text).input_ids
+        self.assertListEqual(src_ids, expected_src_ids)
+
+        with tokenizer.as_target_tokenizer():
+            target_ids = tokenizer(target_text).input_ids
+            self.assertListEqual(target_ids, expected_target_ids)
+
+        decoded = tokenizer.decode(target_ids, skip_special_tokens=True)
+        self.assertEqual(decoded, target_text)

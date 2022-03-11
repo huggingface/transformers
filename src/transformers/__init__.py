@@ -31,8 +31,6 @@ from . import dependency_versions_check
 from .file_utils import (
     _LazyModule,
     is_flax_available,
-    is_pyctcdecode_available,
-    is_pytorch_quantization_available,
     is_scatter_available,
     is_sentencepiece_available,
     is_speech_available,
@@ -580,29 +578,6 @@ else:
         name for name in dir(dummy_scatter_objects) if not name.startswith("_")
     ]
 
-if is_torch_available() and is_pytorch_quantization_available():
-    _import_structure["models.qdqbert"].extend(
-        [
-            "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "QDQBertForMaskedLM",
-            "QDQBertForMultipleChoice",
-            "QDQBertForNextSentencePrediction",
-            "QDQBertForQuestionAnswering",
-            "QDQBertForSequenceClassification",
-            "QDQBertForTokenClassification",
-            "QDQBertLayer",
-            "QDQBertLMHeadModel",
-            "QDQBertModel",
-            "QDQBertPreTrainedModel",
-            "load_tf_weights_in_qdqbert",
-        ]
-    )
-else:
-    from .utils import dummy_pytorch_quantization_and_torch_objects
-
-    _import_structure["utils.dummy_pytorch_quantization_and_torch_objects"] = [
-        name for name in dir(dummy_pytorch_quantization_and_torch_objects) if not name.startswith("_")
-    ]
 
 # PyTorch-backed objects
 if is_torch_available():
@@ -1286,6 +1261,22 @@ if is_torch_available():
             "ProphetNetForConditionalGeneration",
             "ProphetNetModel",
             "ProphetNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.qdqbert"].extend(
+        [
+            "QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "QDQBertForMaskedLM",
+            "QDQBertForMultipleChoice",
+            "QDQBertForNextSentencePrediction",
+            "QDQBertForQuestionAnswering",
+            "QDQBertForSequenceClassification",
+            "QDQBertForTokenClassification",
+            "QDQBertLayer",
+            "QDQBertLMHeadModel",
+            "QDQBertModel",
+            "QDQBertPreTrainedModel",
+            "load_tf_weights_in_qdqbert",
         ]
     )
     _import_structure["models.rag"].extend(
@@ -2828,24 +2819,6 @@ if TYPE_CHECKING:
     else:
         from .utils.dummy_scatter_objects import *
 
-    if is_torch_available() and is_pytorch_quantization_available():
-        from .models.qdqbert import (
-            QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            QDQBertForMaskedLM,
-            QDQBertForMultipleChoice,
-            QDQBertForNextSentencePrediction,
-            QDQBertForQuestionAnswering,
-            QDQBertForSequenceClassification,
-            QDQBertForTokenClassification,
-            QDQBertLayer,
-            QDQBertLMHeadModel,
-            QDQBertModel,
-            QDQBertPreTrainedModel,
-            load_tf_weights_in_qdqbert,
-        )
-    else:
-        from .utils.dummy_pytorch_quantization_and_torch_objects import *
-
     if is_torch_available():
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -3427,6 +3400,20 @@ if TYPE_CHECKING:
             ProphetNetForConditionalGeneration,
             ProphetNetModel,
             ProphetNetPreTrainedModel,
+        )
+        from .models.qdqbert import (
+            QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            QDQBertForMaskedLM,
+            QDQBertForMultipleChoice,
+            QDQBertForNextSentencePrediction,
+            QDQBertForQuestionAnswering,
+            QDQBertForSequenceClassification,
+            QDQBertForTokenClassification,
+            QDQBertLayer,
+            QDQBertLMHeadModel,
+            QDQBertModel,
+            QDQBertPreTrainedModel,
+            load_tf_weights_in_qdqbert,
         )
         from .models.rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
         from .models.realm import (
