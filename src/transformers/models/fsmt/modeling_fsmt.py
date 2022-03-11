@@ -207,7 +207,7 @@ FSMT_GENERATION_EXAMPLE = r"""
     >>> tokenizer = FSMTTokenizer.from_pretrained(mname)
 
     >>> src_text = "Машинное обучение - это здорово, не так ли?"
-    >>> input_ids = tokenizer(src_text, return_tensors="pt")
+    >>> input_ids = tokenizer(src_text, return_tensors="pt").input_ids
     >>> outputs = model.generate(input_ids, num_beams=5, num_return_sequences=3)
     >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
     "Machine learning is great, isn't it?"
