@@ -16,10 +16,9 @@ from typing import List, Union
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
 
 from .utils import logging
-
-from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
 
 
 logger = logging.get_logger(__name__)

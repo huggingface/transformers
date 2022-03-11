@@ -18,8 +18,8 @@
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
@@ -46,7 +46,7 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
 )
-from ...tf_utils import shape_list, dynamic_update_slice
+from ...tf_utils import dynamic_update_slice, shape_list
 from ...utils import logging
 from .configuration_gpt2 import GPT2Config
 
@@ -852,25 +852,32 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
     def set_output_embeddings(self, value):
         self.set_input_embeddings(value)
 
-    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, use_xla=False, **kwargs):
         # TODO: (Joao) after the TF generator is complete, update GPT2 TF generation to match PT's. NB -- some GPT2
         # tests will need to be fixed after the change
 
-        attention_mask = kwargs.get("attention_mask", None)
-
         # only last token for inputs_ids if past is defined in kwargs
-        if past is not None and attention_mask is not None:
+        if past:
             inputs = tf.expand_dims(inputs[:, -1], -1)
-            position_ids = tf.reduce_sum(attention_mask, axis=1, keepdims=True) - 1
-        elif attention_mask is not None:
-            position_ids = tf.math.cumsum(attention_mask, axis=1, exclusive=True)
+
+        # TODO(pvp, Joao) - this `if use_xla` statement can be removed, but is left
+        # for a future PR to not change too many things for now.
+        # All statements in this if case apply for both xla and non-xla (as they already do in PyTorch)
+        position_ids = None
+        attention_mask = None
+        if use_xla:
+            attention_mask = kwargs.get("attention_mask", None)
+            if past is not None and attention_mask is not None:
+                position_ids = tf.reduce_sum(attention_mask, axis=1, keepdims=True) - 1
+            elif attention_mask is not None:
+                position_ids = tf.math.cumsum(attention_mask, axis=1, exclusive=True)
 
         return {
             "input_ids": inputs,
             "attention_mask": attention_mask,
             "position_ids": position_ids,
             "past_key_values": past,
-            "use_cache": use_cache
+            "use_cache": use_cache,
         }
 
     def _update_model_kwargs_for_xla_generation(self, outputs, model_kwargs, current_pos, max_length):
@@ -897,7 +904,14 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
                 new_past[i] = tf.pad(past[i], padding_values)
 
             # Zeros for the currently-unfilled locations in the past tensor, ones for the actual input_ids
-            attention_mask = tf.concat([attention_mask, tf.zeros((batch_size, num_padding_values), dtype=attention_mask.dtype), tf.ones((batch_size, 1), dtype=attention_mask.dtype)], axis=1)
+            attention_mask = tf.concat(
+                [
+                    attention_mask,
+                    tf.zeros((batch_size, num_padding_values), dtype=attention_mask.dtype),
+                    tf.ones((batch_size, 1), dtype=attention_mask.dtype),
+                ],
+                axis=1,
+            )
         else:
             new_past = [None for _ in range(len(past))]
             slice_start_base = tf.constant([0, 0, 0, 1, 0])
@@ -909,7 +923,9 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
                 update_slice = past[i][:, :, :, -1:]
                 # Write the last slice to the first open location in the padded past array
                 # and then truncate the last slice off the array
-                new_past[i] = dynamic_update_slice(past[i][:, :, :, :-1], update_slice, slice_start_base * new_past_index)
+                new_past[i] = dynamic_update_slice(
+                    past[i][:, :, :, :-1], update_slice, slice_start_base * new_past_index
+                )
 
             update_start = tf.constant([0, 1], dtype=tf.int32) * new_past_index
             attention_mask = dynamic_update_slice(attention_mask, attention_mask_update_slice, update_start)

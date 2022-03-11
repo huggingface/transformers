@@ -15,8 +15,8 @@
 # limitations under the License.
 
 import inspect
-from functools import wraps
 from dataclasses import dataclass
+from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -1572,17 +1572,17 @@ class TFGenerationMixin:
                 **model_kwargs,
             )
 
-#                return self.greedy_search(
-#                    input_ids,
-#                    max_length=max_length,
-#                    pad_token_id=pad_token_id,
-#                    eos_token_id=eos_token_id,
-#                    logits_processor=logits_processor,
-#                    output_scores=output_scores,
-#                    return_dict_in_generate=return_dict_in_generate,
-#                    use_xla=use_xla,
-#                    **model_kwargs,
-#            )
+        #                return self.greedy_search(
+        #                    input_ids,
+        #                    max_length=max_length,
+        #                    pad_token_id=pad_token_id,
+        #                    eos_token_id=eos_token_id,
+        #                    logits_processor=logits_processor,
+        #                    output_scores=output_scores,
+        #                    return_dict_in_generate=return_dict_in_generate,
+        #                    use_xla=use_xla,
+        #                    **model_kwargs,
+        #            )
 
         elif is_sample_gen_mode:
             # 8. prepare logits warper
@@ -2095,6 +2095,7 @@ class TFGenerationMixin:
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         ```"""
+
         @xla_compile(do_compile=use_xla)
         def _xla_greedy_generate(
             self,
@@ -2135,11 +2136,17 @@ class TFGenerationMixin:
             batch_size, seq_length = input_ids.shape
 
             # initialize `generated`, `finished_sequences`, and `current_pos`
-            generated = tf.TensorArray(element_shape=(batch_size, 1), dtype=tf.int32, dynamic_size=False, size=max_length, clear_after_read=False)
+            generated = tf.TensorArray(
+                element_shape=(batch_size, 1),
+                dtype=tf.int32,
+                dynamic_size=False,
+                size=max_length,
+                clear_after_read=False,
+            )
 
             # write prompt to generated
             for i in range(seq_length):
-                generated = generated.write(i, input_ids[:, i:i + 1])
+                generated = generated.write(i, input_ids[:, i : i + 1])
 
             finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
             current_pos = tf.ones(shape=(1,), dtype=tf.int32) * seq_length
@@ -2153,7 +2160,8 @@ class TFGenerationMixin:
             # define condition fn
             def greedy_search_body_fn(generated, finished_sequences, next_tokens, current_pos, model_kwargs):
                 """state update fn."""
-                model_inputs = self.prepare_inputs_for_generation(next_tokens, **model_kwargs)
+                # TODO(pvp, Joao) - `use_xla` can be removed here as soon as `position_ids` are corrected for the non-xla case in gpt2's `prepare_inputs_for_generation`.
+                model_inputs = self.prepare_inputs_for_generation(next_tokens, use_xla=use_xla, **model_kwargs)
                 # forward pass to get next token logits
                 outputs = self(
                     **model_inputs,
@@ -2182,7 +2190,7 @@ class TFGenerationMixin:
                 # pre-process distribution
                 input_ids = None
                 if not use_xla:
-                    input_ids = tf.transpose(generated.concat()[:current_pos[0]])
+                    input_ids = tf.transpose(generated.concat()[: current_pos[0]])
 
                 next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
@@ -2193,7 +2201,9 @@ class TFGenerationMixin:
 
                 # update model_kwargs
                 if use_xla:
-                    model_kwargs = self._update_model_kwargs_for_xla_generation(outputs, model_kwargs, current_pos, max_length)
+                    model_kwargs = self._update_model_kwargs_for_xla_generation(
+                        outputs, model_kwargs, current_pos, max_length
+                    )
                 else:
                     model_kwargs = self._update_model_kwargs_for_generation(
                         outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
@@ -2206,13 +2216,20 @@ class TFGenerationMixin:
 
             # 5. run generation
             # 1st generation step has to be run before to initialize `past`
-            generated, finished_sequences, next_tokens, current_pos, model_kwargs = greedy_search_body_fn(generated, finished_sequences, input_ids, current_pos, model_kwargs)
+            generated, finished_sequences, next_tokens, current_pos, model_kwargs = greedy_search_body_fn(
+                generated, finished_sequences, input_ids, current_pos, model_kwargs
+            )
 
             # 2-to-n generation steps can then be run in autoregressive fashion
             # only in case 1st generation step does NOT yield EOS token though
             if greedy_search_cond_fn(generated, finished_sequences, next_tokens, current_pos, model_kwargs):
                 maximum_iterations = max_length - seq_length - 1
-                generated, _, _, _, _ = tf.while_loop(greedy_search_cond_fn, greedy_search_body_fn, (generated, finished_sequences, next_tokens, current_pos, model_kwargs), maximum_iterations=maximum_iterations)
+                generated, _, _, _, _ = tf.while_loop(
+                    greedy_search_cond_fn,
+                    greedy_search_body_fn,
+                    (generated, finished_sequences, next_tokens, current_pos, model_kwargs),
+                    maximum_iterations=maximum_iterations,
+                )
 
             # 6. prepare outputs
             output_ids = tf.transpose(tf.reshape(generated.concat(), (-1, batch_size)))
@@ -2221,7 +2238,9 @@ class TFGenerationMixin:
                 if self.config.is_encoder_decoder:
                     # if model is an encoder-decoder, retrieve encoder attention weights
                     # and hidden states
-                    encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+                    encoder_attentions = (
+                        model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+                    )
                     encoder_hidden_states = (
                         model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
                     )
