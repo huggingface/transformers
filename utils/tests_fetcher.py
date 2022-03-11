@@ -276,6 +276,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
         "auto/test_modeling_auto.py",
         "auto/test_modeling_tf_pytorch.py",
         "bort/test_modeling_bort.py",
+        "dit/test_modeling_dit.py",
     ],
     "models/auto/modeling_flax_auto.py": "auto/test_modeling_flax_auto.py",
     "models/auto/modeling_tf_auto.py": [

@@ -22,7 +22,7 @@ from dataclasses import dataclass
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -55,7 +55,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "microsoft/beit-base-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/beit-base-patch16-224",
@@ -754,6 +754,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
 
         ```python
         >>> from transformers import BeitFeatureExtractor, BeitForMaskedImageModeling
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
 
@@ -763,9 +764,15 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
         >>> model = BeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
+        >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
+        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> # create random boolean mask of shape (batch_size, num_patches)
+        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
+
+        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+        >>> loss, logits = outputs.loss, outputs.logits
+        >>> list(logits.shape)
+        [1, 196, 8192]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -857,14 +864,26 @@ class BeitForImageClassification(BeitPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output

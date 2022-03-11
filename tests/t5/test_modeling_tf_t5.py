@@ -98,13 +98,10 @@ class TFT5ModelTester:
         encoder_output = result.encoder_last_hidden_state
         self.parent.assertListEqual(list(encoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
         self.parent.assertListEqual(list(decoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
-        self.parent.assertEqual(len(decoder_past), 2)
-        # decoder_past[0] should correspond to encoder output
-        self.parent.assertTrue(tf.reduce_all(tf.math.equal(decoder_past[0][0], encoder_output)))
         # There should be `num_layers` key value embeddings stored in decoder_past[1]
-        self.parent.assertEqual(len(decoder_past[1]), config.num_layers)
+        self.parent.assertEqual(len(decoder_past), config.num_layers)
         # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past[1] tuple
-        self.parent.assertEqual(len(decoder_past[1][0]), 4)
+        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
         model = TFT5ForConditionalGeneration(config=config)
@@ -477,6 +474,35 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
         expected_output_string = ["Yesterday, my name was", "Heute ist ein schöne Tag und"]
+
+        self.assertListEqual(expected_output_string, output_strings)
+
+    @slow
+    def test_sample_generate(self):
+        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        sentences = ["I really love my", "Translate English to German: the transformers are truly amazing"]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+
+        generation_kwargs = {
+            "do_sample": True,
+            "bad_words_ids": [tokenizer("my").input_ids, tokenizer("ein schöner").input_ids],
+            "no_repeat_ngram_size": 3,
+            "repetition_penalty": 2.2,
+            "temperature": 0.8,
+            "top_k": 500,
+            "top_p": 0.9,
+        }
+
+        # forces the generation to happen on CPU, to avoid GPU-related quirks
+        with tf.device(":/CPU:0"):
+            tf.random.set_seed(42)  # deterministic sampling sequence -> deterministic generation
+            output_ids = model.generate(input_ids, **generation_kwargs)
+
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+        expected_output_string = ["i love her I really love my heart", "die Transformatoren sind wirklich erstaunlich"]
 
         self.assertListEqual(expected_output_string, output_strings)
 

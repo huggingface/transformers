@@ -218,7 +218,6 @@ class TFFFN(tf.keras.layers.Layer):
         self.lin2 = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="lin2"
         )
-        assert config.activation in ["relu", "gelu"], f"activation ({config.activation}) must be in ['relu', 'gelu']"
         self.activation = get_tf_activation(config.activation)
 
     def call(self, input, training=False):
@@ -642,7 +641,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         self.vocab_transform = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="vocab_transform"
         )
-        self.act = get_tf_activation("gelu")
+        self.act = get_tf_activation(config.activation)
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 

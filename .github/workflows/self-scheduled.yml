@@ -130,7 +130,7 @@ jobs:
         machines: [multi-gpu-docker, single-gpu-docker]
     runs-on: ${{ matrix.machines }}
     container:
-      image: huggingface/transformers-pytorch-latest-gpu
+      image: huggingface/transformers-pytorch-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: setup
     steps:
@@ -165,7 +165,7 @@ jobs:
         machines: [multi-gpu-docker, single-gpu-docker]
     runs-on: ${{ matrix.machines }}
     container:
-      image: huggingface/transformers-tensorflow-latest-gpu
+      image: huggingface/transformers-tensorflow-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     needs: setup
     steps:

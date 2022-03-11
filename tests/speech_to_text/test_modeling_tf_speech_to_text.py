@@ -90,6 +90,7 @@ class TFSpeech2TextModelTester:
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
+        scale_embedding=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -115,6 +116,7 @@ class TFSpeech2TextModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+        self.scale_embedding = scale_embedding
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor(
@@ -155,6 +157,7 @@ class TFSpeech2TextModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            scale_embedding=self.scale_embedding,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -179,7 +182,7 @@ class TFSpeech2TextModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        _, (_, past_key_values) = outputs.to_tuple()
+        _, past_key_values = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = tf.math.maximum(ids_tensor((self.batch_size, 3), config.vocab_size), 2)

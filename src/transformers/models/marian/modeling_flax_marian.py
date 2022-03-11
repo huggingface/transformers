@@ -684,8 +684,8 @@ class FlaxMarianDecoderLayerCollection(nn.Module):
 
 class FlaxMarianEncoder(nn.Module):
     config: MarianConfig
+    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    embed_tokens: Optional[nn.Embed] = None
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -693,13 +693,6 @@ class FlaxMarianEncoder(nn.Module):
         embed_dim = self.config.d_model
         self.max_source_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
 
         self.embed_positions = create_sinusoidal_positions(self.config.max_position_embeddings, embed_dim)
         self.layers = FlaxMarianEncoderLayerCollection(self.config, self.dtype)
@@ -747,8 +740,8 @@ class FlaxMarianEncoder(nn.Module):
 
 class FlaxMarianDecoder(nn.Module):
     config: MarianConfig
+    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    embed_tokens: Optional[nn.Embed] = None
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -756,13 +749,6 @@ class FlaxMarianDecoder(nn.Module):
         embed_dim = self.config.d_model
         self.max_target_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
 
         self.embed_positions = create_sinusoidal_positions(self.config.max_position_embeddings, embed_dim)
         self.layers = FlaxMarianDecoderLayerCollection(self.config, self.dtype)

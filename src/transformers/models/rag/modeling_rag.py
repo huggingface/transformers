@@ -15,7 +15,7 @@
 """RAG model implementation."""
 
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -1405,6 +1405,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
         remove_invalid_values: Optional[bool] = None,
+        exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
         **model_kwargs
     ):
         """
@@ -1534,6 +1535,11 @@ class RagTokenForGeneration(RagPreTrainedModel):
         remove_invalid_values = (
             remove_invalid_values if remove_invalid_values is not None else self.config.remove_invalid_values
         )
+        exponential_decay_length_penalty = (
+            exponential_decay_length_penalty
+            if exponential_decay_length_penalty is not None
+            else self.config.exponential_decay_length_penalty
+        )
 
         # retrieve docs
         if self.retriever is not None and context_input_ids is None:
@@ -1577,6 +1583,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             dtype=torch.long,
             device=next(self.parameters()).device,
         )
+        input_ids_seq_length = input_ids.shape[-1]
         last_hidden_state = encoder_outputs["last_hidden_state"]
 
         def extend_enc_output(tensor, num_beams=None):
@@ -1603,6 +1610,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
             encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
+            input_ids_seq_length=input_ids_seq_length,
             encoder_input_ids=context_input_ids,
             bad_words_ids=bad_words_ids,
             min_length=min_length,
@@ -1615,6 +1623,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
             remove_invalid_values=remove_invalid_values,
+            exponential_decay_length_penalty=exponential_decay_length_penalty,
             logits_processor=logits_processor,
         )
 

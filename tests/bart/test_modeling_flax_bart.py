@@ -11,17 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import unittest
 
 import numpy as np
 import timeout_decorator  # noqa
 
-from transformers import BartConfig, is_flax_available
+from transformers import BartConfig, BartTokenizer, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
 from ..generation.test_generation_flax_utils import FlaxGenerationTesterMixin
-from ..test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
+from ..test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
@@ -34,7 +33,6 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from transformers import BartTokenizer
     from transformers.models.bart.modeling_flax_bart import (
         FlaxBartForConditionalGeneration,
         FlaxBartForQuestionAnswering,
@@ -475,3 +473,95 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
         )
         assert generated_summaries == EXPECTED
+
+
+class FlaxBartStandaloneDecoderModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_attention_mask=True,
+        use_labels=False,
+        vocab_size=99,
+        hidden_size=16,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=4,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=32,
+        eos_token_id=2,
+        pad_token_id=1,
+        bos_token_id=0,
+        initializer_range=0.02,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_attention_mask = use_attention_mask
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.initializer_range = initializer_range
+
+    def prepare_config_and_inputs(self):
+        input_ids = jnp.clip(ids_tensor([self.batch_size, self.seq_length], self.vocab_size), 3, self.vocab_size)
+
+        attention_mask = None
+        if self.use_attention_mask:
+            attention_mask = random_attention_mask([self.batch_size, self.seq_length])
+
+        config = BartConfig(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            encoder_ffn_dim=self.intermediate_size,
+            decoder_ffn_dim=self.intermediate_size,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.bos_token_id,
+            pad_token_id=self.pad_token_id,
+            initializer_range=self.initializer_range,
+            use_cache=False,
+        )
+
+        return config, input_ids, attention_mask
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_decoder(self):
+        config, input_ids, attention_mask = self.prepare_config_and_inputs()
+
+        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
+        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        )

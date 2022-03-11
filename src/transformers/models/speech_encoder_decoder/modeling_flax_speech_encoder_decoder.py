@@ -108,8 +108,9 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
 
-            For training, `decoder_input_ids` are automatically created by the model by shifting the `labels` to the
-            right, replacing -100 by the `pad_token_id` and prepending them with the `decoder_start_token_id`.
+            For sequence to sequence training, `decoder_input_ids` should be provided. `decoder_input_ids` should be
+            created outside of the model by shifting the `labels` to the right, replacing -100 by the `pad_token_id`
+            and prepending them with the `decoder_start_token_id`.
         decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
@@ -161,9 +162,9 @@ SPEECH_ENCODER_DECODER_DECODE_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
 
-            For sequence to sequence training, `decoder_input_ids` should be provided. If no `decoder_input_ids` is
-            provided, the model will create this tensor by shifting the `input_ids` to the right for denoising
-            pre-training.
+            For sequence to sequence training, `decoder_input_ids` should be provided. `decoder_input_ids` should be
+            created outside of the model by shifting the `labels` to the right, replacing -100 by the `pad_token_id`
+            and prepending them with the `decoder_start_token_id`.
         encoder_outputs (`tuple(tuple(jnp.ndarray)`):
             Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
@@ -250,13 +251,6 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
     def _get_decoder_module(self):
         return self.decoder
 
-    def freeze_feature_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder of the speech encoder in
-        order that its parameters are not updated during training.
-        """
-        self.encoder.freeze_feature_encoder()
-
     def __call__(
         self,
         inputs,
@@ -269,6 +263,7 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
+        freeze_feature_encoder: bool = False,
     ):
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -278,6 +273,7 @@ class FlaxSpeechEncoderDecoderModule(nn.Module):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 deterministic=deterministic,
+                freeze_feature_encoder=freeze_feature_encoder,
             )
 
         encoder_hidden_states = encoder_outputs[0]
@@ -448,6 +444,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
+        freeze_feature_encoder: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
@@ -493,6 +490,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             deterministic=not train,
+            freeze_feature_encoder=freeze_feature_encoder,
             rngs=rngs,
             method=_encoder_forward,
         )
@@ -644,6 +642,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
+        freeze_feature_encoder: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
@@ -683,6 +682,10 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
             attention_mask = jnp.ones_like(inputs)
 
         # prepare decoder inputs
+        if decoder_input_ids is None:
+            raise ValueError(
+                "`decoder_input_ids` cannot be `None`. For sequence to sequence training, `decoder_position_ids` must be specified as an input argument."
+            )
         if decoder_attention_mask is None:
             decoder_attention_mask = jnp.ones_like(decoder_input_ids)
         if decoder_position_ids is None:
@@ -705,6 +708,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             deterministic=not train,
+            freeze_feature_encoder=freeze_feature_encoder,
             rngs=rngs,
         )
 

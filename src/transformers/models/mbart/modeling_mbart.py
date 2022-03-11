@@ -51,6 +51,16 @@ _CHECKPOINT_FOR_DOC = "facebook/mbart-large-cc25"
 _CONFIG_FOR_DOC = "MBartConfig"
 _TOKENIZER_FOR_DOC = "MBartTokenizer"
 
+# Base model docstring
+_EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
+
+# SequenceClassification docstring
+_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE = [1, 2]
+
+# QuestionAsnwering docstring
+_QA_EXPECTED_LOSS = 3.04
+_QA_EXPECTED_OUTPUT_SHAPE = [1, 16]
+
 
 MBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/mbart-large-cc25",
@@ -532,20 +542,21 @@ MBART_START_DOCSTRING = r"""
 """
 
 MBART_GENERATION_EXAMPLE = r"""
-    Summarization example:
+    Translation example:
 
     ```python
     >>> from transformers import MBartTokenizer, MBartForConditionalGeneration
 
-    >>> model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
-    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
+    >>> model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
+    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro")
 
-    >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
-    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="pt")
+    >>> example_english_phrase = "42 is the answer"
+    >>> inputs = tokenizer(example_english_phrase, return_tensors="pt")
 
-    >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
-    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    >>> # Translate
+    >>> generated_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
+    >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+    '42 este răspuns'
     ```
 
     Mask filling example:
@@ -567,6 +578,7 @@ MBART_GENERATION_EXAMPLE = r"""
     >>> values, predictions = probs.topk(5)
 
     >>> tokenizer.decode(predictions).split()
+    ['nett', 'sehr', 'ganz', 'nicht', 'so']
     ```
 """
 
@@ -639,11 +651,10 @@ MBART_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-            shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
-            you can choose to directly pass an embedded representation. This is useful if you want more control over
-            how to convert `input_ids` indices into associated vectors than the model's internal embedding lookup
-            matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
+            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            can choose to directly pass an embedded representation. This is useful if you want more control over how to
+            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -966,8 +977,8 @@ class MBartDecoder(MBartPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
-                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
                 embedding lookup matrix.
@@ -1153,6 +1164,7 @@ class MBartModel(MBartPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -1428,6 +1440,7 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT_SHAPE,
     )
     # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
@@ -1553,6 +1566,8 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_loss=_QA_EXPECTED_LOSS,
+        expected_output=_QA_EXPECTED_OUTPUT_SHAPE,
     )
     # Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering.forward
     def forward(
@@ -1665,7 +1680,7 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->MBart, facebook/bart-large->facebook/mbart-large-cc25
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->MBart, facebook/bart-base->facebook/mbart-large-cc25
 class MBartForCausalLM(MBartPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
@@ -1794,6 +1809,9 @@ class MBartForCausalLM(MBartPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

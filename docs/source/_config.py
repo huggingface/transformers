@@ -7,3 +7,4 @@ INSTALL_CONTENT = """
 """
 
 notebook_first_cells = [{"type": "code", "content": INSTALL_CONTENT}]
+default_branch_name = "master"

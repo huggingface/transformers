@@ -18,6 +18,7 @@ import inspect
 import os
 import re
 import warnings
+from collections import OrderedDict
 from difflib import get_close_matches
 from pathlib import Path
 
@@ -88,6 +89,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFRobertaForMultipleChoice",  # TODO: fix
     "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
     "SeparableConv1D",  # Building part of bigger (tested) model.
+    "FlaxBartForCausalLM",  # Building part of bigger (tested) model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -101,6 +103,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "camembert/test_modeling_tf_camembert.py",
     "mt5/test_modeling_tf_mt5.py",
     "xlm_roberta/test_modeling_tf_xlm_roberta.py",
+    "xlm_roberta/test_modeling_flax_xlm_roberta.py",
     "xlm_prophetnet/test_modeling_xlm_prophetnet.py",
     "xlm_roberta/test_modeling_xlm_roberta.py",
     "vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
@@ -168,7 +171,18 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "VisualBertForMultipleChoice",
     "TFWav2Vec2ForCTC",
     "TFHubertForCTC",
+    "MaskFormerForInstanceSegmentation",
 ]
+
+# Update this list for models that have multiple model types for the same
+# model doc
+MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
+    [
+        ("data2vec-text", "data2vec"),
+        ("data2vec-audio", "data2vec"),
+    ]
+)
+
 
 # This is to make sure the transformers module imported is the one in the repo.
 spec = importlib.util.spec_from_file_location(
@@ -641,6 +655,7 @@ def check_model_type_doc_match():
     model_docs = [m.stem for m in model_doc_folder.glob("*.mdx")]
 
     model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
+    model_types = [MODEL_TYPE_TO_DOC_MAPPING[m] if m in MODEL_TYPE_TO_DOC_MAPPING else m for m in model_types]
 
     errors = []
     for m in model_docs:

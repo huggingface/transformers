@@ -82,13 +82,17 @@ jobs:
       image: tensorflow/tensorflow:2.4.1-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
+      - name: Set up Python 3.7
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+
       - name: Install dependencies
         run: |
           apt -y update && apt install -y software-properties-common && apt -y update && add-apt-repository -y ppa:git-core/ppa && apt -y update && apt install -y git espeak-ng
           pip install --upgrade "jax[cuda111]" -f https://storage.googleapis.com/jax-releases/jax_releases.html
           pip install --upgrade pip
           pip install .[sklearn,testing,sentencepiece,flax,flax-speech,vision]
-          pip install https://github.com/kpu/kenlm/archive/master.zip
 
       - name: Launcher docker
         uses: actions/checkout@v2

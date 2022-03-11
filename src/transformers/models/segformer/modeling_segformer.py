@@ -21,7 +21,7 @@ import math
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -45,11 +45,11 @@ _FEAT_EXTRACTOR_FOR_DOC = "SegformerFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "nvidia/mit-b0"
-_EXPECTED_OUTPUT_SHAPE = [1, 256, 256]
+_EXPECTED_OUTPUT_SHAPE = [1, 256, 16, 16]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "nvidia/segformer-b0-finetuned-ade-512-512",
@@ -579,8 +579,11 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        # reshape last hidden states to (batch_size, height*width, hidden_size)
+        # convert last hidden states to (batch_size, height*width, hidden_size)
         batch_size = sequence_output.shape[0]
+        if self.config.reshape_last_stage:
+            # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+            sequence_output = sequence_output.permute(0, 2, 3, 1)
         sequence_output = sequence_output.reshape(batch_size, -1, self.config.hidden_sizes[-1])
 
         # global average pooling
@@ -590,14 +593,26 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -648,10 +663,19 @@ class SegformerDecodeHead(SegformerPreTrainedModel):
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
         self.classifier = nn.Conv2d(config.decoder_hidden_size, config.num_labels, kernel_size=1)
 
+        self.config = config
+
     def forward(self, encoder_hidden_states):
-        batch_size, _, _, _ = encoder_hidden_states[-1].shape
+        batch_size = encoder_hidden_states[-1].shape[0]
+
         all_hidden_states = ()
         for encoder_hidden_state, mlp in zip(encoder_hidden_states, self.linear_c):
+            if self.config.reshape_last_stage is False and encoder_hidden_state.ndim == 3:
+                height = width = int(math.sqrt(encoder_hidden_state.shape[-1]))
+                encoder_hidden_state = (
+                    encoder_hidden_state.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
+                )
+
             # unify channel dimension
             height, width = encoder_hidden_state.shape[2], encoder_hidden_state.shape[3]
             encoder_hidden_state = mlp(encoder_hidden_state)

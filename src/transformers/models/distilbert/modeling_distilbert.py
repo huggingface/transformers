@@ -26,7 +26,7 @@ from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import gelu
+from ...activations import get_activation
 from ...deepspeed import is_deepspeed_zero3_enabled
 from ...file_utils import (
     add_code_sample_docstrings,
@@ -231,8 +231,7 @@ class FFN(nn.Module):
         self.seq_len_dim = 1
         self.lin1 = nn.Linear(in_features=config.dim, out_features=config.hidden_dim)
         self.lin2 = nn.Linear(in_features=config.hidden_dim, out_features=config.dim)
-        assert config.activation in ["relu", "gelu"], f"activation ({config.activation}) must be in ['relu', 'gelu']"
-        self.activation = gelu if config.activation == "gelu" else nn.ReLU()
+        self.activation = get_activation(config.activation)
 
     def forward(self, input):
         return apply_chunking_to_forward(self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, input)
@@ -564,6 +563,8 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        self.activation = get_activation(config.activation)
+
         self.distilbert = DistilBertModel(config)
         self.vocab_transform = nn.Linear(config.dim, config.dim)
         self.vocab_layer_norm = nn.LayerNorm(config.dim, eps=1e-12)
@@ -637,7 +638,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         )
         hidden_states = dlbrt_output[0]  # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)  # (bs, seq_length, dim)
-        prediction_logits = gelu(prediction_logits)  # (bs, seq_length, dim)
+        prediction_logits = self.activation(prediction_logits)  # (bs, seq_length, dim)
         prediction_logits = self.vocab_layer_norm(prediction_logits)  # (bs, seq_length, dim)
         prediction_logits = self.vocab_projector(prediction_logits)  # (bs, seq_length, vocab_size)
 

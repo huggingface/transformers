@@ -48,6 +48,7 @@ else:
     TOKENIZER_MAPPING_NAMES = OrderedDict(
         [
             ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),
+            ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
             ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
