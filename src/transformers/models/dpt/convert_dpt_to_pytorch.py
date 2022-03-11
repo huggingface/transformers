@@ -41,7 +41,7 @@ def get_dpt_config(checkpoint_url):
         config.num_hidden_layers = 24
         config.num_attention_heads = 16
         config.out_indices = [5, 11, 17, 23]
-        config.post_process_channels = [256, 512, 1024, 1024]
+        config.neck_hidden_sizes = [256, 512, 1024, 1024]
         expected_shape = (1, 384, 384)
 
     if "ade" in checkpoint_url:
@@ -117,28 +117,28 @@ def rename_key(name):
         name = name.replace("resConfUnit2", "res_conv_unit2")
     # readout blocks
     if "pretrained.act_postprocess1.0.project.0" in name:
-        name = name.replace("pretrained.act_postprocess1.0.project.0", "neck.reassemble_blocks.readout_projects.0.0")
+        name = name.replace("pretrained.act_postprocess1.0.project.0", "neck.reassemble_stage.readout_projects.0.0")
     if "pretrained.act_postprocess2.0.project.0" in name:
-        name = name.replace("pretrained.act_postprocess2.0.project.0", "neck.reassemble_blocks.readout_projects.1.0")
+        name = name.replace("pretrained.act_postprocess2.0.project.0", "neck.reassemble_stage.readout_projects.1.0")
     if "pretrained.act_postprocess3.0.project.0" in name:
-        name = name.replace("pretrained.act_postprocess3.0.project.0", "neck.reassemble_blocks.readout_projects.2.0")
+        name = name.replace("pretrained.act_postprocess3.0.project.0", "neck.reassemble_stage.readout_projects.2.0")
     if "pretrained.act_postprocess4.0.project.0" in name:
-        name = name.replace("pretrained.act_postprocess4.0.project.0", "neck.reassemble_blocks.readout_projects.3.0")
+        name = name.replace("pretrained.act_postprocess4.0.project.0", "neck.reassemble_stage.readout_projects.3.0")
     # resize blocks
     if "pretrained.act_postprocess1.3" in name:
-        name = name.replace("pretrained.act_postprocess1.3", "neck.reassemble_blocks.projects.0")
+        name = name.replace("pretrained.act_postprocess1.3", "neck.reassemble_stage.projects.0")
     if "pretrained.act_postprocess1.4" in name:
-        name = name.replace("pretrained.act_postprocess1.4", "neck.reassemble_blocks.resize_layers.0")
+        name = name.replace("pretrained.act_postprocess1.4", "neck.reassemble_stage.resize_layers.0")
     if "pretrained.act_postprocess2.3" in name:
-        name = name.replace("pretrained.act_postprocess2.3", "neck.reassemble_blocks.projects.1")
+        name = name.replace("pretrained.act_postprocess2.3", "neck.reassemble_stage.projects.1")
     if "pretrained.act_postprocess2.4" in name:
-        name = name.replace("pretrained.act_postprocess2.4", "neck.reassemble_blocks.resize_layers.1")
+        name = name.replace("pretrained.act_postprocess2.4", "neck.reassemble_stage.resize_layers.1")
     if "pretrained.act_postprocess3.3" in name:
-        name = name.replace("pretrained.act_postprocess3.3", "neck.reassemble_blocks.projects.2")
+        name = name.replace("pretrained.act_postprocess3.3", "neck.reassemble_stage.projects.2")
     if "pretrained.act_postprocess4.3" in name:
-        name = name.replace("pretrained.act_postprocess4.3", "neck.reassemble_blocks.projects.3")
+        name = name.replace("pretrained.act_postprocess4.3", "neck.reassemble_stage.projects.3")
     if "pretrained.act_postprocess4.4" in name:
-        name = name.replace("pretrained.act_postprocess4.4", "neck.reassemble_blocks.resize_layers.3")
+        name = name.replace("pretrained.act_postprocess4.4", "neck.reassemble_stage.resize_layers.3")
     if "pretrained" in name:
         name = name.replace("pretrained", "dpt")
     if "bn" in name:

@@ -403,7 +403,7 @@ class DPTViTEncoder(nn.Module):
         )
 
 
-class DPTReassembleBlocks(nn.Module):
+class DPTReassembleStage(nn.Module):
     """
     This class reassembles the hidden states of the backbone into image-like feature representations at various
     resolutions.
@@ -411,7 +411,7 @@ class DPTReassembleBlocks(nn.Module):
     This happens in 3 stages:
     1. Map the N + 1 tokens to a set of N tokens, by taking into account the readout ([CLS]) token according to
        `config.readout_type`.
-    2. Project the channel dimension of the hidden states according to `config.post_process_channels`.
+    2. Project the channel dimension of the hidden states according to `config.neck_hidden_sizes`.
     3. Resizing the spatial dimensions (height, width).
 
     Args:
@@ -423,7 +423,7 @@ class DPTReassembleBlocks(nn.Module):
         super().__init__()
 
         self.config = config
-        out_channels = config.post_process_channels
+        out_channels = config.neck_hidden_sizes
 
         self.projects = nn.ModuleList(
             [
@@ -543,15 +543,16 @@ class DPTPreActResidualLayer(nn.Module):
         return x + residual
 
 
-class DPTFeatureFusionBlock(nn.Module):
-    """FeatureFusionBlock, merges feature maps from different stages.
+class DPTFeatureFusionLayer(nn.Module):
+    """Feature fusion layer, merges feature maps from different stages.
 
     Args:
-        config (dict): config dict.
-        expand (bool): Whether to expand the channels in the post process block.
-            Default: False.
-        align_corners (bool): align_corner setting for bilinear upsample.
-            Default: True.
+        config (`[DPTConfig]`):
+            Model configuration class defining the model architecture.
+        expand (`bool`, *optional*, defaults to `False`):
+            Whether to expand the channels in the post process block.
+        align_corners (`bool`, *optional*, defaults to `True`):
+            The align_corner setting for bilinear upsample.
     """
 
     def __init__(self, config, expand=False, align_corners=True):
@@ -757,8 +758,8 @@ class DPTNeck(nn.Module):
     DPTNeck. A neck is a module that is normally used between the backbone and the head. It takes a list of tensors as
     input and produces another list of tensors as output. For DPT, it includes:
 
-    * DPTReassembleBlocks
-    * FeatureFusionBlocks.
+    * DPTReassembleStage
+    * FeatureFusionLayers.
 
     Args:
         config (dict): config dict.
@@ -770,30 +771,26 @@ class DPTNeck(nn.Module):
         self.config = config
 
         # postprocessing
-        self.reassemble_blocks = DPTReassembleBlocks(config)
-        self.post_process_channels = [
-            channel * 2**i if config.expand_channels else channel
-            for i, channel in enumerate(config.post_process_channels)
-        ]
+        self.reassemble_stage = DPTReassembleStage(config)
         self.convs = nn.ModuleList()
-        for channel in self.post_process_channels:
+        for channel in config.neck_hidden_sizes:
             self.convs.append(nn.Conv2d(channel, config.channels, kernel_size=3, padding=1, bias=False))
 
         # fusion
         self.fusion_blocks = nn.ModuleList()
         for _ in range(len(self.convs)):
-            self.fusion_blocks.append(DPTFeatureFusionBlock(config))
+            self.fusion_blocks.append(DPTFeatureFusionLayer(config))
         self.fusion_blocks[0].res_conv_unit1 = None
 
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         if not isinstance(hidden_states, list):
             raise ValueError("hidden_states should be a list of tensors")
 
-        if len(hidden_states) != len(self.post_process_channels):
-            raise ValueError("The number of hidden states should be equal to the number of post-process channels.")
+        if len(hidden_states) != len(self.config.neck_hidden_sizes):
+            raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
 
         # postprocess hidden states
-        features = self.reassemble_blocks(hidden_states)
+        features = self.reassemble_stage(hidden_states)
 
         features = [self.convs[i](feature) for i, feature in enumerate(features)]
 
@@ -827,7 +824,6 @@ class DPTDepthEstimationHead(nn.Module):
             ACT2FN["relu"],
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
             ACT2FN["relu"],
-            nn.Identity(),
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
