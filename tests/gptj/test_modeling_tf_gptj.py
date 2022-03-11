@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import datetime
 import unittest
 
-from transformers import GPTJConfig, is_tf_available
+from transformers import AutoTokenizer, GPTJConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow, tooslow
 
 from ..test_configuration_common import ConfigTester
@@ -343,6 +344,63 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
                 name = model.get_bias()
                 assert name is None
 
+    @tooslow
+    def test_batch_generation(self):
+        # Marked as @tooslow due to GPU OOM
+        model = TFGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", revision="float16", from_pt=True)
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B", revision="float16")
+
+        tokenizer.padding_side = "left"
+
+        # Define PAD Token = EOS Token = 50256
+        tokenizer.pad_token = tokenizer.eos_token
+        model.config.pad_token_id = model.config.eos_token_id
+
+        # use different length sentences to test batching
+        sentences = [
+            "Hello, my dog is a little",
+            "Today, I",
+        ]
+
+        inputs = tokenizer(sentences, return_tensors="tf", padding=True)
+        input_ids = inputs["input_ids"]
+        token_type_ids = tf.concat(
+            [
+                tf.zeros((input_ids.shape[0], input_ids.shape[1] - 1), dtype=tf.int64),
+                500 * tf.ones((input_ids.shape[0], 1), dtype=tf.int64),
+            ],
+            axis=-1,
+        )
+
+        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"])
+        outputs_tt = model.generate(
+            input_ids=input_ids,
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=token_type_ids,
+        )
+
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="tf").input_ids
+        output_non_padded = model.generate(input_ids=inputs_non_padded)
+
+        num_paddings = (
+            shape_list(inputs_non_padded)[-1] - tf.reduce_sum(tf.cast(inputs["attention_mask"][-1], tf.int64)).numpy()
+        )
+        inputs_padded = tokenizer(sentences[1], return_tensors="tf").input_ids
+        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+
+        batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
+        padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
+
+        expected_output_sentence = [
+            "Hello, my dog is a little over a year old and has been diagnosed with a heart murmur",
+            "Today, I’m going to talk about the most important thing in the",
+        ]
+        self.assertListEqual(expected_output_sentence, batch_out_sentence)
+        self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
+        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
+
     @slow
     def test_model_from_pretrained(self):
         model = TFGPTJModel.from_pretrained("EleutherAI/gpt-j-6B", from_pt=True)
@@ -353,6 +411,7 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
     @tooslow
     def test_lm_generate_gptj(self):
+        # Marked as @tooslow due to GPU OOM
         model = TFGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", from_pt=True)
         input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
         # fmt: off
@@ -361,3 +420,46 @@ class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
         # fmt: on
         output_ids = model.generate(input_ids, do_sample=False)
         self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
+
+    @tooslow
+    def test_gptj_sample(self):
+        # Marked as @tooslow due to GPU OOM (issue #13676)
+        # TODO!
+        pass
+
+    def test_gptj_sample_max_time(self):
+        tokenizer = AutoTokenizer.from_pretrained("anton-l/gpt-j-tiny-random")
+        model = TFGPTJForCausalLM.from_pretrained("anton-l/gpt-j-tiny-random", from_pt=True)
+
+        input_ids = tokenizer("Today is a nice day and", return_tensors="tf", return_token_type_ids=True).input_ids
+
+        MAX_TIME = 0.5
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
