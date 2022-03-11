@@ -33,7 +33,6 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_swin import SwinConfig
@@ -61,6 +60,7 @@ SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # to_2tuple, drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
 
+
 @dataclass
 class SwinEncoderOutput(ModelOutput):
     """
@@ -84,7 +84,8 @@ class SwinEncoderOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, hidden_size, height, width)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to include the spatial dimensions.
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+            include the spatial dimensions.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -92,7 +93,8 @@ class SwinEncoderOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
-@dataclass 
+
+@dataclass
 class SwinModelOutput(ModelOutput):
     """
     Swin model's outputs that also contains a pooling of the last hidden states.
@@ -120,7 +122,8 @@ class SwinModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, hidden_size, height, width)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to include the spatial dimensions.
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+            include the spatial dimensions.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -128,6 +131,79 @@ class SwinModelOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class SwinMaskedLMOutput(ModelOutput):
+    """
+    Swin masked language models outputs.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Masked language modeling (MLM) loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, hidden_size, height, width)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+            include the spatial dimensions.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class SwinImageClassifierOutput(ModelOutput):
+    """
+    Swin outputs for image classification.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, hidden_size, height, width)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+            include the spatial dimensions.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
 
 # Copied from transformers.models.vit.modeling_vit.to_2tuple
 def to_2tuple(x):
@@ -699,7 +775,7 @@ class SwinEncoder(nn.Module):
             # rearrange b (h w) c -> b c h w
             reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
             reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
-            all_hidden_states +=  (hidden_states,)
+            all_hidden_states += (hidden_states,)
             all_reshape_hidden_states += (reshaped_hidden_state,)
 
         for i, layer_module in enumerate(self.layers):
@@ -740,7 +816,10 @@ class SwinEncoder(nn.Module):
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
         return SwinEncoderOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions, reshaped_hidden_states=all_reshape_hidden_states
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+            reshaped_hidden_states=all_reshape_hidden_states,
         )
 
 
@@ -899,7 +978,7 @@ class SwinModel(SwinPreTrainedModel):
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            reshaped_hidden_states=encoder_outputs.reshaped_hidden_states
+            reshaped_hidden_states=encoder_outputs.reshaped_hidden_states,
         )
 
 
@@ -923,7 +1002,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=SwinMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -1001,11 +1080,12 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
             output = (reconstructed_pixel_values,) + outputs[2:]
             return ((masked_im_loss,) + output) if masked_im_loss is not None else output
 
-        return MaskedLMOutput(
+        return SwinMaskedLMOutput(
             loss=masked_im_loss,
             logits=reconstructed_pixel_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            reshaped_hidden_states=outputs.reshaped_hidden_states,
         )
 
 
@@ -1035,7 +1115,7 @@ class SwinForImageClassification(SwinPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
+        output_type=SwinImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -1095,9 +1175,10 @@ class SwinForImageClassification(SwinPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return SwinImageClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            reshaped_hidden_states=outputs.reshaped_hidden_states,
         )

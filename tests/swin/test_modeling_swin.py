@@ -292,7 +292,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
                 added_hidden_states = 2
             else:
                 # TODO also another +1 for reshaped_hidden_states
-                added_hidden_states = 1
+                added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
@@ -308,7 +308,6 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
                     list(self_attentions[0].shape[-3:]),
                     [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
                 )
-
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -408,11 +407,13 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
                 [num_patches, self.model_tester.embed_dim],
             )
 
-            reshaped_hidden_states =  outputs.reshaped_hidden_states
+            reshaped_hidden_states = outputs.reshaped_hidden_states
             self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 
             batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
-            reshaped_hidden_states = reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
+            reshaped_hidden_states = (
+                reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
+            )
             self.assertListEqual(
                 list(reshaped_hidden_states.shape[-2:]),
                 [num_patches, self.model_tester.embed_dim],
