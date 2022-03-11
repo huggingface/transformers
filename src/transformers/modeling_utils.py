@@ -892,7 +892,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=0):
+            params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
+            with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 if torch.distributed.get_rank() == 0:
                     # Copy old lm head weights to new lm head
                     if not transposed:
