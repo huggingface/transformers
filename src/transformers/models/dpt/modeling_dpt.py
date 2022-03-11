@@ -423,29 +423,10 @@ class DPTReassembleStage(nn.Module):
         super().__init__()
 
         self.config = config
-        out_channels = config.neck_hidden_sizes
+        self.layers = nn.ModuleList()
+        for i in range(len(config.neck_hidden_sizes)):
+            self.layers.append(DPTReassembleLayer(config, channels=config.neck_hidden_sizes[i]))
 
-        self.projects = nn.ModuleList(
-            [
-                nn.Conv2d(in_channels=config.hidden_size, out_channels=out_channel, kernel_size=1)
-                for out_channel in out_channels
-            ]
-        )
-
-        self.resize_layers = nn.ModuleList(
-            [
-                nn.ConvTranspose2d(
-                    in_channels=out_channels[0], out_channels=out_channels[0], kernel_size=4, stride=4, padding=0
-                ),
-                nn.ConvTranspose2d(
-                    in_channels=out_channels[1], out_channels=out_channels[1], kernel_size=2, stride=2, padding=0
-                ),
-                nn.Identity(),
-                nn.Conv2d(
-                    in_channels=out_channels[3], out_channels=out_channels[3], kernel_size=3, stride=2, padding=1
-                ),
-            ]
-        )
         if config.readout_type == "project":
             self.readout_projects = nn.ModuleList()
             for _ in range(len(self.projects)):
@@ -481,11 +462,33 @@ class DPTReassembleStage(nn.Module):
             elif self.config.readout_type == "add":
                 hidden_state = hidden_state.flatten(2) + cls_token.unsqueeze(-1)
                 hidden_state = hidden_state.reshape(feature_shape)
-            hidden_state = self.projects[i](hidden_state)
-            hidden_state = self.resize_layers[i](hidden_state)
+            hidden_state = self.layers[i](hidden_state)
             out.append(hidden_state)
 
         return out
+
+
+class DPTReassembleLayer(nn.Module):
+    def __init__(self, config, channels, target_size, in_size):
+        super().__init__()
+        # projection
+        self.project = nn.Conv2d(in_channels=config.hidden_size, out_channels=channels, kernel_size=1)
+
+        # resize
+        should_upsample = in_size > target_size
+        factor = in_size % target_size
+        if should_upsample:
+            self.resizer = nn.ConvTranspose2d(channels, channels, kernel_size=factor, stride=factor, padding=0)
+        elif factor == 0:
+            self.resize = nn.Identity()
+        elif not should_upsample:
+            # so should downsample
+            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=factor, padding=1)
+
+    def forward(self, hidden_state):
+        hidden_state = self.project(hidden_state)
+        hidden_state = self.resize(hidden_state)
+        return hidden_state
 
 
 class DPTPreActResidualLayer(nn.Module):
