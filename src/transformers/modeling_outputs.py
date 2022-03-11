@@ -253,11 +253,12 @@ class DecisionTransformerOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token) after further processing
-            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
-            the classification token after processing through a linear layer and a tanh activation function. The linear
-            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        state_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, state_dim)`):
+            Environment state predictions
+        action_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, action_dim)`):
+            Model action predictions
+        return_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, 1)`):
+            Predicted returns for each state
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
@@ -271,10 +272,12 @@ class DecisionTransformerOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
     state_preds: torch.FloatTensor = None
     action_preds: torch.FloatTensor = None
     return_preds: torch.FloatTensor = None
+    hidden_states: torch.FloatTensor = None
+    attentions: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor = None
 
 
 @dataclass
