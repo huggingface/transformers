@@ -244,11 +244,8 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
             labels_batch.attention_mask = labels_batch.attention_mask[:, 1:]
 
         batch["inputs"] = batch.pop("input_values")
-
         batch["labels"] = labels
-
         batch["decoder_input_ids"] = shift_tokens_right(labels, self.decoder_start_token_id)
-
         batch["decoder_attention_mask"] = labels_batch.attention_mask
 
         return batch
@@ -478,11 +475,17 @@ def main():
     metric = load_metric("wer")
 
     def compute_metrics(pred_ids: List[List[int]], label_ids: List[List[int]]):
-        label_ids = np.where(np.asarray(label_ids) == -100, tokenizer.pad_token_id, label_ids)
+        # pad variable-length lists to uniform-length
+        lens = np.array([len(i) for i in label_ids])
+        mask = np.arange(lens.max()) < lens[:, None]
+        padded_ids = -100 * np.ones(mask.shape, dtype=int)
+        padded_ids[mask] = np.concatenate(label_ids)
+
+        padded_ids[padded_ids == -100] = tokenizer.pad_token_id
 
         pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
         # we do not want to group tokens when computing the metrics
-        label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
+        label_str = tokenizer.batch_decode(padded_ids, skip_special_tokens=True)
 
         wer = metric.compute(predictions=pred_str, references=label_str)
 
