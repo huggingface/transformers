@@ -658,9 +658,8 @@ class SwinEncoder(nn.Module):
             if output_hidden_states:
                 batch_size, _, hidden_size = hidden_states.shape
                 # rearrange b (h w) c -> b c h w
-                reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size).permute(
-                    0, 3, 1, 2
-                )
+                reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
+                reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
                 all_hidden_states += (reshaped_hidden_state,)
 
             if output_attentions:

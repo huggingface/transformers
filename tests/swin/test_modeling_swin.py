@@ -308,6 +308,35 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
                     [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
                 )
 
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        output = outputs[0]
+
+        hidden_states = outputs.hidden_states[0]
+        batch_size, num_channels, height, width = hidden_states.shape
+        hidden_states = hidden_states.view(batch_size, num_channels, height * width).permute(0, 2, 1)
+        attentions = outputs.attentions[0]
+
+        hidden_states.retain_grad()
+        attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(hidden_states.grad)
+        self.assertIsNotNone(attentions.grad)
+
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
