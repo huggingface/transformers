@@ -138,15 +138,30 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         return tf.cast(tf.constant(-1e9), dtype)
 
     def _split_heads(self, hidden_states: tf.Tensor, rotary: bool) -> tf.Tensor:
-        new_shape = shape_list(hidden_states)[:2] + [self.num_attention_heads, self.head_dim]
+        """
+        Splits hidden dim into attn_head_size and num_attention_heads
+        """
+        new_shape = shape_list(hidden_states)[:-1] + [self.num_attention_heads, self.head_dim]
         hidden_states = tf.reshape(hidden_states, new_shape)
         if rotary:
             return hidden_states
-        return tf.transpose(hidden_states, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
+        if len(shape_list(hidden_states)) == 4:
+            return tf.transpose(hidden_states, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
+        if len(shape_list(hidden_states)) == 5:
+            return tf.transpose(hidden_states, (0, 1, 3, 2, 4))  # (batch, blocks, head, block_length, head_features)
+        raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(shape_list(hidden_states))}")
 
     def _merge_heads(self, hidden_states: tf.Tensor) -> tf.Tensor:
-        hidden_states = tf.transpose(hidden_states, (0, 2, 1, 3))
-        new_shape = shape_list(hidden_states)[:2] + [self.num_attention_heads * self.head_dim]
+        """
+        Merges attn_head_size dim and num_attn_heads dim into hidden dim
+        """
+        if len(shape_list(hidden_states)) == 4:
+            hidden_states = tf.transpose(hidden_states, (0, 2, 1, 3))
+        elif len(shape_list(hidden_states)) == 5:
+            hidden_states = tf.transpose(hidden_states, (0, 1, 3, 2, 4))
+        else:
+            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(shape_list(hidden_states))}")
+        new_shape = shape_list(hidden_states)[:-2] + [self.num_attention_heads * self.head_dim]
         return tf.reshape(hidden_states, new_shape)
 
     def _attn(
@@ -312,7 +327,10 @@ class TFGPTJBlock(tf.keras.layers.Layer):
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = attn_output + feed_forward_hidden_states + residual
 
-        outputs = (hidden_states,) + outputs
+        if use_cache:
+            outputs = (hidden_states,) + outputs
+        else:
+            outputs = (hidden_states,) + outputs[1:]
         return outputs  # hidden_states, present, (attentions)
 
 
@@ -477,12 +495,12 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
                 training=inputs["training"],
             )
 
-            hidden_states, present = outputs[:2]
+            hidden_states = outputs[0]
             if inputs["use_cache"]:
-                presents = presents + (present,)
+                presents = presents + (outputs[1],)
 
             if inputs["output_attentions"]:
-                all_attentions = all_attentions + (outputs[2],)
+                all_attentions = all_attentions + (outputs[2 if inputs["use_cache"] else 1],)
 
         hidden_states = self.ln_f(hidden_states)
 
@@ -797,6 +815,12 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
         training=False,
         **kwargs,
     ):
+        r"""
+        labels (`np.ndarray` or `tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
+            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        """
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -913,7 +937,7 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
         **kwargs,
     ):
         r"""
-        labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+        labels (`np.ndarray` or `tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
@@ -1056,11 +1080,11 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
         **kwargs,
     ):
         r"""
-        start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+        start_positions (`np.ndarray` or `tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
-        end_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+        end_positions (`np.ndarray` or `tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
