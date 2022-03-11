@@ -48,7 +48,8 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
     config_class = DecisionTransformerConfig
     # load_tf_weights = load_tf_weights_in_decision_transformer
     base_model_prefix = "decision_transformer"
-    supports_gradient_checkpointing = True
+    main_input_name = "states"
+    supports_gradient_checkpointing = False
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -115,7 +116,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         self.hidden_size = config.hidden_size
         # note: the only difference between this GPT2Model and the default Huggingface version
         # is that the positional embeddings are removed (since we'll add those ourselves)
-        self.transformer = GPT2Model(config)
+        self.encoder = GPT2Model(config)
 
         self.embed_timestep = nn.Embedding(config.max_ep_len, config.hidden_size)
         self.embed_return = torch.nn.Linear(1, config.hidden_size)
@@ -148,7 +149,16 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         returns_to_go=None,
         timesteps=None,
         attention_mask=None,
+        output_hidden_states=None,
+        output_attentions=None,
+        return_dict=None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         batch_size, seq_length = states.shape[0], states.shape[1]
 
         if attention_mask is None:
@@ -181,13 +191,17 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
             .permute(0, 2, 1)
             .reshape(batch_size, 3 * seq_length)
         )
-
+        device = stacked_inputs.device
         # we feed in the input embeddings (not word indices as in NLP) to the model
-        transformer_outputs = self.transformer(
+        encoder_outputs = self.encoder(
             inputs_embeds=stacked_inputs,
             attention_mask=stacked_attention_mask,
+            position_ids=torch.zeros(stacked_attention_mask.shape, device=device, dtype=torch.long),
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
-        x = transformer_outputs["last_hidden_state"]
+        x = encoder_outputs[0]
 
         # reshape x so that the second dimension corresponds to the original
         # returns (0), states (1), or actions (2); i.e. x[:,1,t] is the token for s_t
@@ -197,10 +211,14 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         return_preds = self.predict_return(x[:, 2])  # predict next return given state and action
         state_preds = self.predict_state(x[:, 2])  # predict next state given state and action
         action_preds = self.predict_action(x[:, 1])  # predict next action given state
+        if not return_dict:
+            return (state_preds, action_preds, return_preds)
 
         return DecisionTransformerOutput(
-            last_hidden_state=transformer_outputs["last_hidden_state"],
+            last_hidden_state=encoder_outputs.last_hidden_state,
             state_preds=state_preds,
             action_preds=action_preds,
             return_preds=return_preds,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
