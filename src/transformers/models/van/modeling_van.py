@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Van model."""
+""" PyTorch Visual Attention Network (VAN) model."""
 
 import math
 from collections import OrderedDict
@@ -52,7 +52,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 VAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "zuppif/van-base",
-    # See all van models at https://huggingface.co/models?filter=van
+    # See all VAN models at https://huggingface.co/models?filter=van
 ]
 
 
@@ -147,9 +147,8 @@ class VanDropPath(nn.Module):
 
 class VanOverlappingPatchEmbedder(nn.Sequential):
     """
-    Downsamples the input using a patchfy operation with a `stride` of 4 by default making adjacent windows overlap by
-    half of the area. From [PVTv2: Improved Baselines with Pyramid Vision
-    Transformer](https://arxiv.org/abs/2106.13797).
+    Downsamples the input using a patchify operation with a `stride` of 4 by default making adjacent windows overlap by
+    half of the area. From [PVTv2: Improved Baselines with Pyramid Vision Transformer](https://arxiv.org/abs/2106.13797).
     """
 
     def __init__(self, in_channels: int, hidden_size: int, patch_size: int = 7, stride: int = 4):
@@ -213,7 +212,7 @@ class VanLargeKernelAttentionLayer(nn.Module):
 class VanSpatialAttentionLayer(nn.Module):
     """
     Van spatial attention layer composed by projection (via conv) -> act -> Large Kernel Attention (LKA) attention ->
-    projection (via conv) + residual connetion.
+    projection (via conv) + residual connection.
     """
 
     def __init__(self, hidden_size: int, hidden_act: str = "gelu"):
@@ -439,7 +438,7 @@ VAN_INPUTS_DOCSTRING = r"""
             [`AutoFeatureExtractor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            Whether or not to return the hidden states of all stages. See `hidden_states` under returned tensors for
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
@@ -447,7 +446,7 @@ VAN_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Van model outputting raw features without any specific head on top. Note, van does not have an embedding layer.",
+    "The bare VAN model outputting raw features without any specific head on top. Note, VAN does not have an embedding layer.",
     VAN_START_DOCSTRING,
 )
 class VanModel(VanPreTrainedModel):
@@ -496,7 +495,7 @@ class VanModel(VanPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Van Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    VAN Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
     """,
     VAN_START_DOCSTRING,

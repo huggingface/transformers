@@ -25,8 +25,6 @@ _import_structure = {
     "configuration_van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
 }
 
-if is_vision_available():
-    _import_structure["feature_extraction_van"] = ["VanFeatureExtractor"]
 
 if is_torch_available():
     _import_structure["modeling_van"] = [
@@ -39,8 +37,6 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
 
-    if is_vision_available():
-        from .feature_extraction_van import VanFeatureExtractor
 
     if is_torch_available():
         from .modeling_van import (

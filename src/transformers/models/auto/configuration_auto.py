@@ -222,7 +222,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("maskformer", "MaskFormer"),
         ("poolformer", "PoolFormer"),
         ("convnext", "ConvNext"),
-        ("van", "van"),
+        ("van", "VAN"),
         ("yoso", "YOSO"),
         ("swin", "Swin"),
         ("vilt", "ViLT"),

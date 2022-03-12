@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ConvNeXT model configuration"""
+""" VAN model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -27,9 +27,9 @@ VAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class VanConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VanModel`]. It is used to instantiate a Van model
+    This is the configuration class to store the configuration of a [`VanModel`]. It is used to instantiate a VAN model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ConvNeXT [van-base](https://huggingface.co/van-base)
+    defaults will yield a similar configuration to that of the VAN [van-base](https://huggingface.co/van-base)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -37,7 +37,7 @@ class VanConfig(PretrainedConfig):
 
     Args:
         image_size (`int`, *optional*, defaults to 224):
-            The image size the network is train on.
+            The size (resolution) of each image.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         patch_sizes (`List[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
@@ -51,7 +51,7 @@ class VanConfig(PretrainedConfig):
         mlp_expansions (`List[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
             The expansion factor for mlp layer at each stage.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
+            The non-linear activation function (function or string) in each layer. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -68,7 +68,7 @@ class VanConfig(PretrainedConfig):
     ```python
     >>> from transformers import VanModel, VanConfig
 
-    >>> # Initializing a Van van-base style configuration
+    >>> # Initializing a VAN van-base style configuration
     >>> configuration = VanConfig()
     >>> # Initializing a model from the van-base style configuration
     >>> model = VanModel(configuration)
