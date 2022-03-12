@@ -1310,6 +1310,14 @@ You can also enable/disable this mode explicitly:
 }
 ```
 
+<Tip>
+
+As of `deepspeed==0.6.0` the bf16 support is new and experimental.
+
+If you use [gradient accumulation](#gradient-accumulation) with bf16-enabled, you need to be aware that it'll accumulate gradients in bf16, which may not be what you want due to this format's low precision, as it may lead to a lossy accumulation.
+
+</Tip>
+
 
 ### apex
 
