@@ -99,8 +99,8 @@ class CLIPOutput(ModelOutput):
     logits_per_text: Optional[torch.FloatTensor] = None
     text_embeds: Optional[torch.FloatTensor] = None
     image_embeds: Optional[torch.FloatTensor] = None
-    text_model_output: Optional[BaseModelOutputWithPooling] = None
-    vision_model_output: Optional[BaseModelOutputWithPooling] = None
+    text_model_output: BaseModelOutputWithPooling = None
+    vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
@@ -915,10 +915,10 @@ class CLIPModel(CLIPPreTrainedModel):
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
     def get_image_features(
         self,
-        pixel_values=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
