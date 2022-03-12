@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PyTorch GPT-J model."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -448,7 +448,7 @@ DEPARALLELIZE_DOCSTRING = r"""
     GPTJ_START_DOCSTRING,
 )
 class GPTJModel(GPTJPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTJConfig):
         super().__init__(config)
 
         self.embed_dim = config.n_embd
@@ -690,7 +690,7 @@ class GPTJModel(GPTJPreTrainedModel):
 class GPTJForCausalLM(GPTJPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
 
-    def __init__(self, config):
+    def __init__(self, config: GPTJConfig):
         super().__init__(config)
         self.transformer = GPTJModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
