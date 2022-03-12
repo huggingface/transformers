@@ -271,7 +271,9 @@ class VanLayer(nn.Module):
         self.attention = VanSpatialAttentionLayer(hidden_size, config.hidden_act)
         self.attention_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
         self.post_norm = nn.BatchNorm2d(hidden_size)
-        self.mlp = VanMlpLayer(hidden_size, hidden_size * mlp_expansion, hidden_size, config.hidden_act, config.dropout_rate)
+        self.mlp = VanMlpLayer(
+            hidden_size, hidden_size * mlp_expansion, hidden_size, config.hidden_act, config.dropout_rate
+        )
         self.mlp_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
 
     def forward(self, hidden_state):
@@ -369,9 +371,6 @@ class VanEncoder(nn.Module):
                     depth=depth,
                     mlp_expansion=mlp_expantion,
                     drop_path_rate=drop_path_rate,
-                    dropout_rate=config.dropout_rate,
-                    layer_norm_eps=config.layer_norm_eps,
-                    layer_scale_init_value=config.layer_scale_init_value,
                 )
             )
 
