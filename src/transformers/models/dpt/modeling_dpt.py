@@ -424,8 +424,14 @@ class DPTReassembleStage(nn.Module):
 
         self.config = config
         self.layers = nn.ModuleList()
+        in_size = config.image_size // config.patch_size
+        target_sizes = [in_size**4, in_size**2, in_size, in_size**0.5]
         for i in range(len(config.neck_hidden_sizes)):
-            self.layers.append(DPTReassembleLayer(config, channels=config.neck_hidden_sizes[i]))
+            self.layers.append(
+                DPTReassembleLayer(
+                    config, channels=config.neck_hidden_sizes[i], in_size=in_size, target_size=target_sizes[i]
+                )
+            )
 
         if config.readout_type == "project":
             self.readout_projects = nn.ModuleList()
@@ -469,14 +475,14 @@ class DPTReassembleStage(nn.Module):
 
 
 class DPTReassembleLayer(nn.Module):
-    def __init__(self, config, channels, target_size, in_size):
+    def __init__(self, config, channels, in_size, target_size):
         super().__init__()
         # projection
         self.project = nn.Conv2d(in_channels=config.hidden_size, out_channels=channels, kernel_size=1)
 
         # resize
-        should_upsample = in_size > target_size
-        factor = in_size % target_size
+        should_upsample = target_size > in_size
+        factor = target_size // in_size if should_upsample else in_size // target_size
         if should_upsample:
             self.resizer = nn.ConvTranspose2d(channels, channels, kernel_size=factor, stride=factor, padding=0)
         elif factor == 0:
