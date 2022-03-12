@@ -688,7 +688,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [-5.6816, -5.8388, 1.1398, -6.9034, 6.8505, -2.4393, 1.2284, -1.0232, -1.9661, -3.9210]
+            [-5.6844, -5.8372, 1.1518, -6.8984, 6.8587, -2.4453, 1.2347, -1.0241, -1.9649, -3.9109]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-4))
