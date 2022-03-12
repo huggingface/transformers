@@ -82,6 +82,7 @@ config_common_kwargs = {
     "eos_token_id": 8,
     "sep_token_id": 9,
     "decoder_start_token_id": 10,
+    "exponential_decay_length_penalty": (5, 1.01),
     "task_specific_params": {"translation": "some_params"},
     "problem_type": "regression",
 }
@@ -334,8 +335,12 @@ class ConfigurationVersioningTest(unittest.TestCase):
         import transformers as new_transformers
 
         new_transformers.configuration_utils.__version__ = "v4.0.0"
-        new_configuration = new_transformers.models.auto.AutoConfig.from_pretrained(repo)
+        new_configuration, kwargs = new_transformers.models.auto.AutoConfig.from_pretrained(
+            repo, return_unused_kwargs=True
+        )
         self.assertEqual(new_configuration.hidden_size, 2)
+        # This checks `_configuration_file` ia not kept in the kwargs by mistake.
+        self.assertDictEqual(kwargs, {"_from_auto": True})
 
         # Testing an older version by monkey-patching the version in the module it's used.
         import transformers as old_transformers

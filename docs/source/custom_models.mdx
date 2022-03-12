@@ -213,6 +213,12 @@ code of the model is saved.
 
 ## Sending the code to the Hub
 
+<Tip warning={true}>
+
+This API is experimental and may have some slight breaking changes in the next releases.
+
+</Tip>
+
 First, make sure your model is fully defined in a `.py` file. It can rely on relative imports to some other files as
 long as all the files are in the same directory (we don't support submodules for this feature yet). For our example,
 we'll define a `modeling_resnet.py` file and a `configuration_resnet.py` file in a folder of the current working
@@ -298,8 +304,9 @@ See the [sharing tutorial](model_sharing) for more information on the push to Hu
 ## Using a model with custom code
 
 You can use any configuration, model or tokenizer with custom code files in its repository with the auto-classes and
-the `from_pretrained` method. The only thing is that you have to add an extra argument to make sure you have read the
-online code and trust the author of that model, to avoid executing malicious code on your machine:
+the `from_pretrained` method. All files and code uploaded to the Hub are scanned for malware (refer to the [Hub security](https://huggingface.co/docs/hub/security#malware-scanning) documentation for more information), but you should still 
+review the model code and author to avoid executing malicious code on your machine. Set `trust_remote_code=True` to use
+a model with custom code:
 
 ```py
 from transformers import AutoModelForImageClassification

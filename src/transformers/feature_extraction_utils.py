@@ -26,9 +26,11 @@ import numpy as np
 
 from requests import HTTPError
 
+from .dynamic_module_utils import custom_object_save
 from .file_utils import (
     FEATURE_EXTRACTOR_NAME,
     EntryNotFoundError,
+    PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
     TensorType,
@@ -36,6 +38,7 @@ from .file_utils import (
     _is_numpy,
     _is_torch_device,
     cached_path,
+    copy_func,
     hf_bucket_url,
     is_flax_available,
     is_offline_mode,
@@ -199,11 +202,13 @@ class BatchFeature(UserDict):
         return self
 
 
-class FeatureExtractionMixin:
+class FeatureExtractionMixin(PushToHubMixin):
     """
     This is a feature extraction mixin used to provide saving/loading functionality for sequential and image feature
     extractors.
     """
+
+    _auto_class = None
 
     def __init__(self, **kwargs):
         """Set elements of `kwargs` as attributes."""
@@ -305,7 +310,7 @@ class FeatureExtractionMixin:
 
         return cls.from_dict(feature_extractor_dict, **kwargs)
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike]):
+    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Save a feature_extractor object to the directory `save_directory`, so that it can be re-loaded using the
         [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] class method.
@@ -313,15 +318,42 @@ class FeatureExtractionMixin:
         Args:
             save_directory (`str` or `os.PathLike`):
                 Directory where the feature extractor JSON file will be saved (will be created if it does not exist).
+            push_to_hub (`bool`, *optional*, defaults to `False`):
+                Whether or not to push your feature extractor to the Hugging Face model hub after saving it.
+
+                <Tip warning={true}>
+
+                Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
+                which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
+                folder. Pass along `temp_dir=True` to use a temporary directory instead.
+
+                </Tip>
+
+            kwargs:
+                Additional key word arguments passed along to the [`~file_utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
+
+        if push_to_hub:
+            commit_message = kwargs.pop("commit_message", None)
+            repo = self._create_or_get_repo(save_directory, **kwargs)
+
+        # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self._auto_class is not None:
+            custom_object_save(self, save_directory, config=self)
+
         os.makedirs(save_directory, exist_ok=True)
         # If we save using the predefined names, we can load using `from_pretrained`
         output_feature_extractor_file = os.path.join(save_directory, FEATURE_EXTRACTOR_NAME)
 
         self.to_json_file(output_feature_extractor_file)
-        logger.info(f"Configuration saved in {output_feature_extractor_file}")
+        logger.info(f"Feature extractor saved in {output_feature_extractor_file}")
+
+        if push_to_hub:
+            url = self._push_to_hub(repo, commit_message=commit_message)
+            logger.info(f"Feature extractor pushed to the hub in this commit: {url}")
 
     @classmethod
     def get_feature_extractor_dict(
@@ -380,36 +412,31 @@ class FeatureExtractionMixin:
                 user_agent=user_agent,
             )
 
-        except RepositoryNotFoundError as err:
-            logger.error(err)
+        except RepositoryNotFoundError:
             raise EnvironmentError(
                 f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier listed on "
                 "'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token having "
                 "permission to this repo with `use_auth_token` or log in with `huggingface-cli login` and pass "
                 "`use_auth_token=True`."
             )
-        except RevisionNotFoundError as err:
-            logger.error(err)
+        except RevisionNotFoundError:
             raise EnvironmentError(
                 f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
                 f"model name. Check the model page at 'https://huggingface.co/{pretrained_model_name_or_path}' for "
                 "available revisions."
             )
-        except EntryNotFoundError as err:
-            logger.error(err)
+        except EntryNotFoundError:
             raise EnvironmentError(
                 f"{pretrained_model_name_or_path} does not appear to have a file named {FEATURE_EXTRACTOR_NAME}."
             )
-        except HTTPError as err:
-            logger.error(err)
+        except HTTPError:
             raise EnvironmentError(
                 "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
                 f"{pretrained_model_name_or_path} is not the path to a directory conaining a "
                 f"{FEATURE_EXTRACTOR_NAME} file.\nCheckout your internet connection or see how to run the library in "
                 "offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
             )
-        except EnvironmentError as err:
-            logger.error(err)
+        except EnvironmentError:
             raise EnvironmentError(
                 f"Can't load feature extractor for '{pretrained_model_name_or_path}'. If you were trying to load it "
                 "from 'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
@@ -539,3 +566,35 @@ class FeatureExtractionMixin:
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="AutoFeatureExtractor"):
+        """
+        Register this class with a given auto class. This should only be used for custom feature extractors as the ones
+        in the library are already mapped with `AutoFeatureExtractor`.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"AutoFeatureExtractor"`):
+                The auto class to register this new feature extractor with.
+        """
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
+        cls._auto_class = auto_class
+
+
+FeatureExtractionMixin.push_to_hub = copy_func(FeatureExtractionMixin.push_to_hub)
+FeatureExtractionMixin.push_to_hub.__doc__ = FeatureExtractionMixin.push_to_hub.__doc__.format(
+    object="feature extractor", object_class="AutoFeatureExtractor", object_files="feature extractor file"
+)

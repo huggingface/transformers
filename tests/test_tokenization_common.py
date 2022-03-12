@@ -3812,7 +3812,9 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
             with open(os.path.join(tmp_dir, "tokenizer_config.json")) as f:
                 tokenizer_config = json.load(f)
-            self.assertEqual(tokenizer_config["auto_map"], ["custom_tokenization.CustomTokenizer", None])
+            self.assertDictEqual(
+                tokenizer_config["auto_map"], {"AutoTokenizer": ["custom_tokenization.CustomTokenizer", None]}
+            )
 
             repo.push_to_hub()
 
@@ -3837,9 +3839,14 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
             with open(os.path.join(tmp_dir, "tokenizer_config.json")) as f:
                 tokenizer_config = json.load(f)
-            self.assertEqual(
+            self.assertDictEqual(
                 tokenizer_config["auto_map"],
-                ["custom_tokenization.CustomTokenizer", "custom_tokenization_fast.CustomTokenizerFast"],
+                {
+                    "AutoTokenizer": [
+                        "custom_tokenization.CustomTokenizer",
+                        "custom_tokenization_fast.CustomTokenizerFast",
+                    ]
+                },
             )
 
             repo.push_to_hub()

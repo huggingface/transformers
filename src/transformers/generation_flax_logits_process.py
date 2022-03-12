@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import inspect
-from abc import ABC
 
 import jax
 import jax.lax as lax
@@ -48,7 +47,7 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 """
 
 
-class FlaxLogitsProcessor(ABC):
+class FlaxLogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -59,7 +58,7 @@ class FlaxLogitsProcessor(ABC):
         )
 
 
-class FlaxLogitsWarper(ABC):
+class FlaxLogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -95,7 +94,7 @@ class FlaxLogitsProcessorList(list):
 
 class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
     r"""
-    [`LogitsWarper`] for temperature (exponential scaling output probability distribution).
+    [`FlaxLogitsWarper`] for temperature (exponential scaling output probability distribution).
 
     Args:
         temperature (`float`):
@@ -115,7 +114,7 @@ class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
 
 class FlaxTopPLogitsWarper(FlaxLogitsWarper):
     """
-    [`LogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
+    [`FlaxLogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
 
     Args:
         top_p (`float`):
@@ -156,7 +155,7 @@ class FlaxTopPLogitsWarper(FlaxLogitsWarper):
 
 class FlaxTopKLogitsWarper(FlaxLogitsWarper):
     r"""
-    [`LogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
+    [`FlaxLogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
 
     Args:
         top_k (`int`):

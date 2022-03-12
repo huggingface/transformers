@@ -162,7 +162,7 @@ and reply to the questions asked. Then
 accelerate test
 ```
 
-that will check everything is ready for training. Finally, you cna launch training with
+that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
 accelerate launch run_qa_no_trainer.py \

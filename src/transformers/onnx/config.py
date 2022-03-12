@@ -13,13 +13,29 @@
 # limitations under the License.
 import copy
 import dataclasses
+import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
-from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType, is_torch_available
+import numpy as np
+from packaging import version
 
+from ..file_utils import TensorType, is_torch_available, is_vision_available
+from ..utils import logging
 from .utils import ParameterFormat, compute_effective_axis_dimension, compute_serialized_parameters_size
+
+
+if TYPE_CHECKING:
+    from ..configuration_utils import PretrainedConfig
+    from ..feature_extraction_utils import FeatureExtractionMixin
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
+
+
+if is_vision_available():
+    from PIL import Image
+
+logger = logging.get_logger(__name__)
 
 
 DEFAULT_ONNX_OPSET = 11
@@ -54,10 +70,10 @@ class OnnxConfig(ABC):
     Base class for ONNX exportable model describing metadata on how to export the model through the ONNX format.
     """
 
-    DEFAULT_FIXED_BATCH = 2
-    DEFAULT_FIXED_SEQUENCE = 8
-
-    _TASKS_TO_COMMON_OUTPUTS = {
+    default_fixed_batch = 2
+    default_fixed_sequence = 8
+    torch_onnx_minimum_version = version.parse("1.8")
+    _tasks_to_common_outputs = {
         "default": OrderedDict({"last_hidden_state": {0: "batch", 1: "sequence"}}),
         "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "causal-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
@@ -71,14 +87,15 @@ class OnnxConfig(ABC):
                 "end_logits": {0: "batch", 1: "sequence"},
             }
         ),
+        "image-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
     }
 
-    def __init__(self, config: PretrainedConfig, task: str = "default", patching_specs: List[PatchingSpec] = None):
+    def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: List[PatchingSpec] = None):
         self._config = config
 
-        if task not in self._TASKS_TO_COMMON_OUTPUTS:
+        if task not in self._tasks_to_common_outputs:
             raise ValueError(
-                f"{task} is not a supported task, supported tasks: {self._TASKS_TO_COMMON_OUTPUTS.keys()}"
+                f"{task} is not a supported task, supported tasks: {self._tasks_to_common_outputs.keys()}"
             )
         self.task = task
 
@@ -90,7 +107,7 @@ class OnnxConfig(ABC):
             self._patching_specs.append(final_spec)
 
     @classmethod
-    def from_model_config(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfig":
+    def from_model_config(cls, config: "PretrainedConfig", task: str = "default") -> "OnnxConfig":
         """
         Instantiate a OnnxConfig for a specific model
 
@@ -121,7 +138,7 @@ class OnnxConfig(ABC):
         Returns:
             For each output: its name associated to the axes symbolic name and the axis position within the tensor
         """
-        common_outputs = self._TASKS_TO_COMMON_OUTPUTS[self.task]
+        common_outputs = self._tasks_to_common_outputs[self.task]
         return copy.deepcopy(common_outputs)
 
     @property
@@ -146,7 +163,7 @@ class OnnxConfig(ABC):
             Integer > 0
         """
         # Using 2 avoid ONNX making assumption about single sample batch
-        return OnnxConfig.DEFAULT_FIXED_BATCH
+        return OnnxConfig.default_fixed_batch
 
     @property
     def default_sequence_length(self) -> int:
@@ -156,7 +173,7 @@ class OnnxConfig(ABC):
         Returns:
             Integer > 0
         """
-        return OnnxConfig.DEFAULT_FIXED_SEQUENCE
+        return OnnxConfig.default_fixed_sequence
 
     @property
     def default_onnx_opset(self) -> int:
@@ -178,6 +195,21 @@ class OnnxConfig(ABC):
         """
         return 1e-5
 
+    @property
+    def is_torch_support_available(self) -> bool:
+        """
+        The minimum PyTorch version required to export the model.
+
+        Returns:
+            `bool`: Whether the installed version of PyTorch is compatible with the model.
+        """
+        if is_torch_available():
+            from transformers.file_utils import torch_version
+
+            return torch_version >= self.torch_onnx_minimum_version
+        else:
+            return False
+
     @staticmethod
     def use_external_data_format(num_parameters: int) -> bool:
         """
@@ -195,42 +227,85 @@ class OnnxConfig(ABC):
             >= EXTERNAL_DATA_FORMAT_SIZE_LIMIT
         )
 
+    def _generate_dummy_images(
+        self, batch_size: int = 2, num_channels: int = 3, image_height: int = 40, image_width: int = 40
+    ):
+        images = []
+        for _ in range(batch_size):
+            data = np.random.rand(image_height, image_width, num_channels) * 255
+            images.append(Image.fromarray(data.astype("uint8")).convert("RGB"))
+        return images
+
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
+        num_channels: int = 3,
+        image_width: int = 40,
+        image_height: int = 40,
+        tokenizer: "PreTrainedTokenizerBase" = None,
     ) -> Mapping[str, Any]:
         """
         Generate inputs to provide to the ONNX exporter for the specific framework
 
         Args:
-            tokenizer: The tokenizer associated with this model configuration
-            batch_size: The batch size (int) to export the model for (-1 means dynamic axis)
-            seq_length: The sequence length (int) to export the model for (-1 means dynamic axis)
-            is_pair: Indicate if the input is a pair (sentence 1, sentence 2)
-            framework: The framework (optional) the tokenizer will generate tensor for
+            preprocessor: ([`PreTrainedTokenizerBase`] or [`FeatureExtractionMixin`]):
+                The preprocessor associated with this model configuration.
+            batch_size (`int`, *optional*, defaults to -1):
+                The batch size to export the model for (-1 means dynamic axis).
+            seq_length (`int`, *optional*, defaults to -1):
+                The sequence length to export the model for (-1 means dynamic axis).
+            is_pair (`bool`, *optional*, defaults to `False`):
+                Indicate if the input is a pair (sentence 1, sentence 2)
+            framework (`TensorType`, *optional*, defaults to `None`):
+                The framework (PyTorch or TensorFlow) that the tokenizer will generate tensors for.
+            num_channels (`int`, *optional*, defaults to 3):
+                The number of channels of the generated images.
+            image_width (`int`, *optional*, defaults to 40):
+                The width of the generated images.
+            image_height (`int`, *optional*, defaults to 40):
+                The height of the generated images.
 
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
         """
+        from ..feature_extraction_utils import FeatureExtractionMixin
+        from ..tokenization_utils_base import PreTrainedTokenizerBase
 
-        # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
-        batch_size = compute_effective_axis_dimension(
-            batch_size, fixed_dimension=OnnxConfig.DEFAULT_FIXED_BATCH, num_token_to_add=0
-        )
-
-        # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
-        token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
-        seq_length = compute_effective_axis_dimension(
-            seq_length, fixed_dimension=OnnxConfig.DEFAULT_FIXED_SEQUENCE, num_token_to_add=token_to_add
-        )
-
-        # Generate dummy inputs according to compute batch and sequence
-        dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
-        return dict(tokenizer(dummy_input, return_tensors=framework))
+        if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
+            raise ValueError("You cannot provide both a tokenizer and a preprocessor to generate dummy inputs.")
+        if tokenizer is not None:
+            warnings.warn(
+                "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use `preprocessor` instead.",
+                FutureWarning,
+            )
+            logger.warning("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
+            preprocessor = tokenizer
+        if isinstance(preprocessor, PreTrainedTokenizerBase):
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(
+                batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
+            )
+            # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
+            token_to_add = preprocessor.num_special_tokens_to_add(is_pair)
+            seq_length = compute_effective_axis_dimension(
+                seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
+            )
+            # Generate dummy inputs according to compute batch and sequence
+            dummy_input = [" ".join([preprocessor.unk_token]) * seq_length] * batch_size
+            return dict(preprocessor(dummy_input, return_tensors=framework))
+        elif isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "pixel_values":
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
+            dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
+            return dict(preprocessor(images=dummy_input, return_tensors=framework))
+        else:
+            raise ValueError(
+                "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
+            )
 
     def patch_ops(self):
         for spec in self._patching_specs:
@@ -264,7 +339,7 @@ class OnnxConfig(ABC):
 class OnnxConfigWithPast(OnnxConfig, ABC):
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: "PretrainedConfig",
         task: str = "default",
         patching_specs: List[PatchingSpec] = None,
         use_past: bool = False,
@@ -273,7 +348,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         self.use_past = use_past
 
     @classmethod
-    def with_past(cls, config: PretrainedConfig, task: str = "default") -> "OnnxConfigWithPast":
+    def with_past(cls, config: "PretrainedConfig", task: str = "default") -> "OnnxConfigWithPast":
         """
         Instantiate a OnnxConfig with `use_past` attribute set to True
 
@@ -326,7 +401,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: "PreTrainedTokenizerBase",
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
@@ -445,7 +520,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: "PreTrainedTokenizerBase",
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,

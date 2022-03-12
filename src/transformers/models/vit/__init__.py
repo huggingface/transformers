@@ -21,7 +21,7 @@ from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_to
 
 
 _import_structure = {
-    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig", "ViTOnnxConfig"],
 }
 
 if is_vision_available():
@@ -31,6 +31,7 @@ if is_torch_available():
     _import_structure["modeling_vit"] = [
         "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ViTForImageClassification",
+        "ViTForMaskedImageModeling",
         "ViTModel",
         "ViTPreTrainedModel",
     ]
@@ -50,7 +51,7 @@ if is_flax_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig, ViTOnnxConfig
 
     if is_vision_available():
         from .feature_extraction_vit import ViTFeatureExtractor
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
         from .modeling_vit import (
             VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTForImageClassification,
+            ViTForMaskedImageModeling,
             ViTModel,
             ViTPreTrainedModel,
         )

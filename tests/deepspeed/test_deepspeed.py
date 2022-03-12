@@ -21,6 +21,7 @@ import unittest
 from copy import deepcopy
 
 from parameterized import parameterized
+from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available
 from transformers.file_utils import WEIGHTS_NAME, is_torch_bf16_available
@@ -28,7 +29,6 @@ from transformers.testing_utils import (
     CaptureLogger,
     CaptureStd,
     CaptureStderr,
-    ExtendSysPath,
     LoggingLevel,
     TestCasePlus,
     execute_subprocess_async,
@@ -42,13 +42,12 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import get_last_checkpoint, set_seed
 
 
-tests_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-root_dir = os.path.dirname(tests_dir)
-with ExtendSysPath(tests_dir):
-    from test_trainer import TrainerIntegrationCommon  # noqa
-
-    if is_torch_available():
-        from test_trainer import RegressionModelConfig, RegressionPreTrainedModel, get_regression_trainer  # noqa
+if is_torch_available():
+    from tests.trainer.test_trainer import (  # noqa
+        RegressionModelConfig,
+        RegressionPreTrainedModel,
+        get_regression_trainer,
+    )
 
 
 set_seed(42)

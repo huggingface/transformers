@@ -192,8 +192,6 @@ accelerate test
 that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
-export TASK_NAME=mrpc
-
 accelerate launch run_translation_no_trainer.py \
     --model_name_or_path Helsinki-NLP/opus-mt-en-ro \
     --source_lang en \

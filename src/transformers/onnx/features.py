@@ -12,10 +12,12 @@ from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.ibert import IBertOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
+from ..models.m2m_100 import M2M100OnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
 from ..models.roberta import RobertaOnnxConfig
 from ..models.t5 import T5OnnxConfig
+from ..models.vit import ViTOnnxConfig
 from ..models.xlm_roberta import XLMRobertaOnnxConfig
 from ..utils import logging
 from .config import OnnxConfig
@@ -27,6 +29,7 @@ if is_torch_available():
     from transformers.models.auto import (
         AutoModel,
         AutoModelForCausalLM,
+        AutoModelForImageClassification,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
         AutoModelForQuestionAnswering,
@@ -89,6 +92,7 @@ class FeaturesManager:
             "token-classification": AutoModelForTokenClassification,
             "multiple-choice": AutoModelForMultipleChoice,
             "question-answering": AutoModelForQuestionAnswering,
+            "image-classification": AutoModelForImageClassification,
         }
     elif is_tf_available():
         _TASKS_TO_AUTOMODELS = {
@@ -184,6 +188,9 @@ class FeaturesManager:
             "causal-lm-with-past",
             onnx_config_cls=MarianOnnxConfig,
         ),
+        "m2m-100": supported_features_mapping(
+            "default", "default-with-past", "seq2seq-lm", "seq2seq-lm-with-past", onnx_config_cls=M2M100OnnxConfig
+        ),
         "roberta": supported_features_mapping(
             "default",
             "masked-lm",
@@ -240,6 +247,7 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls=ElectraOnnxConfig,
         ),
+        "vit": supported_features_mapping("default", "image-classification", onnx_config_cls=ViTOnnxConfig),
     }
 
     AVAILABLE_FEATURES = sorted(reduce(lambda s1, s2: s1 | s2, (v.keys() for v in _SUPPORTED_MODEL_TYPE.values())))
@@ -303,8 +311,16 @@ class FeaturesManager:
             The instance of the model.
 
         """
+        # If PyTorch and TensorFlow are installed in the same environment, we
+        # load an AutoModel class by default
         model_class = FeaturesManager.get_model_class_for_feature(feature)
-        return model_class.from_pretrained(model)
+        try:
+            model = model_class.from_pretrained(model)
+        # Load TensorFlow weights in an AutoModel instance if PyTorch and
+        # TensorFlow are installed in the same environment
+        except OSError:
+            model = model_class.from_pretrained(model, from_tf=True)
+        return model
 
     @staticmethod
     def check_supported_model_or_raise(

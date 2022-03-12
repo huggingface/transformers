@@ -182,6 +182,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             preprocess_params["doc_stride"] = doc_stride
         if max_question_len is not None:
             preprocess_params["max_question_len"] = max_question_len
+        if max_seq_len is not None:
+            preprocess_params["max_seq_len"] = max_seq_len
 
         postprocess_params = {}
         if topk is not None and top_k is None:

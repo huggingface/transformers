@@ -892,7 +892,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            with deepspeed.zero.GatheredParameters(old_lm_head.weight, modifier_rank=0):
+            params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
+            with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 if torch.distributed.get_rank() == 0:
                     # Copy old lm head weights to new lm head
                     if not transposed:
@@ -1366,23 +1367,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     user_agent=user_agent,
                 )
 
-            except RepositoryNotFoundError as err:
-                logger.error(err)
+            except RepositoryNotFoundError:
                 raise EnvironmentError(
                     f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
                     "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a "
                     "token having permission to this repo with `use_auth_token` or log in with `huggingface-cli "
                     "login` and pass `use_auth_token=True`."
                 )
-            except RevisionNotFoundError as err:
-                logger.error(err)
+            except RevisionNotFoundError:
                 raise EnvironmentError(
                     f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for "
                     "this model name. Check the model page at "
                     f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
                 )
-            except EntryNotFoundError as err:
-                logger.error(err)
+            except EntryNotFoundError:
                 if filename == WEIGHTS_NAME:
                     has_file_kwargs = {
                         "revision": revision,
@@ -1403,7 +1401,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             "weights."
                         )
                     else:
-                        logger.error(err)
                         raise EnvironmentError(
                             f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME}, "
                             f"{TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
@@ -1412,8 +1409,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     raise EnvironmentError(
                         f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
                     )
-            except HTTPError as err:
-                logger.error(err)
+            except HTTPError:
                 raise EnvironmentError(
                     "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
                     f"{pretrained_model_name_or_path} is not the path to a directory conaining a a file named "
@@ -1421,8 +1417,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Checkout your internet connection or see how to run the library in offline mode at "
                     "'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
-            except EnvironmentError as err:
-                logger.error(err)
+            except EnvironmentError:
                 raise EnvironmentError(
                     f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it from "
                     "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
@@ -1586,8 +1581,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         loaded_keys = list(state_dict.keys())
         prefix = model.base_model_prefix
 
-        has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
-        expects_prefix_module = any(s.startswith(prefix) for s in expected_keys)
+        if len(prefix) > 0:
+            has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
+            expects_prefix_module = any(s.startswith(prefix) for s in expected_keys)
+        else:
+            has_prefix_module = False
+            expects_prefix_module = False
 
         # key re-naming operations are never done on the keys
         # that are loaded, but always on the keys of the newly initialized model
@@ -1675,9 +1674,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ""
         model_to_load = model
-        if not hasattr(model, cls.base_model_prefix) and has_prefix_module:
+        if len(cls.base_model_prefix) > 0 and not hasattr(model, cls.base_model_prefix) and has_prefix_module:
             start_prefix = cls.base_model_prefix + "."
-        if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
+        if len(cls.base_model_prefix) > 0 and hasattr(model, cls.base_model_prefix) and not has_prefix_module:
             model_to_load = getattr(model, cls.base_model_prefix)
             if any(key in expected_keys_not_prefixed for key in loaded_keys):
                 raise ValueError(
@@ -1820,6 +1819,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoModel"`):

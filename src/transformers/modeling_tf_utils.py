@@ -34,6 +34,7 @@ from tensorflow.python.keras.saving import hdf5_format
 from huggingface_hub import Repository, list_repo_files
 from requests import HTTPError
 
+from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .file_utils import (
@@ -54,6 +55,7 @@ from .file_utils import (
 )
 from .generation_tf_utils import TFGenerationMixin
 from .modeling_tf_outputs import TFSeq2SeqLMOutput
+from .tf_utils import shape_list
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
@@ -309,9 +311,10 @@ def booleans_processing(config, **kwargs):
     final_booleans = {}
 
     if tf.executing_eagerly():
-        final_booleans["output_attentions"] = (
-            kwargs["output_attentions"] if kwargs["output_attentions"] is not None else config.output_attentions
-        )
+        # Pure conv models (such as ConvNext) do not have `output_attentions`
+        final_booleans["output_attentions"] = kwargs.get("output_attentions", None)
+        if final_booleans["output_attentions"] is None:
+            final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = (
             kwargs["output_hidden_states"]
             if kwargs["output_hidden_states"] is not None
@@ -339,6 +342,46 @@ def booleans_processing(config, **kwargs):
             final_booleans["use_cache"] = getattr(config, "use_cache", None)
 
     return final_booleans
+
+
+def unpack_inputs(func):
+    """
+    Decorator that processes the inputs to a Keras layer, passing them to the layer as keyword arguments. This enables
+    downstream use of the inputs by their variable name, even if they arrive packed as a dictionary in the first input
+    (common case in Keras).
+
+    Args:
+        func (`callable`):
+            The callable function of the TensorFlow model.
+
+    Returns:
+        A callable that wraps the original `func` with the behavior described above.
+    """
+
+    original_signature = inspect.signature(func)
+
+    @functools.wraps(func)
+    def run_call_with_unpacked_inputs(self, *args, **kwargs):
+        # isolates the actual `**kwargs` for the decorated function
+        kwargs_call = {key: val for key, val in kwargs.items() if key not in dict(original_signature.parameters)}
+        fn_args_and_kwargs = {key: val for key, val in kwargs.items() if key not in kwargs_call}
+        fn_args_and_kwargs.update({"kwargs_call": kwargs_call})
+
+        # move any arg into kwargs, if they exist
+        fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames[1:], args)))
+
+        # process the inputs and call the wrapped function
+        main_input_name = getattr(self, "main_input_name", func.__code__.co_varnames[1])
+        main_input = fn_args_and_kwargs.pop(main_input_name)
+        unpacked_inputs = input_processing(func, self.config, main_input, **fn_args_and_kwargs)
+        return func(self, **unpacked_inputs)
+
+    # Keras enforces the first layer argument to be passed, and checks it through `inspect.getfullargspec()`. This
+    # function does not follow wrapper chains (i.e. ignores `functools.wraps()`), meaning that without the line below
+    # Keras would attempt to check the first argument against the literal signature of the wrapper.
+    run_call_with_unpacked_inputs.__signature__ = original_signature
+
+    return run_call_with_unpacked_inputs
 
 
 def input_processing(func, config, input_ids, **kwargs):
@@ -882,7 +925,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def train_step(self, data):
         """
-        A modification of Keras's default train_step that cleans up the printed metrics when we use a dummy loss.
+        A modification of Keras's default `train_step` that cleans up the printed metrics when we use a dummy loss. If
+        a user specifies a loss at model compile time, this function behaves as the original Keras `train_step`. In
+        this case, it expects the same `data` as the original function (i.e. `(inputs, labels)`).
+
+        However, when the model is compiled without specifying the loss AND the expected label columns are passed as
+        part of the input dictionary, the loss is computed internally (inside the model class) and is used in the
+        backwards pass. In this case, `data` is a singleton tuple containing `(inputs,)`.
+
+        This is possible under the aforementioned circumstances because our overriden compile function can set an
+        additional loss function that reduces a `loss` output, and the model will output a `loss` component (notice the
+        name matching) containing the loss that was used to train the pre-trained model.
         """
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
@@ -1135,6 +1188,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         return model_embeds
 
     def _get_word_embedding_weight(model, embedding_layer):
+        # If the variable holds the weights themselves, return them
+        if isinstance(embedding_layer, tf.Tensor):
+            return embedding_layer
+        # Otherwise, try to get them from the layer's attributes
+
         embeds = getattr(embedding_layer, "weight", None)
         if embeds is not None:
             return embeds
@@ -1583,23 +1641,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     user_agent=user_agent,
                 )
 
-            except RepositoryNotFoundError as err:
-                logger.error(err)
+            except RepositoryNotFoundError:
                 raise EnvironmentError(
                     f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
                     "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a "
                     "token having permission to this repo with `use_auth_token` or log in with `huggingface-cli "
                     "login` and pass `use_auth_token=True`."
                 )
-            except RevisionNotFoundError as err:
-                logger.error(err)
+            except RevisionNotFoundError:
                 raise EnvironmentError(
                     f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for "
                     "this model name. Check the model page at "
                     f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
                 )
-            except EntryNotFoundError as err:
-                logger.error(err)
+            except EntryNotFoundError:
                 if filename == TF2_WEIGHTS_NAME:
                     has_file_kwargs = {
                         "revision": revision,
@@ -1614,7 +1669,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                             "those weights."
                         )
                     else:
-                        logger.error(err)
                         raise EnvironmentError(
                             f"{pretrained_model_name_or_path} does not appear to have a file named {TF2_WEIGHTS_NAME} "
                             f"or {WEIGHTS_NAME}."
@@ -1623,8 +1677,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     raise EnvironmentError(
                         f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
                     )
-            except HTTPError as err:
-                logger.error(err)
+            except HTTPError:
                 raise EnvironmentError(
                     "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
                     f"{pretrained_model_name_or_path} is not the path to a directory conaining a a file named "
@@ -1632,8 +1685,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     "Checkout your internet connection or see how to run the library in offline mode at "
                     "'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 )
-            except EnvironmentError as err:
-                logger.error(err)
+            except EnvironmentError:
                 raise EnvironmentError(
                     f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it from "
                     "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
@@ -1952,9 +2004,11 @@ class TFSequenceSummary(tf.keras.layers.Layer):
                 num_classes, kernel_initializer=get_initializer(initializer_range), name="summary"
             )
 
-        self.has_activation = hasattr(config, "summary_activation") and config.summary_activation == "tanh"
-        if self.has_activation:
-            self.activation = tf.keras.activations.tanh
+        self.has_activation = False
+        activation_string = getattr(config, "summary_activation", None)
+        if activation_string is not None:
+            self.has_activation = True
+            self.activation = get_tf_activation(activation_string)
 
         self.has_first_dropout = hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0
         if self.has_first_dropout:
@@ -2021,6 +2075,12 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
 
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
+
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"TFAutoModel"`):
                 The auto class to register this new model with.
@@ -2034,29 +2094,6 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
-
-
-def shape_list(tensor: Union[tf.Tensor, np.ndarray]) -> List[int]:
-    """
-    Deal with dynamic shape in tensorflow cleanly.
-
-    Args:
-        tensor (`tf.Tensor` or `np.ndarray`): The tensor we want the shape of.
-
-    Returns:
-        `List[int]`: The shape of the tensor as a list.
-    """
-    if isinstance(tensor, np.ndarray):
-        return list(tensor.shape)
-
-    dynamic = tf.shape(tensor)
-
-    if tensor.shape == tf.TensorShape(None):
-        return dynamic
-
-    static = tensor.shape.as_list()
-
-    return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
 def get_initializer(initializer_range: float = 0.02) -> tf.initializers.TruncatedNormal:

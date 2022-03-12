@@ -506,20 +506,37 @@ BLENDERBOT_START_DOCSTRING = r"""
 """
 
 BLENDERBOT_GENERATION_EXAMPLE = r"""
-    Conversation example::
+    Conversation example:
 
-        >>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration >>> mname =
-        'facebook/blenderbot-400M-distill' >>> model = BlenderbotForConditionalGeneration.from_pretrained(mname) >>>
-        tokenizer = BlenderbotTokenizer.from_pretrained(mname) >>> UTTERANCE = "My friends are cool but they eat too
-        many carbs." >>> print("Human: ", UTTERANCE) >>> inputs = tokenizer([UTTERANCE], return_tensors='pt') >>>
-        reply_ids = model.generate(**inputs) >>> print("Bot: ", tokenizer.batch_decode(reply_ids,
-        skip_special_tokens=True)[0])
+    ```python
+    >>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
 
-        >>> REPLY = "I'm not sure" >>> print("Human: ", REPLY) >>> NEXT_UTTERANCE = ( ... "My friends are cool but they
-        eat too many carbs.</s> <s>That's unfortunate. " ... "Are they trying to lose weight or are they just trying to
-        be healthier?</s> " ... "<s> I'm not sure." ... ) >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='pt')
-        >>> next_reply_ids = model.generate(**inputs) >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids,
-        skip_special_tokens=True)[0])
+    >>> mname = "facebook/blenderbot-400M-distill"
+    >>> model = BlenderbotForConditionalGeneration.from_pretrained(mname)
+    >>> tokenizer = BlenderbotTokenizer.from_pretrained(mname)
+    >>> UTTERANCE = "My friends are cool but they eat too many carbs."
+    >>> print("Human: ", UTTERANCE)
+    Human:  My friends are cool but they eat too many carbs.
+
+    >>> inputs = tokenizer([UTTERANCE], return_tensors="pt")
+    >>> reply_ids = model.generate(**inputs)
+    >>> print("Bot: ", tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0])
+    Bot: That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?
+
+    >>> REPLY = "I'm not sure"
+    >>> print("Human: ", REPLY)
+    Human: I'm not sure
+
+    >>> NEXT_UTTERANCE = (
+    ...     "My friends are cool but they eat too many carbs.</s> <s>That's unfortunate. "
+    ...     "Are they trying to lose weight or are they just trying to be healthier?</s> "
+    ...     "<s> I'm not sure."
+    ... )
+    >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors="pt")
+    >>> next_reply_ids = model.generate(**inputs)
+    >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
+    Bot:   That's too bad. Have you tried encouraging them to change their eating habits?
+    ```
 """
 
 BLENDERBOT_INPUTS_DOCSTRING = r"""
@@ -586,11 +603,10 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-            shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
-            you can choose to directly pass an embedded representation. This is useful if you want more control over
-            how to convert `input_ids` indices into associated vectors than the model's internal embedding lookup
-            matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
+            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            can choose to directly pass an embedded representation. This is useful if you want more control over how to
+            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -907,8 +923,8 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
-                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
                 embedding lookup matrix.
@@ -1130,13 +1146,13 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         >>> model = BlenderbotModel.from_pretrained("facebook/blenderbot-400M-distill")
         >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
-        >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        >>> ).input_ids  # Batch size 1
+        >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        >>> outputs = model(input_ids=inputs.input_ids, decoder_input_ids=decoder_input_ids)
 
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 6, 1280]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1389,7 +1405,7 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot, facebook/bart-large->facebook/blenderbot-400M-distill
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot, facebook/bart-base->facebook/blenderbot-400M-distill
 class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)
@@ -1520,6 +1536,9 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

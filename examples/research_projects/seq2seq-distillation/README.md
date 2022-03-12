@@ -13,6 +13,10 @@ Author: Sam Shleifer (https://github.com/sshleifer)
 - `FSMTForConditionalGeneration`
 - `T5ForConditionalGeneration`
 
+# Note
+
+⚠️ This project should be run with pytorch-lightning==1.0.4 which has a potential security vulnerability
+
 ## Datasets
 
 #### XSUM
@@ -62,7 +66,7 @@ https://github.com/huggingface/transformers/tree/master/scripts/fsmt
 
 #### Pegasus (multiple datasets)
 
-Multiple eval datasets are available for download from: 
+Multiple eval datasets are available for download from:
 https://github.com/stas00/porting/tree/master/datasets/pegasus
 
 
@@ -210,7 +214,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(f'{output_dir}/best_tfmr')
 ### Converting pytorch-lightning checkpoints
 pytorch lightning ``-do_predict`` often fails, after you are done training, the best way to evaluate your model is to convert it.
 
-This should be done for you, with a file called `{save_dir}/best_tfmr`. 
+This should be done for you, with a file called `{save_dir}/best_tfmr`.
 
 If that file doesn't exist but you have a lightning `.ckpt` file, you can run
 ```bash
@@ -219,7 +223,7 @@ python convert_pl_checkpoint_to_hf.py PATH_TO_CKPT  randomly_initialized_hf_mode
 Then either `run_eval` or `run_distributed_eval` with `save_dir/best_tfmr` (see previous sections)
 
 
-# Experimental Features 
+# Experimental Features
 These features are harder to use and not always useful.
 
 ###  Dynamic Batch Size for MT
@@ -230,7 +234,7 @@ This feature can only be used:
 - without sortish sampler
 - after calling `./save_len_file.py $tok $data_dir`
 
-For example, 
+For example,
 ```bash
 ./save_len_file.py Helsinki-NLP/opus-mt-en-ro  wmt_en_ro
 ./dynamic_bs_example.sh --max_tokens_per_batch=2000 --output_dir benchmark_dynamic_bs
@@ -254,10 +258,10 @@ This section describes all code and artifacts from our [Paper](http://arxiv.org/
 ![DBART](https://huggingface.co/front/thumbnails/distilbart_large.png)
 
 + For the CNN/DailyMail dataset, (relatively longer, more extractive summaries), we found a simple technique that works, which we call "Shrink and Fine-tune", or SFT.
-you just copy alternating layers from `facebook/bart-large-cnn` and fine-tune more on the cnn/dm data. `sshleifer/distill-pegasus-cnn-16-4`, `sshleifer/distilbart-cnn-12-6` and all other checkpoints under `sshleifer` that start with `distilbart-cnn` were trained this way. 
+you just copy alternating layers from `facebook/bart-large-cnn` and fine-tune more on the cnn/dm data. `sshleifer/distill-pegasus-cnn-16-4`, `sshleifer/distilbart-cnn-12-6` and all other checkpoints under `sshleifer` that start with `distilbart-cnn` were trained this way.
 + For the XSUM dataset, training on pseudo-labels worked best for Pegasus (`sshleifer/distill-pegasus-16-4`), while training with KD worked best for `distilbart-xsum-12-6`
 + For `sshleifer/dbart-xsum-12-3`
-+ We ran 100s experiments, and didn't want to document 100s of commands. If you want a command to replicate a figure from the paper that is not documented below, feel free to ask on the [forums](https://discuss.huggingface.co/t/seq2seq-distillation-methodology-questions/1270) and tag `@sshleifer`. 
++ We ran 100s experiments, and didn't want to document 100s of commands. If you want a command to replicate a figure from the paper that is not documented below, feel free to ask on the [forums](https://discuss.huggingface.co/t/seq2seq-distillation-methodology-questions/1270) and tag `@sshleifer`.
 + You can see the performance tradeoffs of model sizes [here](https://docs.google.com/spreadsheets/d/1EkhDMwVO02m8jCD1cG3RoFPLicpcL1GQHTQjfvDYgIM/edit#gid=0).
 and more granular timing results [here](https://docs.google.com/spreadsheets/d/1EkhDMwVO02m8jCD1cG3RoFPLicpcL1GQHTQjfvDYgIM/edit#gid=1753259047&range=B2:I23).
 
@@ -303,10 +307,10 @@ deval 1 sshleifer/distill-pegasus-xsum-16-4 xsum dpx_xsum_eval
 + Find a teacher model [Pegasus](https://huggingface.co/models?search=pegasus) (slower, better ROUGE) or `facebook/bart-large-xsum`/`facebook/bart-large-cnn` (faster, slightly lower.).
 Choose the checkpoint where the corresponding dataset is most similar (or identical to) your dataset.
 + Follow the sections in order below. You can stop after SFT if you are satisfied, or move on to pseudo-labeling if you want more performance.
-+ student size: If you want a close to free 50% speedup, cut the decoder in half. If you want a larger speedup, cut it in 4. 
++ student size: If you want a close to free 50% speedup, cut the decoder in half. If you want a larger speedup, cut it in 4.
 + If your SFT run starts at a validation ROUGE-2 that is more than 10 pts below the teacher's validation ROUGE-2,  you have a bug. Switching to a more expensive technique will not help. Try setting a breakpoint and looking at generation and truncation defaults/hyper-parameters, and share your experience on the forums!
 
-  
+
 #### Initialization
 We use [make_student.py](./make_student.py) to copy alternating layers from the teacher, and save the resulting model to disk
 ```bash
@@ -319,7 +323,7 @@ python make_student.py google/pegasus-xsum --save_path dpx_xsum_16_4  --e 16 --d
 we now have an initialized student saved to  `dbart_xsum_12_3`, which we will use for the following commands.
 + Extension: To replicate more complicated initialize experiments in section 6.1, or try your own. Use the `create_student_by_copying_alternating_layers` function.
 
-#### Pegasus 
+#### Pegasus
 + The following commands are written for BART and will require, at minimum, the following modifications
 + reduce batch size, and increase gradient accumulation steps so that the product `gpus * batch size * gradient_accumulation_steps = 256`. We used `--learning-rate` = 1e-4 * gradient accumulation steps.
 + don't use fp16
@@ -379,7 +383,7 @@ python finetune.py \
   --output_dir dbart_xsum_12_3_PL --gpus 1 --logger_name wandb
 ```
 
- 
+
 
 To combine datasets, as in Section 6.2, try something like:
 ```bash
@@ -413,7 +417,7 @@ The command that produced `sshleifer/distilbart-xsum-12-6` is at [./train_distil
 
 ```bibtex
 @misc{shleifer2020pretrained,
-      title={Pre-trained Summarization Distillation}, 
+      title={Pre-trained Summarization Distillation},
       author={Sam Shleifer and Alexander M. Rush},
       year={2020},
       eprint={2010.13002},

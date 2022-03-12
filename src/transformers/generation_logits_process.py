@@ -15,8 +15,7 @@
 
 import inspect
 import math
-from abc import ABC
-from typing import Callable, Iterable, List, Optional
+from typing import Callable, Iterable, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -49,7 +48,7 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 """
 
 
-class LogitsProcessor(ABC):
+class LogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -60,7 +59,7 @@ class LogitsProcessor(ABC):
         )
 
 
-class LogitsWarper(ABC):
+class LogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -380,8 +379,9 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
 
     Args:
         bad_words_ids (`List[List[int]]`):
-            List of list of token ids that are not allowed to be generated. In order to get the tokens of the words
-            that should not appear in the generated text, use `tokenizer(bad_word, add_prefix_space=True).input_ids`.
+            List of list of token ids that are not allowed to be generated. In order to get the token ids of the words
+            that should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
+            add_special_tokens=False).input_ids`.
         eos_token_id (`int`):
             The id of the *end-of-sequence* token.
     """
@@ -646,4 +646,33 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
         # set all inf values to max possible value
         scores[scores == float("inf")] = torch.finfo(scores.dtype).max
 
+        return scores
+
+
+class ExponentialDecayLengthPenalty(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] that exponentially increases the score of the eos_token_id after regulation_start has been
+    reached.
+
+    Args:
+        exponential_decay_length_penalty (`tuple(int, float)`, *optional*):
+            This tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where penalty
+            starts and `decay_factor` represents the factor of exponential decay
+        eos_token_id (`int`):
+            The id of the *end-of-sequence* token.
+        input_ids_seq_length (`int`):
+            The length of the input sequence.
+    """
+
+    def __init__(self, exponential_decay_length_penalty: Tuple, eos_token_id: int, input_ids_seq_length: int):
+        self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
+        self.regulation_factor = exponential_decay_length_penalty[1]
+        self.eos_token_id = eos_token_id
+
+    def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.FloatTensor:
+        cur_len = input_ids.shape[-1]
+        if cur_len > self.regulation_start:
+            scores[:, self.eos_token_id] = scores[:, self.eos_token_id] * pow(
+                self.regulation_factor, cur_len - self.regulation_start
+            )
         return scores

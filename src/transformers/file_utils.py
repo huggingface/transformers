@@ -158,6 +158,13 @@ except importlib_metadata.PackageNotFoundError:
     except importlib_metadata.PackageNotFoundError:
         _faiss_available = False
 
+_ftfy_available = importlib.util.find_spec("ftfy") is not None
+try:
+    _ftfy_version = importlib_metadata.version("ftfy")
+    logger.debug(f"Successfully imported ftfy version {_ftfy_version}")
+except importlib_metadata.PackageNotFoundError:
+    _ftfy_available = False
+
 
 coloredlogs = importlib.util.find_spec("coloredlogs") is not None
 try:
@@ -441,6 +448,10 @@ def is_flax_available():
     return _flax_available
 
 
+def is_ftfy_available():
+    return _ftfy_available
+
+
 def is_torch_tpu_available():
     if not _torch_available:
         return False
@@ -514,10 +525,6 @@ def is_pytesseract_available():
 
 def is_spacy_available():
     return importlib.util.find_spec("spacy") is not None
-
-
-def is_ftfy_available():
-    return importlib.util.find_spec("ftfy") is not None
 
 
 def is_in_notebook():
@@ -722,6 +729,13 @@ FLAX_IMPORT_ERROR = """
 installation page: https://github.com/google/flax and follow the ones that match your environment.
 """
 
+# docstyle-ignore
+FTFY_IMPORT_ERROR = """
+{0} requires the ftfy library but it was not found in your environment. Checkout the instructions on the
+installation section: https://github.com/rspeer/python-ftfy/tree/master#installing and follow the ones
+that match your environment.
+"""
+
 
 # docstyle-ignore
 SCATTER_IMPORT_ERROR = """
@@ -801,6 +815,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
+        ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
@@ -827,8 +842,10 @@ def requires_backends(obj, backends):
         backends = [backends]
 
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not all(BACKENDS_MAPPING[backend][0]() for backend in backends):
-        raise ImportError("".join([BACKENDS_MAPPING[backend][1].format(name) for backend in backends]))
+    checks = (BACKENDS_MAPPING[backend] for backend in backends)
+    failed = [msg.format(name) for available, msg in checks if not available()]
+    if failed:
+        raise ImportError("".join(failed))
 
 
 class DummyObject(type):
@@ -995,6 +1012,8 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
     >>> from transformers import {processor_class}, {model_class}
     >>> import torch
 
+    >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
+
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
@@ -1005,8 +1024,16 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
 
     >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
     >>> loss = outputs.loss
+    >>> round(loss.item(), 2)
+    {expected_loss}
+
     >>> start_scores = outputs.start_logits
+    >>> list(start_scores.shape)
+    {expected_output}
+
     >>> end_scores = outputs.end_logits
+    >>> list(end_scores.shape)
+    {expected_output}
     ```
 """
 
@@ -1014,33 +1041,40 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     Example of single-label classification:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
     >>> import torch
+    >>> from transformers import {processor_class}, {model_class}
+
+    >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
 
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=2)
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
     >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
     >>> outputs = model(**inputs, labels=labels)
     >>> loss = outputs.loss
     >>> logits = outputs.logits
+    >>> list(logits.shape)
+    {expected_output}
     ```
 
     Example of multi-label classification:
 
     ```python
-    >>> from transformers import {processor_class}, {model_class}
     >>> import torch
+    >>> from transformers import {processor_class}, {model_class}
+
+    >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
 
     >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}", problem_type="multi_label_classification")
+    >>> model = {model_class}.from_pretrained("{checkpoint}", problem_type="multi_label_classification", num_labels=2)
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
     >>> labels = torch.tensor([[1, 1]], dtype=torch.float)  # need dtype=float for BCEWithLogitsLoss
     >>> outputs = model(**inputs, labels=labels)
     >>> loss = outputs.loss
-    >>> logits = outputs.logits
+    >>> list(logits.shape)
+    {expected_output}
     ```
 """
 
@@ -2300,16 +2334,14 @@ def get_file_from_repo(
             use_auth_token=use_auth_token,
         )
 
-    except RepositoryNotFoundError as err:
-        logger.error(err)
+    except RepositoryNotFoundError:
         raise EnvironmentError(
             f"{path_or_repo} is not a local folder and is not a valid model identifier "
             "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
             "pass a token having permission to this repo with `use_auth_token` or log in with "
             "`huggingface-cli login` and pass `use_auth_token=True`."
         )
-    except RevisionNotFoundError as err:
-        logger.error(err)
+    except RevisionNotFoundError:
         raise EnvironmentError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
             "for this model name. Check the model page at "

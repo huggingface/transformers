@@ -11,6 +11,10 @@ Such contextualized inputs are passed to the generator.
 
 Read more about RAG  at https://arxiv.org/abs/2005.11401.
 
+# Note
+
+⚠️ This project should be run with pytorch-lightning==1.3.1 which has a potential security vulnerability
+
 # Finetuning
 
 Our finetuning logic is based on scripts from [`examples/seq2seq`](https://github.com/huggingface/transformers/tree/master/examples/seq2seq). We accept training data in the same format as specified there - we expect a directory consisting of 6 text files:
@@ -52,8 +56,8 @@ You will then be able to pass `path/to/checkpoint` as `model_name_or_path` to th
 
 ## Document Retrieval
 When running distributed fine-tuning, each training worker needs to retrieve contextual documents
-for its input by querying a index loaded into memory. RAG provides two implementations for document retrieval, 
-one with [`torch.distributed`](https://pytorch.org/docs/stable/distributed.html) communication package and the other 
+for its input by querying a index loaded into memory. RAG provides two implementations for document retrieval,
+one with [`torch.distributed`](https://pytorch.org/docs/stable/distributed.html) communication package and the other
 with [`Ray`](https://docs.ray.io/en/master/).
 
 This option can be configured with the `--distributed_retriever` flag which can either be set to `pytorch` or `ray`.
@@ -62,7 +66,7 @@ By default this flag is set to `pytorch`.
 For the Pytorch implementation, only training worker 0 loads the index into CPU memory, and a gather/scatter pattern is used
 to collect the inputs from the other training workers and send back the corresponding document embeddings.
 
-For the Ray implementation, the index is loaded in *separate* process(es). The training workers randomly select which 
+For the Ray implementation, the index is loaded in *separate* process(es). The training workers randomly select which
 retriever worker to query. To use Ray for distributed retrieval, you have to set the `--distributed_retriever` arg to `ray`.
 To configure the number of retrieval workers (the number of processes that load the index), you can set the `num_retrieval_workers` flag.
 Also make sure to start the Ray cluster before running fine-tuning.
@@ -119,7 +123,7 @@ We demonstrate how to evaluate retrieval against DPR evaluation data. You can do
         --gold_data_path output/biencoder-nq-dev.pages
     ```
 3. Run evaluation:
-    ```bash    
+    ```bash
     python examples/research_projects/rag/eval_rag.py \
         --model_name_or_path facebook/rag-sequence-nq \
         --model_type rag_sequence \
@@ -139,7 +143,7 @@ We demonstrate how to evaluate retrieval against DPR evaluation data. You can do
         --predictions_path output/retrieval_preds.tsv  \ # name of file where predictions will be stored
         --eval_mode retrieval \ # indicates whether we're performing retrieval evaluation or e2e evaluation
         --k 1 # parameter k for the precision@k metric
-   
+
     ```
 ## End-to-end evaluation
 
@@ -153,8 +157,8 @@ who is the owner of reading football club	['Xiu Li Dai', 'Dai Yongge', 'Dai Xiul
 Xiu Li Dai
 ```
 
-Predictions of the model for the samples from the `evaluation_set` will be saved under the path specified by the `predictions_path` parameter. 
-If this path already exists, the script will use saved predictions to calculate metrics. 
+Predictions of the model for the samples from the `evaluation_set` will be saved under the path specified by the `predictions_path` parameter.
+If this path already exists, the script will use saved predictions to calculate metrics.
 Add `--recalculate` parameter to force the script to perform inference from scratch.
 
 An example e2e evaluation run could look as follows:

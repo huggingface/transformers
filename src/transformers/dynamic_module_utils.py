@@ -395,8 +395,8 @@ def custom_object_save(obj, folder, config=None):
             "this code in a separate module so we can include it in the saved folder and make it easier to share via "
             "the Hub."
         )
-    # Add object class to the config auto_map
-    if config is not None:
+
+    def _set_auto_map_in_config(_config):
         module_name = obj.__class__.__module__
         last_module = module_name.split(".")[-1]
         full_name = f"{last_module}.{obj.__class__.__name__}"
@@ -418,12 +418,21 @@ def custom_object_save(obj, folder, config=None):
 
             full_name = (slow_tokenizer_class, fast_tokenizer_class)
 
-        if isinstance(config, dict):
-            config["auto_map"] = full_name
-        elif getattr(config, "auto_map", None) is not None:
-            config.auto_map[obj._auto_class] = full_name
+        if isinstance(_config, dict):
+            auto_map = _config.get("auto_map", {})
+            auto_map[obj._auto_class] = full_name
+            _config["auto_map"] = auto_map
+        elif getattr(_config, "auto_map", None) is not None:
+            _config.auto_map[obj._auto_class] = full_name
         else:
-            config.auto_map = {obj._auto_class: full_name}
+            _config.auto_map = {obj._auto_class: full_name}
+
+    # Add object class to the config auto_map
+    if isinstance(config, (list, tuple)):
+        for cfg in config:
+            _set_auto_map_in_config(cfg)
+    elif config is not None:
+        _set_auto_map_in_config(config)
 
     # Copy module file to the output folder.
     object_file = sys.modules[obj.__module__].__file__

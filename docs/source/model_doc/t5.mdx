@@ -263,6 +263,11 @@ print(tokenizer.batch_decode(output_sequences, skip_special_tokens=True))
 
 <a id='scripts'></a>
 
+## Performance
+
+If you'd like a faster training and inference performance, install [apex](https://github.com/NVIDIA/apex#quick-start) and then the model will automatically use `apex.normalization.FusedRMSNorm` instead of `T5LayerNorm`. The former uses an optimized fused kernel which is several times faster than the latter.
+
+
 ## Example scripts
 
 T5 is supported by several example scripts, both for pre-training and fine-tuning.

@@ -43,7 +43,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
         padding_value (`float`, defaults to 0.0):
             The value that is used to fill the padding values.
-        do_normalize (`bool`, *optional*, defaults to `False`):
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
             improve the performance for some models, *e.g.*,
             [wav2vec2-lv60](https://huggingface.co/models?search=lv60).

@@ -474,8 +474,8 @@ class TFModelTesterMixin:
                     ),
                     "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
                 }
-            # TODO: A better way to handle vision models
-            elif model_class.__name__ in ["TFViTModel", "TFViTForImageClassification", "TFCLIPVisionModel"]:
+            # `pixel_values` implies that the input is an image
+            elif model_class.main_input_name == "pixel_values":
                 inputs = tf.keras.Input(
                     batch_shape=(
                         3,
@@ -947,7 +947,7 @@ class TFModelTesterMixin:
 
             if config.bos_token_id is None:
                 # if bos token id is not defined model needs input_ids
-                with self.assertRaises(AssertionError):
+                with self.assertRaises(ValueError):
                     model.generate(do_sample=True, max_length=5)
                 # num_return_sequences = 1
                 self._check_generated_ids(model.generate(input_ids, do_sample=True))
@@ -955,7 +955,7 @@ class TFModelTesterMixin:
                 # Models with non-text inputs won't work here; num_return_sequences = 1
                 self._check_generated_ids(model.generate(do_sample=True, max_length=5))
 
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ValueError):
                 # generating multiple sequences when no beam search generation
                 # is not allowed as it would always generate the same sequences
                 model.generate(input_ids, do_sample=False, num_return_sequences=2)

@@ -295,6 +295,7 @@ class PretrainedConfig(PushToHubMixin):
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
+        self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
@@ -580,7 +581,7 @@ class PretrainedConfig(PushToHubMixin):
         if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
-            configuration_file = kwargs.get("_configuration_file", CONFIG_NAME)
+            configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
 
             if os.path.isdir(pretrained_model_name_or_path):
                 config_file = os.path.join(pretrained_model_name_or_path, configuration_file)
@@ -602,36 +603,31 @@ class PretrainedConfig(PushToHubMixin):
                 user_agent=user_agent,
             )
 
-        except RepositoryNotFoundError as err:
-            logger.error(err)
+        except RepositoryNotFoundError:
             raise EnvironmentError(
                 f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier listed on "
                 "'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token having "
                 "permission to this repo with `use_auth_token` or log in with `huggingface-cli login` and pass "
                 "`use_auth_token=True`."
             )
-        except RevisionNotFoundError as err:
-            logger.error(err)
+        except RevisionNotFoundError:
             raise EnvironmentError(
                 f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
                 f"model name. Check the model page at 'https://huggingface.co/{pretrained_model_name_or_path}' for "
                 "available revisions."
             )
-        except EntryNotFoundError as err:
-            logger.error(err)
+        except EntryNotFoundError:
             raise EnvironmentError(
                 f"{pretrained_model_name_or_path} does not appear to have a file named {configuration_file}."
             )
-        except HTTPError as err:
-            logger.error(err)
+        except HTTPError:
             raise EnvironmentError(
                 "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
                 f"{pretrained_model_name_or_path} is not the path to a directory conaining a {configuration_file} "
                 "file.\nCheckout your internet connection or see how to run the library in offline mode at "
                 "'https://huggingface.co/docs/transformers/installation#offline-mode'."
             )
-        except EnvironmentError as err:
-            logger.error(err)
+        except EnvironmentError:
             raise EnvironmentError(
                 f"Can't load config for '{pretrained_model_name_or_path}'. If you were trying to load it from "
                 "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
@@ -854,18 +850,27 @@ class PretrainedConfig(PushToHubMixin):
 
     def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
         """
-        Checks whether the passed dictionary has a *torch_dtype* key and if it's not None, converts torch.dtype to a
-        string of just the type. For example, `torch.float32` get converted into *"float32"* string, which can then be
-        stored in the json format.
+        Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
+        converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
+        string, which can then be stored in the json format.
         """
         if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        for value in d.values():
+            if isinstance(value, dict):
+                self.dict_torch_dtype_to_str(value)
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoConfig"):
         """
         Register this class with a given auto class. This should only be used for custom configurations as the ones in
         the library are already mapped with `AutoConfig`.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoConfig"`):
