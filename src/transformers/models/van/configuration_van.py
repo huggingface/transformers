@@ -49,7 +49,7 @@ class VanConfig(PretrainedConfig):
         depths (`List[int]`, *optional*, defaults to `[3, 3, 12, 3]`):
             Depth (number of layers) for each stage.
         mlp_ratios (`List[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
-            The expansion factor for mlp layer at each stage.
+            The expansion ratio for mlp layer at each stage.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in each layer. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
