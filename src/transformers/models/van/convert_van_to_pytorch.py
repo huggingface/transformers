@@ -180,22 +180,22 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         "van-tiny": ImageNetPreTrainedConfig(
             hidden_sizes=[32, 64, 160, 256],
             depths=[3, 3, 5, 2],
-            mlp_expansions=[8, 8, 4, 4],
+            mlp_ratios=[8, 8, 4, 4],
         ),
         "van-small": ImageNetPreTrainedConfig(
             hidden_sizes=[64, 128, 320, 512],
             depths=[2, 2, 4, 2],
-            mlp_expansions=[8, 8, 4, 4],
+            mlp_ratios=[8, 8, 4, 4],
         ),
         "van-base": ImageNetPreTrainedConfig(
             hidden_sizes=[64, 128, 320, 512],
             depths=[3, 3, 12, 3],
-            mlp_expansions=[8, 8, 4, 4],
+            mlp_ratios=[8, 8, 4, 4],
         ),
         "van-large": ImageNetPreTrainedConfig(
             hidden_sizes=[64, 128, 320, 512],
             depths=[3, 5, 27, 3],
-            mlp_expansions=[8, 8, 4, 4],
+            mlp_ratios=[8, 8, 4, 4],
         ),
     }
 

@@ -148,7 +148,8 @@ class VanDropPath(nn.Module):
 class VanOverlappingPatchEmbedder(nn.Sequential):
     """
     Downsamples the input using a patchify operation with a `stride` of 4 by default making adjacent windows overlap by
-    half of the area. From [PVTv2: Improved Baselines with Pyramid Vision Transformer](https://arxiv.org/abs/2106.13797).
+    half of the area. From [PVTv2: Improved Baselines with Pyramid Vision
+    Transformer](https://arxiv.org/abs/2106.13797).
     """
 
     def __init__(self, in_channels: int, hidden_size: int, patch_size: int = 7, stride: int = 4):
@@ -254,14 +255,14 @@ class VanLayerScaling(nn.Module):
 
 class VanLayer(nn.Module):
     """
-    Van layer.
+    Van layer composed by normalization layers, large kernel attention (LKA) and a multi layer perceptron (MLP).
     """
 
     def __init__(
         self,
         config: VanConfig,
         hidden_size: int,
-        mlp_expansion: int = 4,
+        mlp_ratio: int = 4,
         drop_path_rate: float = 0.5,
     ):
         super().__init__()
@@ -271,7 +272,7 @@ class VanLayer(nn.Module):
         self.attention_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
         self.post_norm = nn.BatchNorm2d(hidden_size)
         self.mlp = VanMlpLayer(
-            hidden_size, hidden_size * mlp_expansion, hidden_size, config.hidden_act, config.dropout_rate
+            hidden_size, hidden_size * mlp_ratio, hidden_size, config.hidden_act, config.dropout_rate
         )
         self.mlp_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
 
@@ -308,7 +309,7 @@ class VanStage(nn.Module):
         patch_size: int,
         stride: int,
         depth: int,
-        mlp_expansion: int = 4,
+        mlp_ratio: int = 4,
         drop_path_rate: float = 0.0,
     ):
         super().__init__()
@@ -318,7 +319,7 @@ class VanStage(nn.Module):
                 VanLayer(
                     config,
                     hidden_size,
-                    mlp_expansion=mlp_expansion,
+                    mlp_ratio=mlp_ratio,
                     drop_path_rate=drop_path_rate,
                 )
                 for _ in range(depth)
@@ -350,11 +351,11 @@ class VanEncoder(nn.Module):
         strides = config.strides
         hidden_sizes = config.hidden_sizes
         depths = config.depths
-        mlp_expansions = config.mlp_expansions
+        mlp_ratios = config.mlp_ratios
         drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
 
         for num_stage, (patch_size, stride, hidden_size, depth, mlp_expantion, drop_path_rate) in enumerate(
-            zip(patch_sizes, strides, hidden_sizes, depths, mlp_expansions, drop_path_rates)
+            zip(patch_sizes, strides, hidden_sizes, depths, mlp_ratios, drop_path_rates)
         ):
             is_first_stage = num_stage == 0
             in_channels = hidden_sizes[num_stage - 1]
@@ -368,7 +369,7 @@ class VanEncoder(nn.Module):
                     patch_size=patch_size,
                     stride=stride,
                     depth=depth,
-                    mlp_expansion=mlp_expantion,
+                    mlp_ratio=mlp_expantion,
                     drop_path_rate=drop_path_rate,
                 )
             )
@@ -512,31 +513,6 @@ class VanForImageClassification(VanPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def maybe_get_loss(self, logits, labels, num_labels):
-        loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-        return loss
-
     @add_start_docstrings_to_model_forward(VAN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
@@ -560,7 +536,28 @@ class VanForImageClassification(VanPreTrainedModel):
 
         logits = self.classifier(pooled_output)
 
-        loss = self.maybe_get_loss(logits, labels, self.config.num_labels)
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.config.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.config.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]

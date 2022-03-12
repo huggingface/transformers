@@ -48,7 +48,7 @@ class VanConfig(PretrainedConfig):
             Dimensionality (hidden size) at each stage.
         depths (`List[int]`, *optional*, defaults to `[3, 3, 12, 3]`):
             Depth (number of layers) for each stage.
-        mlp_expansions (`List[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
+        mlp_ratios (`List[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
             The expansion factor for mlp layer at each stage.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in each layer. If string, `"gelu"`, `"relu"`,
@@ -85,7 +85,7 @@ class VanConfig(PretrainedConfig):
         strides=[4, 2, 2, 2],
         hidden_sizes=[64, 128, 320, 512],
         depths=[3, 3, 12, 3],
-        mlp_expansions=[8, 8, 4, 4],
+        mlp_ratios=[8, 8, 4, 4],
         hidden_act="gelu",
         initializer_range=0.02,
         layer_norm_eps=1e-6,
@@ -101,7 +101,7 @@ class VanConfig(PretrainedConfig):
         self.strides = strides
         self.hidden_sizes = hidden_sizes
         self.depths = depths
-        self.mlp_expansions = mlp_expansions
+        self.mlp_ratios = mlp_ratios
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps

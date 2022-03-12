@@ -37,7 +37,6 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
 
-
     if is_torch_available():
         from .modeling_van import (
             VAN_PRETRAINED_MODEL_ARCHIVE_LIST,
