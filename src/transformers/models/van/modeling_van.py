@@ -260,21 +260,19 @@ class VanLayer(nn.Module):
 
     def __init__(
         self,
+        config: VanConfig,
         hidden_size: int,
         mlp_expansion: int = 4,
-        dropout_rate: float = 0.0,
         drop_path_rate: float = 0.5,
-        hidden_act: str = "gelu",
-        layer_scale_init_value: float = 1e-2,
     ):
         super().__init__()
         self.drop_path = VanDropPath(drop_path) if drop_path_rate > 0.0 else nn.Identity()
         self.pre_norm = nn.BatchNorm2d(hidden_size)
-        self.attention = VanSpatialAttentionLayer(hidden_size, hidden_act)
-        self.attention_scaling = VanLayerScaling(hidden_size, layer_scale_init_value)
+        self.attention = VanSpatialAttentionLayer(hidden_size, config.hidden_act)
+        self.attention_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
         self.post_norm = nn.BatchNorm2d(hidden_size)
-        self.mlp = VanMlpLayer(hidden_size, hidden_size * mlp_expansion, hidden_size, hidden_act, dropout_rate)
-        self.mlp_scaling = VanLayerScaling(hidden_size, layer_scale_init_value)
+        self.mlp = VanMlpLayer(hidden_size, hidden_size * mlp_expansion, hidden_size, config.hidden_act, config.dropout_rate)
+        self.mlp_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
 
     def forward(self, hidden_state):
         residual = hidden_state
@@ -303,6 +301,7 @@ class VanStage(nn.Module):
 
     def __init__(
         self,
+        config: VanConfig,
         in_channels: int,
         hidden_size: int,
         patch_size: int,
@@ -310,27 +309,21 @@ class VanStage(nn.Module):
         depth: int,
         mlp_expansion: int = 4,
         drop_path_rate: float = 0.0,
-        dropout_rate: float = 0.0,
-        hidden_act: str = "gelu",
-        layer_norm_eps: float = 1e-6,
-        layer_scale_init_value: float = 1e-2,
     ):
         super().__init__()
         self.embeddings = VanOverlappingPatchEmbedder(in_channels, hidden_size, patch_size, stride)
         self.layers = nn.Sequential(
             *[
                 VanLayer(
+                    config,
                     hidden_size,
                     mlp_expansion=mlp_expansion,
                     drop_path_rate=drop_path_rate,
-                    dropout_rate=dropout_rate,
-                    hidden_act=hidden_act,
-                    layer_scale_init_value=layer_scale_init_value,
                 )
                 for _ in range(depth)
             ]
         )
-        self.norm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
+        self.norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_state):
         hidden_state = self.embeddings(hidden_state)
@@ -368,6 +361,7 @@ class VanEncoder(nn.Module):
                 in_channels = config.num_channels
             self.stages.append(
                 VanStage(
+                    config,
                     in_channels,
                     hidden_size,
                     patch_size=patch_size,
