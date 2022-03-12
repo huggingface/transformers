@@ -1687,7 +1687,7 @@ class Trainer:
         self.save_model(output_dir, _internal_call=True)
         if self.deepspeed:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
-            # config `stage3_gather_fp16_weights_on_model_save` is True
+            # config `stage3_gather_16bit_weights_on_model_save` is True
             self.deepspeed.save_checkpoint(output_dir)
 
         # Save optimizer and scheduler
@@ -2101,12 +2101,12 @@ class Trainer:
                         # logger.info(f"deepspeed zero3: removing {file}, see zero_to_fp32.py to recover weights")
                         os.remove(file)
 
-                # now save the real model if stage3_gather_fp16_weights_on_model_save=True
+                # now save the real model if stage3_gather_16bit_weights_on_model_save=True
                 # if false it will not be saved.
                 # This must be called on all ranks
-                if not self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME):
+                if not self.deepspeed.save_16bit_model(output_dir, WEIGHTS_NAME):
                     logger.warning(
-                        "deepspeed.save_fp16_model didn't save the model, since stage3_gather_fp16_weights_on_model_save=false. "
+                        "deepspeed.save_16bit_model didn't save the model, since stage3_gather_16bit_weights_on_model_save=false. "
                         "Saving the full checkpoint instead, use zero_to_fp32.py to recover weights"
                     )
                     self.deepspeed.save_checkpoint(output_dir)
