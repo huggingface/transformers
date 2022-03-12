@@ -129,6 +129,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
     "DecisionTransformerGPT2Model",
     "GLPNForDepthEstimation",
+    "ViltForQuestionAnswering",
     "ViltForImagesAndTextClassification",
     "ViltForImageAndTextRetrieval",
     "ViltForTokenClassification",
