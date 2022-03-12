@@ -39,7 +39,7 @@ Comienza cargando el dataset de [Yelp Reviews](https://huggingface.co/datasets/y
  'text': 'My expectations for McDonalds are t rarely high. But for one to still fail so spectacularly...that takes something special!\\nThe cashier took my friends\'s order, then promptly ignored me. I had to force myself in front of a cashier who opened his register to wait on the person BEHIND me. I waited over five minutes for a gigantic order that included precisely one kid\'s meal. After watching two people who ordered after me be handed their food, I asked where mine was. The manager started yelling at the cashiers for \\"serving off their orders\\" when they didn\'t have their food. But neither cashier was anywhere near those controls, and the manager was the one serving food to customers and clearing the boards.\\nThe manager was rude when giving me my order. She didn\'t make sure that I had everything ON MY RECEIPT, and never even had the decency to apologize that I felt I was getting poor service.\\nI\'ve eaten at various McDonalds restaurants for over 30 years. I\'ve worked at more than one location. I expect bad days, bad moods, and the occasional mistake. But I have yet to have a decent experience at this store. It will remain a place I avoid unless someone in my party needs to avoid illness from low blood sugar. Perhaps I should go back to the racially biased service of Steak n Shake instead!'}
 ```
 
-Como ya sabes, necesitas un tokenizador para procesar el texto e incluir una estrategia para el padding y el truncamiento, para manejar cualquier longitud de variable secuencial. Para procesar tu dataset en un solo paso, utiliza el método de 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/process.html#map) para aplicar una función de preprocesamiento sobre todo el dataset:
+Como ya sabes, necesitas un tokenizador para procesar el texto e incluir una estrategia para el padding y el truncamiento, para manejar cualquier longitud de secuencia variable. Para procesar tu dataset en un solo paso, utiliza el método de 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/process.html#map) para aplicar una función de preprocesamiento sobre todo el dataset:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -107,7 +107,7 @@ El [`Trainer`] no evalúa automáticamente el rendimiento del modelo durante el 
 >>> metric = load_metric("accuracy")
 ```
 
-Definamos la función `compute` en `metric` para calcular el accuracy de tus predicciones. Antes de pasar tus predicciones a `compute`, necesitas convertir las predicciones a logits (recuerda que todos los modelos de 🤗 Transformers devuelven logits).
+Define la función `compute` en `metric` para calcular el accuracy de tus predicciones. Antes de pasar tus predicciones a `compute`, necesitas convertir las predicciones a logits (recuerda que todos los modelos de 🤗 Transformers devuelven logits).
 
 ```py
 >>> def compute_metrics(eval_pred):
@@ -138,7 +138,7 @@ Crea un objeto [`Trainer`] con tu modelo, argumentos de entrenamiento, conjuntos
 ... )
 ```
 
-A continuación, aplique fine-tuning a tu modelo llamando a [`~transformers.Trainer.train`]:
+A continuación, aplica fine-tuning a tu modelo llamando a [`~transformers.Trainer.train`]:
 
 ```py
 >>> trainer.train()
@@ -266,7 +266,7 @@ Crea un `DataLoader` para tus datasets de entrenamiento y de prueba para poder i
 >>> eval_dataloader = DataLoader(small_eval_dataset, batch_size=8)
 ```
 
-Cargue tu modelo con el número de labels previstas:
+Carga tu modelo con el número de labels previstas:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -315,7 +315,7 @@ Genial, ¡ahora podemos entrenar! 🥳
 
 ### Ciclo de entrenamiento
 
-Para hacer un seguimiento del progreso al entrenamiento, utiliza la librería [tqdm](https://tqdm.github.io/) para añadir una barra de progreso sobre el número de pasos de entrenamiento:
+Para hacer un seguimiento al progreso del entrenamiento, utiliza la librería [tqdm](https://tqdm.github.io/) para añadir una barra de progreso sobre el número de pasos de entrenamiento:
 
 ```py
 >>> from tqdm.auto import tqdm
