@@ -66,6 +66,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             ImageNet std.
         ignore_index (`int`, *optional*):
             Value of the index (label) to ignore.
+        reduce_labels (`bool`, *optional*, defaults to `False`):
+            Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0 is
+            used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k). The
+            background label will be replaced by `ignore_index`.
         num_labels (`int`, *optional*):
             The number of labels in the dataset. Needed to create the binary masks of shape `(batch, num_labels,
             height, width)`.
@@ -83,6 +87,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         image_mean=None,
         image_std=None,
         ignore_index=None,
+        reduce_labels=False,
         num_labels=None,
         **kwargs
     ):
@@ -95,10 +100,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self.size = size
         self.max_size = max_size
         self.size_divisibility = size_divisibility
-        self.ignore_index = ignore_index
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406]  # ImageNet mean
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]  # ImageNet std
+        self.ignore_index = ignore_index
+        self.reduce_labels = reduce_labels
         self.num_labels = num_labels
 
     def _resize_with_size_divisibility(self, image, size, target=None, max_size=None):
@@ -299,6 +305,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
     def convert_segmentation_map_to_binary_masks(self, segmentation_map: "np.ndarray", num_labels: int):
         # get all the labels in the image
         labels = np.unique(segmentation_map)
+        if self.reduce_labels:
+            segmentation_map[segmentation_map == 0] = 255
+            segmentation_map = segmentation_map - 1
+            segmentation_map[segmentation_map == 254] = self.ignore_index
         # remove ignore index (if we have one)
         if self.ignore_index is not None:
             labels = labels[labels != self.ignore_index]
