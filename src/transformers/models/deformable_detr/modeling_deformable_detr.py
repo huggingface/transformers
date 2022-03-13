@@ -38,7 +38,7 @@ from ...file_utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ...modeling_outputs import BaseModelOutput, Seq2SeqModelOutput
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_deformable_detr import DeformableDetrConfig
@@ -140,10 +140,10 @@ class DeformableDetrDecoderOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    
+
 
 @dataclass
-class DeformableDetrModelOutput(Seq2SeqModelOutput):
+class DeformableDetrModelOutput(ModelOutput):
     """
     Base class for outputs of the Deformable DETR encoder-decoder model. This class adds one attribute to
     Seq2SeqModelOutput, namely an optional stack of intermediate decoder activations, i.e. the output of each decoder
@@ -151,6 +151,8 @@ class DeformableDetrModelOutput(Seq2SeqModelOutput):
     losses.
 
     Args:
+        init_reference_points (`torch.FloatTensor` of shape ...):
+            Initial reference points sent through the Transformer decoder.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -179,30 +181,25 @@ class DeformableDetrModelOutput(Seq2SeqModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights of the encoder, after the attention softmax, used to compute the
             weighted average in the self-attention heads.
-        init_reference_points (`torch.FloatTensor` of shape ...):
-            Initial reference points sent through the Transformer decoder.
         enc_outputs_class
             ...
         enc_outputs_coord_unact
             ...
     """
 
+    init_reference_points: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
-    enc_outputs_class: Optional = None
-    enc_outputs_coord_unact: Optional = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    init_reference_points: torch.FloatTensor = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_unact: Optional[torch.FloatTensor] = None
-    
+
 
 @dataclass
 class DeformableDetrObjectDetectionOutput(ModelOutput):
@@ -268,16 +265,16 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
+    init_reference_points: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    init_reference_points: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
     enc_outputs_class: Optional = None
     enc_outputs_coord_unact: Optional = None
 
@@ -599,8 +596,6 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         )
         output = self.output_proj(output)
 
-        print("Shape of attention_weights:", attention_weights.shape)
-
         return output, attention_weights
 
 
@@ -627,7 +622,7 @@ class DeformableDetrMultiheadAttention(nn.Module):
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1190,6 +1185,15 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
 
             position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
                 Position embeddings that are added to the queries and keys in each self-attention layer.
+
+            reference_points
+
+            spatial_shapes
+
+            level_start_index
+
+            valid_ratios
+
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1290,21 +1294,21 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 v
                 for v in [
                     hidden_states,
+                    intermediate,
+                    intermediate_reference_points,
                     all_hidden_states,
                     all_self_attns,
                     all_cross_attentions,
-                    intermediate,
-                    intermediate_reference_points,
                 ]
                 if v is not None
             )
         return DeformableDetrDecoderOutput(
             last_hidden_state=hidden_states,
+            intermediate_hidden_states=intermediate,
+            intermediate_reference_points=intermediate_reference_points,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
-            intermediate_hidden_states=intermediate,
-            intermediate_reference_points=intermediate_reference_points,
         )
 
 
@@ -1429,7 +1433,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
 
             scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(N_, 1, 1, 2)
             grid = (grid.unsqueeze(0).expand(N_, -1, -1, -1) + 0.5) / scale
-            wh = torch.ones_like(grid) * 0.05 * (2.0 ** lvl)
+            wh = torch.ones_like(grid) * 0.05 * (2.0**lvl)
             proposal = torch.cat((grid, wh), -1).view(N_, -1, 4)
             proposals.append(proposal)
             _cur += H_ * W_
@@ -1494,7 +1498,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         # which is a list of tuples
         features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
 
-        print("Shape of pixel values:", pixel_values.shape)
+        # print("Shape of pixel values:", pixel_values.shape)
 
         srcs = []
         masks = []
@@ -1507,7 +1511,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             for l in range(_len_srcs, self.config.num_feature_levels):
                 if l == _len_srcs:
                     src = self.input_proj[l](features[-1][0])
-                    print("Shape of src:", src.shape)
+                    # print("Shape of src:", src.shape)
                 else:
                     src = self.input_proj[l](srcs[-1])
                 mask = nn.functional.interpolate(pixel_mask[None].float(), size=src.shape[-2:]).to(torch.bool)[0]
@@ -1521,9 +1525,9 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         if not self.config.two_stage:
             query_embeds = self.query_position_embeddings.weight
 
-        print("Shapes of features:")
-        for (src, mask) in features:
-            print(src.shape)
+        # print("Shapes of features:")
+        # for (src, mask) in features:
+        #     print(src.shape)
 
         # Prepare encoder inputs (by flattening)
         src_flatten = []
@@ -1541,8 +1545,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             lvl_pos_embed_flatten.append(lvl_pos_embed)
             src_flatten.append(src)
             mask_flatten.append(mask)
-        for src in src_flatten:
-            print("Shape of src in src_flatten:", src.shape)
+        # for src in src_flatten:
+        #     print("Shape of src in src_flatten:", src.shape)
         src_flatten = torch.cat(src_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
@@ -1550,14 +1554,14 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
 
-        print("Spatial shapes:", spatial_shapes)
+        # print("Spatial shapes:", spatial_shapes)
 
         # revert valid_ratios
         valid_ratios = ~valid_ratios.bool()
         valid_ratios = valid_ratios.float()
 
-        print("----ENCODER INPUTS-----")
-        print("Shape of src_flatten:", src_flatten.shape)
+        # print("----ENCODER INPUTS-----")
+        # print("Shape of src_flatten:", src_flatten.shape)
         # print("First values of src_flatten:", src_flatten[0, :3, :3])
         # print("Shape of spatial_shapes:", spatial_shapes.shape)
         # print("Spatial shapes:", spatial_shapes)
@@ -1664,7 +1668,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             return_dict=return_dict,
         )
 
-        print("Last hidden states of decoder:", decoder_outputs[0][0, :3, :3])
+        # print("Last hidden states of decoder:", decoder_outputs[0][0, :3, :3])
 
         if not return_dict:
             enc_outputs = tuple(
@@ -1675,7 +1679,15 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
                 ]
                 if v is not None
             )
-            return (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
+            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
+
+            # for v in tuple_outputs:
+            #     if isinstance(v, torch.Tensor):
+            #         print(v.shape)
+            #     else:
+            #         print(len(v))
+
+            return tuple_outputs
 
         return DeformableDetrModelOutput(
             init_reference_points=init_reference_points,
@@ -1691,6 +1703,14 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_unact=enc_outputs_coord_unact,
         )
+
+        # for k,v in dict_outputs.items():
+        #     if isinstance(v, torch.Tensor):
+        #         print(k,v.shape)
+        #     else:
+        #         print(len(v))
+
+        # return dict_outputs
 
 
 @add_start_docstrings(
@@ -1802,9 +1822,9 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         )
 
         # TODO add support for return_dict = False
-        hs = outputs.intermediate_hidden_states
-        init_reference = outputs.init_reference_points
-        inter_references = outputs.intermediate_reference_points
+        hs = outputs.intermediate_hidden_states if return_dict else outputs[2]
+        init_reference = outputs.init_reference_points if return_dict else outputs[0]
+        inter_references = outputs.intermediate_reference_points if return_dict else outputs[3]
 
         # class logits + predicted bounding boxes
         outputs_classes = []
@@ -1877,9 +1897,17 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
                 output = (logits, pred_boxes) + auxiliary_outputs + outputs
             else:
                 output = (logits, pred_boxes) + outputs
-            return ((loss, loss_dict) + output) if loss is not None else output
+            tuple_outputs = ((loss, loss_dict) + output) if loss is not None else output
 
-        return DeformableDetrObjectDetectionOutput(
+            for v in tuple_outputs:
+                if isinstance(v, torch.Tensor):
+                    print(v.shape)
+                else:
+                    print(len(v))
+
+            return tuple_outputs
+
+        dict_outputs = DeformableDetrObjectDetectionOutput(
             loss=loss,
             loss_dict=loss_dict,
             logits=logits,
@@ -1898,6 +1926,14 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             enc_outputs_class=outputs.enc_outputs_class,
             enc_outputs_coord_unact=outputs.enc_outputs_coord_unact,
         )
+
+        for k, v in dict_outputs.items():
+            if isinstance(v, torch.Tensor):
+                print(k, v.shape)
+            else:
+                print(len(v))
+
+        return dict_outputs
 
 
 def dice_loss(inputs, targets, num_boxes):
