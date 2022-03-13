@@ -18,7 +18,7 @@
 import inspect
 import math
 import unittest
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
 from transformers import DeformableDetrConfig, is_timm_available, is_vision_available
 from transformers.file_utils import cached_property
@@ -415,7 +415,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             check_equivalence(
                 model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
             )
-    
+
     def test_retain_grad_hidden_states_attentions(self):
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
 
