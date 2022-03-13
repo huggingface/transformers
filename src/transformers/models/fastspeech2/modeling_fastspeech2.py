@@ -16,6 +16,7 @@
 
 
 import math
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
@@ -23,15 +24,14 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...file_utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import (
     PreTrainedModel,
-    SequenceSummary,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -73,6 +73,15 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     inverted_mask = 1.0 - expanded_mask
 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
+
+
+@dataclass
+class FastSpeech2ModelOutput(ModelOutput):
+    mel_spectrogram: torch.FloatTensor = None
+    mel_spectrogram_postnet: torch.FloatTensor = None
+    log_duration: torch.FloatTensor = None
+    pitch: torch.FloatTensor = None
+    energy: torch.FloatTensor = None
 
 
 # Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding with Speech2Text->FastSpeech2
@@ -595,7 +604,7 @@ class FastSpeech2Encoder(nn.Module):
             x = x * self.std.view(1, 1, -1).expand_as(x)
         if self.mean is not None:
             x = x + self.mean.view(1, 1, -1).expand_as(x)
-        return x, x_post, out_lens, log_dur_out, pitch_out, energy_out
+        return FastSpeech2ModelOutput(x, x_post, out_lens, log_dur_out, pitch_out, energy_out)
 
 
 class FastSpeech2PreTrainedModel(PreTrainedModel):
@@ -677,8 +686,7 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        # NOTE: should change model output type
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        output_type=FastSpeech2ModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
