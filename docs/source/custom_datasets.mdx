@@ -170,7 +170,7 @@ tf_train_set = tokenized_imdb["train"].to_tf_dataset(
     collate_fn=data_collator,
 )
 
-tf_validation_set = tokenized_imdb["train"].to_tf_dataset(
+tf_validation_set = tokenized_imdb["test"].to_tf_dataset(
     columns=["attention_mask", "input_ids", "label"],
     shuffle=False,
     batch_size=16,
