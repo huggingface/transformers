@@ -38,7 +38,7 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     get_initializer,
     keras_serializable,
-    unpack_inputs
+    unpack_inputs,
 )
 from ...tf_utils import shape_list
 from ...utils import logging
@@ -495,6 +495,7 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
             epsilon=config.layer_norm_eps, name="final_layer_norm"
         )
 
+    @unpack_inputs
     def call(
         self,
         input_ids: TFModelInputType,
@@ -686,9 +687,6 @@ class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
         training: bool = False,
         **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        # TODO: what is going on with input_ids?
-        if input_ids:
-            pixel_values = input_ids
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -802,19 +800,15 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         training: bool = False,
         **kwargs,
     ) -> tf.Tensor:
-        # TODO: where is input_ids?
-        if "input_ids" in inputs:
-            inputs["pixel_values"] = inputs.pop("input_ids")
-
-        if inputs["pixel_values"] is None:
+        if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         vision_outputs = self.vision_model(
-            pixel_values=inputs["pixel_values"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
         )
 
         pooled_output = vision_outputs[1]  # pooled_output
@@ -852,7 +846,7 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training
+            training=training,
         )
 
         text_outputs = self.text_model(
@@ -1093,7 +1087,7 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training
+            training=training,
         )
 
         return outputs
@@ -1185,16 +1179,13 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
-        # TODO: input_ids??
-        if "input_ids" in inputs:
-            inputs["pixel_values"] = inputs.pop("input_ids")
 
         outputs = self.clip(
-            pixel_values=inputs["pixel_values"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
         )
 
         return outputs
@@ -1337,7 +1328,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict
+            return_dict=return_dict,
         )
 
         return image_features
@@ -1392,7 +1383,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             return_loss=return_loss,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict
+            return_dict=return_dict,
         )
 
         return outputs
