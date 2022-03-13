@@ -367,7 +367,7 @@ cat <<'EOT' > ds_config_zero3.json
         "stage3_param_persistence_threshold": "auto",
         "stage3_max_live_parameters": 1e9,
         "stage3_max_reuse_distance": 1e9,
-        "stage3_gather_fp16_weights_on_model_save": true
+        "stage3_gather_16bit_weights_on_model_save": true
     },
 
     "gradient_accumulation_steps": "auto",
@@ -652,7 +652,7 @@ The following is an example of configuration for ZeRO stage 3:
         "stage3_param_persistence_threshold": "auto",
         "stage3_max_live_parameters": 1e9,
         "stage3_max_reuse_distance": 1e9,
-        "stage3_gather_fp16_weights_on_model_save": true
+        "stage3_gather_16bit_weights_on_model_save": true
     }
 }
 ```
@@ -691,7 +691,7 @@ The following configuration values depend on the model's hidden size:
 therefore set these values to `auto` and the [`Trainer`] will automatically assign the recommended
 values. But, of course, feel free to set these explicitly as well.
 
-`stage3_gather_fp16_weights_on_model_save` enables model fp16 weights consolidation when model gets saved. With large
+`stage3_gather_16bit_weights_on_model_save` enables model fp16 weights consolidation when model gets saved. With large
 models and multiple GPUs this is an expensive operation both in terms of memory and speed. It's currently required if
 you plan to resume the training. Watch out for future updates that will remove this limitation and make things more
 flexible.
@@ -760,8 +760,8 @@ The following configuration example enables NVMe to offload both optimizer state
         "stage3_param_persistence_threshold": "auto",
         "stage3_max_live_parameters": 1e9,
         "stage3_max_reuse_distance": 1e9,
-        "stage3_gather_fp16_weights_on_model_save": true
-    }
+        "stage3_gather_16bit_weights_on_model_save": true
+    },
 }
 ```
 
@@ -966,7 +966,7 @@ Here is a full ZeRO-3 auto-configuration file `ds_config_zero3.json`:
         "stage3_param_persistence_threshold": "auto",
         "stage3_max_live_parameters": 1e9,
         "stage3_max_reuse_distance": 1e9,
-        "stage3_gather_fp16_weights_on_model_save": true
+        "stage3_gather_16bit_weights_on_model_save": true
     },
 
     "gradient_accumulation_steps": "auto",
@@ -1029,7 +1029,7 @@ values look like, but we highly recommend using the one with multiple `auto` set
         "stage3_param_persistence_threshold": 1e4,
         "stage3_max_live_parameters": 1e9,
         "stage3_max_reuse_distance": 1e9,
-        "stage3_gather_fp16_weights_on_model_save": true
+        "stage3_gather_16bit_weights_on_model_save": true
     },
 
     "steps_per_print": 2000,
@@ -1232,6 +1232,7 @@ the much more efficient tf32 format for some operations, but the results will st
 benchmarks, please, see [TensorFloat-32(TF32) on Ampere devices](https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices). The document includes
 instructions on how to disable this automatic conversion if for some reason you prefer not to use it.
 
+With the 🤗 Trainer you can use `--tf32` to enable it, or disable it with `--tf32 0` or `--no_tf32`. By default the PyTorch default is used.
 
 
 
@@ -1241,7 +1242,9 @@ instructions on how to disable this automatic conversion if for some reason you 
 
 You can use automatic mixed precision with either a pytorch-like AMP way or the apex-like way:
 
-To configure pytorch AMP-like mode set:
+### fp16
+
+To configure pytorch AMP-like mode with fp16 (float16) set:
 
 ```json
 {
@@ -1259,7 +1262,7 @@ To configure pytorch AMP-like mode set:
 and the [`Trainer`] will automatically enable or disable it based on the value of
 `args.fp16_backend`. The rest of config values are up to you.
 
-This mode gets enabled when `--fp16 --fp16_backend amp` command line args are passed.
+This mode gets enabled when `--fp16 --fp16_backend amp` or `--fp16_full_eval` command line args are passed.
 
 You can also enable/disable this mode explicitly:
 
@@ -1280,6 +1283,43 @@ But then you're on your own synchronizing the [`Trainer`] command line arguments
 configuration.
 
 Here is the [documentation](https://www.deepspeed.ai/docs/config-json/#fp16-training-options).
+
+### bf16
+
+If bf16 (bfloat16) is desired instead of fp16 then the following configuration section is to be used:
+
+```json
+{
+    "bf16": {
+        "enabled": "auto"
+    }
+}
+```
+
+bf16 has the same dynamic range as fp32 and thus doesn't require loss scaling.
+
+This mode gets enabled when `--bf16` or `--bf16_full_eval` command line args are passed.
+
+You can also enable/disable this mode explicitly:
+
+```json
+{
+    "bf16": {
+        "enabled": true
+    }
+}
+```
+
+<Tip>
+
+As of `deepspeed==0.6.0` the bf16 support is new and experimental.
+
+If you use [gradient accumulation](#gradient-accumulation) with bf16-enabled, you need to be aware that it'll accumulate gradients in bf16, which may not be what you want due to this format's low precision, as it may lead to a lossy accumulation.
+
+</Tip>
+
+
+### apex
 
 To configure apex AMP-like mode set:
 
@@ -1411,15 +1451,14 @@ When a model is saved under ZeRO-2, you end up having the normal `pytorch_model.
 they are only the fp16 version of the weights.
 
 Under ZeRO-3, things are much more complicated, since the model weights are partitioned out over multiple GPUs,
-therefore `"stage3_gather_fp16_weights_on_model_save": true` is required to get the `Trainer` to save the fp16
-version of the weights. If this setting is `False` ``pytorch_model.bin` won't be created. This is because by default DeepSpeed's `state_dict` contains a placeholder and not the real weights. If we were to save this `state_dict`` it
-won't be possible to load it back.
+therefore `"stage3_gather_16bit_weights_on_model_save": true` is required to get the `Trainer` to save the fp16
+version of the weights. If this setting is `False` `pytorch_model.bin` won't be created. This is because by default DeepSpeed's `state_dict` contains a placeholder and not the real weights. If we were to save this `state_dict` it won't be possible to load it back.
 
 
 ```json
 {
     "zero_optimization": {
-        "stage3_gather_fp16_weights_on_model_save": true
+        "stage3_gather_16bit_weights_on_model_save": true
     }
 }
 ```
