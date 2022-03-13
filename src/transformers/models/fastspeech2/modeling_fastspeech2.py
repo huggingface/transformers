@@ -78,7 +78,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 @dataclass
 class FastSpeech2ModelOutput(ModelOutput):
     mel_spectrogram: torch.FloatTensor = None
-    mel_spectrogram_postnet: torch.FloatTensor = None
+    out_lengths: torch.FloatTensor = None
     log_duration: torch.FloatTensor = None
     pitch: torch.FloatTensor = None
     energy: torch.FloatTensor = None
@@ -580,6 +580,8 @@ class FastSpeech2Encoder(nn.Module):
             x = layer(x, attention_mask)
 
         if self.embed_speaker is not None:
+            if speaker is None:
+                raise ValueError("`speaker` cannot be `None` for multi-speaker FastSpeech2.")
             bsz, seq_len, _ = x.size()
             emb = self.embed_speaker(speaker).expand(bsz, seq_len, -1)
             x = self.spk_emb_proj(torch.cat([x, emb], dim=2))
@@ -597,14 +599,13 @@ class FastSpeech2Encoder(nn.Module):
             x = layer(x, attention_mask)
 
         x = self.out_proj(x)
-        x_post = None
         if self.postnet is not None:
-            x_post = x + self.postnet(x)
+            x = x + self.postnet(x)
         if self.std is not None:
             x = x * self.std.view(1, 1, -1).expand_as(x)
         if self.mean is not None:
             x = x + self.mean.view(1, 1, -1).expand_as(x)
-        return FastSpeech2ModelOutput(x, x_post, out_lens, log_dur_out, pitch_out, energy_out)
+        return FastSpeech2ModelOutput(x, out_lens, log_dur_out, pitch_out, energy_out)
 
 
 class FastSpeech2PreTrainedModel(PreTrainedModel):
@@ -683,12 +684,12 @@ class FastSpeech2Model(FastSpeech2PreTrainedModel):
         # NOTE: add dimensionality check?
         self.encoder.std = std
 
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=FastSpeech2ModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    # @add_code_sample_docstrings(
+    #     processor_class=_TOKENIZER_FOR_DOC,
+    #     checkpoint=_CHECKPOINT_FOR_DOC,
+    #     output_type=FastSpeech2ModelOutput,
+    #     config_class=_CONFIG_FOR_DOC,
+    # )
     def forward(
         self,
         input_ids,

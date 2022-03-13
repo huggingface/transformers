@@ -102,12 +102,11 @@ class FastSpeech2Config(PretrainedConfig):
         decoder_embed_dim=256,
         decoder_attention_heads=2,
         decoder_layers=4,
-        # defaults from https://github.com/ming024/FastSpeech2
         add_postnet=False,
         postnet_conv_dim=512,
         postnet_conv_kernel_size=5,
         postnet_layers=5,
-        postnet_dropout=0,
+        postnet_dropout=0.5,
         vocab_size=75,
         num_speakers=1,
         var_pred_n_bins=256,
