@@ -436,7 +436,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
             pooled_output = last_hidden_state
         
         if not return_dict:
-            return (last_hidden_state, None) + encoder_outputs[1:]
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return ConvNextModelOutput(
             last_hidden_state=last_hidden_state,
@@ -648,14 +648,7 @@ class ConvNextUperHead(nn.Module):
 
     def forward(self, encoder_hidden_states):
         # build laterals
-        laterals = []
-        for i, conv in enumerate(self.lateral_convs):
-            print(f"Pre-lateral shape - {i}", encoder_hidden_states[i].shape)
-            op = conv(encoder_hidden_states[i])
-            print(f"Post-lateral shape - {i}", op.shape)
-            laterals.append(op)
-        # laterals = [lateral_conv(encoder_hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
-
+        laterals = [lateral_conv(encoder_hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
         laterals.append(self.psp_forward(encoder_hidden_states))
 
         # build top-down path
