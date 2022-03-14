@@ -285,6 +285,7 @@ class TFT5Attention(tf.keras.layers.Layer):
             relative_position,
             bidirectional=(not self.is_decoder),
             num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
         )
         values = tf.gather(
             self.relative_attention_bias, relative_position_bucket
