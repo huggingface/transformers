@@ -334,8 +334,8 @@ class T5Attention(nn.Module):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
-
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
+        self.relative_attention_max_distance = config.relative_attention_max_distance
         self.d_model = config.d_model
         self.key_value_proj_dim = config.d_kv
         self.n_heads = config.num_heads

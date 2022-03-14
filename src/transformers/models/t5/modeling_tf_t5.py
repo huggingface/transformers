@@ -179,6 +179,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
 
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
+        self.relative_attention_max_distance = config.relative_attention_max_distance
         self.d_model = config.d_model
         self.key_value_proj_dim = config.d_kv
         self.n_heads = config.num_heads
