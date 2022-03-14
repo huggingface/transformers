@@ -935,8 +935,6 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         >>> import re
         >>> import torch
 
-        >>> device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> text = "a bunch of [MASK] laying on a [MASK]."
@@ -957,7 +955,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         >>> with torch.no_grad():
         ...     for i in range(tl):
         ...         encoded = processor.tokenizer(inferred_token)
-        ...         input_ids = torch.tensor(encoded.input_ids).to(device)
+        ...         input_ids = torch.tensor(encoded.input_ids)
         ...         encoded = encoded["input_ids"][0][1:-1]
         ...         outputs = model(input_ids=input_ids, pixel_values=encoding.pixel_values)
         ...         mlm_logits = outputs.logits[0]  # shape (seq_len, vocab_size)
