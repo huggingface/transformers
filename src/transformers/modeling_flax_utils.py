@@ -613,13 +613,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         missing_keys = model.required_params - set(state.keys())
         unexpected_keys = set(state.keys()) - model.required_params
 
-        base_key_missing = any(cls.base_model_prefix in key for key in missing_keys)
-        is_base_model = cls.base_model_prefix not in dict(model.params_shape_tree)
-
-        if missing_keys and (base_key_missing or is_base_model):
+        if missing_keys and not do_init:
             raise ValueError(
-                f"The model {pretrained_model_name_or_path} is missing keys required for initialization: {missing_keys}. "
-                f"Please ensure that the model is complete and you are not missing any keys."
+                f"The checkpoint {pretrained_model_name_or_path} is missing required keys: {missing_keys}. "
+                f"Please ensure that the model is complete and you are not missing any keys when `do_init`=False."
             )
 
         # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
