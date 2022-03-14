@@ -51,7 +51,7 @@ _IMAGE_CLASS_CHECKPOINT = "van-base"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 VAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "zuppif/van-base",
+    "Visual-Attention-Network/van-base",
     # See all VAN models at https://huggingface.co/models?filter=van
 ]
 
