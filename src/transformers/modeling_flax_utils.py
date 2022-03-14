@@ -125,7 +125,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             params_shape_tree = jax.eval_shape(init_fn, self.key)
 
         # get the shape of the parameters
-        self.params_shape_tree = params_shape_tree
+        self._params_shape_tree = params_shape_tree
 
         # save required_params as set
         self._required_params = set(flatten_dict(unfreeze(params_shape_tree)).keys())
@@ -164,6 +164,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
     @property
     def required_params(self) -> Set:
         return self._required_params
+
+    @property
+    def params_shape_tree(self) -> Dict:
+        return self._params_shape_tree
 
     @params.setter
     def params(self, params: Union[Dict, FrozenDict]):
