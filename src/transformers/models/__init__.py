@@ -94,6 +94,7 @@ from . import (
     realm,
     reformer,
     rembert,
+    resnet,
     retribert,
     roberta,
     roformer,
