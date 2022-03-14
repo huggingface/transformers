@@ -717,7 +717,7 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: bool = False,
+        training: Optional[bool] = False,
         **kwargs,
     ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
         inputs = input_processing(
