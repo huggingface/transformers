@@ -294,6 +294,8 @@
       title: Reformer
     - local: model_doc/rembert
       title: RemBERT
+    - local: model_doc/resnet
+      title: ResNet
     - local: model_doc/retribert
       title: RetriBERT
     - local: model_doc/roberta
