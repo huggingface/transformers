@@ -126,19 +126,19 @@ def rename_key(name):
         name = name.replace("pretrained.act_postprocess4.0.project.0", "neck.reassemble_stage.readout_projects.3.0")
     # resize blocks
     if "pretrained.act_postprocess1.3" in name:
-        name = name.replace("pretrained.act_postprocess1.3", "neck.reassemble_stage.projects.0")
+        name = name.replace("pretrained.act_postprocess1.3", "neck.reassemble_stage.layers.0.project")
     if "pretrained.act_postprocess1.4" in name:
-        name = name.replace("pretrained.act_postprocess1.4", "neck.reassemble_stage.resize_layers.0")
+        name = name.replace("pretrained.act_postprocess1.4", "neck.reassemble_stage.layers.0.resize")
     if "pretrained.act_postprocess2.3" in name:
-        name = name.replace("pretrained.act_postprocess2.3", "neck.reassemble_stage.projects.1")
+        name = name.replace("pretrained.act_postprocess2.3", "neck.reassemble_stage.layers.1.project")
     if "pretrained.act_postprocess2.4" in name:
-        name = name.replace("pretrained.act_postprocess2.4", "neck.reassemble_stage.resize_layers.1")
+        name = name.replace("pretrained.act_postprocess2.4", "neck.reassemble_stage.layers.1.resize")
     if "pretrained.act_postprocess3.3" in name:
-        name = name.replace("pretrained.act_postprocess3.3", "neck.reassemble_stage.projects.2")
+        name = name.replace("pretrained.act_postprocess3.3", "neck.reassemble_stage.layers.2.project")
     if "pretrained.act_postprocess4.3" in name:
-        name = name.replace("pretrained.act_postprocess4.3", "neck.reassemble_stage.projects.3")
+        name = name.replace("pretrained.act_postprocess4.3", "neck.reassemble_stage.layers.3.project")
     if "pretrained.act_postprocess4.4" in name:
-        name = name.replace("pretrained.act_postprocess4.4", "neck.reassemble_stage.resize_layers.3")
+        name = name.replace("pretrained.act_postprocess4.4", "neck.reassemble_stage.layers.3.resize")
     if "pretrained" in name:
         name = name.replace("pretrained", "dpt")
     if "bn" in name:

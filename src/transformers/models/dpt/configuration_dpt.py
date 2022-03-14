@@ -76,6 +76,8 @@ class DPTConfig(PretrainedConfig):
             - "project" passes information to the other tokens by concatenating the readout to all other tokens before
               projecting the
             representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
+        reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
+            The up/downsampling factors of the reassemble layers.
         neck_hidden_sizes (`List[str]`, *optional*, defaults to [96, 192, 384, 768]):
             The hidden sizes to project to for the feature maps of the backbone.
         channels (`int`, *optional*, defaults to 256):
@@ -127,6 +129,7 @@ class DPTConfig(PretrainedConfig):
         qkv_bias=True,
         out_indices=[2, 5, 8, 11],
         readout_type="project",
+        reassemble_factors=[4, 2, 1, 0.5],
         neck_hidden_sizes=[96, 192, 384, 768],
         channels=256,
         in_index=-1,
@@ -156,6 +159,7 @@ class DPTConfig(PretrainedConfig):
         if readout_type not in ["ignore", "add", "project"]:
             raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
         self.readout_type = readout_type
+        self.reassemble_factors = reassemble_factors
         self.neck_hidden_sizes = neck_hidden_sizes
         self.channels = channels
         self.in_index = in_index

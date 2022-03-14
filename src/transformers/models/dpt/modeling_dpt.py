@@ -424,18 +424,12 @@ class DPTReassembleStage(nn.Module):
 
         self.config = config
         self.layers = nn.ModuleList()
-        in_size = config.image_size // config.patch_size
-        target_sizes = [in_size**4, in_size**2, in_size, in_size**0.5]
-        for i in range(len(config.neck_hidden_sizes)):
-            self.layers.append(
-                DPTReassembleLayer(
-                    config, channels=config.neck_hidden_sizes[i], in_size=in_size, target_size=target_sizes[i]
-                )
-            )
+        for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
+            self.layers.append(DPTReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor))
 
         if config.readout_type == "project":
             self.readout_projects = nn.ModuleList()
-            for _ in range(len(self.projects)):
+            for _ in range(len(config.neck_hidden_sizes)):
                 self.readout_projects.append(
                     nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
                 )
@@ -475,21 +469,19 @@ class DPTReassembleStage(nn.Module):
 
 
 class DPTReassembleLayer(nn.Module):
-    def __init__(self, config, channels, in_size, target_size):
+    def __init__(self, config, channels, factor):
         super().__init__()
         # projection
         self.project = nn.Conv2d(in_channels=config.hidden_size, out_channels=channels, kernel_size=1)
 
-        # resize
-        should_upsample = target_size > in_size
-        factor = target_size // in_size if should_upsample else in_size // target_size
-        if should_upsample:
-            self.resizer = nn.ConvTranspose2d(channels, channels, kernel_size=factor, stride=factor, padding=0)
-        elif factor == 0:
+        # up/down sampling depending on factor
+        if factor > 1:
+            self.resize = nn.ConvTranspose2d(channels, channels, kernel_size=factor, stride=factor, padding=0)
+        elif factor == 1:
             self.resize = nn.Identity()
-        elif not should_upsample:
+        elif factor < 1:
             # so should downsample
-            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=factor, padding=1)
+            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=int(1 / factor), padding=1)
 
     def forward(self, hidden_state):
         hidden_state = self.project(hidden_state)
