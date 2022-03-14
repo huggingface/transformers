@@ -29,6 +29,7 @@ import sys
 import tarfile
 import tempfile
 import types
+import warnings
 from collections import OrderedDict, UserDict
 from contextlib import ExitStack, contextmanager
 from dataclasses import fields
@@ -325,7 +326,15 @@ CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
 _staging_mode = os.environ.get("HUGGINGFACE_CO_STAGING", "NO").upper() in ENV_VARS_TRUE_VALUES
 _default_endpoint = "https://moon-staging.huggingface.co" if _staging_mode else "https://huggingface.co"
 
-HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", _default_endpoint)
+HUGGINGFACE_CO_RESOLVE_ENDPOINT = _default_endpoint
+if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
+    warnings.warn(
+        "Using the environment variable `HUGGINGFACE_CO_RESOLVE_ENDPOINT` is deprecated and will be removed in "
+        "Transformers v5. Use `HF_ENDPOINT` instead.",
+        FutureWarning,
+    )
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None)
+HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
