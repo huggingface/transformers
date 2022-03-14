@@ -226,7 +226,7 @@ class MultiHeadSelfAttention(nn.Module):
 
         context = torch.matmul(weights, v)  # (bs, n_heads, q_length, dim_per_head)
         context = unshape(context)  # (bs, q_length, dim)
-        context: torch.Tensor = self.out_lin(context)  # (bs, q_length, dim)
+        context = self.out_lin(context)  # (bs, q_length, dim)
 
         if output_attentions:
             return (context, weights)
