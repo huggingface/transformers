@@ -2587,7 +2587,7 @@ class GenerationIntegrationTests(unittest.TestCase):
                               " Einstein suggested to work together on Artifical Intelligence.\n",
                               " Kevin is my name\n"]
         completion_tokenized = [gpt2_tokenizer(completion_str, return_tensors="pt").input_ids[0].input_ids.to(torch_device) for completion_str in completion_options]
-        prob_list = model.evalute_completetions(input_ids, completion_tokenized)
+        prob_list = gpt2_model.evalute_completetions(input_ids, completion_tokenized)
         mean_list = [sum(elem) / float(len(elem)) for elem in prob_list]
 
         self.assertTrue(mean_list[0] < mean_list[1] and mean_list[2] < mean_list[1])
