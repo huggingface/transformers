@@ -295,7 +295,6 @@ class TFGPT2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_gpt2_xla_generate(self, config, input_ids, *args):
-        config.min_length = -1
         config.eos_token_id = None
         config.max_length = 10
         model = TFGPT2LMHeadModel(config=config)
@@ -537,7 +536,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gpt2_xla(self):
         """This test gives the exact same results as the non-xla test above"""
-        model = TFGPT2LMHeadModel.from_pretrained("gpt2", min_length=-1)
+        model = TFGPT2LMHeadModel.from_pretrained("gpt2")
         input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
 
         # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog

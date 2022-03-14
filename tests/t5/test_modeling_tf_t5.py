@@ -228,7 +228,6 @@ class TFT5ModelTester:
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
     def create_and_check_t5_xla_generate(self, config, input_ids, *args):
-        config.min_length = -1
         config.eos_token_id = None
         config.max_length = 10
         config.do_sample = False
@@ -236,7 +235,7 @@ class TFT5ModelTester:
         model = TFT5ForConditionalGeneration(config=config)
 
         # make sure there are no pad tokens in prompt
-        input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id - 1)
+        input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id + 5)
 
         generated = model.generate(input_ids)
 
@@ -478,7 +477,7 @@ class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFT5GenerationIntegrationTests(unittest.TestCase):
     @slow
     def test_greedy_xla_generate_simple(self):
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-small", min_length=-1)
+        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
         sentence = "Translate English to German: Today is a beautiful day."

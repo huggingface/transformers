@@ -1780,7 +1780,7 @@ class TFGenerationMixin:
             processors.append(TFNoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
         if bad_words_ids is not None:
             processors.append(TFNoBadWordsLogitsProcessor(bad_words_ids, eos_token_id))
-        if min_length is not None and eos_token_id is not None and min_length > -1:
+        if min_length is not None and eos_token_id is not None and min_length > 0:
             processors.append(TFMinLengthLogitsProcessor(min_length, eos_token_id))
 
         return processors
