@@ -77,7 +77,7 @@ class DeiTEmbeddings(nn.Module):
 
     """
 
-    def __init__(self, config, use_mask_token=False):
+    def __init__(self, config: DeiTConfig, use_mask_token: bool = False) -> None:
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
@@ -93,7 +93,7 @@ class DeiTEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 2, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, pixel_values, bool_masked_pos=None):
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.BoolTensor] = None) -> torch.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
 
@@ -117,7 +117,13 @@ class PatchEmbeddings(nn.Module):
 
     """
 
-    def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768):
+    def __init__(
+        self,
+        image_size: int = 224,
+        patch_size: Union[int, Tuple[int, int]] = 16,
+        num_channels: int = 3,
+        embed_dim: int = 768,
+    ) -> None:
         super().__init__()
         image_size = to_2tuple(image_size)
         patch_size = to_2tuple(patch_size)
@@ -128,7 +134,7 @@ class PatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         # FIXME look at relaxing size constraints
         if height != self.image_size[0] or width != self.image_size[1]:
@@ -463,7 +469,7 @@ DEIT_INPUTS_DOCSTRING = r"""
     DEIT_START_DOCSTRING,
 )
 class DeiTModel(DeiTPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+    def __init__(self, config: DeiTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False) -> None:
         super().__init__(config)
         self.config = config
 
@@ -476,7 +482,7 @@ class DeiTModel(DeiTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> PatchEmbeddings:
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
@@ -498,12 +504,12 @@ class DeiTModel(DeiTPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values=None,
-        bool_masked_pos=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        pixel_values: Optional[torch.Tensor] = None,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -566,7 +572,7 @@ class DeiTPooler(nn.Module):
     DEIT_START_DOCSTRING,
 )
 class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__(config)
 
         self.deit = DeiTModel(config, add_pooling_layer=False, use_mask_token=True)
@@ -583,13 +589,13 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values=None,
-        bool_masked_pos=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        pixel_values: Optional[torch.Tensor] = None,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, MaskedLMOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -674,7 +680,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
     DEIT_START_DOCSTRING,
 )
 class DeiTForImageClassification(DeiTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -690,13 +696,13 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values=None,
-        head_mask=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        pixel_values: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -823,7 +829,7 @@ class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
     DEIT_START_DOCSTRING,
 )
 class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -850,12 +856,12 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        pixel_values: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, DeiTForImageClassificationWithTeacherOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.deit(
