@@ -1416,6 +1416,7 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         input_shape: Optional[tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        do_init: bool = True,
         **kwargs
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
@@ -1424,7 +1425,7 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         elif input_shape is None:
             input_shape = (1, 1)
 
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, do_init=do_init)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
