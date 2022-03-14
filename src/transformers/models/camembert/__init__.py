@@ -52,6 +52,7 @@ if is_torch_available():
 if is_tf_available():
     _import_structure["modeling_tf_camembert"] = [
         "TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFCamembertForCausalLM",
         "TFCamembertForMaskedLM",
         "TFCamembertForMultipleChoice",
         "TFCamembertForQuestionAnswering",
@@ -85,6 +86,7 @@ if TYPE_CHECKING:
     if is_tf_available():
         from .modeling_tf_camembert import (
             TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCamembertForCausalLM,
             TFCamembertForMaskedLM,
             TFCamembertForMultipleChoice,
             TFCamembertForQuestionAnswering,
