@@ -190,11 +190,11 @@ class FlaxModelTesterMixin:
         elif isinstance(fxo, jnp.ndarray):
             self.assertTrue(isinstance(pto, torch.Tensor))
 
-            fxo = fxo.numpy()
+            fxo = np.asarray(fxo)
             pto = pto.numpy()
 
-            fx_nans = np.copy(np.isnan(fxo))
-            pt_nans = np.copy(np.isnan(pto))
+            fx_nans = np.isnan(fxo)
+            pt_nans = np.isnan(pto)
 
             pto[fx_nans] = 0
             fxo[fx_nans] = 0
