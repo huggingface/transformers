@@ -113,20 +113,22 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         self.key = PRNGKey(seed)
         self.dtype = dtype
 
+        self.do_init = do_init
+
         if do_init:
             # randomly initialized parameters
             random_params = self.init_weights(self.key, input_shape)
             params_shape_tree = jax.tree_map(lambda x: x.shape, random_params)
+            self.params = random_params
         else:
             init_fn = partial(self.init_weights, input_shape=input_shape)
             params_shape_tree = jax.eval_shape(init_fn, self.key)
-        
+
         # get the shape of the parameters
         self.params_shape_tree = params_shape_tree
 
         # save required_params as set
         self._required_params = set(flatten_dict(unfreeze(params_shape_tree)).keys())
-        self.params = random_params if do_init else None
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
@@ -155,6 +157,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
     @property
     def params(self) -> Union[Dict, FrozenDict]:
+        if not self.do_init:
+            raise ValueError("params cannot be accessed from model when the model is created with `do_init=False`.")
         return self._params
 
     @property
