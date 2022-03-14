@@ -112,6 +112,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         # Those are public as their type is generic to every derived classes.
         self.key = PRNGKey(seed)
         self.dtype = dtype
+        self.input_shape = input_shape
 
         self.do_init = do_init
 
