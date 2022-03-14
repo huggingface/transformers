@@ -2575,3 +2575,19 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             model.generate(input_ids, force_words_ids=[[[-1]]])
+
+    @slow
+    def test_evaluate_completions(self):
+        article = """In recent events the collaboration between Albert Einstein and Yann LeCun started getting traction."""
+        gpt2_model = GPT2LMHeadModel.from_pretrained("../gpt2").to(torch_device)
+        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("../gpt2")
+        input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        completion_options = [" That's why they kissed.\n",
+                              " Einstein suggested to work together on Artifical Intelligence.\n",
+                              " Kevin is my name\n"]
+        completion_tokenized = [gpt2_tokenizer(completion_str, return_tensors="pt").input_ids[0].input_ids.to(torch_device) for completion_str in completion_options]
+        prob_list = model.evalute_completetions(input_ids, completion_tokenized)
+        mean_list = [sum(elem) / float(len(elem)) for elem in prob_list]
+
+        self.assertTrue(mean_list[0] < mean_list[1] and mean_list[2] < mean_list[1])
