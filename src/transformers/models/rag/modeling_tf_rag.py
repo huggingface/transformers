@@ -23,7 +23,7 @@ import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import ModelOutput, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, unpack_inputs, shape_list
+from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, shape_list, unpack_inputs
 from ...utils import logging
 from .configuration_rag import RagConfig
 from .retrieval_rag import RagRetriever
@@ -532,9 +532,9 @@ class TFRagModel(TFRagPreTrainedModel):
     def set_retriever(self, retriever: RagRetriever):
         self.retriever = retriever
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFRetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -818,9 +818,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         log_prob_sum = seq_logprobs + doc_logprobs
         return tf.reduce_logsumexp(log_prob_sum, axis=1)
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFRetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1400,9 +1400,9 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
     def question_encoder(self):
         return self.rag.question_encoder
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFRetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1495,9 +1495,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
             "decoder_cached_states" not in kwargs
         ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
 
-        exclude_bos_score = (
-            exclude_bos_score if exclude_bos_score else self.config.exclude_bos_score
-        )
+        exclude_bos_score = exclude_bos_score if exclude_bos_score else self.config.exclude_bos_score
         reduce_loss = reduce_loss if reduce_loss else self.config.reduce_loss
 
         if labels is not None:
