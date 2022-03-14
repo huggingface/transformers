@@ -192,7 +192,7 @@ class MaskGenerator:
         self.rand_size = self.input_size // self.mask_patch_size
         self.scale = self.mask_patch_size // self.model_patch_size
 
-        self.token_count = self.rand_size**2
+        self.token_count = self.rand_size ** 2
         self.mask_count = int(np.ceil(self.token_count * self.mask_ratio))
 
     def __call__(self):

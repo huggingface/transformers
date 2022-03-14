@@ -15,6 +15,7 @@
 import os
 import tempfile
 import unittest
+from copy import deepcopy
 
 from transformers import DistilBertConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
@@ -349,6 +350,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DistilBertModel,
+            DistilBertForCausalLM,
             DistilBertForMaskedLM,
             DistilBertForMultipleChoice,
             DistilBertForQuestionAnswering,
@@ -358,6 +360,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else None
     )
+    all_generative_model_classes = (DistilBertForCausalLM,) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = True
     test_torchscript = True
@@ -449,3 +452,23 @@ class DistilBertModelIntergrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+
+    # XXX: this might be a candidate for common tests if we have many of those
+    def test_lm_head_ignore_keys(self):
+        keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
+        keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
+        config = DistilBertModel.from_pretrained("distilbert-base-uncased")
+        config_tied = deepcopy(config)
+        config_tied.tie_word_embeddings = True
+        config_untied = deepcopy(config)
+        config_untied.tie_word_embeddings = False
+        for cls in [DistilBertForMaskedLM, DistilBertForCausalLM]:
+            model = cls(config_tied)
+            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_tied, cls)
+
+            # the keys should be different when embeddings aren't tied
+            model = cls(config_untied)
+            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_untied, cls)
+
+            # test that saving works with updated ignore keys - just testing that it doesn't fail
+            model.save_pretrained(self.get_auto_remove_tmp_dir())

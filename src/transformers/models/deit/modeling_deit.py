@@ -560,7 +560,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         self.deit = DeiTModel(config, add_pooling_layer=False, use_mask_token=True)
 
         self.decoder = nn.Sequential(
-            nn.Conv2d(in_channels=config.hidden_size, out_channels=config.encoder_stride**2 * 3, kernel_size=1),
+            nn.Conv2d(in_channels=config.hidden_size, out_channels=config.encoder_stride ** 2 * 3, kernel_size=1),
             nn.PixelShuffle(config.encoder_stride),
         )
 
@@ -617,7 +617,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         # Reshape to (batch_size, num_channels, height, width)
         sequence_output = sequence_output[:, 1:-1]
         batch_size, sequence_length, num_channels = sequence_output.shape
-        height = width = int(sequence_length**0.5)
+        height = width = int(sequence_length ** 0.5)
         sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
 
         # Reconstruct pixel values

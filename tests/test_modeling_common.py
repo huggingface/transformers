@@ -169,7 +169,7 @@ class ModelTesterMixin:
             elif model_class in get_values(MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING):
                 num_patches = self.model_tester.image_size // self.model_tester.patch_size
                 inputs_dict["bool_masked_pos"] = torch.zeros(
-                    (self.model_tester.batch_size, num_patches**2), dtype=torch.long, device=torch_device
+                    (self.model_tester.batch_size, num_patches ** 2), dtype=torch.long, device=torch_device
                 )
         return inputs_dict
 
