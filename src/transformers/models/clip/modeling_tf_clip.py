@@ -495,7 +495,6 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
             epsilon=config.layer_norm_eps, name="final_layer_norm"
         )
 
-    @unpack_inputs
     def call(
         self,
         input_ids: TFModelInputType,
@@ -596,9 +595,8 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
         training: bool = False,
         **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-
         if input_ids is None:
-            raise ValueError("You have to specify either input_ids")
+            raise ValueError("You have to specify input_ids")
 
         input_shape = shape_list(input_ids)
 
