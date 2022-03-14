@@ -56,6 +56,7 @@ class LEDTokenizerFast(BartTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = LEDTokenizer
 
+    # Copied from transformers.models.led.tokenization_led.LEDTokenizer._pad
     def _pad(
         self,
         encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
