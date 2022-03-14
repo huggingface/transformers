@@ -16,15 +16,19 @@
 
 
 import inspect
+import math
 import unittest
 
 from transformers import VanConfig
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.file_utils import cached_property, is_scipy_available, is_torch_available, is_vision_available
+from transformers.testing_utils import require_scipy, require_torch, require_vision, slow, torch_device
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
+
+if is_scipy_available:
+    from scipy import stats
 
 if is_torch_available():
     import torch
@@ -165,6 +169,7 @@ class VanModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @require_scipy
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         configs_no_init = _config_zero_init(config)
@@ -182,18 +187,13 @@ class VanModelTest(ModelTesterMixin, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
                 elif isinstance(module, nn.Conv2d):
-                    # fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
-                    # fan_out //= module.groups
-                    # std = math.sqrt(2.0 / fan_out)
-                    # we should use shapiro test https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.shapiro.html
-                    # but I can't import scipy
-                    # # impossibile to have numbers outside 6 x std
-                    # normal_range = [-6 * std, 6 * std]
-                    # self.assertTrue(torch.all(module.weight.data >= normal_range[0]))
-                    # self.assertTrue(torch.all(module.weight.data <= normal_range[1]))
-                    # # check bias
-                    # self.assertTrue(torch.all(module.bias == 0))
-                    pass
+                    fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
+                    fan_out //= module.groups
+                    std = math.sqrt(2.0 / fan_out)
+                    # divide by std -> mean = 0, std = 1
+                    data = module.weight.data.cpu().flatten().numpy() / std
+                    test = stats.anderson(data)
+                    self.assertTrue(test.statistic > 0.05)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
