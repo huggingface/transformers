@@ -80,11 +80,11 @@ class DPTConfig(PretrainedConfig):
             The up/downsampling factors of the reassemble layers.
         neck_hidden_sizes (`List[str]`, *optional*, defaults to [96, 192, 384, 768]):
             The hidden sizes to project to for the feature maps of the backbone.
-        channels (`int`, *optional*, defaults to 256):
+        fusion_hidden_size (`int`, *optional*, defaults to 256):
             The number of channels before fusion.
         in_index (`int`, *optional*, defaults to -1):
             The index of the features to use in the heads.
-        use_batch_norm (`bool`, *optional*, defaults to `False`):
+        use_batch_norm_in_fusion_residual (`bool`, *optional*, defaults to `False`):
             Whether to use batch normalization in the pre-activate residual units of the fusion blocks.
         use_auxiliary_head (`bool`, *optional*, defaults to `True`):
             Whether to use an auxiliary head during training.
@@ -131,9 +131,9 @@ class DPTConfig(PretrainedConfig):
         readout_type="project",
         reassemble_factors=[4, 2, 1, 0.5],
         neck_hidden_sizes=[96, 192, 384, 768],
-        channels=256,
+        fusion_hidden_size=256,
         in_index=-1,
-        use_batch_norm=False,
+        use_batch_norm_in_fusion_residual=False,
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
         semantic_loss_ignore_index=255,
@@ -161,9 +161,9 @@ class DPTConfig(PretrainedConfig):
         self.readout_type = readout_type
         self.reassemble_factors = reassemble_factors
         self.neck_hidden_sizes = neck_hidden_sizes
-        self.channels = channels
+        self.fusion_hidden_size = fusion_hidden_size
         self.in_index = in_index
-        self.use_batch_norm = use_batch_norm
+        self.use_batch_norm_in_fusion_residual = use_batch_norm_in_fusion_residual
         # auxiliary head attributes (semantic segmentation)
         self.use_auxiliary_head = use_auxiliary_head
         self.auxiliary_loss_weight = auxiliary_loss_weight

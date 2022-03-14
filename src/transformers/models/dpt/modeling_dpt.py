@@ -519,11 +519,11 @@ class DPTPreActResidualLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.use_batch_norm = config.use_batch_norm
+        self.use_batch_norm = config.use_batch_norm_in_fusion_residual
         self.act1 = ACT2FN["relu"]
         self.conv1 = nn.Conv2d(
-            config.channels,
-            config.channels,
+            config.fusion_hidden_size,
+            config.fusion_hidden_size,
             kernel_size=3,
             stride=1,
             padding=1,
@@ -532,8 +532,8 @@ class DPTPreActResidualLayer(nn.Module):
 
         self.act2 = ACT2FN["relu"]
         self.conv2 = nn.Conv2d(
-            config.channels,
-            config.channels,
+            config.fusion_hidden_size,
+            config.fusion_hidden_size,
             kernel_size=3,
             stride=1,
             padding=1,
@@ -541,8 +541,8 @@ class DPTPreActResidualLayer(nn.Module):
         )
 
         if self.use_batch_norm:
-            self.batch_norm1 = nn.BatchNorm2d(config.channels)
-            self.batch_norm2 = nn.BatchNorm2d(config.channels)
+            self.batch_norm1 = nn.BatchNorm2d(config.fusion_hidden_size)
+            self.batch_norm2 = nn.BatchNorm2d(config.fusion_hidden_size)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         residual = hidden_state
@@ -568,27 +568,18 @@ class DPTFeatureFusionLayer(nn.Module):
     Args:
         config (`[DPTConfig]`):
             Model configuration class defining the model architecture.
-        expand (`bool`, *optional*, defaults to `False`):
-            Whether to expand the channels in the post process block.
         align_corners (`bool`, *optional*, defaults to `True`):
             The align_corner setting for bilinear upsample.
     """
 
-    def __init__(self, config, expand=False, align_corners=True):
+    def __init__(self, config, align_corners=True):
         super().__init__()
 
-        self.expand = expand
         self.align_corners = align_corners
 
-        self.out_channels = config.channels
-        if self.expand:
-            self.out_channels = config.channels // 2
-
-        out_channels = config.channels // 2 if self.expand else config.channels
-        self.project = nn.Conv2d(config.channels, out_channels, kernel_size=1, bias=True)
+        self.project = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
 
         self.res_conv_unit1 = DPTPreActResidualLayer(config)
-
         self.res_conv_unit2 = DPTPreActResidualLayer(config)
 
     def forward(self, *inputs):
@@ -793,7 +784,7 @@ class DPTNeck(nn.Module):
         self.reassemble_stage = DPTReassembleStage(config)
         self.convs = nn.ModuleList()
         for channel in config.neck_hidden_sizes:
-            self.convs.append(nn.Conv2d(channel, config.channels, kernel_size=3, padding=1, bias=False))
+            self.convs.append(nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, bias=False))
 
         # fusion
         self.fusion_stage = DPTFeatureFusionStage(config)
@@ -828,7 +819,7 @@ class DPTDepthEstimationHead(nn.Module):
 
         self.config = config
 
-        features = config.channels
+        features = config.fusion_hidden_size
         self.head = nn.Sequential(
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
@@ -951,7 +942,7 @@ class DPTSemanticSegmentationHead(nn.Module):
 
         self.config = config
 
-        features = config.channels
+        features = config.fusion_hidden_size
         self.head = nn.Sequential(
             nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(features),
@@ -974,7 +965,7 @@ class DPTAuxiliaryHead(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        features = config.channels
+        features = config.fusion_hidden_size
         self.head = nn.Sequential(
             nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(features),

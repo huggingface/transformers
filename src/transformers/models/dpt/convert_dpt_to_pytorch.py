@@ -45,7 +45,7 @@ def get_dpt_config(checkpoint_url):
         expected_shape = (1, 384, 384)
 
     if "ade" in checkpoint_url:
-        config.use_batch_norm = True
+        config.use_batch_norm_in_fusion_residual = True
 
         config.num_labels = 150
         repo_id = "datasets/huggingface/label-files"
