@@ -35,7 +35,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from flax.core.frozen_dict import unfreeze
+    from flax.core.frozen_dict import FrozenDict, unfreeze
     from flax.traverse_util import flatten_dict, unflatten_dict
     from transformers import (
         FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
@@ -825,6 +825,34 @@ class FlaxModelTesterMixin:
                 raise NotImplementedError("The test has not been implemented for encoder-decoder models yet.")
             else:
                 _check_attentions_validity(outputs.attentions)
+
+    def test_do_init(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            model = model_class(config, do_init=False)
+
+            # Check that accesing parmas raises an ValueError when do_init is False
+            with self.assertRaises(ValueError):
+                params = model.params
+
+            # Check if we params can be properly initialized when calling init_weights
+            params = model.init_weights(model.key, model.input_shape)
+            self.assertIsInstance(params, FrozenDict)
+            # Check if all required parmas are initialized
+            keys = set(flatten_dict(unfreeze(params)).keys())
+            self.assertTrue(all(k in keys for k in model.required_params))
+
+            # Check if we can do a forward pass
+            inputs_dict["output_hidden_states"] = True
+            inputs = self._prepare_for_class(inputs_dict, model_class).copy()
+            outputs = model(**inputs, params=params)
+            seq_length = self.model_tester.seq_length
+            self.assertListEqual(
+                list(outputs.hidden_states[-1].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
+            )
 
 
 @require_flax
