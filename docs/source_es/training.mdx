@@ -138,7 +138,7 @@ Crea un objeto [`Trainer`] con tu modelo, argumentos de entrenamiento, conjuntos
 ... )
 ```
 
-A continuación, aplica fine-tuning a tu modelo llamando a [`~transformers.Trainer.train`]:
+A continuación, aplica fine-tuning a tu modelo llamando [`~transformers.Trainer.train`]:
 
 ```py
 >>> trainer.train()
@@ -164,11 +164,11 @@ El [`DefaultDataCollator`] junta los tensores en un batch para que el modelo se 
 
 <Tip>
 
-[`Trainer`] utiliza [`DataCollatorWithPadding`] por defecto, por lo que no es necesario especificar explícitamente un intercalador de datos.
+[`Trainer`] utiliza [`DataCollatorWithPadding`] por defecto por lo que no es necesario especificar explícitamente un intercalador de datos (data collator, en inglés).
 
 </Tip>
 
-A continuación, convierte los datasets0 tokenizados en datasets de TensorFlow con el método [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Especifica tus entradas en `columns`, y tu etiqueta en `label_cols`:
+A continuación, convierte los datasets tokenizados en datasets de TensorFlow con el método [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Especifica tus entradas en `columns` y tu etiqueta en `label_cols`:
 
 ```py
 >>> tf_train_dataset = small_train_dataset.to_tf_dataset(
@@ -199,7 +199,7 @@ Carguemos un modelo TensorFlow con el número esperado de labels:
 >>> model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
 ```
 
-A continuación, compila y aplica fine-tuning a tu modelo con [`fit`](https://keras.io/api/models/model_training_apis/) como lo harías con cualquier otro modelo Keras:
+A continuación, compila y aplica fine-tuning a tu modelo con [`fit`](https://keras.io/api/models/model_training_apis/) como lo harías con cualquier otro modelo de Keras:
 
 ```py
 >>> model.compile(
@@ -228,7 +228,7 @@ del trainer
 torch.cuda.empty_cache()
 ```
 
-A continuación, haz un post-proceso manualmente al `tokenized_dataset` y así prepararlo para el entrenamiento.
+A continuación, haremos un post-procesamiento manual al `tokenized_dataset` y así prepararlo para el entrenamiento.
 
 1. Elimina la columna de `text` porque el modelo no acepta texto en crudo como entrada:
 
@@ -284,7 +284,7 @@ Crea un optimizador y el learning rate para aplicar fine-tuning al modelo. Vamos
 >>> optimizer = AdamW(model.parameters(), lr=5e-5)
 ```
 
-Crea el learning rate por defecto desde el [`Trainer`]:
+Crea el learning rate desde el [`Trainer`]:
 
 ```py
 >>> from transformers import get_scheduler
@@ -296,7 +296,7 @@ Crea el learning rate por defecto desde el [`Trainer`]:
 ... )
 ```
 
-Por último, especifique el `device` o entorno de ejecución para utilizar una GPU si tiene acceso a una. De lo contrario, el entrenamiento en una CPU puede llevar varias horas en lugar de un par de minutos.
+Por último, especifica el `device` o entorno de ejecución para utilizar una GPU si tienes acceso a una. De lo contrario, el entrenamiento en una CPU puede llevarte varias horas en lugar de un par de minutos.
 
 ```py
 >>> import torch
@@ -307,11 +307,11 @@ Por último, especifique el `device` o entorno de ejecución para utilizar una G
 
 <Tip>
 
-Consigue acceso gratuito a una GPU en la nube si es que no tienes este recurso de forma local, con un notebook alojado como [Colaboratory](https://colab.research.google.com/) o [SageMaker StudioLab](https://studiolab.sagemaker.aws/).
+Consigue acceso gratuito a una GPU en la nube si es que no tienes este recurso de forma local con un notebook alojado en [Colaboratory](https://colab.research.google.com/) o [SageMaker StudioLab](https://studiolab.sagemaker.aws/).
 
 </Tip>
 
-Genial, ¡ahora podemos entrenar! 🥳
+Genial, ¡ahora estamos listos entrenar! 🥳
 
 ### Ciclo de entrenamiento
 
