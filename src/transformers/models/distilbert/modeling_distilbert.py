@@ -217,7 +217,7 @@ class MultiHeadSelfAttention(nn.Module):
         mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
         scores = scores.masked_fill(mask, -float("inf"))  # (bs, n_heads, q_length, k_length)
 
-        weights: torch.Tensor = nn.functional.softmax(scores, dim=-1)  # (bs, n_heads, q_length, k_length)
+        weights = nn.functional.softmax(scores, dim=-1)  # (bs, n_heads, q_length, k_length)
         weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
 
         # Mask heads if we want to
