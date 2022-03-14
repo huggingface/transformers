@@ -190,7 +190,8 @@ class FlaxModelTesterMixin:
         elif isinstance(fxo, jnp.ndarray):
             self.assertTrue(isinstance(pto, torch.Tensor))
 
-            fxo = np.asarray(fxo)
+            # Using `np.asarray` gives `ValueError: assignment destination is read-only` at the line `fxo[fx_nans] = 0`.
+            fxo = np.array(fxo)
             pto = pto.numpy()
 
             fx_nans = np.isnan(fxo)
