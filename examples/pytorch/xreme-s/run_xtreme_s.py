@@ -28,7 +28,7 @@ from typing import Dict, List, Optional, Union
 import datasets
 import numpy as np
 import torch
-from datasets import DatasetDict, load_dataset, load_metric
+from datasets import DatasetDict, concatenate_datasets, get_dataset_config_names, load_dataset, load_metric
 
 import transformers
 from transformers import (
@@ -197,7 +197,7 @@ class DataTrainingArguments:
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
     max_duration_in_seconds: float = field(
-        default=20.0,
+        default=30.0,
         metadata={
             "help": "Filter audio files that are longer than `max_duration_in_seconds` seconds to 'max_duration_in_seconds`"
         },
@@ -245,7 +245,7 @@ class DataTrainingArguments:
 
 
 @dataclass
-class DataCollatorWithPadding:
+class SpeechDataCollatorWithPadding:
     """
     Data collator that will dynamically pad the inputs received.
     Args:
@@ -269,6 +269,7 @@ class DataCollatorWithPadding:
     """
 
     processor: AutoProcessor
+    decoder_start_token_id: Optional[int] = None
     padding: Union[bool, str] = "longest"
     pad_labels: Optional[int] = True
     pad_to_multiple_of: Optional[int] = None
@@ -298,6 +299,15 @@ class DataCollatorWithPadding:
 
             # replace padding with -100 to ignore loss correctly
             labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
+
+            # if bos token is appended in previous tokenization step,
+            # cut bos token here as it's append later anyways
+            if (
+                self.decoder_start_token_id is not None
+                and (labels[:, 0] == self.decoder_start_token_id).all().cpu().item()
+            ):
+                labels = labels[:, 1:]
+
             batch["labels"] = labels
         else:
             batch["labels"] = torch.tensor([feature["labels"] for feature in features])
@@ -401,20 +411,36 @@ def main():
     if data_args.dataset_config_name is None:
         raise ValueError(
             "Set --dataset_config_name should be set to '<xtreme_s_subset>.<language(s)' "
-            "(e.g. 'mls.pl', 'covost2.en.tr', 'minds14.fr-FR')"
+            "(e.g. 'mls.pl', 'covost2.en.tr', 'minds14.fr-FR') or '<xtreme_s_subset>' for multi-lingual fine-tuning."
         )
 
-    task_name = data_args.dataset_config_name.split(".")[0]
+    # Use either a single language config or infer a list of configs for the whole task
+    if "." in data_args.dataset_config_name:
+        task_name = data_args.dataset_config_name.split(".")[0]
+        datasets_configs = [data_args.dataset_config_name]
+    else:
+        task_name = data_args.dataset_config_name
+        datasets_configs = get_dataset_config_names(
+            data_args.dataset_name,
+            use_auth_token=data_args.use_auth_token,
+        )
+        datasets_configs = [conf for conf in datasets_configs if conf.startswith(task_name)]
+
     target_column_name = data_args.target_column_name
     is_text_target = target_column_name in ("transcription", "translation")
 
     if training_args.do_train:
-        raw_datasets["train"] = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
-            split=data_args.train_split_name,
-            use_auth_token=data_args.use_auth_token,
-            cache_dir=model_args.cache_dir,
+        raw_datasets["train"] = concatenate_datasets(
+            [
+                load_dataset(
+                    data_args.dataset_name,
+                    dataset_config,
+                    split=data_args.train_split_name,
+                    use_auth_token=data_args.use_auth_token,
+                    cache_dir=model_args.cache_dir,
+                )
+                for dataset_config in datasets_configs
+            ]
         )
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
@@ -439,12 +465,17 @@ def main():
             num_labels = len(label_list)
 
     if training_args.do_eval:
-        raw_datasets["eval"] = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
-            split=data_args.eval_split_name,
-            use_auth_token=data_args.use_auth_token,
-            cache_dir=model_args.cache_dir,
+        raw_datasets["eval"] = concatenate_datasets(
+            [
+                load_dataset(
+                    data_args.dataset_name,
+                    dataset_config,
+                    split=data_args.eval_split_name,
+                    use_auth_token=data_args.use_auth_token,
+                    cache_dir=model_args.cache_dir,
+                )
+                for dataset_config in datasets_configs
+            ]
         )
 
         if data_args.max_eval_samples is not None:
@@ -617,7 +648,7 @@ def main():
 
         inputs = feature_extractor(sample["array"], sampling_rate=sample["sampling_rate"])
         batch["input_values"] = inputs.input_values[0]
-        batch["input_length"] = len(batch["input_values"])
+        batch["length"] = len(batch["input_values"])
 
         # encode targets
         additional_kwargs = {}
@@ -638,15 +669,16 @@ def main():
             desc="preprocess datasets",
         )
 
-        def is_audio_in_length_range(length):
-            return length > min_input_length and length < max_input_length
+        if training_args.do_train:
+            def is_audio_in_length_range(length):
+                return length > min_input_length and length < max_input_length
 
-        # filter data that is shorter than min_input_length
-        vectorized_datasets = vectorized_datasets.filter(
-            is_audio_in_length_range,
-            num_proc=num_workers,
-            input_columns=["input_length"],
-        )
+            # filter data that is shorter than min_input_length
+            vectorized_datasets["train"] = vectorized_datasets["train"].filter(
+                is_audio_in_length_range,
+                num_proc=num_workers,
+                input_columns=["length"],
+            )
 
     # 7. Next, we can prepare the training.
     # Let's use word error rate (WER) as our evaluation metric,
@@ -674,12 +706,12 @@ def main():
         # we do not want to group tokens when computing the metrics
         label_str = tokenizer.batch_decode(pred.label_ids, group_tokens=False)
 
-        metric = eval_metric.compute(predictions=pred_str, references=label_str, bleu_kwargs={}, wer_kwargs={})
+        metric = eval_metric.compute(predictions=pred_str, references=label_str)
         return metric
 
     def compute_classification_metric(pred):
         pred_ids = np.argmax(pred.predictions, axis=1)
-        metric = eval_metric.compute(predictions=pred_ids, references=pred.label_ids, bleu_kwargs={}, wer_kwargs={})
+        metric = eval_metric.compute(predictions=pred_ids, references=pred.label_ids)
         return metric
 
     # Now save everything to be able to create a single processor later
@@ -707,7 +739,7 @@ def main():
         processor = AutoFeatureExtractor.from_pretrained(training_args.output_dir)
 
     # Instantiate custom data collator
-    data_collator = DataCollatorWithPadding(processor=processor, pad_labels=is_text_target)
+    data_collator = SpeechDataCollatorWithPadding(processor=processor, pad_labels=is_text_target)
 
     # Initialize Trainer
     trainer = Trainer(
