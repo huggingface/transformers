@@ -50,6 +50,8 @@ class MaskFormerFeatureExtractionTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         num_labels=10,
+        reduce_labels=True,
+        ignore_index=255,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -70,6 +72,8 @@ class MaskFormerFeatureExtractionTester(unittest.TestCase):
         self.height = 3
         self.width = 4
         self.num_labels = num_labels
+        self.reduce_labels = reduce_labels
+        self.ignore_index = ignore_index
 
     def prepare_feat_extract_dict(self):
         return {
@@ -81,6 +85,8 @@ class MaskFormerFeatureExtractionTester(unittest.TestCase):
             "image_std": self.image_std,
             "size_divisibility": self.size_divisibility,
             "num_labels": self.num_labels,
+            "reduce_labels": self.reduce_labels,
+            "ignore_index": self.ignore_index,
         }
 
     def get_expected_values(self, image_inputs, batched=False):
@@ -276,9 +282,12 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         annotations = None
 
         if with_segmentation_maps:
-            annotations = [np.zeros((384, 384)).astype(np.float32) for _ in range(batch_size)]
+            annotations = [
+                np.random.randint(0, self.feature_extract_tester.num_labels, (384, 384)).astype(np.uint8)
+                for _ in range(batch_size)
+            ]
             if segmentation_type == "pil":
-                annotations = [Image.fromarray(annotation.astype(np.uint8)) for annotation in annotations]
+                annotations = [Image.fromarray(annotation) for annotation in annotations]
 
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
 
