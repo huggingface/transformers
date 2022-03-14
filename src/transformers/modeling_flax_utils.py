@@ -97,6 +97,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         input_shape: Tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        do_init: bool = True,
     ):
         if config is None:
             raise ValueError("config cannot be None")
@@ -112,8 +113,12 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         self.key = PRNGKey(seed)
         self.dtype = dtype
 
-        # randomly initialized parameters
-        random_params = self.init_weights(self.key, input_shape)
+        if do_init:
+            # randomly initialized parameters
+            random_params = self.init_weights(self.key, input_shape)
+        else:
+            init_fn = partial(self.init_weights, input_shape=input_shape)
+            random_params = jax.eval_shape(init_fn, self.key)
 
         # save required_params as set
         self._required_params = set(flatten_dict(unfreeze(random_params)).keys())
@@ -416,6 +421,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         revision = kwargs.pop("revision", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+        do_init = kwargs.pop("do_init", True)
 
         user_agent = {"file_type": "model", "framework": "flax", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -552,7 +558,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             resolved_archive_file = None
 
         # init random models
-        model = cls(config, *model_args, **model_kwargs)
+        model = cls(config, *model_args, do_init=do_init, **model_kwargs)
 
         if from_pt:
             state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file)
@@ -576,7 +582,11 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             # make sure all arrays are stored as jnp.arrays
             # NOTE: This is to prevent a bug this will be fixed in Flax >= v0.3.4:
             # https://github.com/google/flax/issues/1261
-            state = jax.tree_util.tree_map(jnp.array, state)
+            if do_init:
+                state = jax.tree_util.tree_map(jnp.array, state)
+            else:
+                # keep the params on CPU if we don't want to initialize
+                state = jax.tree_util.tree_map(lambda x: jax.device_put(x, jax.devices("cpu")[0]), state)
 
         # if model is base model only use model_prefix key
         if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
@@ -594,6 +604,15 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         missing_keys = model.required_params - set(state.keys())
         unexpected_keys = set(state.keys()) - model.required_params
+
+        base_key_missing = any(cls.base_model_prefix in key for key in missing_keys)
+        is_base_model = cls.base_model_prefix not in dict(model.params)
+
+        if missing_keys and (base_key_missing or is_base_model):
+            raise ValueError(
+                f"The model {pretrained_model_name_or_path} is missing keys required for initialization: {missing_keys}. "
+                f"Please ensure that the model is complete and you are not missing any keys."
+            )
 
         # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
         # matching the weights in the model.
@@ -656,10 +675,12 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
 
-        # set correct parameters
-        model.params = unflatten_dict(state)
-
-        return model
+        if do_init:
+            # set correct parameters
+            model.params = unflatten_dict(state)
+            return model
+        else:
+            return model, unflatten_dict(state)
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], params=None, push_to_hub=False, **kwargs):
         """
