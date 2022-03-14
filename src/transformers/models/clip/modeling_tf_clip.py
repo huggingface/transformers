@@ -1046,9 +1046,9 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
 
         self.clip = TFCLIPTextMainLayer(config, name="clip")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=CLIPTextConfig)
-    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1143,9 +1143,9 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
 
         return self.serving_output(output)
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=CLIPVisionConfig)
-    @unpack_inputs
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -1247,8 +1247,8 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
 
         return self.serving_output(output)
 
-    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @unpack_inputs
+    @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def get_text_features(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1288,8 +1288,8 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
     @unpack_inputs
+    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
     def get_image_features(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -1331,9 +1331,9 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
 
         return image_features
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(CLIP_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFCLIPOutput, config_class=CLIPConfig)
-    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
