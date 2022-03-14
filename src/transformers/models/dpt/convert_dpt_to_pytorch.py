@@ -108,7 +108,7 @@ def rename_key(name):
     if "refinenet" in name:
         layer_idx = int(name[len("neck.refinenet") : len("neck.refinenet") + 1])
         # tricky here: we need to map 4 to 0, 3 to 1, 2 to 2 and 1 to 3
-        name = name.replace(f"refinenet{layer_idx}", f"fusion_blocks.{abs(layer_idx-4)}")
+        name = name.replace(f"refinenet{layer_idx}", f"fusion_stage.layers.{abs(layer_idx-4)}")
     if "out_conv" in name:
         name = name.replace("out_conv", "project")
     if "resConfUnit1" in name:

@@ -434,7 +434,7 @@ class DPTReassembleStage(nn.Module):
                     nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
                 )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
@@ -487,6 +487,24 @@ class DPTReassembleLayer(nn.Module):
         hidden_state = self.project(hidden_state)
         hidden_state = self.resize(hidden_state)
         return hidden_state
+
+
+class DPTFeatureFusionStage(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        for _ in range(len(config.neck_hidden_sizes)):
+            self.layers.append(DPTFeatureFusionLayer(config))
+        self.layers[0].res_conv_unit1 = None
+
+    def forward(self, hidden_states):
+        output = []
+        out = self.layers[0](hidden_states[-1])
+        for i in range(1, len(self.layers)):
+            out = self.layers[i](out, hidden_states[-(i + 1)])
+            output.append(out)
+
+        return output
 
 
 class DPTPreActResidualLayer(nn.Module):
@@ -757,10 +775,10 @@ class DPTViTPooler(nn.Module):
 class DPTNeck(nn.Module):
     """
     DPTNeck. A neck is a module that is normally used between the backbone and the head. It takes a list of tensors as
-    input and produces another list of tensors as output. For DPT, it includes:
+    input and produces another list of tensors as output. For DPT, it includes 2 stages:
 
     * DPTReassembleStage
-    * FeatureFusionLayers.
+    * DPTFeatureFusionStage.
 
     Args:
         config (dict): config dict.
@@ -778,10 +796,7 @@ class DPTNeck(nn.Module):
             self.convs.append(nn.Conv2d(channel, config.channels, kernel_size=3, padding=1, bias=False))
 
         # fusion
-        self.fusion_blocks = nn.ModuleList()
-        for _ in range(len(self.convs)):
-            self.fusion_blocks.append(DPTFeatureFusionLayer(config))
-        self.fusion_blocks[0].res_conv_unit1 = None
+        self.fusion_stage = DPTFeatureFusionStage(config)
 
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         if not isinstance(hidden_states, list):
@@ -796,11 +811,7 @@ class DPTNeck(nn.Module):
         features = [self.convs[i](feature) for i, feature in enumerate(features)]
 
         # fusion blocks
-        output = []
-        out = self.fusion_blocks[0](features[-1])
-        for i in range(1, len(self.fusion_blocks)):
-            out = self.fusion_blocks[i](out, features[-(i + 1)])
-            output.append(out)
+        output = self.fusion_stage(features)
 
         return output
 
