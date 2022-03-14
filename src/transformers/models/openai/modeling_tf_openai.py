@@ -536,8 +536,8 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        return_dict: Optional[bool]=None,
-        training: Optional[bool]=False,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
         **kwargs,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         inputs = input_processing(
@@ -710,8 +710,8 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         mc_token_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        return_dict: Optional[bool]=None,
-        training: Optional[bool]=False,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
         **kwargs,
     ) -> Union[TFOpenAIGPTDoubleHeadsModelOutput, Tuple[tf.Tensor]]:
         r"""
@@ -875,9 +875,9 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        return_dict: Optional[bool]=None,
+        return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool]=False,
+        training: Optional[bool] = False,
         **kwargs,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
