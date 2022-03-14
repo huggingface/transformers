@@ -200,6 +200,7 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
 TENSORFLOW_EXPORT_DEFAULT_MODELS = {
     ("albert", "hf-internal-testing/tiny-albert"),
     ("bert", "bert-base-cased"),
+    ("camembert", "camembert-base"),
     ("distilbert", "distilbert-base-cased"),
     ("roberta", "roberta-base"),
 }

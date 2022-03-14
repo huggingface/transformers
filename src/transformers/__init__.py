@@ -1744,6 +1744,7 @@ if is_tf_available():
     _import_structure["models.camembert"].extend(
         [
             "TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFCamembertForCausalLM",
             "TFCamembertForMaskedLM",
             "TFCamembertForMultipleChoice",
             "TFCamembertForQuestionAnswering",
@@ -3812,6 +3813,7 @@ if TYPE_CHECKING:
         )
         from .models.camembert import (
             TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCamembertForCausalLM,
             TFCamembertForMaskedLM,
             TFCamembertForMultipleChoice,
             TFCamembertForQuestionAnswering,
