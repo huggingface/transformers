@@ -116,13 +116,17 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if do_init:
             # randomly initialized parameters
             random_params = self.init_weights(self.key, input_shape)
+            params_shape_tree = jax.tree_map(lambda x: x.shape, random_params)
         else:
             init_fn = partial(self.init_weights, input_shape=input_shape)
-            random_params = jax.eval_shape(init_fn, self.key)
+            params_shape_tree = jax.eval_shape(init_fn, self.key)
+        
+        # get the shape of the parameters
+        self.params_shape_tree = params_shape_tree
 
         # save required_params as set
-        self._required_params = set(flatten_dict(unfreeze(random_params)).keys())
-        self.params = random_params
+        self._required_params = set(flatten_dict(unfreeze(params_shape_tree)).keys())
+        self.params = random_params if do_init else None
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
@@ -584,24 +588,24 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 state = jax.tree_util.tree_map(lambda x: jax.device_put(x, jax.devices("cpu")[0]), state)
 
         # if model is base model only use model_prefix key
-        if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
+        if cls.base_model_prefix not in dict(model.params_shape_tree) and cls.base_model_prefix in state:
             state = state[cls.base_model_prefix]
 
         # if model is head model and we are loading weights from base model
         # we initialize new params dict with base_model_prefix
-        if cls.base_model_prefix in dict(model.params) and cls.base_model_prefix not in state:
+        if cls.base_model_prefix in dict(model.params_shape_tree) and cls.base_model_prefix not in state:
             state = {cls.base_model_prefix: state}
 
         # flatten dicts
         state = flatten_dict(state)
 
-        random_state = flatten_dict(unfreeze(model.params))
+        random_state = flatten_dict(unfreeze(model.params if do_init else model.params_shape_tree))
 
         missing_keys = model.required_params - set(state.keys())
         unexpected_keys = set(state.keys()) - model.required_params
 
         base_key_missing = any(cls.base_model_prefix in key for key in missing_keys)
-        is_base_model = cls.base_model_prefix not in dict(model.params)
+        is_base_model = cls.base_model_prefix not in dict(model.params_shape_tree)
 
         if missing_keys and (base_key_missing or is_base_model):
             raise ValueError(
