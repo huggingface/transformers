@@ -922,8 +922,8 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         **kwargs
     ):
-        module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        module = self.module_class(config=config, dtype=dtype)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, **kwargs)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
