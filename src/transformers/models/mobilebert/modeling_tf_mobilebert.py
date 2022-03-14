@@ -709,13 +709,7 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
         if token_type_ids is None:
             token_type_ids = tf.fill(input_shape, 0)
 
-        embedding_output = self.embeddings(
-            input_ids,
-            position_ids,
-            token_type_ids,
-            inputs_embeds,
-            training=training
-        )
+        embedding_output = self.embeddings(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -1519,15 +1513,9 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
             seq_length = shape_list(inputs_embeds)[2]
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
-        flat_attention_mask = (
-            tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
-        )
-        flat_token_type_ids = (
-            tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
-        )
-        flat_position_ids = (
-            tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
-        )
+        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
+        flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
+        flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
         flat_inputs_embeds = (
             tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
             if inputs_embeds is not None
