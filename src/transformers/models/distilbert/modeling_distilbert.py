@@ -191,7 +191,7 @@ class MultiHeadSelfAttention(nn.Module):
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        bs, _, _ = query.size()
+        bs, q_length, dim = query.size()
         k_length = key.size(1)
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         # assert key.size() == value.size()
