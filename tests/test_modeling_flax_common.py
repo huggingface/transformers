@@ -26,7 +26,15 @@ from huggingface_hub import delete_repo, login
 from requests.exceptions import HTTPError
 from transformers import BertConfig, is_flax_available, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import PASS, USER, CaptureLogger, is_pt_flax_cross_test, is_staging_test, require_flax
+from transformers.testing_utils import (
+    PASS,
+    USER,
+    CaptureLogger,
+    is_pt_flax_cross_test,
+    is_staging_test,
+    require_flax,
+    torch_device,
+)
 from transformers.utils import logging
 
 
@@ -207,14 +215,10 @@ class FlaxModelTesterMixin:
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
-                # Pure convolutional models have no attention
-                # TODO: use a better and general criteria
-                if "FlaxConvNext" not in model_class.__name__:
-                    config.output_attentions = True
 
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+                pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
 
                 # load corresponding PyTorch class
                 pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
@@ -229,6 +233,9 @@ class FlaxModelTesterMixin:
                 fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
                 fx_model.params = fx_state
 
+                # send pytorch model to the correct device
+                pt_model.to(torch_device)
+
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs)
                 fx_outputs = fx_model(**prepared_inputs_dict)
@@ -237,7 +244,7 @@ class FlaxModelTesterMixin:
                 pt_keys = [k for k, v in pt_outputs.items() if v is not None]
 
                 self.assertEqual(fx_keys, pt_keys)
-                self.check_outputs(fx_outputs, pt_outputs, model_class, names=fx_keys)
+                self.check_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
@@ -249,7 +256,7 @@ class FlaxModelTesterMixin:
                 pt_keys = [k for k, v in pt_outputs.items() if v is not None]
 
                 self.assertEqual(fx_keys, pt_keys)
-                self.check_outputs(fx_outputs_loaded, pt_outputs, model_class, names=fx_keys)
+                self.check_outputs(fx_outputs_loaded.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
 
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
@@ -261,13 +268,10 @@ class FlaxModelTesterMixin:
                 # Output all for aggressive testing
                 config.output_hidden_states = True
                 # Pure convolutional models have no attention
-                # TODO: use a better and general criteria
-                if "FlaxConvNext" not in model_class.__name__:
-                    config.output_attentions = True
 
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+                pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
 
                 # load corresponding PyTorch class
                 pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
@@ -284,6 +288,9 @@ class FlaxModelTesterMixin:
                 # make sure weights are tied in PyTorch
                 pt_model.tie_weights()
 
+                # send pytorch model to the correct device
+                pt_model.to(torch_device)
+
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs)
                 fx_outputs = fx_model(**prepared_inputs_dict)
@@ -292,11 +299,14 @@ class FlaxModelTesterMixin:
                 pt_keys = [k for k, v in pt_outputs.items() if v is not None]
 
                 self.assertEqual(fx_keys, pt_keys)
-                self.check_outputs(fx_outputs, pt_outputs, model_class, names=fx_keys)
+                self.check_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
                     pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
+
+                # send pytorch model to the correct device
+                pt_model_loaded.to(torch_device)
 
                 with torch.no_grad():
                     pt_outputs_loaded = pt_model_loaded(**pt_inputs)
@@ -305,7 +315,7 @@ class FlaxModelTesterMixin:
                 pt_keys = [k for k, v in pt_outputs_loaded.items() if v is not None]
 
                 self.assertEqual(fx_keys, pt_keys)
-                self.check_outputs(fx_outputs, pt_outputs_loaded, model_class, names=fx_keys)
+                self.check_outputs(fx_outputs.to_tuple(), pt_outputs_loaded.to_tuple(), model_class, names=fx_keys)
 
     def test_from_pretrained_save_pretrained(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
