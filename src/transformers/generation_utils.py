@@ -3296,11 +3296,12 @@ class GenerationMixin:
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         **model_kwargs
-    ):
+    ) -> List[List[float]]:
+
         r"""
-        Enables the evaluation of completions for a given prompt based on the models softmax probabilities. In
-        contrast to free text generation, the model can be used to determine the best completion out of closed
-        deterministic possibilities.
+        Enables the evaluation of completions for a given prompt based on the models softmax probabilities. In contrast
+        to free text generation, the model can be used to determine the best completion out of closed deterministic
+        possibilities.
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
