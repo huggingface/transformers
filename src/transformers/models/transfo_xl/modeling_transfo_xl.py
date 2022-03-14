@@ -17,6 +17,7 @@
  PyTorch Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl. In particular
  https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
 """
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -673,12 +674,10 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
 
     Args:
-        loss (`torch.FloatTensor` of shape *()*, *optional*, returned when `labels` is provided)
-            Reduced language modeling loss.
+        losses (`torch.FloatTensor` of shape *(batch_size, sequence_length-1)*, *optional*, returned when `labels` is provided):
+            Language modeling losses (not reduced).
         prediction_scores (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token after SoftMax).
-        losses (`torch.FloatTensor` of shape *(batch_size, sequence_length-1)*, `optional`, returned when `labels` is provided)
-            Language modeling losses (not reduced).
         mems (`List[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see `mems`
             input) to speed up sequential decoding. The token ids which have their past given to this model should not
@@ -694,14 +693,16 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        loss (`torch.FloatTensor` of shape *()*, *optional*, returned when `labels` is provided)
+            Reduced language modeling loss.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    prediction_scores: torch.FloatTensor = None
     losses: Optional[torch.FloatTensor] = None
+    prediction_scores: torch.FloatTensor = None
     mems: List[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.FloatTensor] = None
 
     @property
     def logits(self):
@@ -1014,6 +1015,14 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         super().__init__(config)
         self.transformer = TransfoXLModel(config)
         self.sample_softmax = config.sample_softmax
+        self.trainer_compatible = getattr(config, "trainer_compatible", False)
+
+        if not self.trainer_compatible:
+            warnings.warn(
+                "The output of TransfoXL will be updated in v5 to support a single loss as first argument. In order"
+                "to use that updated output, please specify `trainer_compatible=True` as your configuration attribute.",
+                DeprecationWarning,
+            )
 
         assert (
             self.sample_softmax <= 0
@@ -1117,9 +1126,14 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             losses, loss = None, None
 
         if not return_dict:
-            output = (prediction_scores, losses) if losses is not None else (prediction_scores,)
-            output += transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
+            if self.trainer_compatible:
+                output = (prediction_scores, losses) if losses is not None else (prediction_scores,)
+                output += transformer_outputs[1:]
+                return ((loss,) + output) if loss is not None else output
+            else:
+                output = (prediction_scores, *transformer_outputs[1:])
+                output = ((losses,) + output) if losses is not None else output
+                return (output + (loss,)) if loss is not None else output
 
         return TransfoXLLMHeadModelOutput(
             loss=loss,
