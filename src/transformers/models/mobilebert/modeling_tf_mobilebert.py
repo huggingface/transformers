@@ -914,6 +914,7 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -921,7 +922,6 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -984,9 +984,9 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFMobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1077,6 +1077,7 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1084,7 +1085,6 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1166,9 +1166,9 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
         self.cls = TFMobileBertOnlyNSPHead(config, name="seq_relationship___cls")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1272,6 +1272,7 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1279,7 +1280,6 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1365,6 +1365,7 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1372,7 +1373,6 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1481,6 +1481,7 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(
         MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
@@ -1490,7 +1491,6 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1617,6 +1617,7 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1624,7 +1625,6 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
