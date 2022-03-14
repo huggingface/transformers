@@ -329,6 +329,8 @@ def main():
         transformers.utils.logging.set_verbosity_info()
     logger.info("Training/evaluation parameters %s", training_args)
 
+    logger.info(f"JAX devices: {jax.device_count()}")
+
     # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
@@ -623,9 +625,6 @@ def main():
             # normalize loss over gradient accumulation steps
             loss = loss / gradient_accumulation_steps
             return loss
-
-        if training_args.gradient_checkpointing:
-            compute_loss = jax.checkpoint(compute_loss)
 
         grad_fn = jax.value_and_grad(compute_loss)
         loss, grad = grad_fn(state.params)
