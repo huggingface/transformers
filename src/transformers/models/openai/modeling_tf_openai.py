@@ -500,6 +500,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -507,7 +508,6 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -563,6 +563,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
     def set_output_embeddings(self, value):
         self.set_input_embeddings(value)
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -570,7 +571,6 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
         output_type=TFCausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -651,9 +651,9 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             config, initializer_range=config.initializer_range, name="multiple_choice_head"
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFOpenAIGPTDoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -790,6 +790,7 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
         )
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -797,7 +798,6 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
