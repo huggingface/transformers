@@ -163,7 +163,7 @@ class BeitEmbeddings(nn.Module):
             self.position_embeddings = None
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.BoolTensor] = None):
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.BoolTensor] = None) -> torch.Tensor:
 
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
@@ -251,8 +251,8 @@ class BeitSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-        relative_position_bias=None,
-    ) -> tuple:
+        relative_position_bias: Optional["BeitRelativePositionBias"] = None,
+    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -342,8 +342,8 @@ class BeitAttention(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-        relative_position_bias=None,
-    ) -> tuple:
+        relative_position_bias: Optional["BeitRelativePositionBias"] = None,
+    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions, relative_position_bias)
 
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -407,8 +407,8 @@ class BeitLayer(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-        relative_position_bias=None,
-    ) -> tuple:
+        relative_position_bias: Optional["BeitRelativePositionBias"] = None,
+    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in BEiT, layernorm is applied before self-attention
             head_mask,
