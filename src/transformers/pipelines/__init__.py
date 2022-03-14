@@ -245,7 +245,7 @@ SUPPORTED_TASKS = {
         "impl": ZeroShotImageClassificationPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
-        "default": {"pt": "openai/clip-vit-base-patch32", "tf": "openai/clip-vit-base-patch32"},
+        "default": {"model": {"pt": "openai/clip-vit-base-patch32", "tf": "openai/clip-vit-base-patch32"}},
         "type": "multimodal",
     },
     "conversational": {
@@ -346,6 +346,7 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             - `"translation_xx_to_yy"`
             - `"summarization"`
             - `"zero-shot-classification"`
+            - `"zero-shot-image-classification"`
 
     Returns:
         (task_defaults`dict`, task_options: (`tuple`, None)) The actual dictionary required to initialize the pipeline
