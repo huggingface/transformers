@@ -670,6 +670,7 @@ def main():
         )
 
         if training_args.do_train:
+
             def is_audio_in_length_range(length):
                 return length > min_input_length and length < max_input_length
 
@@ -722,21 +723,11 @@ def main():
             tokenizer.save_pretrained(training_args.output_dir)
         config.save_pretrained(training_args.output_dir)
 
-    if is_text_target:
-        try:
-            processor = AutoProcessor.from_pretrained(training_args.output_dir)
-        except (OSError, KeyError):
-            warnings.warn(
-                "Loading a processor from a feature extractor config that does not"
-                " include a `processor_class` attribute is deprecated and will be removed in v5. Please add the following "
-                " attribute to your `preprocessor_config.json` file to suppress this warning: "
-                " `'processor_class': 'Wav2Vec2Processor'`",
-                FutureWarning,
-            )
-            processor = Wav2Vec2Processor.from_pretrained(training_args.output_dir)
-            # TODO (Anton): fix the error when loading a processor without a tokenizer config
+        processor = AutoProcessor.from_pretrained(training_args.output_dir)
     else:
-        processor = AutoFeatureExtractor.from_pretrained(training_args.output_dir)
+        processor = Wav2Vec2Processor(
+            feature_extractor=feature_extractor, tokenizer=tokenizer if is_text_target else None
+        )
 
     # Instantiate custom data collator
     data_collator = SpeechDataCollatorWithPadding(processor=processor, pad_labels=is_text_target)
@@ -749,7 +740,7 @@ def main():
         compute_metrics=compute_asr_metric if is_text_target else compute_classification_metric,
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        tokenizer=feature_extractor if is_text_target else None,
+        tokenizer=processor,
     )
 
     # 8. Finally, we can start training
