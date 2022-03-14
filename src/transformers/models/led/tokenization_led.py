@@ -83,6 +83,7 @@ class LEDTokenizer(BartTokenizer):
                 difference = len(required_input) - len(encoded_inputs["global_attention_mask"])
 
                 if self.padding_side == "right":
+                    # Use `-1` since `0` in `global_attention_mask` means `local attention` instead of `not to attend`
                     encoded_inputs["global_attention_mask"] = (
                         encoded_inputs["global_attention_mask"] + [-1] * difference
                     )
