@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
@@ -46,7 +47,7 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
 )
-from ...tf_utils import dynamic_update_slice, shape_list
+from ...tf_utils import shape_list
 from ...utils import logging
 from .configuration_gpt2 import GPT2Config
 
@@ -885,7 +886,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         # quite some duplicated code patterns it seems
         # also the `attention_mask` is currently used in a somewhat hacky to
         # correctly influence the `past_key_values` - not sure if this is the way to go
-
+        # Let's keep that for a future PR.
         past = outputs.past_key_values
         is_past_initialized = model_kwargs.pop("past", None) is not None
         attention_mask = model_kwargs.pop("attention_mask")

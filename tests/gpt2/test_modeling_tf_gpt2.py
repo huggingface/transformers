@@ -294,16 +294,19 @@ class TFGPT2ModelTester:
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_gpt2_xla_generate(self, config, *args):
+    def create_and_check_gpt2_xla_generate(self, config, input_ids, *args):
         config.min_length = -1
         config.eos_token_id = None
         config.max_length = 10
         model = TFGPT2LMHeadModel(config=config)
 
-        input_ids = tf.constant([[22, 74, 72, 26], [12, 15, 9, 33]])
+        # make sure there are no pad tokens in prompt
+        input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id - 1)
 
-        generated = model.generate(tf.identity(input_ids))
-        generated_xla = model.generate(tf.identity(input_ids), use_xla=True)
+        generated = model.generate(input_ids)
+
+        generate_xla = tf.function(model.generate, jit_compile=True)
+        generated_xla = generate_xla(input_ids)
 
         self.parent.assertListEqual(generated.numpy().tolist(), generated_xla.numpy().tolist())
 
@@ -541,5 +544,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         # fmt: off
         expected_output_ids = [464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290]
         # fmt: on
-        output_ids = model.generate(input_ids, do_sample=False, use_xla=True)
+        xla_generate = tf.function(model.generate, jit_compile=True)
+
+        output_ids = xla_generate(input_ids, do_sample=False)
         self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
