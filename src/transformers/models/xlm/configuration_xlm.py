@@ -169,7 +169,7 @@ class XLMConfig(PretrainedConfig):
         n_langs=1,
         use_lang_emb=True,
         max_position_embeddings=512,
-        embed_init_std=2048 ** -0.5,
+        embed_init_std=2048**-0.5,
         layer_norm_eps=1e-12,
         init_std=0.02,
         bos_index=0,

@@ -259,7 +259,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
 
         self.layer_norm = nn.LayerNorm(d_model, eps=layer_norm_epsilon)
 
-        self.scale = 1 / (d_head ** 0.5)
+        self.scale = 1 / (d_head**0.5)
 
         self.pre_lnorm = pre_lnorm
 
@@ -412,7 +412,7 @@ class AdaptiveEmbedding(nn.Module):
         self.div_val = div_val
         self.d_proj = d_proj
 
-        self.emb_scale = d_proj ** 0.5
+        self.emb_scale = d_proj**0.5
 
         self.cutoff_ends = [0] + self.cutoffs
 
@@ -425,7 +425,7 @@ class AdaptiveEmbedding(nn.Module):
         else:
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
-                d_emb_i = d_embed // (div_val ** i)
+                d_emb_i = d_embed // (div_val**i)
                 self.emb_layers.append(nn.Embedding(r_idx - l_idx, d_emb_i))
                 self.emb_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_emb_i)))
 

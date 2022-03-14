@@ -823,7 +823,7 @@ class Attention(nn.Module):
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
 
         self.encoder_decoder_attention = encoder_decoder_attention
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)

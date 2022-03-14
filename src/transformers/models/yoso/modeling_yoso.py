@@ -175,7 +175,7 @@ class YosoLSHCumulation(torch.autograd.Function):
         use_cuda = query_mask.is_cuda
         num_hash = config["num_hash"]
         hash_code_len = config["hash_code_len"]
-        hashtable_capacity = int(2 ** hash_code_len)
+        hashtable_capacity = int(2**hash_code_len)
 
         if config["use_fast_hash"]:
             query_hash_code, key_hash_code = lsh_cumulation.fast_hash(
@@ -202,7 +202,7 @@ class YosoLSHCumulation(torch.autograd.Function):
 
         use_cuda = grad.is_cuda
         hash_code_len = config["hash_code_len"]
-        hashtable_capacity = int(2 ** hash_code_len)
+        hashtable_capacity = int(2**hash_code_len)
 
         if config["lsh_backward"]:
             grad_value = lsh_cumulation.lsh_cumulation(

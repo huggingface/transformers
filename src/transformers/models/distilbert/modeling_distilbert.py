@@ -799,7 +799,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """DistilBERT Model with a `language modeling` head on top for CLM fine-tuning.""", DISTILBERT_START_DOCSTRING
+    """DistilBERT Model with a `language modeling` head on top for CLM fine-tuning. """, DISTILBERT_START_DOCSTRING
 )
 class DistilBertForCausalLM(DistilBertPreTrainedModel):
 
@@ -841,39 +841,37 @@ class DistilBertForCausalLM(DistilBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (:
-            obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model is
-            configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **maked**.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
-            `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
+            ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are
+            ignored (masked), the loss is only computed for the tokens with labels n ``[0, ..., config.vocab_size]``
 
         Returns:
 
-        Example:
+        Example::
 
-        ```python
-        >>> from transformers import DistilBertTokenizer, DistilBertLMHeadModel, DistilBertConfig
-        >>> import torch
+            >>> from transformers import DistilBertTokenizer, DistilBertLMHeadModel, DistilBertConfig
+            >>> import torch
 
-        >>> tokenizer = DistilBertTokenizer.from_pretrained("bert-base-cased")
-        >>> config = DistilBertConfig.from_pretrained("bert-base-cased")
-        >>> config.is_decoder = True
-        >>> model = DistilBertLMHeadModel.from_pretrained("bert-base-cased", config=config, return_dict=True)
+            >>> tokenizer = DistilBertTokenizer.from_pretrained('bert-base-cased')
+            >>> config = DistilBertConfig.from_pretrained("bert-base-cased")
+            >>> config.is_decoder = True
+            >>> model = DistilBertLMHeadModel.from_pretrained('bert-base-cased', config=config, return_dict=True)
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
+            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+            >>> outputs = model(**inputs)
 
-        >>> prediction_logits = outputs.logits
-        ```"""
+            >>> prediction_logits = outputs.logits
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.distilbert(
@@ -925,7 +923,7 @@ class DistilBertForCausalLM(DistilBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """DistilBert Model with a `masked language modeling` head on top.""",
+    """DistilBert Model with a `masked language modeling` head on top. """,
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
@@ -1419,38 +1417,39 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
+                labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                    Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+                    num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
+                    `input_ids` above)
 
-        Returns:
+                Returns:
 
-        Examples:
+                Examples:
 
-        ```python
-        >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
-        >>> import torch
+                ```python
+                >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
+                >>> import torch
 
-        >>> tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
-        >>> model = DistilBertForMultipleChoice.from_pretrained("distilbert-base-cased")
+                >>> tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
+                >>> model = DistilBertForMultipleChoice.from_pretrained("distilbert-base-cased")
 
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> choice0 = "It is eaten with a fork and a knife."
-        >>> choice1 = "It is eaten while held in the hand."
-        >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
-        HEAD
-            >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors='pt', padding=True)
-            >>> outputs = model(**{key: value.unsqueeze(0) for key,value in encoding.items()}, labels=labels) # batch size is 1
+                >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+                >>> choice0 = "It is eaten with a fork and a knife."
+                >>> choice1 = "It is eaten while held in the hand."
+                >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
 
-        >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors="pt", padding=True)
-        >>> outputs = model(**{k: v.unsqueeze(0) for k, v in encoding.items()}, labels=labels)  # batch size is 1
-        origin/master
+        <<<<<<< HEAD
+                    >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors='pt', padding=True)
+                    >>> outputs = model(**{key: value.unsqueeze(0) for key,value in encoding.items()}, labels=labels) # batch size is 1
+        =======
+                >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors="pt", padding=True)
+                >>> outputs = model(**{k: v.unsqueeze(0) for k, v in encoding.items()}, labels=labels)  # batch size is 1
+        >>>>>>> origin/master
 
-        >>> # the linear classifier still needs to be trained
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
-        ```"""
+                >>> # the linear classifier still needs to be trained
+                >>> loss = outputs.loss
+                >>> logits = outputs.logits
+                ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 

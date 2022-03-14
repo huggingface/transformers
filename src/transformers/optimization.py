@@ -214,7 +214,7 @@ def get_polynomial_decay_schedule_with_warmup(
             lr_range = lr_init - lr_end
             decay_steps = num_training_steps - num_warmup_steps
             pct_remaining = 1 - (current_step - num_warmup_steps) / decay_steps
-            decay = lr_range * pct_remaining ** power + lr_end
+            decay = lr_range * pct_remaining**power + lr_end
             return decay / lr_init  # as LambdaLR multiplies by lr_init
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
@@ -586,7 +586,7 @@ class Adafactor(Optimizer):
                 lr = self._get_lr(group, state)
 
                 beta2t = 1.0 - math.pow(state["step"], group["decay_rate"])
-                update = (grad ** 2) + group["eps"][0]
+                update = (grad**2) + group["eps"][0]
                 if factored:
                     exp_avg_sq_row = state["exp_avg_sq_row"]
                     exp_avg_sq_col = state["exp_avg_sq_col"]

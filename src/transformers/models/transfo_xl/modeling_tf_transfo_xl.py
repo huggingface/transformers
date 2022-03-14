@@ -149,7 +149,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
 
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layer_norm")
 
-        self.scale = 1 / (d_head ** 0.5)
+        self.scale = 1 / (d_head**0.5)
 
         self.pre_lnorm = pre_lnorm
 
@@ -350,7 +350,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
         self.div_val = div_val
         self.d_proj = d_proj
 
-        self.emb_scale = d_proj ** 0.5
+        self.emb_scale = d_proj**0.5
 
         self.cutoff_ends = [0] + self.cutoffs
 
@@ -362,7 +362,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
         else:
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
-                d_emb_i = d_embed // (div_val ** i)
+                d_emb_i = d_embed // (div_val**i)
                 self.emb_layers.append(
                     TFTransfoEmbeddings(
                         r_idx - l_idx,
@@ -374,7 +374,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         for i in range(len(self.cutoffs)):
-            d_emb_i = self.d_embed // (self.div_val ** i)
+            d_emb_i = self.d_embed // (self.div_val**i)
             self.emb_projs.append(
                 self.add_weight(
                     shape=(d_emb_i, self.d_proj),
