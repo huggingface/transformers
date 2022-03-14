@@ -1317,7 +1317,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 model_kwargs.pop("encoder_hidden_states", None)
 
             model_kwargs.pop("output_hidden_states", None)
-            model_kwargs.pop("output_hidden_states", None)
             model_kwargs.pop("output_attentions", None)
             model_kwargs.pop("output_scores", None)
 
