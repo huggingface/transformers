@@ -3286,6 +3286,86 @@ class GenerationMixin:
         else:
             return sequence_outputs["sequences"]
 
+    @torch.no_grad()
+    def evalute_completetions(
+        self,
+        inputs: torch.Tensor = None,
+        completion_list: List[torch.Tensor] = None,
+        bos_token_id: Optional[int] = None,
+        decoder_start_token_id: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        **model_kwargs
+    ):
+        r"""
+        Enables the evaluation of completions for a given prompt based on the models softmax probabilities. In
+        contrast to free text generation, the model can be used to determine the best completion out of closed
+        deterministic possibilities.
+
+        Parameters:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                The sequence used as a prompt for the generation.
+            completion_list (`List[List[torch.Tensor]]`):
+                A list containing a list of tokens that represent possible completions and shall be evaluated.
+            bos_token_id (`int`, *optional*):
+                The id of the *beginning-of-sequence* token.
+            decoder_start_token_id (`int`, *optional*):
+                If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
+            output_attentions (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more details.
+            output_hidden_states (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more details.
+            model_kwargs:
+                Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
+                an encoder-decoder model the kwargs should include `encoder_outputs`.
+
+        Return:
+            `List[List[float]]`: A list containing a list of softmax probabilities for each given completion.
+        """
+
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
+        inputs_tensor, _, model_kwargs = self._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
+        batch_size = inputs_tensor.shape[0]
+
+        if self.config.is_encoder_decoder:
+            input_ids = self._prepare_decoder_input_ids_for_generation(
+                batch_size,
+                decoder_start_token_id=decoder_start_token_id,
+                bos_token_id=bos_token_id,
+                model_kwargs=model_kwargs,
+            )
+        else:
+            input_ids = inputs_tensor
+
+        orig_input_ids = input_ids.clone()
+        complete_result = []
+
+        for completion in completion_list:
+            input_ids = orig_input_ids.clone()
+            result = []
+            for completion_token in completion:
+
+                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+                # forward pass to get probabilities
+                outputs = self(
+                    **model_inputs,
+                    return_dict=True,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                )
+
+                next_token_logits = outputs.logits[:, -1, :]
+                probs = nn.functional.softmax(next_token_logits, dim=-1)
+                result.append(probs[0][completion_token].item())
+                input_ids = torch.cat([input_ids, completion_token.view(1, -1)], dim=-1)
+                model_kwargs = self._update_model_kwargs_for_generation(
+                    outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                )
+            complete_result.append(result)
+        return complete_result
+
 
 def top_k_top_p_filtering(
     logits: torch.FloatTensor,
