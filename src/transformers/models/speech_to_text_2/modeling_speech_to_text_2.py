@@ -787,7 +787,7 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        rf"""
+        f"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
