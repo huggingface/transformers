@@ -353,7 +353,7 @@ class Transformer(nn.Module):
 
             if output_attentions:
                 assert len(layer_outputs) == 2
-                attentions: torch.Tensor = layer_outputs[0]
+                attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
                 assert len(layer_outputs) == 1
