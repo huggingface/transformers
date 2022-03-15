@@ -35,7 +35,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from flax.core.frozen_dict import FrozenDict, unfreeze
+    from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
     from flax.traverse_util import flatten_dict, unflatten_dict
     from transformers import (
         FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
@@ -860,6 +860,51 @@ class FlaxModelTesterMixin:
             inputs_dict["output_hidden_states"] = True
             inputs = self._prepare_for_class(inputs_dict, model_class).copy()
             model(**inputs, params=params)
+
+    def test_from_pretrained_with_do_init(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            # init the model
+            model = model_class(config)
+
+            # save the model in the temporary directory
+            # load the saved model with do_init=False
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model, params = model_class.from_pretrained(tmpdirname, do_init=False)
+
+            # Check that accesing parmas raises an ValueError when do_init is False
+            with self.assertRaises(ValueError):
+                params = model.params
+
+            # Check if all required parmas are loaded
+            keys = set(flatten_dict(unfreeze(params)).keys())
+            self.assertTrue(all(k in keys for k in model.required_params))
+            # Check if the shapes match
+            flat_params = flatten_dict(unfreeze(params))
+            for k, v in flatten_dict(unfreeze(model.params_shape_tree)).items():
+                self.assertEqual(
+                    v.shape,
+                    flat_params[k].shape,
+                    "Shapes of {} do not match. Expecting {}, got {}.".format(k, v.shape, flat_params[k].shape),
+                )
+
+            # Check that setting params raises an ValueError when do_init is False
+            with self.assertRaises(ValueError):
+                model.params = params
+
+            # Check if from_pretrained raises if a key is missing
+            random_key = random.choice(list(flat_params.keys()))
+            flat_params.pop(random_key)
+            params = freeze(unflatten_dict(flat_params))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, params=params)
+
+                with self.assertRaises(ValueError):
+                    model, params = model_class.from_pretrained(tmpdirname, do_init=False)
 
 
 @require_flax
