@@ -803,7 +803,7 @@ class FlaxBlenderbotDecoder(nn.Module):
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=last_hidden_states,
-            hidden_states=outputs.hidden_states,
+            hidden_states=hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
