@@ -631,7 +631,7 @@ class FlaxWav2Vec2EncoderLayerStableLayerNormCollection(nn.Module):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        outputs = (hidden_states,)
+        outputs = (hidden_states, all_hidden_states, all_attentions)
 
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
@@ -680,13 +680,20 @@ class FlaxWav2Vec2StableLayerNormEncoder(nn.Module):
             return_dict=return_dict,
         )
 
-        hidden_states = self.layer_norm(outputs[0])
+        last_hidden_state = self.layer_norm(outputs[0])
+
+        # update the last element in `hidden_states` after applying `layernorm` above
+        hidden_states = None
+        if output_hidden_states:
+            hidden_states = outputs[1]
+            hidden_states = hidden_states[:-1] + (last_hidden_state,)
 
         if not return_dict:
-            return (hidden_states,) + outputs[1:]
+            outputs = (last_hidden_state, hidden_states) + (outputs[2:] if output_hidden_states else outputs[1:])
+            return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+            last_hidden_state=last_hidden_state, hidden_states=hidden_states, attentions=outputs.attentions
         )
 
 
