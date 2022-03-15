@@ -693,7 +693,7 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        loss (`torch.FloatTensor` of shape *()*, *optional*, returned when `labels` is provided)
+        loss (`torch.FloatTensor` of shape `()`, *optional*, returned when `labels` is provided)
             Reduced language modeling loss.
     """
 
