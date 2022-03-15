@@ -1026,7 +1026,6 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
 
         # if past is defined in model kwargs then use it for faster decoding
         if past:
-            mems = past
             input_ids = tf.expand_dims(input_ids[:, -1], axis=-1)
         else:
             input_ids = input_ids
