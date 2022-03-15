@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
-""" Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition"""
+""" Fine-tuning a 🤗 Transformers pretrained speech model on the XTREME-S benchmark tasks"""
 
 import functools
 import json
@@ -21,14 +21,13 @@ import logging
 import os
 import re
 import sys
-import warnings
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
 import datasets
 import numpy as np
 import torch
-from datasets import DatasetDict, concatenate_datasets, get_dataset_config_names, load_dataset, load_metric
+from datasets import DatasetDict, load_dataset, load_metric
 
 import transformers
 from transformers import (
