@@ -259,8 +259,8 @@ class FlaxModelTesterMixin:
                         pt_outputs = pt_model(**pt_inputs)
                     fx_outputs = fx_model(**prepared_inputs_dict)
 
-                    fx_keys = [k for k, v in fx_outputs.items() if v is not None]
-                    pt_keys = [k for k, v in pt_outputs.items() if v is not None]
+                    fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                    pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
 
                     self.assertEqual(fx_keys, pt_keys)
                     self.check_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys, context="load_via_memory", results=results)
@@ -271,8 +271,8 @@ class FlaxModelTesterMixin:
 
                     fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict)
 
-                    fx_keys = [k for k, v in fx_outputs_loaded.items() if v is not None]
-                    pt_keys = [k for k, v in pt_outputs.items() if v is not None]
+                    fx_keys = tuple([k for k, v in fx_outputs_loaded.items() if v is not None])
+                    pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
 
                     self.assertEqual(fx_keys, pt_keys)
                     self.check_outputs(fx_outputs_loaded.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys, context="load_via_disk", results=results)
@@ -333,8 +333,8 @@ class FlaxModelTesterMixin:
                         pt_outputs = pt_model(**pt_inputs)
                     fx_outputs = fx_model(**prepared_inputs_dict)
 
-                    fx_keys = [k for k, v in fx_outputs.items() if v is not None]
-                    pt_keys = [k for k, v in pt_outputs.items() if v is not None]
+                    fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                    pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
 
                     self.assertEqual(fx_keys, pt_keys)
                     self.check_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys, context="load_via_memory", results=results)
@@ -349,8 +349,8 @@ class FlaxModelTesterMixin:
                     with torch.no_grad():
                         pt_outputs_loaded = pt_model_loaded(**pt_inputs)
 
-                    fx_keys = [k for k, v in fx_outputs.items() if v is not None]
-                    pt_keys = [k for k, v in pt_outputs_loaded.items() if v is not None]
+                    fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                    pt_keys = tuple([k for k, v in pt_outputs_loaded.items() if v is not None])
 
                     self.assertEqual(fx_keys, pt_keys)
                     self.check_outputs(fx_outputs.to_tuple(), pt_outputs_loaded.to_tuple(), model_class, names=fx_keys, context="load_via_disk", results=results)
