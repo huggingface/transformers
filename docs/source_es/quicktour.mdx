@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-Entra en marcha con 🤗 Transformers! Comienza usando [`pipeline`] para una inferencia veloz, carga un modelo preentrenado y un tokenizador con una [AutoClass](./model_doc/auto) para resolver tu tarea de texto, visión o audio.
+¡Entra en marcha con los 🤗 Transformers! Comienza usando [`pipeline`] para una inferencia veloz, carga un modelo preentrenado y un tokenizador con una [AutoClass](./model_doc/auto) para resolver tu tarea de texto, visión o audio.
 
 <Tip>
 
@@ -25,7 +25,7 @@ Si no fuese así, se espera que el código funcione para ambos backends sin ning
 
 ## Pipeline
 
-[`pipeline`] es la forma más fácil para usar un model preentrenado para una tarea dada.
+[`pipeline`] es la forma más fácil de usar un modelo preentrenado para una tarea dada.
 
 <Youtube id="tiZFewofSLM"/>
 
@@ -33,21 +33,21 @@ El [`pipeline`] soporta muchas tareas comunes listas para usar:
 
 **Texto**:
 * Análisis de Sentimientos: clasifica la polaridad de un texto dado.
-* Generación de texto (sólo en inglés): genera texto de un input dado.
+* Generación de texto (solo en inglés): genera texto a partir de un input dado.
 * Name entity recognition (NER): etiqueta cada palabra con la entidad que representa (persona, fecha, ubicación, etc.).
-* Responder preguntas: extrae la respuesta del contexto, dado un contexto y una pregunta.
-* Fill-mask: rellena el expacio faltante dado un texto con palabras enmascaradas.
-* Resumen: genera un resumen de una secuencia larga de texto o un documento.
+* Responder preguntas: extrae la respuesta del contexto dado un contexto y una pregunta.
+* Fill-mask: rellena el espacio faltante dado un texto con palabras enmascaradas.
+* Summarization: genera un resumen de una secuencia larga de texto o un documento.
 * Traducción: traduce un texto a otro idioma.
 * Extracción de características: crea una representación tensorial del texto.
 
 **Imagen**:
 * Clasificación de imágenes: clasifica una imagen.
 * Segmentación de imágenes: clasifica cada pixel de una imagen.
-* Detección de Objetos: detecta objetos dentro de una imagen.
+* Detección de objetos: detecta objetos dentro de una imagen.
 
 **Audio**:
-* Clasificación de audios: asigna una etiqueta dado un segmento de audio.
+* Clasificación de audios: asigna una etiqueta a un segmento de audio.
 * Automatic speech recognition (ASR): transcribe datos de audio a un texto.
 
 <Tip>
@@ -83,7 +83,7 @@ El pipeline descarga y almacena en caché un [modelo preentrenado](https://huggi
 [{'label': 'POSITIVE', 'score': 0.9998}]
 ```
 
-Para más de una oración, entrega una lista de frases al [`pipeline`], que devolverá una lista de diccionarios:
+Para más de un enunciado entrega una lista de frases al [`pipeline`] que devolverá una lista de diccionarios:
 
 ```py
 >>> results = classifier(["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."])
@@ -93,13 +93,13 @@ label: POSITIVE, with score: 0.9998
 label: NEGATIVE, with score: 0.5309
 ```
 
-El [`pipeline`] también puede iterar sobre dataset entero. Comienza instalando la biblioteca [🤗 Datasets](https://huggingface.co/docs/datasets/):
+El [`pipeline`] también puede iterar sobre un dataset entero. Comienza instalando la biblioteca [🤗 Datasets](https://huggingface.co/docs/datasets/):
 
 ```bash
 pip install datasets 
 ```
 
-Crea una [`pipeline`] con la tarea que deseas resolver y el modelo que quieres usar. Coloca el parámetro `device` a `0` para poner los tensores en un dispositivo CUDA:
+Crea un [`pipeline`] con la tarea que deseas resolver y el modelo que quieres usar. Coloca el parámetro `device` a `0` para poner los tensores en un dispositivo CUDA:
 
 ```py
 >>> import torch
@@ -108,7 +108,7 @@ Crea una [`pipeline`] con la tarea que deseas resolver y el modelo que quieres u
 >>> speech_recognizer = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
 ```
 
-A continuación, carga el dataset (ve 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) para más detalles) sobre el que quisieras iterar. Por ejemplo, vamos a cargar el conjunto [SUPERB](https://huggingface.co/datasets/superb):
+A continuación, carga el dataset (ve 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) para más detalles) sobre el que quisieras iterar. Por ejemplo, vamos a cargar el dataset [SUPERB](https://huggingface.co/datasets/superb):
 
 ```py
 >>> import datasets
@@ -116,7 +116,7 @@ A continuación, carga el dataset (ve 🤗 Datasets [Quick Start](https://huggin
 >>> dataset = datasets.load_dataset("superb", name="asr", split="test")  # doctest: +IGNORE_RESULT
 ```
 
-Puedes pasar un dataset pipeline:
+Puedes pasar un pipeline para un dataset:
 
 ```py
 >>> files = dataset["file"]
@@ -131,7 +131,7 @@ Para un dataset más grande, donde los inputs son de mayor tamaño (como en habl
 
 ### Use otro modelo y otro tokenizador en el pipeline
 
-El [`pipeline`] puede adaptarse a cualquier modelo del [Model Hub](https://huggingface.co/models), haciendo más fácil adaptar el [`pipeline`] para otros casos de uso. Por ejemplo, si quisieras un modelo capaz de manejar texto en francés, usa los tags en el Model Hub para filtrar entre los modelos apropiados. El resultado mejor filtrado devuelve un [modelo BERT](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) multilingual fine-tuned para el análisis de sentimiento. Genial, ¡vamos a usar este modelo!
+El [`pipeline`] puede adaptarse a cualquier modelo del [Model Hub](https://huggingface.co/models) haciendo más fácil adaptar el [`pipeline`] para otros casos de uso. Por ejemplo, si quisieras un modelo capaz de manejar texto en francés, usa los tags en el Model Hub para filtrar entre los modelos apropiados. El resultado mejor filtrado devuelve un [modelo BERT](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment) multilingual fine-tuned para el análisis de sentimiento. Genial, ¡vamos a usar este modelo!
 
 ```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
@@ -151,7 +151,7 @@ Usa [`AutoModelForSequenceClassification`] y ['AutoTokenizer'] para cargar un mo
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
 
-Entonces pueds especificar el modelo y el tokenizador en el [`pipeline`], y aplicar el `classifier` en su texto objetivo:
+Después puedes especificar el modelo y el tokenizador en el [`pipeline`], y aplicar el `classifier` en tu texto objetivo:
 
 ```py
 >>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
@@ -159,7 +159,7 @@ Entonces pueds especificar el modelo y el tokenizador en el [`pipeline`], y apli
 [{'label': '5 stars', 'score': 0.7273}]
 ```
 
-Si no pudieras encontrar el modelo para su respectivo caso de uso, necesitarás ajustar un modelo preentrenado en sus datos. Echa un vistazo a nuestro [tutorial de fine-tuning](./training) para aprender cómo. Finalmente, después que has ajustado su modelo preentrenado, ¡por favor considera compartirlo (ve el tutorial [aquí](./model_sharing)) con la comunidad en el Model Hub para democratizar NLP para todos! 🤗
+Si no pudieras encontrar el modelo para tu caso respectivo de uso necesitarás ajustar un modelo preentrenado a tus datos. Mira nuestro [tutorial de fine-tuning](./training) para aprender cómo. Finalmente, después de que has ajustado tu modelo preentrenado, ¡por favor considera compartirlo (ve el tutorial [aquí](./model_sharing)) con la comunidad en el Model Hub para democratizar el NLP! 🤗
 
 ## AutoClass
 
@@ -171,7 +171,7 @@ Regresemos a nuestro ejemplo y veamos cómo puedes usar el `AutoClass` para repr
 
 ### AutoTokenizer
 
-Un tokenizador es responsable de procesar el texto a un formato que sea entendible para el modelo. Primero, el tokenizador separará el texto en palabras llamadas *tokens*. Hay múltiples reglas que gobiernan el proceso de tokenización, incluyendo el cómo separar una palabra y en qué nivel (aprende más sobre tokenización [aquí](./tokenizer_summary)). Lo más importante es recordar que necesitarás instanciar el tokenizador con el mismo nombre del modelo para asegurar que estás usando las mismas reglas de tokenización con las que el modelo fue preentrenado.
+Un tokenizador es responsable de procesar el texto a un formato que sea entendible para el modelo. Primero, el tokenizador separará el texto en palabras llamadas *tokens*. Hay múltiples reglas que gobiernan el proceso de tokenización incluyendo el cómo separar una palabra y en qué nivel (aprende más sobre tokenización [aquí](./tokenizer_summary)). Lo más importante es recordar que necesitarás instanciar el tokenizador con el mismo nombre del modelo para asegurar que estás usando las mismas reglas de tokenización con las que el modelo fue preentrenado.
 
 Carga un tokenizador con [`AutoTokenizer`]:
 
@@ -182,7 +182,7 @@ Carga un tokenizador con [`AutoTokenizer`]:
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
 
-Después, el tokenizador convierte los tokens a números para construir un tensor, que servirá como input para el modelo. Ésto es conocido como el *vocabulario* del modelo.
+Después, el tokenizador convierte los tokens a números para construir un tensor que servirá como input para el modelo. Esto es conocido como el *vocabulario* del modelo.
 
 Pasa tu texto al tokenizador:
 
@@ -196,10 +196,10 @@ Pasa tu texto al tokenizador:
 
 El tokenizador devolverá un diccionario conteniendo:
 
-* [input_ids](./glossary#input-ids): representaciones numéricas de sus tokens.
+* [input_ids](./glossary#input-ids): representaciones numéricas de los tokens.
 * [atttention_mask](.glossary#attention-mask): indica cuáles tokens deben ser atendidos.
 
-Como el [`pipeline`], el tokenizador aceptará una lista de inputs. Además, El tokenizador también puede rellenar (pad, en inglés) y truncar el texto para devolver un lote (batch, en inglés) de longitud uniforme:
+Como con el [`pipeline`], el tokenizador aceptará una lista de inputs. Además, el tokenizador también puede rellenar (pad, en inglés) y truncar el texto para devolver un lote (batch, en inglés) de longitud uniforme:
 
 ```py
 >>> pt_batch = tokenizer(
@@ -219,11 +219,11 @@ Como el [`pipeline`], el tokenizador aceptará una lista de inputs. Además, El 
 ... )
 ```
 
-Lee el tutorial de [preprocessing](./preprocessing) para más detalles acerca de tokenización.
+Lee el tutorial de [preprocessing](./preprocessing) para más detalles acerca de la tokenización.
 
 ### AutoModel
 
-🤗 Transformers provee una forma simple y unificada de cargar tus instancias preentrenadas. Ésto significa que puedes cargar un [`AutoModel`] como cargarías un [`AutoTokenizer`]. La única diferencia es seleccionar el [`AutoModel`] correcto para la tarea. Ya que estás clasificando texto o secuencias, carga [`AutoModelForSequenceClassification`]. El TensorFlow equivalente es simplemente [`TFAutoModelForSequenceClassification`]:
+🤗 Transformers provee una forma simple y unificada de cargar tus instancias preentrenadas. Esto significa que puedes cargar un [`AutoModel`] como cargarías un [`AutoTokenizer`]. La única diferencia es seleccionar el [`AutoModel`] correcto para la tarea. Ya que estás clasificando texto, o secuencias, carga [`AutoModelForSequenceClassification`]. El equivalente en TensorFlow es simplemente [`TFAutoModelForSequenceClassification`]:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -274,22 +274,22 @@ tf.Tensor(
 <Tip>
 
 Todos los modelos de 🤗 Transformers (PyTorch o TensorFlow) producirán los tensores *antes* de la función de activación
-final (como softmax) porque la función de activación final es comúnmente fusionado con la pérdida.
+final (como softmax) porque la función de activación final es comúnmente fusionada con la pérdida.
 
 </Tip>
 
-Los modelos son [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) o [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) estándar, así que podrás usarlos en tu training loop usual. Sin embargo, para facilitar las cosas, 🤗 Transformers provee una clase [`Trainer`] para PyTorch que añade funcionalidades para entrenamiento distribuido, precición mixta, y más. Para TensorFlow, puedes usar el método `fit` desde [Keras](https://keras.io/). Consulta el [tutorial de entrenamiento](./training) para más detalles.
+Los modelos son [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) o [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) estándares así que podrás usarlos en tu training loop usual. Sin embargo, para facilitar las cosas, 🤗 Transformers provee una clase [`Trainer`] para PyTorch que añade funcionalidades para entrenamiento distribuido, precición mixta, y más. Para TensorFlow, puedes usar el método `fit` desde [Keras](https://keras.io/). Consulta el [tutorial de entrenamiento](./training) para más detalles.
 
 <Tip>
 
-Los outputs del modelo de 🤗 Transformers son dataclasses especiales para que tus atributos sean completados en un IDE.
+Los outputs del modelo de 🤗 Transformers son dataclasses especiales por lo que sus atributos pueden ser completados en un IDE.
 Los outputs del modelo también se comportan como tuplas o diccionarios (e.g., puedes indexar con un entero, un slice o una cadena) en cuyo caso los atributos que son `None` son ignorados.
 
 </Tip>
 
 ### Guarda un modelo
 
-Una vez que tu modelo esté fine-tuned, puedes guardarlo con tu tokenizador usando [`PreTrainedModel.save_pretrained`]:
+Una vez que tu modelo esté fine-tuned puedes guardarlo con tu tokenizador usando [`PreTrainedModel.save_pretrained`]:
 
 ```py
 >>> pt_save_directory = "./pt_save_pretrained"
@@ -301,7 +301,7 @@ Una vez que tu modelo esté fine-tuned, puedes guardarlo con tu tokenizador usan
 >>> tf_model.save_pretrained(tf_save_directory)
 ```
 
-Cuando estés listo para usar el modelo otra vez, cárgalo con [`PreTrainedModel.from_pretrained`]:
+Cuando quieras usar el modelo otra vez cárgalo con [`PreTrainedModel.from_pretrained`]:
 
 ```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
@@ -309,7 +309,7 @@ Cuando estés listo para usar el modelo otra vez, cárgalo con [`PreTrainedModel
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
 ```
 
-Una característica particularmente cool de 🤗 Transformers, es la habilidad de guardar el modelo y cargarlo como un modelo PyTorch o TensorFlow. El parámetro `from_pt` o `from_tf` puede convertir el modelo de un framework al otro:
+Una característica particularmente cool de 🤗 Transformers es la habilidad de guardar el modelo y cargarlo como un modelo de PyTorch o TensorFlow. El parámetro `from_pt` o `from_tf` puede convertir el modelo de un framework al otro:
 
 ```py
 >>> from transformers import AutoModel
