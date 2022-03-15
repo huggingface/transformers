@@ -727,12 +727,20 @@ class FlaxPegasusEncoder(nn.Module):
         last_hidden_state = outputs[0]
         last_hidden_state = self.layer_norm(last_hidden_state)
 
+        # update the last element in `hidden_states` after applying `layernorm` above
+        hidden_states = outputs.hidden_states
+        if output_hidden_states:
+            hidden_states = hidden_states[:-1] + (last_hidden_state,)
+
         if not return_dict:
-            return (last_hidden_state,) + outputs[1:]
+            if not output_hidden_states:
+                return (last_hidden_state,) + outputs[1:]
+            else:
+                return (last_hidden_state, hidden_states) + outputs[2:]
 
         return FlaxBaseModelOutput(
             last_hidden_state=last_hidden_state,
-            hidden_states=outputs.hidden_states,
+            hidden_states=hidden_states,
             attentions=outputs.attentions,
         )
 
@@ -796,12 +804,20 @@ class FlaxPegasusDecoder(nn.Module):
         last_hidden_state = outputs[0]
         last_hidden_state = self.layer_norm(last_hidden_state)
 
+        # update the last element in `hidden_states` after applying `layernorm` above
+        hidden_states = outputs.hidden_states
+        if output_hidden_states:
+            hidden_states = hidden_states[:-1] + (last_hidden_state,)
+
         if not return_dict:
-            return (last_hidden_state,) + outputs[1:]
+            if not output_hidden_states:
+                return (last_hidden_state,) + outputs[1:]
+            else:
+                return (last_hidden_state, hidden_states) + outputs[2:]
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=last_hidden_state,
-            hidden_states=outputs.hidden_states,
+            hidden_states=hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
