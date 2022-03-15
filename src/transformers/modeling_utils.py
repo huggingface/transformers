@@ -1294,6 +1294,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model_kwargs = kwargs
 
         # Load model
+        loading_info = None
+
         if pretrained_model_name_or_path is not None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             if os.path.isdir(pretrained_model_name_or_path):
@@ -1507,7 +1509,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 try:
                     from .modeling_tf_pytorch_utils import load_tf2_checkpoint_in_pytorch_model
 
-                    model = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True)
+                    model, loading_info = load_tf2_checkpoint_in_pytorch_model(
+                        model, resolved_archive_file, allow_missing_keys=True, output_loading_info=True
+                    )
                 except ImportError:
                     logger.error(
                         "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
@@ -1545,12 +1549,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         model.eval()
 
         if output_loading_info:
-            loading_info = {
-                "missing_keys": missing_keys,
-                "unexpected_keys": unexpected_keys,
-                "mismatched_keys": mismatched_keys,
-                "error_msgs": error_msgs,
-            }
+            if loading_info is None:
+                loading_info = {
+                    "missing_keys": missing_keys,
+                    "unexpected_keys": unexpected_keys,
+                    "mismatched_keys": mismatched_keys,
+                    "error_msgs": error_msgs,
+                }
             return model, loading_info
 
         return model
