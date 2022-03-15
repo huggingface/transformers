@@ -28,12 +28,12 @@ assignees: ''
 Models:
 
 - ALBERT, BERT, XLM, DeBERTa, DeBERTa-v2, ELECTRA, MobileBert, SqueezeBert: @LysandreJik
-- T5, BART, Marian, Pegasus, EncoderDecoder: @patrickvonplaten
-- Blenderbot, MBART: @patil-suraj
+- T5, Pegasus, EncoderDecoder: @patrickvonplaten
+- Blenderbot, MBART, BART, Marian, Pegasus: @patil-suraj
 - Longformer, Reformer, TransfoXL, XLNet, FNet, BigBird: @patrickvonplaten
 - FSMT: @stas00
 - Funnel: @sgugger
-- GPT-2, GPT: @patrickvonplaten, @LysandreJik
+- GPT-2, GPT: @patil-suraj, @patrickvonplaten, @LysandreJik
 - RAG, DPR: @patrickvonplaten, @lhoestq
 - TensorFlow: @Rocketknight1
 - JAX/Flax: @patil-suraj

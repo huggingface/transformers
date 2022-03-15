@@ -480,6 +480,8 @@ class OpusState:
         if "Wpos" in self.state_dict:
             raise ValueError("Wpos key in state dictionary")
         self.state_dict = dict(self.state_dict)
+        if cfg["tied-embeddings-all"]:
+            cfg["tied-embeddings-src"] = True
         self.share_encoder_decoder_embeddings = cfg["tied-embeddings-src"]
 
         # create the tokenizer here because we need to know the eos_token_id
