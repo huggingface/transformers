@@ -19,7 +19,7 @@ import math
 from dataclasses import dataclass
 from functools import reduce
 from operator import __add__
-from typing import Any, Callable, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -986,15 +986,15 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
     @replace_return_docstrings(output_type=PerceiverMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        inputs=None,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        labels=None,
-        return_dict=None,
-        input_ids=None,
-    ):
+        inputs: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
+        input_ids: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, PerceiverMaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1103,15 +1103,15 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
     @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        inputs=None,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        labels=None,
-        return_dict=None,
-        input_ids=None,
-    ):
+        inputs: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
+        input_ids: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, PerceiverClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the classification/regression loss. Indices should be in `[0, ..., config.num_labels -
@@ -1236,15 +1236,15 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
     @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        inputs=None,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        labels=None,
-        return_dict=None,
-        pixel_values=None,
-    ):
+        inputs: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, PerceiverClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -1373,15 +1373,15 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
     @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        inputs=None,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        labels=None,
-        return_dict=None,
-        pixel_values=None,
-    ):
+        inputs: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, PerceiverClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -1510,15 +1510,15 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
     @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        inputs=None,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        labels=None,
-        return_dict=None,
-        pixel_values=None,
-    ):
+        inputs: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, PerceiverClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -1664,14 +1664,14 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
     @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        inputs=None,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        labels=None,
-        return_dict=None,
-    ):
+        inputs: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, PerceiverClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the optical flow loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1873,15 +1873,15 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
     @replace_return_docstrings(output_type=PerceiverClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        inputs=None,
-        attention_mask=None,
-        subsampled_output_points=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        labels=None,
-        return_dict=None,
-    ):
+        inputs: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        subsampled_output_points: Optional[Dict[str, torch.tensor]] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, PerceiverClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
