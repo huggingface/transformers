@@ -1309,9 +1309,13 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 min_length=min_length,
                 eos_token_id=eos_token_id,
             )
-            # TODO(Patrick) clean-up once generate is fully cleaned up
             model_kwargs["attention_mask"] = context_attention_mask
-            # TODO(Patrick) remove once generate is fully cleaned up
+
+            if model_kwargs.get("encoder_attentions", None) is None:
+                model_kwargs.pop("encoder_attentions", None)
+            if model_kwargs.get("encoder_hidden_states", None) is None:
+                model_kwargs.pop("encoder_hidden_states", None)
+
             model_kwargs.pop("output_hidden_states", None)
             model_kwargs.pop("output_attentions", None)
             model_kwargs.pop("output_scores", None)
