@@ -320,25 +320,27 @@ def load_single(resolved_archive_file, fullname, f):
 
 
 def set_weight(pt_model, pt_name, data, transpose):
+    import numpy as np
     import torch
 
     ptr = pt_model
     for name in pt_name.split("."):
         ptr = getattr(ptr, name)
 
-    ptr = torch.Tensor(data)
+    tensor = torch.from_numpy(np.array(data))
     if transpose is TransposeType.CONV2D:
         # Conv2D weight:
         #    TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
         # -> PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
-        ptr = ptr.permute(3, 2, 0, 1)
+        tensor = tensor.permute(3, 2, 0, 1)
     elif transpose is TransposeType.CONV1D:
         # Conv1D weight:
         #    TF: (kernel, num_in_channel, num_out_channel)
         # -> PT: (num_out_channel, num_in_channel, kernel)
-        ptr = ptr.permute(2, 1, 0)
+        tensor = tensor.permute(2, 1, 0)
     elif transpose is TransposeType.SIMPLE:
-        ptr = ptr.permute(1, 0)
+        tensor = tensor.permute(1, 0)
+    ptr.data = tensor
 
 
 def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
@@ -364,37 +366,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
     )
 
 
-def load_pytorch_model_with_h5(
-    pt_model, tf_checkpoint_path: str, weight_shapes: Dict[str, Shape], allow_missing_keys=False
-):
-    # Make sure we are able to load PyTorch base models as well as derived models (with heads)
-    # TF models always have a prefix, some of PyTorch models (base ones) don't
-    current_pt_params_dict = dict(pt_model.named_parameters())
-    start_prefix_to_remove = ""
-    if not any(s.startswith(pt_model.base_model_prefix) for s in current_pt_params_dict.keys()):
-        start_prefix_to_remove = pt_model.base_model_prefix + "."
-
-    import h5py
-
-    unexpected_keys = set()
-    expected_names = {name for name, _ in pt_model.named_parameters()}
-    with h5py.File(tf_checkpoint_path, "r") as f:
-        for full_h5_name, weight_shape in weight_shapes.items():
-            # By default we use two "names" as prefix in transformers
-            # Since the old function expects those names to not be there
-            # we remove them manually so the conversion works
-            h5_name = "/".join(full_h5_name.split("/")[2:])
-            (pt_name, transpose) = convert_tf_weight_name_to_pt_weight_name(
-                h5_name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=weight_shape
-            )
-
-            data = load_single(tf_checkpoint_path, full_h5_name, f)
-            try:
-                set_weight(pt_model, pt_name, data, transpose)
-                expected_names.remove(pt_name)
-            except (KeyError, AttributeError):
-                unexpected_keys.add(pt_name)
-
+def eventual_warnings(pt_model, unexpected_keys, missing_keys):
     if pt_model._keys_to_ignore_on_load_unexpected is not None:
         for pat in pt_model._keys_to_ignore_on_load_unexpected:
             unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
@@ -411,7 +383,6 @@ def load_pytorch_model_with_h5(
     else:
         logger.warning(f"All TF 2.0 model weights were used when initializing {pt_model.__class__.__name__}.\n")
 
-    missing_keys = expected_names
     if pt_model._keys_to_ignore_on_load_missing is not None:
         for pat in pt_model._keys_to_ignore_on_load_missing:
             missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
@@ -427,6 +398,59 @@ def load_pytorch_model_with_h5(
             f"If your task is similar to the task the model of the checkpoint was trained on, "
             f"you can already use {pt_model.__class__.__name__} for predictions without further training."
         )
+
+
+def load_pytorch_model_with_h5(
+    pt_model, tf_checkpoint_path: str, weight_shapes: Dict[str, Shape], allow_missing_keys=False
+):
+    # Make sure we are able to load PyTorch base models as well as derived models (with heads)
+    # TF models always have a prefix, some of PyTorch models (base ones) don't
+    current_pt_params_dict = dict(pt_model.named_parameters())
+    start_prefix_to_remove = ""
+    if not any(s.startswith(pt_model.base_model_prefix) for s in current_pt_params_dict.keys()):
+        start_prefix_to_remove = pt_model.base_model_prefix + "."
+
+    import h5py
+
+    unexpected_keys = set()
+    expected_names = {name for name, _ in pt_model.named_parameters()}
+    with h5py.File(tf_checkpoint_path, "r") as f:
+
+        mapped_names = {}
+        for full_h5_name, weight_shape in weight_shapes.items():
+            # By default we use two "names" as prefix in transformers
+            # Since the old function expects those names to not be there
+            # we remove them manually so the conversion works
+            h5_name = "/".join(full_h5_name.split("/")[2:])
+            (pt_name, transpose) = convert_tf_weight_name_to_pt_weight_name(
+                h5_name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=weight_shape
+            )
+
+            data = load_single(tf_checkpoint_path, full_h5_name, f)
+            if pt_name not in expected_names:
+                unexpected_keys.add(pt_name)
+            mapped_names[pt_name] = (data, transpose)
+
+        # Some tensors could have different names but be shared
+        visited_ptr = set()
+        for name, weight in pt_model.named_parameters():
+            if weight.data_ptr() in visited_ptr:
+                # TODO This is actually incorrect,
+                # we cannot be sure that the first name can be loaded
+                # We could have W1 and W2 being shared weights
+                # and W2 is the name within the H5 file.
+                expected_names.remove(name)
+                continue
+
+            if name not in mapped_names:
+                continue
+            data_, transpose_ = mapped_names[name]
+            expected_names.remove(name)
+            set_weight(pt_model, name, data_, transpose_)
+
+    # Leftover expected are missing
+    missing_keys = expected_names
+    eventual_warnings(pt_model, unexpected_keys, missing_keys)
     return pt_model
 
 
@@ -527,40 +551,6 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
     missing_keys, unexpected_keys = pt_model.load_state_dict(new_pt_params_dict, strict=False)
     missing_keys += missing_keys_pt
 
-    # Some models may have keys that are not in the state by design, removing them before needlessly warning
-    # the user.
-    if pt_model._keys_to_ignore_on_load_missing is not None:
-        for pat in pt_model._keys_to_ignore_on_load_missing:
-            missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
-
-    if pt_model._keys_to_ignore_on_load_unexpected is not None:
-        for pat in pt_model._keys_to_ignore_on_load_unexpected:
-            unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
-
-    if len(unexpected_keys) > 0:
-        logger.warning(
-            f"Some weights of the TF 2.0 model were not used when "
-            f"initializing the PyTorch model {pt_model.__class__.__name__}: {unexpected_keys}\n"
-            f"- This IS expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model trained on another task "
-            f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a TFBertForPreTraining model).\n"
-            f"- This IS NOT expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model that you expect "
-            f"to be exactly identical (e.g. initializing a BertForSequenceClassification model from a TFBertForSequenceClassification model)."
-        )
-    else:
-        logger.warning(f"All TF 2.0 model weights were used when initializing {pt_model.__class__.__name__}.\n")
-    if len(missing_keys) > 0:
-        logger.warning(
-            f"Some weights of {pt_model.__class__.__name__} were not initialized from the TF 2.0 model "
-            f"and are newly initialized: {missing_keys}\n"
-            f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
-        )
-    else:
-        logger.warning(
-            f"All the weights of {pt_model.__class__.__name__} were initialized from the TF 2.0 model.\n"
-            f"If your task is similar to the task the model of the checkpoint was trained on, "
-            f"you can already use {pt_model.__class__.__name__} for predictions without further training."
-        )
-
-    logger.info(f"Weights or buffers not loaded from TF 2.0 model: {all_tf_weights}")
+    eventual_warnings(pt_model, unexpected_keys, missing_keys)
 
     return pt_model
