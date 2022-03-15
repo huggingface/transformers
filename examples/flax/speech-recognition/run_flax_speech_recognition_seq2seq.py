@@ -162,6 +162,32 @@ class DataTrainingArguments:
     min_duration_in_seconds: float = field(
         default=0.0, metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"}
     )
+    max_target_length: Optional[int] = field(
+        default=128,
+        metadata={
+            "help": "The maximum total sequence length for target text after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
+    )
+    min_target_length: Optional[int] = field(
+        default=0,
+        metadata={
+            "help": "The minimum total sequence length for target text after tokenization. Sequences shorter "
+            "than this will be filtered."
+        },
+    )
+    pad_input_to_multiple_of: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "If set will pad the input sequence to a multiple of the provided value. This is important to avoid triggering recompilations on TPU"
+        },
+    )
+    pad_target_to_multiple_of: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "If set will pad the target sequence to a multiple of the provided value. This is important to avoid triggering recompilations on TPU"
+        },
+    )
     preprocessing_only: bool = field(
         default=False,
         metadata={
@@ -196,13 +222,13 @@ class TrainState(train_state.TrainState):
         return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
 
 
-def shift_tokens_right(label_ids: jnp.array, decoder_start_token_id: int) -> np.ndarray:
+def shift_tokens_right(label_ids: np.array, decoder_start_token_id: int) -> np.ndarray:
     """
     Shift label ids one token to the right.
     """
-    shifted_label_ids = jnp.zeros_like(label_ids)
-    shifted_label_ids = shifted_label_ids.at[:, 1:].set(label_ids[:, :-1])
-    shifted_label_ids = shifted_label_ids.at[:, 0].set(decoder_start_token_id)
+    shifted_label_ids = np.zeros_like(label_ids)
+    shifted_label_ids[:, 1:] = label_ids[:, :-1]
+    shifted_label_ids[:, 0] = decoder_start_token_id
 
     return shifted_label_ids
 
@@ -216,36 +242,80 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
             The processor used for proccessing the data.
         decoder_start_token_id (`int`)
             The begin-of-sentence of the decoder.
+        input_padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+            Select a strategy to pad the returned input sequences (according to the model's padding side and padding index)
+            among:
+            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+              sequence if provided).
+            * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+              maximum acceptable input length for the model if that argument is not provided.
+            * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+              different lengths).
+        target_padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+            Select a strategy to pad the returned target sequences (according to the model's padding side and padding index).
+            See above for details.
+        max_input_length (:obj:`float`, `optional`):
+            Maximum length of the ``input_values`` of the returned list and optionally padding length (see above).
+        max_target_length (:obj:`int`, `optional`):
+            Maximum length of the ``labels`` of the returned list and optionally padding length (see above).
+        pad_input_to_multiple_of (:obj:`int`, `optional`):
+            If set will pad the input sequence to a multiple of the provided value.
+            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
+            7.5 (Volta).
+        pad_target_to_multiple_of (:obj:`int`, `optional`):
+            If set will pad the target sequence to a multiple of the provided value.
+            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
+            7.5 (Volta).
     """
 
     processor: Any
     decoder_start_token_id: int
+    input_padding: Union[bool, str] = "max_length"
+    target_padding: Union[bool, str] = "max_length"
+    max_input_length: Optional[float] = None
+    max_target_length: Optional[int] = None
+    pad_input_to_multiple_of: Optional[int] = None
+    pad_target_to_multiple_of: Optional[int] = None
 
     def __call__(self, features: List[Dict[str, Union[List[int], np.ndarray]]]) -> Dict[str, np.ndarray]:
-        # split inputs and labels since they have to be of different lenghts and need
+        # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
-        batch = self.processor.feature_extractor.pad(input_features, return_tensors="np")
-
-        labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="np")
-
-        # replace padding with -100 to ignore loss correctly
-        labels_batch["input_ids"] = np.ma.array(
-            labels_batch["input_ids"], mask=np.not_equal(labels_batch.attention_mask, 1)
+        # reformat list to dict and set to pytorch format
+        batch = self.processor.feature_extractor.pad(
+            input_features,
+            max_length=self.max_input_length,
+            padding=self.input_padding,
+            pad_to_multiple_of=self.pad_input_to_multiple_of,
+            return_tensors="np",
         )
-        labels = labels_batch["input_ids"].filled(fill_value=-100)
+
+        labels_batch = self.processor.tokenizer.pad(
+            label_features,
+            max_length=self.max_target_length,
+            padding=self.target_padding,
+            pad_to_multiple_of=self.pad_target_to_multiple_of,
+            return_tensors="np",
+        )
 
         # if bos token is appended in previous tokenization step,
         # cut bos token here as it's append later anyways
+        labels = labels_batch["input_ids"]
         if (labels[:, 0] == self.decoder_start_token_id).all().item():
             labels = labels[:, 1:]
             labels_batch.attention_mask = labels_batch.attention_mask[:, 1:]
 
+        decoder_input_ids = shift_tokens_right(labels, self.decoder_start_token_id)
+
+        # replace padding with -100 to ignore loss correctly
+        labels = np.ma.array(labels, mask=np.not_equal(labels_batch.attention_mask, 1))
+        labels = labels.filled(fill_value=-100)
+
         batch["inputs"] = batch.pop("input_values")
         batch["labels"] = labels
-        batch["decoder_input_ids"] = shift_tokens_right(labels, self.decoder_start_token_id)
+        batch["decoder_input_ids"] = decoder_input_ids
         batch["decoder_attention_mask"] = labels_batch.attention_mask
 
         return batch
@@ -417,8 +487,12 @@ def main():
 
     # 7. Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
-    max_input_length = data_args.max_duration_in_seconds * feature_extractor.sampling_rate
-    min_input_length = data_args.min_duration_in_seconds * feature_extractor.sampling_rate
+    max_input_length = int(data_args.max_duration_in_seconds * feature_extractor.sampling_rate)
+    min_input_length = int(data_args.min_duration_in_seconds * feature_extractor.sampling_rate)
+    max_target_length = data_args.max_target_length
+    min_target_length = data_args.min_target_length
+    pad_input_to_multiple_of = data_args.pad_input_to_multiple_of
+    pad_target_to_multiple_of = data_args.pad_target_to_multiple_of
     audio_column_name = data_args.audio_column_name
     num_workers = data_args.preprocessing_num_workers
     text_column_name = data_args.text_column_name
@@ -442,6 +516,7 @@ def main():
         # process targets
         input_str = batch[text_column_name].lower() if do_lower_case else batch[text_column_name]
         batch["labels"] = tokenizer(input_str).input_ids
+        batch["labels_length"] = len(batch["labels"])
         return batch
 
     with training_args.main_process_first(desc="dataset map pre-processing"):
@@ -452,7 +527,7 @@ def main():
             desc="preprocess train dataset",
         )
 
-    # filter data that is shorter than min_input_length or longer than
+    # filter data with inputs shorter than min_input_length or longer than
     # max_input_length
     def is_audio_in_length_range(length):
         return length > min_input_length and length < max_input_length
@@ -461,6 +536,17 @@ def main():
         is_audio_in_length_range,
         num_proc=num_workers,
         input_columns=["input_length"],
+    )
+
+    # filter data with targets shorter than min_target_length or longer than
+    # max_target_length
+    def is_labels_in_length_range(length):
+        return length > min_target_length and length < max_target_length
+
+    vectorized_datasets = vectorized_datasets.filter(
+        is_labels_in_length_range,
+        num_proc=num_workers,
+        input_columns=["labels_length"],
     )
 
     # for large datasets it is advised to run the preprocessing on a
@@ -477,13 +563,7 @@ def main():
     metric = load_metric("wer")
 
     def compute_metrics(pred_ids: List[List[int]], label_ids: List[List[int]]):
-        # pad variable-length lists to uniform-length
-        lens = np.array([len(i) for i in label_ids])
-        mask = np.arange(lens.max()) < lens[:, None]
-        padded_ids = -100 * np.ones(mask.shape, dtype=int)
-        padded_ids[mask] = np.concatenate(label_ids)
-
-        padded_ids[padded_ids == -100] = tokenizer.pad_token_id
+        padded_ids = np.where(np.asarray(label_ids) == -100, tokenizer.pad_token_id, np.asarray(label_ids))
 
         pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
         # we do not want to group tokens when computing the metrics
@@ -503,7 +583,14 @@ def main():
     processor = AutoProcessor.from_pretrained(training_args.output_dir)
 
     data_collator = FlaxDataCollatorSpeechSeq2SeqWithPadding(
-        processor=processor, decoder_start_token_id=model.config.decoder_start_token_id
+        processor=processor,
+        decoder_start_token_id=model.config.decoder_start_token_id,
+        input_padding="max_length",
+        target_padding="max_length",
+        max_input_length=max_input_length,
+        max_target_length=max_target_length,
+        pad_input_to_multiple_of=pad_input_to_multiple_of,
+        pad_target_to_multiple_of=pad_target_to_multiple_of,
     )
 
     # Enable tensorboard only on the master node
@@ -580,14 +667,14 @@ def main():
         mask=decay_mask_fn,
     )
 
-    # augment adam optimizer to facilitate gradient accumulation
-    optim = optax.chain(adamw, optax.apply_every(gradient_accumulation_steps))
+    # augment adam optimizer to facilitate gradient accumulation (ignore for now)
+    # optim = optax.chain(adamw, optax.apply_every(gradient_accumulation_steps))
 
     # Setup train state
-    state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=optim, dropout_rng=dropout_rng)
+    state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw, dropout_rng=dropout_rng)
 
     # label smoothed cross entropy
-    def loss_fn(logits, labels, padding_mask, label_smoothing_factor=0.0):
+    def loss_fn(logits, labels, label_smoothing_factor=0.0):
         """
         The label smoothing implementation is adapted from Flax's official example:
         https://github.com/google/flax/blob/87a211135c6a377c8f29048a1cac3840e38b9da4/examples/wmt/train.py#L104
@@ -603,9 +690,10 @@ def main():
         loss = optax.softmax_cross_entropy(logits, soft_labels)
         loss = loss - normalizing_constant
 
-        # ignore padded tokens from loss
-        loss = loss * padding_mask
-        loss = loss.sum() / padding_mask.sum()
+        # ignore padded tokens from loss, i.e. where labels are not set to -100
+        padding = labels > 0
+        loss = loss * padding
+        loss = loss.sum() / padding.sum()
         return loss
 
     # Define gradient update step fn
@@ -621,9 +709,9 @@ def main():
                 freeze_feature_encoder=model_args.freeze_feature_encoder,
                 train=True,
             )[0]
-            loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
-            # normalize loss over gradient accumulation steps
-            loss = loss / gradient_accumulation_steps
+            loss = loss_fn(logits, labels, label_smoothing_factor)
+            # normalize loss over gradient accumulation steps (ignore for now)
+            # loss = loss / gradient_accumulation_steps
             return loss
 
         grad_fn = jax.value_and_grad(compute_loss)
@@ -641,7 +729,7 @@ def main():
     def eval_step(params, batch, label_smoothing_factor=0.0):
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
-        loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+        loss = loss_fn(logits, labels, label_smoothing_factor)
 
         # summarize metrics
         metrics = {"loss": loss}
@@ -704,6 +792,7 @@ def main():
             f"Epoch... ({epoch + 1}/{num_epochs} | Loss: {train_metric['loss']}, Learning Rate: {train_metric['learning_rate']})"
         )
 
+        continue
         # ======================== Evaluating ==============================
         eval_metrics = []
         eval_preds = []
