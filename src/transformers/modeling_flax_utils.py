@@ -121,6 +121,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             # randomly initialized parameters
             random_params = self.init_weights(self.key, input_shape)
             params_shape_tree = jax.eval_shape(lambda params: params, random_params)
+            # initialize the parameters
+            self.params = random_params
         else:
             init_fn = partial(self.init_weights, input_shape=input_shape)
             params_shape_tree = jax.eval_shape(init_fn, self.key)
@@ -135,10 +137,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         # save required_params as set
         self._required_params = set(flatten_dict(unfreeze(params_shape_tree)).keys())
-
-        # initialize the parameters
-        if do_init:
-            self.params = random_params
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
