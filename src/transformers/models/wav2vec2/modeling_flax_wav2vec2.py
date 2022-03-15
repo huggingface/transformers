@@ -957,9 +957,8 @@ class FlaxWav2Vec2Module(nn.Module):
 
             # these two operations makes sure that all values
             # before the output lengths indices are attended to
-            attention_mask = attention_mask.at[
-                jax.ops.index[jnp.arange(attention_mask.shape[0]), output_lengths - 1]
-            ].set(1)
+            idx = jax.ops.index[jnp.arange(attention_mask.shape[0]), output_lengths - 1]
+            attention_mask = attention_mask.at[idx].set(1)
             attention_mask = jnp.flip(jnp.flip(attention_mask, -1).cumsum(-1), -1).astype("bool")
 
         hidden_states, extract_features = self.feature_projection(extract_features, deterministic=deterministic)
@@ -1031,7 +1030,8 @@ class FlaxWav2Vec2Module(nn.Module):
 
         attention_mask = jnp.zeros((batch_size, feature_vector_length), dtype=attention_mask.dtype)
         # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask = attention_mask.at[(jnp.arange(attention_mask.shape[0]), output_lengths - 1)].set(1)
+        idx = (jnp.arange(attention_mask.shape[0]), output_lengths - 1)
+        attention_mask = attention_mask.at[idx].set(1)
         attention_mask = jnp.flip(jnp.flip(attention_mask, axis=-1).cumsum(axis=-1), axis=-1)
 
         attention_mask = jnp.array(attention_mask, dtype=bool)
