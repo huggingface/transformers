@@ -842,7 +842,7 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[Tuple, TFFlaubertWithLMHeadModelOutput]:
         inputs = input_processing(
             func=self.call,
             config=self.config,
