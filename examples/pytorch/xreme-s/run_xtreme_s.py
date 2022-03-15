@@ -35,13 +35,14 @@ from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
     AutoModelForAudioClassification,
+    AutoModelForSpeechSeq2Seq,
     AutoModelForCTC,
     AutoProcessor,
     AutoTokenizer,
     HfArgumentParser,
     Trainer,
-    TrainingArguments,
-    Wav2Vec2Processor,
+    Seq2SeqTrainer,
+    Seq2SeqTrainingArguments,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
@@ -193,7 +194,7 @@ class DataTrainingArguments:
         },
     )
     chars_to_ignore: Optional[List[str]] = list_field(
-        default=None,
+        default=', ? . ! - ; : " “ % ‘ ” �'.split(" "),
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
     max_duration_in_seconds: float = field(
@@ -362,7 +363,7 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -549,13 +550,16 @@ def main():
 
             # if tokenizer has just been created
             # it is defined by `tokenizer_class` if present in config else by `model_type`
-            tokenizer_kwargs = {
-                "config": config if config.tokenizer_class is not None else None,
-                "tokenizer_type": config.model_type if config.tokenizer_class is None else None,
-                "unk_token": unk_token,
-                "pad_token": pad_token,
-                "word_delimiter_token": word_delimiter_token,
-            }
+            if not config.is_encoder_decoder:
+                tokenizer_kwargs = {
+                    "config": config if config.tokenizer_class is not None else None,
+                    "tokenizer_type": config.model_type if config.tokenizer_class is None else None,
+                    "unk_token": unk_token,
+                    "pad_token": pad_token,
+                    "word_delimiter_token": word_delimiter_token,
+                }
+            else:
+                tokenizer_kwargs = {}
 
     # 5. Now we can instantiate the feature extractor, tokenizer and model
     # Note for distributed training, the .from_pretrained methods guarantee that only
@@ -600,13 +604,22 @@ def main():
             config.num_labels = num_labels
 
     # create model
-    if is_text_target:
+    if target_column_name == "transcription":
         model = AutoModelForCTC.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             config=config,
             use_auth_token=data_args.use_auth_token,
         )
+    elif config.is_encoder_decoder:
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            config=config,
+            use_auth_token=data_args.use_auth_token,
+        )
+        if model.config.decoder_start_token_id is None:
+            raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
     else:
         model = AutoModelForAudioClassification.from_pretrained(
             model_args.model_name_or_path,
@@ -722,26 +735,38 @@ def main():
         if is_text_target:
             tokenizer.save_pretrained(training_args.output_dir)
         config.save_pretrained(training_args.output_dir)
+    # wait until configs are saved in the main process before loading the processor
+    torch.distributed.barrier()
 
+    if is_text_target:
         processor = AutoProcessor.from_pretrained(training_args.output_dir)
     else:
-        processor = Wav2Vec2Processor(
-            feature_extractor=feature_extractor, tokenizer=tokenizer if is_text_target else None
-        )
+        processor = AutoFeatureExtractor.from_pretrained(training_args.output_dir)
 
     # Instantiate custom data collator
     data_collator = SpeechDataCollatorWithPadding(processor=processor, pad_labels=is_text_target)
 
     # Initialize Trainer
-    trainer = Trainer(
-        model=model,
-        data_collator=data_collator,
-        args=training_args,
-        compute_metrics=compute_asr_metric if is_text_target else compute_classification_metric,
-        train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
-        eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        tokenizer=processor,
-    )
+    if target_column_name == "translation":
+        trainer = Seq2SeqTrainer(
+            model=model,
+            data_collator=data_collator,
+            args=training_args,
+            compute_metrics=compute_asr_metric if training_args.predict_with_generate else None,
+            train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
+            eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
+            tokenizer=feature_extractor,
+        )
+    else:
+        trainer = Trainer(
+            model=model,
+            data_collator=data_collator,
+            args=training_args,
+            compute_metrics=compute_asr_metric if is_text_target else compute_classification_metric,
+            train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
+            eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
+            tokenizer=feature_extractor,
+        )
 
     # 8. Finally, we can start training
 
