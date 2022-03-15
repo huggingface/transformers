@@ -3961,6 +3961,30 @@ class UniSpeechSatPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+VAN_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class VanForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VanModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VanPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 VILT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
