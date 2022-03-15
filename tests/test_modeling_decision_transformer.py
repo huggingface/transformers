@@ -27,7 +27,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, r
 
 
 if is_torch_available():
-    # import torch
+    import torch
 
     from transformers import DecisionTransformerModel
     from transformers.models.decision_transformer.modeling_decision_transformer import (
@@ -191,3 +191,61 @@ class DecisionTransformerModelTest(  # ModelTesterMixin is removed as this model
             ]
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+
+@require_torch
+class DecisionTransformerModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_autoregressive_prediction(self):
+        """
+        An integration test that performs autoregressive prediction of state, action and return
+        from a sequence of state, actions and returns. Test is performed over two timesteps.
+
+        """
+
+        NUM_STEPS = 2  # number of steps of autoregressive prediction we will perform
+        TARGET_RETURN = 10  # defined by the RL environment, may be normalized
+        config = DecisionTransformerConfig()
+        model = DecisionTransformerModel(config).to(torch_device)
+
+        state = torch.randn(1, 1, config.state_dim).to(device=torch_device, dtype=torch.float32)  # env.reset()
+
+        returns_to_go = torch.tensor(TARGET_RETURN, device=torch_device, dtype=torch.float32).reshape(1, 1, 1)
+        states = state
+        actions = torch.zeros(1, 0, config.act_dim, device=torch_device, dtype=torch.float32)
+        rewards = torch.zeros(1, 0, device=torch_device, dtype=torch.float32)
+        timesteps = torch.tensor(0, device=torch_device, dtype=torch.long).reshape(1, 1)
+
+        for step in range(NUM_STEPS):
+            actions = torch.cat([actions, torch.zeros(1, 1, config.act_dim, device=torch_device)], dim=1)
+            rewards = torch.cat([rewards, torch.zeros(1, 1, device=torch_device)], dim=1)
+
+            attention_mask = torch.ones(1, states.shape[1]).to(dtype=torch.long, device=states.device)
+
+            with torch.no_grad():
+                _, action_pred, _ = model(
+                    states=states,
+                    actions=actions,
+                    rewards=rewards,
+                    returns_to_go=returns_to_go,
+                    timesteps=timesteps,
+                    attention_mask=attention_mask,
+                    return_dict=False,
+                )
+
+            self.assertEqual(action_pred.shape, actions.shape)
+
+            state, reward, done, info = (  # env.step(action)
+                torch.randn(1, 1, config.state_dim).to(device=torch_device, dtype=torch.float32),
+                1.0,
+                False,
+                {},
+            )
+
+            actions[-1] = action_pred[0, -1]
+            states = torch.cat([states, state], dim=1)
+            pred_return = returns_to_go[0, -1] - reward
+            returns_to_go = torch.cat([returns_to_go, pred_return.reshape(1, 1, 1)], dim=1)
+            timesteps = torch.cat(
+                [timesteps, torch.ones((1, 1), device=torch_device, dtype=torch.long) * (step + 1)], dim=1
+            )
