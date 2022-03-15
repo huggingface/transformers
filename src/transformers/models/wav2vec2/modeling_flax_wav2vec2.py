@@ -689,10 +689,8 @@ class FlaxWav2Vec2StableLayerNormEncoder(nn.Module):
             hidden_states = hidden_states[:-1] + (last_hidden_state,)
 
         if not return_dict:
-            if not output_hidden_states:
-                return (last_hidden_state,) + outputs[1:]
-            else:
-                return (last_hidden_state, hidden_states) + outputs[2:]
+            outputs = (last_hidden_state, hidden_states) + (outputs[2:] if output_hidden_states else outputs[1:])
+            return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutput(
             last_hidden_state=last_hidden_state, hidden_states=hidden_states, attentions=outputs.attentions
