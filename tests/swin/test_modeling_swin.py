@@ -250,7 +250,8 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), len(self.model_tester.depths))
+            expected_num_attentions = sum(self.model_tester.depths)
+            self.assertEqual(len(attentions), expected_num_attentions)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -262,7 +263,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), len(self.model_tester.depths))
+            self.assertEqual(len(attentions), expected_num_attentions)
 
             if chunk_length is not None:
                 self.assertListEqual(
@@ -291,13 +292,13 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             elif self.is_encoder_decoder:
                 added_hidden_states = 2
             else:
-                # TODO also another +1 for reshaped_hidden_states
+                # also another +1 for reshaped_hidden_states
                 added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
-            self.assertEqual(len(self_attentions), len(self.model_tester.depths))
+            self.assertEqual(len(self_attentions), expected_num_attentions)
             if chunk_length is not None:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-4:]),
