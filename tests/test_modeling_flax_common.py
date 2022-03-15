@@ -194,7 +194,7 @@ class FlaxModelTesterMixin:
 
             # Using `np.asarray` gives `ValueError: assignment destination is read-only` at the line `fxo[fx_nans] = 0`.
             fxo = np.array(fxo)
-            pto = pto.numpy()
+            pto = pto.detach().to("cpu").numpy()
 
             fx_nans = np.isnan(fxo)
             pt_nans = np.isnan(pto)
