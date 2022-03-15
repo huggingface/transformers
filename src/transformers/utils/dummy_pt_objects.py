@@ -3350,6 +3350,30 @@ class ReformerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class RegNetForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RegNetModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RegNetPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
