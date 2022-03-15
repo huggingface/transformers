@@ -429,7 +429,7 @@ class RoFormerIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
@@ -687,7 +687,7 @@ class RoFormerOnlyMLMHead(nn.Module):
         super().__init__()
         self.predictions = RoFormerLMPredictionHead(config)
 
-    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
+    def forward(self, sequence_output):
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
