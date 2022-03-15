@@ -381,7 +381,7 @@ def load_pytorch_model_with_h5(
             # By default we use two "names" as prefix in transformers
             # Since the old function expects those names to not be there
             # we remove them manually so the conversion works
-            h5_name = "/".join(full_h5_name.strip("/").split("/")[2:])
+            h5_name = "/".join(full_h5_name.split("/")[2:])
             (pt_name, transpose) = convert_tf_weight_name_to_pt_weight_name(
                 h5_name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=weight_shape
             )
