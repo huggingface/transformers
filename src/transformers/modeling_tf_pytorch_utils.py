@@ -289,7 +289,9 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 #####################
 
 
-def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
+def load_tf2_checkpoint_in_pytorch_model(
+    pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+):
     """
     Load TF 2.0 HDF5 checkpoint in a PyTorch model We use HDF5 to easily do transfer learning (see
     https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
@@ -323,17 +325,21 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
 
     load_tf_weights(tf_model, tf_checkpoint_path)
 
-    return load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=allow_missing_keys)
+    return load_tf2_model_in_pytorch_model(
+        pt_model, tf_model, allow_missing_keys=allow_missing_keys, output_loading_info=output_loading_info
+    )
 
 
-def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False):
+def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False, output_loading_info=False):
     """Load TF 2.0 model in a pytorch model"""
     weights = tf_model.weights
 
-    return load_tf2_weights_in_pytorch_model(pt_model, weights, allow_missing_keys=allow_missing_keys)
+    return load_tf2_weights_in_pytorch_model(
+        pt_model, weights, allow_missing_keys=allow_missing_keys, output_loading_info=output_loading_info
+    )
 
 
-def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False):
+def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False, output_loading_info=False):
     """Load TF2.0 symbolic weights in a PyTorch model"""
     try:
         import tensorflow as tf  # noqa: F401
@@ -459,5 +465,9 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
         )
 
     logger.info(f"Weights or buffers not loaded from TF 2.0 model: {all_tf_weights}")
+
+    if output_loading_info:
+        loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys}
+        return pt_model, loading_info
 
     return pt_model
