@@ -134,9 +134,9 @@ class SwinModelOutput(ModelOutput):
 
 
 @dataclass
-class SwinMaskedLMOutput(ModelOutput):
+class SwinMaskedImageModelingOutput(ModelOutput):
     """
-    Swin masked language models outputs.
+    Swin masked image model outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
