@@ -1144,9 +1144,7 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0:batch_size, sequence_lengths]
 
-            loss = self.hf_compute_loss(
-                tf.reshape(labels, [-1, 1]), tf.reshape(in_logits, [-1, self.num_labels])
-            )
+            loss = self.hf_compute_loss(tf.reshape(labels, [-1, 1]), tf.reshape(in_logits, [-1, self.num_labels]))
 
         pooled_logits = in_logits if in_logits is not None else logits
 
