@@ -56,8 +56,8 @@ class SwinModelTester:
         patch_size=2,
         num_channels=3,
         embed_dim=16,
-        depths=[1],
-        num_heads=[2],
+        depths=[1, 2, 1],
+        num_heads=[2, 2, 4],
         window_size=2,
         mlp_ratio=2.0,
         qkv_bias=True,
@@ -73,7 +73,7 @@ class SwinModelTester:
         scope=None,
         use_labels=True,
         type_sequence_label_size=10,
-        encoder_stride=2,
+        encoder_stride=8,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -139,8 +139,7 @@ class SwinModelTester:
         model.eval()
         result = model(pixel_values)
 
-        # since the model we're testing only consists of a single layer, expected_seq_len = number of patches
-        expected_seq_len = (config.image_size // config.patch_size) ** 2
+        expected_seq_len = ((config.image_size // config.patch_size) ** 2) // (4 ** (len(config.depths) - 1))
         expected_dim = int(config.embed_dim * 2 ** (len(config.depths) - 1))
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
