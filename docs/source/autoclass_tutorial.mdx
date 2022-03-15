@@ -77,16 +77,14 @@ Load a processor with [`AutoProcessor.from_pretrained`]:
 
 ## AutoModel
 
+<frameworkcontent>
+<pt>
 Finally, the `AutoModelFor` classes let you load a pretrained model for a given task (see [here](model_doc/auto) for a complete list of available tasks). For example, load a model for sequence classification with [`AutoModelForSequenceClassification.from_pretrained`]:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
 >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
-===PT-TF-SPLIT===
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
 ```
 
 Easily reuse the same checkpoint to load an architecture for a different task:
@@ -95,10 +93,27 @@ Easily reuse the same checkpoint to load an architecture for a different task:
 >>> from transformers import AutoModelForTokenClassification
 
 >>> model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
-===PT-TF-SPLIT===
+```
+
+Generally, we recommend using the `AutoTokenizer` class and the `AutoModelFor` class to load pretrained instances of models. This will ensure you load the correct architecture every time. In the next [tutorial](preprocessing), learn how to use your newly loaded tokenizer, feature extractor and processor to preprocess a dataset for fine-tuning.
+</pt>
+<tf>
+Finally, the `TFAutoModelFor` classes let you load a pretrained model for a given task (see [here](model_doc/auto) for a complete list of available tasks). For example, load a model for sequence classification with [`TFAutoModelForSequenceClassification.from_pretrained`]:
+
+```py
+>>> from transformers import TFAutoModelForSequenceClassification
+
+>>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+```
+
+Easily reuse the same checkpoint to load an architecture for a different task:
+
+```py
 >>> from transformers import TFAutoModelForTokenClassification
 
 >>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Generally, we recommend using the `AutoTokenizer` class and the `AutoModelFor` class to load pretrained instances of models. This will ensure you load the correct architecture every time. In the next [tutorial](preprocessing), learn how to use your newly loaded tokenizer, feature extractor and processor to preprocess a dataset for fine-tuning.
+Generally, we recommend using the `AutoTokenizer` class and the `TFAutoModelFor` class to load pretrained instances of models. This will ensure you load the correct architecture every time. In the next [tutorial](preprocessing), learn how to use your newly loaded tokenizer, feature extractor and processor to preprocess a dataset for fine-tuning.
+</tf>
+</frameworkcontent>

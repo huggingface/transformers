@@ -157,6 +157,8 @@ Apply the `group_texts` function over the entire dataset:
 
 For causal language modeling, use [`DataCollatorForLanguageModeling`] to create a batch of examples. It will also *dynamically pad* your text to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient. 
 
+<frameworkcontent>
+<pt>
 You can use the end of sequence token as the padding token, and set `mlm=False`. This will use the inputs as labels shifted to the right by one element:
 
 ```py
@@ -164,7 +166,21 @@ You can use the end of sequence token as the padding token, and set `mlm=False`.
 
 >>> tokenizer.pad_token = tokenizer.eos_token
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-===PT-TF-SPLIT===
+```
+
+For masked language modeling, use the same [`DataCollatorForLanguageModeling`] except you should specify `mlm_probability` to randomly mask tokens each time you iterate over the data.
+
+```py
+>>> from transformers import DataCollatorForLanguageModeling
+
+>>> tokenizer.pad_token = tokenizer.eos_token
+>>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
+```
+</pt>
+<tf>
+You can use the end of sequence token as the padding token, and set `mlm=False`. This will use the inputs as labels shifted to the right by one element:
+
+```py
 >>> from transformers import DataCollatorForLanguageModeling
 
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="tf")
@@ -175,13 +191,10 @@ For masked language modeling, use the same [`DataCollatorForLanguageModeling`] e
 ```py
 >>> from transformers import DataCollatorForLanguageModeling
 
->>> tokenizer.pad_token = tokenizer.eos_token
->>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
-===PT-TF-SPLIT===
->>> from transformers import DataCollatorForLanguageModeling
-
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="tf")
 ```
+</tf>
+</frameworkcontent>
 
 ## Causal language modeling
 
