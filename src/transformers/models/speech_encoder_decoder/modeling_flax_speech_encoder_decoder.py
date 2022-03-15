@@ -336,8 +336,15 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         input_shape: Optional[Tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        do_init: bool = True,
         **kwargs
     ):
+
+        if not do_init:
+            raise ValueError(
+                "`FlaxSpeechEncoderDecoderModel` cannot be created without initializing, `do_init` must be `True`."
+            )
+
         if config.decoder.cross_attention_hidden_size is not None:
             # Raise ValueError or option to project enc to dec hidden_size (eg EncAdapterLayer)
             if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
@@ -356,7 +363,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
             decoder_input_length = module._get_feat_extract_output_lengths(encoder_input_length)
             input_shape = ((1, encoder_input_length), (1, decoder_input_length))
 
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, do_init=do_init)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         encoder_input_shape, decoder_input_shape = input_shape

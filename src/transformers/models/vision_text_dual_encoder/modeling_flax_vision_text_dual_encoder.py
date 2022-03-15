@@ -226,8 +226,15 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         input_shape: Optional[Tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        do_init: bool = True,
         **kwargs
     ):
+
+        if not do_init:
+            raise ValueError(
+                "`FlaxVisionTextDualEncoderModel` cannot be created without initializing, `do_init` must be `True`."
+            )
+
         if input_shape is None:
             input_shape = ((1, 1), (1, config.vision_config.image_size, config.vision_config.image_size, 3))
 
