@@ -294,6 +294,21 @@ class TFGPT2ModelTester:
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_gpt2_xla_generate(self, config, input_ids, *args):
+        config.eos_token_id = None
+        config.max_length = 10
+        model = TFGPT2LMHeadModel(config=config)
+
+        # make sure there are no pad tokens in prompt
+        input_ids = tf.where(input_ids != config.pad_token_id, input_ids, config.pad_token_id - 1)
+
+        generated = model.generate(input_ids)
+
+        generate_xla = tf.function(model.generate, jit_compile=True)
+        generated_xla = generate_xla(input_ids)
+
+        self.parent.assertListEqual(generated.numpy().tolist(), generated_xla.numpy().tolist())
+
     def create_and_check_gpt2_double_head(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
     ):
@@ -392,6 +407,10 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
     def test_gpt2_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_lm_head(*config_and_inputs)
+
+    def test_gpt2_xla_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt2_xla_generate(*config_and_inputs)
 
     def test_gpt2_double_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -512,4 +531,19 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         expected_output_ids = [464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290]
         # fmt: on
         output_ids = model.generate(input_ids, do_sample=False)
+        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
+
+    @slow
+    def test_lm_generate_gpt2_xla(self):
+        """This test gives the exact same results as the non-xla test above"""
+        model = TFGPT2LMHeadModel.from_pretrained("gpt2")
+        input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
+
+        # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
+        # fmt: off
+        expected_output_ids = [464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290]
+        # fmt: on
+        xla_generate = tf.function(model.generate, jit_compile=True)
+
+        output_ids = xla_generate(input_ids, do_sample=False)
         self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
