@@ -181,7 +181,7 @@ class FlaxModelTesterMixin:
         if type(fxo) in [tuple, list]:
             self.assertEqual(type(fxo), type(pto))
             self.assertEqual(len(fxo), len(pto))
-            if type(names) in tuple:
+            if type(names) == tuple:
                 for fo, po, name in zip(fxo, pto, names):
                     self.check_outputs(fo, po, model_class, names=name, context=context, results=results)
             elif type(names) == str:
