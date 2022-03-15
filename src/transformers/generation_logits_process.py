@@ -240,6 +240,9 @@ class TopKLogitsWarper(LogitsWarper):
 
 class TypicalLogitsWarper(LogitsWarper):
     def __init__(self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        mass = float(mass)
+        if mass < 0 or mass > 1.0:
+            raise ValueError(f"`typical_p` has to be a float > 0 and < 1, but is {mass}")
 
         self.filter_value = filter_value
         self.mass = mass
