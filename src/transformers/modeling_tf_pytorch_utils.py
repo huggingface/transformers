@@ -18,6 +18,7 @@
 
 import os
 import re
+from typing import Dict, List
 
 import numpy
 
@@ -68,9 +69,9 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="",
         tf_name = tf_name[1:]  # Remove level zero
 
     # When should we transpose the weights
-    if tf_name[-1] == "kernel" and tf_weight_shape is not None and tf_weight_shape.rank == 4:
+    if tf_name[-1] == "kernel" and tf_weight_shape is not None and len(tf_weight_shape) == 4:
         transpose = TransposeType.CONV2D
-    elif tf_name[-1] == "kernel" and tf_weight_shape is not None and tf_weight_shape.rank == 3:
+    elif tf_name[-1] == "kernel" and tf_weight_shape is not None and len(tf_weight_shape) == 3:
         transpose = TransposeType.CONV1D
     elif bool(
         tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
@@ -284,6 +285,61 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 # TF 2.0 => PyTorch #
 #####################
 
+Shape = List[int]
+
+
+def _load(f, shapes, prefix=""):
+    import h5py
+
+    for k in f.keys():
+        if isinstance(f[k], h5py._hl.dataset.Dataset):
+            shapes[f"{prefix}/{k}"] = f[k].shape
+        else:
+            _load(f[k], shapes, prefix=f"{prefix}/{k}")
+
+
+def load_h5_weight_names(resolved_archive_file) -> Dict[str, Shape]:
+    import h5py
+
+    # Read the H5 file
+    shapes = {}
+    with h5py.File(resolved_archive_file, "r") as f:
+        # Retrieve the name of each layer from the H5 file
+        _load(f, shapes)
+    return shapes
+
+
+def load_single(resolved_archive_file, fullname, f):
+    names = fullname.strip("/").split("/")
+
+    # Retrieve the name of each layer from the H5 file
+    data = f
+    for name in names:
+        data = data[name]
+    return data
+
+
+def set_weight(pt_model, pt_name, data, transpose):
+    import torch
+
+    ptr = pt_model
+    for name in pt_name.split("."):
+        ptr = getattr(ptr, name)
+
+    ptr = torch.Tensor(data)
+    if transpose is TransposeType.CONV2D:
+        # Conv2D weight:
+        #    TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
+        # -> PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
+        ptr = ptr.permute(3, 2, 0, 1)
+    elif transpose is TransposeType.CONV1D:
+        # Conv1D weight:
+        #    TF: (kernel, num_in_channel, num_out_channel)
+        # -> PT: (num_out_channel, num_in_channel, kernel)
+        ptr = ptr.permute(2, 1, 0)
+    elif transpose is TransposeType.SIMPLE:
+        ptr = ptr.permute(1, 0)
+
 
 def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
     """
@@ -291,7 +347,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
     https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
     """
     try:
-        import tensorflow as tf  # noqa: F401
+        import h5py  # noqa: F401
         import torch  # noqa: F401
     except ImportError:
         logger.error(
@@ -300,26 +356,39 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
         )
         raise
 
-    import transformers
-
-    from .modeling_tf_utils import load_tf_weights
-
     logger.info(f"Loading TensorFlow weights from {tf_checkpoint_path}")
 
-    # Instantiate and load the associated TF 2.0 model
-    tf_model_class_name = "TF" + pt_model.__class__.__name__  # Add "TF" at the beginning
-    tf_model_class = getattr(transformers, tf_model_class_name)
-    tf_model = tf_model_class(pt_model.config)
+    weight_names = load_h5_weight_names(tf_checkpoint_path)
+    return load_pytorch_model_with_h5(
+        pt_model, tf_checkpoint_path, weight_names, allow_missing_keys=allow_missing_keys
+    )
 
-    if tf_inputs is None:
-        tf_inputs = tf_model.dummy_inputs
 
-    if tf_inputs is not None:
-        tf_model(tf_inputs, training=False)  # Make sure model is built
+def load_pytorch_model_with_h5(
+    pt_model, tf_checkpoint_path: str, weight_shapes: Dict[str, Shape], allow_missing_keys=False
+):
+    # Make sure we are able to load PyTorch base models as well as derived models (with heads)
+    # TF models always have a prefix, some of PyTorch models (base ones) don't
+    current_pt_params_dict = dict(pt_model.named_parameters())
+    start_prefix_to_remove = ""
+    if not any(s.startswith(pt_model.base_model_prefix) for s in current_pt_params_dict.keys()):
+        start_prefix_to_remove = pt_model.base_model_prefix + "."
 
-    load_tf_weights(tf_model, tf_checkpoint_path)
+    import h5py
 
-    return load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=allow_missing_keys)
+    with h5py.File(tf_checkpoint_path, "r") as f:
+        for full_h5_name, weight_shape in weight_shapes.items():
+            # By default we use two "names" as prefix in transformers
+            # Since the old function expects those names to not be there
+            # we remove them manually so the conversion works
+            h5_name = "/".join(full_h5_name.strip("/").split("/")[2:])
+            (pt_name, transpose) = convert_tf_weight_name_to_pt_weight_name(
+                h5_name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=weight_shape
+            )
+
+            data = load_single(tf_checkpoint_path, full_h5_name, f)
+            set_weight(pt_model, pt_name, data, transpose)
+    return pt_model
 
 
 def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False):
