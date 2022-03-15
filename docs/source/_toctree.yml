@@ -334,6 +334,8 @@
       title: UniSpeech
     - local: model_doc/unispeech-sat
       title: UniSpeech-SAT
+    - local: model_doc/van
+      title: VAN
     - local: model_doc/vilt
       title: ViLT
     - local: model_doc/vision-encoder-decoder

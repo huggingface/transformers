@@ -314,6 +314,7 @@ _import_structure = {
         "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechSatConfig",
     ],
+    "models.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig", "ViltFeatureExtractor", "ViltProcessor"],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
@@ -1479,6 +1480,14 @@ if is_torch_available():
             "UniSpeechSatPreTrainedModel",
         ]
     )
+    _import_structure["models.van"].extend(
+        [
+            "VAN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VanForImageClassification",
+            "VanModel",
+            "VanPreTrainedModel",
+        ]
+    )
     _import_structure["models.vilt"].extend(
         [
             "VILT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2612,6 +2621,7 @@ if TYPE_CHECKING:
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
+    from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.vilt import VILT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViltConfig, ViltFeatureExtractor, ViltProcessor
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
@@ -3584,6 +3594,12 @@ if TYPE_CHECKING:
             UniSpeechSatForXVector,
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
+        )
+        from .models.van import (
+            VAN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VanForImageClassification,
+            VanModel,
+            VanPreTrainedModel,
         )
         from .models.vilt import (
             VILT_PRETRAINED_MODEL_ARCHIVE_LIST,
