@@ -134,15 +134,22 @@ Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference
 
 Use [`DefaultDataCollator`] to create a batch of examples. Unlike other data collators in 🤗 Transformers, the `DefaultDataCollator` does not apply additional preprocessing such as padding.
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import DefaultDataCollator
 
 >>> data_collator = DefaultDataCollator()
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import DefaultDataCollator
 
 >>> data_collator = DefaultDataCollator(return_tensors="tf")
 ```
+</tf>
+</frameworkcontent>
 
 ## Fine-tune with Trainer
 

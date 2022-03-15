@@ -74,15 +74,22 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 Use [`DataCollatorWithPadding`] to create a batch of examples. It will also *dynamically pad* your text to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import DataCollatorWithPadding
 
 >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import DataCollatorWithPadding
 
 >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
 ```
+</tf>
+</frameworkcontent>
 
 ## Fine-tune with Trainer
 

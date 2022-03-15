@@ -23,7 +23,6 @@ import black
 
 
 BLACK_AVOID_PATTERNS = {
-    "===PT-TF-SPLIT===": "### PT-TF-SPLIT",
     "{processor_class}": "FakeProcessorClass",
     "{model_class}": "FakeModelClass",
     "{object_class}": "FakeObjectClass",
@@ -192,8 +191,7 @@ def format_code_example(code: str, max_len: int, in_docstring: bool = False):
                 in_decorator = True
 
         formatted_lines.extend([" " * indent + line for line in output.split("\n")])
-        if not output.endswith("===PT-TF-SPLIT==="):
-            formatted_lines.append("")
+        formatted_lines.append("")
 
     result = "\n".join(formatted_lines)
     return result.rstrip(), error
