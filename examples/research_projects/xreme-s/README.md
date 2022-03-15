@@ -18,7 +18,7 @@ limitations under the License.
 
 *Maintainers: [Anton Lozhkov](https://github.com/anton-l) and [Patrick von Platen](https://github.com/patrickvonplaten)*
 
-The Cross-lingual TRansfer Evaluation of Multilingual Encoders for Speech (XTREME-S) benchmark is a benchmark designed to evaluate speech representations across languages, tasks, domains and data regimes. It covers XX typologically diverse languages and eight downstream tasks grouped in four families: speech recognition, translation, classification and retrieval.
+The Cross-lingual TRansfer Evaluation of Multilingual Encoders for Speech (XTREME-S) benchmark is a benchmark designed to evaluate speech representations across languages, tasks, domains and data regimes. It covers XX typologically diverse languages and seven downstream tasks grouped in four families: speech recognition, translation, classification and retrieval.
 
 XTREME-S covers speech recognition with BABEL, Multilingual LibriSpeech (MLS) and VoxPopuli, speech translation with CoVoST-2, speech classification with LangID (FLoRes) and intent classification (MInds-14) and finally speech retrieval with speech-speech translation data mining (bi-speech retrieval). Each of the tasks covers a subset of the 40 languages included in XTREME-S (shown here with their ISO 639-1 codes): ar, as, ca, cs, cy, da, de, en, en, en, en, es, et, fa, fi, fr, hr, hu, id, it, ja, ka, ko, lo, lt, lv, mn, nl, pl, pt, ro, ru, sk, sl, sv, sw, ta, tl, tr and zh.
 
@@ -32,7 +32,7 @@ Based on the [`run_xtreme_s.py`](https://github.com/huggingface/transformers/blo
 
 This script can fine-tune any of the pretrained speech models on the [hub](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition) on the [XTREME-S dataset](https://huggingface.co/datasets/google/xtreme_s) tasks.
 
-GLUE is made up of 7 different task-specific subsets. Here is how to run the script on each of them:
+XTREME-S is made up of 7 different task-specific subsets. Here is how to run the script on each of them:
 
 ```bash
 export TASK_NAME=mls.all
