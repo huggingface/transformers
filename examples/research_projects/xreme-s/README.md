@@ -35,7 +35,7 @@ This script can fine-tune any of the pretrained speech models on the [hub](https
 GLUE is made up of 7 different task-specific subsets. Here is how to run the script on each of them:
 
 ```bash
-export TASK_NAME=mls
+export TASK_NAME=mls.all
 
 python run_xtreme_s.py \
     --model_name_or_path="facebook/wav2vec2-xls-r-300m" \
@@ -58,7 +58,7 @@ python run_xtreme_s.py \
     --push_to_hub
 ```
 
-where `TASK_NAME` can be one of: `mls, voxpopuli, covost2, fleurs, minds14`.
+where `TASK_NAME` can be one of: `mls.all, voxpopuli, covost2.all, fleurs.all, minds14.all`.
 
 We get the following results on the test set of the benchmark's datasets. 
 The corresponding training commands for each dataset are given in the sections below:
@@ -83,7 +83,7 @@ python -m torch.distributed.launch \
     run_xtreme_s.py \
     --model_name_or_path="facebook/wav2vec2-xls-r-300m" \
     --dataset_name="google/xtreme_s" \
-    --dataset_config_name="mls" \
+    --dataset_config_name="mls.all" \
     --eval_split_name="test" \
     --output_dir="xtreme_s_xlsr_300m_mls" \
     --overwrite_output_dir \
@@ -128,7 +128,7 @@ python -m torch.distributed.launch \
     run_xtreme_s.py \
     --model_name_or_path="facebook/wav2vec2-xls-r-300m" \
     --dataset_name="google/xtreme_s" \
-    --dataset_config_name="minds14" \
+    --dataset_config_name="minds14.all" \
     --eval_split_name="test" \
     --output_dir="xtreme_s_xlsr_300m_minds14" \
     --overwrite_output_dir \
