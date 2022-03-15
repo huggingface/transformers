@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,14 +35,14 @@ from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
     AutoModelForAudioClassification,
-    AutoModelForSpeechSeq2Seq,
     AutoModelForCTC,
+    AutoModelForSpeechSeq2Seq,
     AutoProcessor,
     AutoTokenizer,
     HfArgumentParser,
-    Trainer,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
+    Trainer,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
@@ -247,27 +247,6 @@ class DataTrainingArguments:
 
 @dataclass
 class SpeechDataCollatorWithPadding:
-    """
-    Data collator that will dynamically pad the inputs received.
-    Args:
-        processor (:class:`~transformers.AutoProcessor`)
-            The processor used for proccessing the data.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
-            Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
-            among:
-            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-              sequence if provided).
-            * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
-              maximum acceptable input length for the model if that argument is not provided.
-            * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-              different lengths).
-        pad_labels (:obj:`bool`, `optional`):
-            Whether to pad the labels (for ASR and translation tasks) or not (for classification).
-        pad_to_multiple_of (:obj:`int`, `optional`):
-            If set will pad the sequence to a multiple of the provided value.
-            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
-            7.5 (Volta).
-    """
 
     processor: AutoProcessor
     decoder_start_token_id: Optional[int] = None
@@ -411,37 +390,23 @@ def main():
     raw_datasets = DatasetDict()
     if data_args.dataset_config_name is None:
         raise ValueError(
-            "Set --dataset_config_name should be set to '<xtreme_s_subset>.<language(s)' "
-            "(e.g. 'mls.pl', 'covost2.en.tr', 'minds14.fr-FR') or '<xtreme_s_subset>' for multi-lingual fine-tuning."
+            "Set --dataset_config_name should be set to '<xtreme_s_subset>.<language(s)>' "
+            "(e.g. 'mls.pl', 'covost2.en.tr', 'minds14.fr-FR') "
+            "or '<xtreme_s_subset>.all' for multi-lingual fine-tuning."
         )
 
-    # Use either a single language config or infer a list of configs for the whole task
-    if "." in data_args.dataset_config_name:
-        task_name = data_args.dataset_config_name.split(".")[0]
-        datasets_configs = [data_args.dataset_config_name]
-    else:
-        task_name = data_args.dataset_config_name
-        datasets_configs = get_dataset_config_names(
-            data_args.dataset_name,
-            use_auth_token=data_args.use_auth_token,
-        )
-        datasets_configs = [conf for conf in datasets_configs if conf.startswith(task_name)]
-
+    task_name = data_args.dataset_config_name.split(".")[0]
     target_column_name = data_args.target_column_name
+    # here we differentiate between tasks with text as the target and classification tasks
     is_text_target = target_column_name in ("transcription", "translation")
 
     if training_args.do_train:
-        raw_datasets["train"] = concatenate_datasets(
-            [
-                load_dataset(
-                    data_args.dataset_name,
-                    dataset_config,
-                    split=data_args.train_split_name,
-                    use_auth_token=data_args.use_auth_token,
-                    cache_dir=model_args.cache_dir,
-                )
-                for dataset_config in datasets_configs
-            ]
+        raw_datasets["train"] = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            split=data_args.train_split_name,
+            use_auth_token=data_args.use_auth_token,
+            cache_dir=model_args.cache_dir,
         )
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
@@ -466,17 +431,12 @@ def main():
             num_labels = len(label_list)
 
     if training_args.do_eval:
-        raw_datasets["eval"] = concatenate_datasets(
-            [
-                load_dataset(
-                    data_args.dataset_name,
-                    dataset_config,
-                    split=data_args.eval_split_name,
-                    use_auth_token=data_args.use_auth_token,
-                    cache_dir=model_args.cache_dir,
-                )
-                for dataset_config in datasets_configs
-            ]
+        raw_datasets["eval"] = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            split=data_args.eval_split_name,
+            use_auth_token=data_args.use_auth_token,
+            cache_dir=model_args.cache_dir,
         )
 
         if data_args.max_eval_samples is not None:
@@ -517,7 +477,7 @@ def main():
     )
 
     if is_text_target:
-        # 4. Next, if no tokenizer file is defined,
+        # 4. (Optional, for ASR and translation) If no tokenizer file is defined,
         # we create the vocabulary of the model by extracting all unique characters from
         # the training and evaluation datasets
         # We need to make sure that only first rank saves vocabulary
@@ -694,12 +654,12 @@ def main():
                 input_columns=["length"],
             )
 
-    # 7. Next, we can prepare the training.
-    # Let's use word error rate (WER) as our evaluation metric,
+    # 7. Next, we can prepare for the training step.
+    # Let's use the appropriate XTREME-S evaluation metric,
     # instantiate a data collator and the trainer
 
     # Define evaluation metrics during training, *i.e.* word error rate, character error rate
-    eval_metric = load_metric("../datasets/metrics/xtreme_s", task_name)
+    eval_metric = load_metric("xtreme_s", task_name)
 
     # for large datasets it is advised to run the preprocessing on a
     # single machine first with ``args.preprocessing_only`` since there will mostly likely
