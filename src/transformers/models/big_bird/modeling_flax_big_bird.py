@@ -1894,13 +1894,14 @@ class FlaxBigBirdForMultipleChoice(FlaxBigBirdPreTrainedModel):
         input_shape: Optional[tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        do_init: bool = True,
         **kwargs
     ):
         if config.attention_type == "block_sparse" and input_shape is None:
             input_shape = (1, 1, 12 * config.block_size)
         elif input_shape is None:
             input_shape = (1, 1)
-        super().__init__(config, input_shape=input_shape, seed=seed, dtype=dtype)
+        super().__init__(config, input_shape=input_shape, seed=seed, dtype=dtype, do_init=do_init)
 
 
 overwrite_call_docstring(
