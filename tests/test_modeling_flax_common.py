@@ -178,15 +178,17 @@ class FlaxModelTesterMixin:
                 Currently unused, but in the future, we could use this information to make the error message clearer
                 by giving the name(s) of the output tensor(s) with large difference(s) between PT and Flax.
         """
-        if type(fxo) == tuple:
-            self.assertEqual(type(pto), tuple)
+        if type(fxo) in [tuple, list]:
+            self.assertEqual(type(fxo), type(pto))
             self.assertEqual(len(fxo), len(pto))
-            if type(names) in [tuple, list]:
+            if type(names) in tuple:
                 for fo, po, name in zip(fxo, pto, names):
                     self.check_outputs(fo, po, model_class, names=name)
             elif type(names) == str:
                 for idx, (fo, po) in enumerate(zip(fxo, pto)):
                     self.check_outputs(fo, po, model_class, names=f"{names}_{idx}")
+            else:
+                raise ValueError(f"`names` should be a `tuple` or a string. Got {type(names)} instead.")
         elif isinstance(fxo, jnp.ndarray):
             self.assertTrue(isinstance(pto, torch.Tensor))
 
@@ -204,6 +206,10 @@ class FlaxModelTesterMixin:
 
             max_diff = np.amax(np.abs(fxo - pto))
             self.assertLessEqual(max_diff, 1e-5)
+        else:
+            raise ValueError(
+                f"`fxo` should be a `tuple` or an instance of `jnp.ndarray`. Got {type(fxo)} instead."
+            )
 
     @is_pt_flax_cross_test
     def test_equivalence_pt_to_flax(self):
