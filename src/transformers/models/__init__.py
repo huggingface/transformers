@@ -98,6 +98,7 @@ from . import (
     reformer,
     rembert,
     resnet,
+    resnetd,
     retribert,
     roberta,
     roformer,
