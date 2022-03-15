@@ -683,8 +683,9 @@ class FlaxWav2Vec2StableLayerNormEncoder(nn.Module):
         last_hidden_state = self.layer_norm(outputs[0])
 
         # update the last element in `hidden_states` after applying `layernorm` above
-        hidden_states = outputs.hidden_states
+        hidden_states = None
         if output_hidden_states:
+            hidden_states = outputs[1]
             hidden_states = hidden_states[:-1] + (last_hidden_state,)
 
         if not return_dict:
