@@ -933,6 +933,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
         >>> import re
+        >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -954,9 +955,9 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         >>> with torch.no_grad():
         ...     for i in range(tl):
         ...         encoded = processor.tokenizer(inferred_token)
-        ...         input_ids = torch.tensor(encoded.input_ids).to(device)
+        ...         input_ids = torch.tensor(encoded.input_ids)
         ...         encoded = encoded["input_ids"][0][1:-1]
-        ...         outputs = model(input_ids=input_ids, pixel_values=pixel_values)
+        ...         outputs = model(input_ids=input_ids, pixel_values=encoding.pixel_values)
         ...         mlm_logits = outputs.logits[0]  # shape (seq_len, vocab_size)
         ...         # only take into account text features (minus CLS and SEP token)
         ...         mlm_logits = mlm_logits[1 : input_ids.shape[1] - 1, :]
@@ -969,7 +970,8 @@ class ViltForMaskedLM(ViltPreTrainedModel):
 
         >>> selected_token = ""
         >>> encoded = processor.tokenizer(inferred_token)
-        >>> processor.decode(encoded.input_ids[0], skip_special_tokens=True)
+        >>> output = processor.decode(encoded.input_ids[0], skip_special_tokens=True)
+        >>> print(output)
         a bunch of cats laying on a couch.
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1215,12 +1217,10 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-coco")
         >>> model = ViltForImageAndTextRetrieval.from_pretrained("dandelin/vilt-b32-finetuned-coco")
 
-        >>> # prepare inputs
-        >>> encoding = processor(image, text, return_tensors="pt")
-
         >>> # forward pass
         >>> scores = dict()
         >>> for text in texts:
+        ...     # prepare inputs
         ...     encoding = processor(image, text, return_tensors="pt")
         ...     outputs = model(**encoding)
         ...     scores[text] = outputs.logits[0, :].item()
