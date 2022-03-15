@@ -843,16 +843,19 @@ class FlaxModelTesterMixin:
             # Check if all required parmas are initialized
             keys = set(flatten_dict(unfreeze(params)).keys())
             self.assertTrue(all(k in keys for k in model.required_params))
+            # Check if the shapes match
+            flat_params = flatten_dict(unfreeze(params))
+            for k, v in flatten_dict(unfreeze(model.params_shape_tree)).items():
+                self.assertEqual(
+                    v.shape,
+                    flat_params[k].shape,
+                    "Shapes of {} do not match. Expecting {}, got {}.".format(k, v.shape, flat_params[k].shape),
+                )
 
             # Check if we can do a forward pass
             inputs_dict["output_hidden_states"] = True
             inputs = self._prepare_for_class(inputs_dict, model_class).copy()
-            outputs = model(**inputs, params=params)
-            seq_length = self.model_tester.seq_length
-            self.assertListEqual(
-                list(outputs.hidden_states[-1].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
-            )
+            model(**inputs, params=params)
 
 
 @require_flax
