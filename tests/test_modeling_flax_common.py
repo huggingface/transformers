@@ -851,7 +851,7 @@ class FlaxModelTesterMixin:
                     flat_params[k].shape,
                     "Shapes of {} do not match. Expecting {}, got {}.".format(k, v.shape, flat_params[k].shape),
                 )
-            
+
             # Check that setting params raises an ValueError when do_init is False
             with self.assertRaises(ValueError):
                 model.params = params
