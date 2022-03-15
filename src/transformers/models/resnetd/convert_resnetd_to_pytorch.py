@@ -90,7 +90,9 @@ class ModuleTransfer:
                 print(f"Transfered from={src_m} to={dest_m}")
 
 
-def convert_weight_and_push(name: str, from_name: str, config: ResNetDConfig, save_directory: Path, push_to_hub: bool = True):
+def convert_weight_and_push(
+    name: str, from_name: str, config: ResNetDConfig, save_directory: Path, push_to_hub: bool = True
+):
     print(f"Converting {name}...")
     with torch.no_grad():
         from_model = timm.create_model(from_name, pretrained=True).eval()
@@ -99,9 +101,8 @@ def convert_weight_and_push(name: str, from_name: str, config: ResNetDConfig, sa
         x = torch.randn((1, 3, 224, 224))
         module_transfer(x)
 
-    
     from_logits = from_model(x)
-    our_logits =  our_model(x).logits
+    our_logits = our_model(x).logits
     assert torch.allclose(from_logits, our_logits), f"The model {name} logits don't match the original one."
 
     checkpoint_name = name
@@ -172,11 +173,12 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         # "resnetd-101": "resnet101d",
         # "resnetd-152": "resnet152d",
         "resnetd-200": "resnet200d"
-
     }
 
     if model_name:
-        convert_weight_and_push(model_name, names_to_timm[model_name], names_to_config[model_name], save_directory, push_to_hub)
+        convert_weight_and_push(
+            model_name, names_to_timm[model_name], names_to_config[model_name], save_directory, push_to_hub
+        )
     else:
         for model_name, config in names_to_config.items():
             convert_weight_and_push(model_name, names_to_timm[model_name], config, save_directory, push_to_hub)

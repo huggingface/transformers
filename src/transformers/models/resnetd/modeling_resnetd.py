@@ -50,7 +50,6 @@ RESNETD_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 @dataclass
 # Copied from transformers.models.resnet.modeling_resnet.ResNetEncoderOutput with ResNet->ResNetD
 class ResNetDEncoderOutput(ModelOutput):
@@ -123,6 +122,7 @@ class ResNetDEmbeddings(nn.Sequential):
             ResNetDConvLayer(hidden_size // 2, hidden_size, kernel_size=3, activation=activation),
         )
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
 
 class ResNetDShortCut(nn.Sequential):
     """

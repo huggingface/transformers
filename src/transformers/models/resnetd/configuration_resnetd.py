@@ -25,7 +25,6 @@ RESNETD_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class ResNetDConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ResNetDModel`]. It is used to instantiate an

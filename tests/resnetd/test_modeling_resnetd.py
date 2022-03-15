@@ -16,8 +16,8 @@
 
 
 import inspect
-import unittest
 import math
+import unittest
 
 from transformers import ResNetDConfig
 from transformers.file_utils import cached_property, is_scipy_available, is_torch_available, is_vision_available
@@ -25,6 +25,7 @@ from transformers.testing_utils import require_scipy, require_torch, require_vis
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+
 
 if is_scipy_available():
     from scipy import stats
@@ -175,6 +176,7 @@ class ResNetDModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @require_scipy
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -263,7 +265,9 @@ class ResNetDModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ResNetDForImageClassification.from_pretrained(RESNETD_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = ResNetDForImageClassification.from_pretrained(RESNETD_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
