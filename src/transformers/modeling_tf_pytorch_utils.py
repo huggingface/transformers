@@ -376,6 +376,8 @@ def load_pytorch_model_with_h5(
 
     import h5py
 
+    unexpected_keys = set()
+    expected_names = {name for name, _ in pt_model.named_parameters()}
     with h5py.File(tf_checkpoint_path, "r") as f:
         for full_h5_name, weight_shape in weight_shapes.items():
             # By default we use two "names" as prefix in transformers
@@ -387,7 +389,44 @@ def load_pytorch_model_with_h5(
             )
 
             data = load_single(tf_checkpoint_path, full_h5_name, f)
-            set_weight(pt_model, pt_name, data, transpose)
+            try:
+                set_weight(pt_model, pt_name, data, transpose)
+                expected_names.remove(pt_name)
+            except (KeyError, AttributeError):
+                unexpected_keys.add(pt_name)
+
+    if pt_model._keys_to_ignore_on_load_unexpected is not None:
+        for pat in pt_model._keys_to_ignore_on_load_unexpected:
+            unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
+
+    if len(unexpected_keys) > 0:
+        logger.warning(
+            f"Some weights of the TF 2.0 model were not used when "
+            f"initializing the PyTorch model {pt_model.__class__.__name__}: {unexpected_keys}\n"
+            f"- This IS expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model trained on another task "
+            f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a TFBertForPreTraining model).\n"
+            f"- This IS NOT expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model that you expect "
+            f"to be exactly identical (e.g. initializing a BertForSequenceClassification model from a TFBertForSequenceClassification model)."
+        )
+    else:
+        logger.warning(f"All TF 2.0 model weights were used when initializing {pt_model.__class__.__name__}.\n")
+
+    missing_keys = expected_names
+    if pt_model._keys_to_ignore_on_load_missing is not None:
+        for pat in pt_model._keys_to_ignore_on_load_missing:
+            missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+    if len(missing_keys) > 0:
+        logger.warning(
+            f"Some weights of {pt_model.__class__.__name__} were not initialized from the TF 2.0 model "
+            f"and are newly initialized: {missing_keys}\n"
+            f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+        )
+    else:
+        logger.warning(
+            f"All the weights of {pt_model.__class__.__name__} were initialized from the TF 2.0 model.\n"
+            f"If your task is similar to the task the model of the checkpoint was trained on, "
+            f"you can already use {pt_model.__class__.__name__} for predictions without further training."
+        )
     return pt_model
 
 
