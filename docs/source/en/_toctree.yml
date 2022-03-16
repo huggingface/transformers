@@ -298,6 +298,8 @@
       title: RemBERT
     - local: model_doc/resnet
       title: ResNet
+    - local: model_doc/regnet
+      title: RegNet
     - local: model_doc/retribert
       title: RetriBERT
     - local: model_doc/roberta
