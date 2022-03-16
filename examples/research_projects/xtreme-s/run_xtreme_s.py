@@ -182,8 +182,7 @@ class DataTrainingArguments:
     predict_split_name: str = field(
         default="test",
         metadata={
-            "help": "The name of the prediction dataset split to use (via the datasets library). "
-            "Defaults to 'test'"
+            "help": "The name of the prediction dataset split to use (via the datasets library). " "Defaults to 'test'"
         },
     )
     audio_column_name: str = field(
@@ -348,8 +347,10 @@ def create_vocabulary_from_data(
     )
 
     # take union of all unique characters in each dataset
-    vocab_set = functools.reduce(
-        lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]), vocabs.values()
+    vocab_set = (
+        (set(vocabs["train"]["vocab"][0]) if "train" in vocabs else set())
+        | (set(vocabs["eval"]["vocab"][0]) if "eval" in vocabs else set())
+        | (set(vocabs["predict"]["vocab"][0]) if "predict" in vocabs else set())
     )
 
     vocab_dict = {v: k for k, v in enumerate(sorted(list(vocab_set)))}
@@ -834,7 +835,7 @@ def main():
         "tags": [task_name, data_args.dataset_name],
         "dataset_args": f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}, Predict split: {data_args.predict_split_name}",
         "dataset": f"{data_args.dataset_name.upper()} - {config_name.upper()}",
-        "language": data_args.language
+        "language": data_args.language,
     }
 
     if training_args.push_to_hub:
