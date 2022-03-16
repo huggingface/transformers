@@ -3334,6 +3334,30 @@ def load_tf_weights_in_rembert(*args, **kwargs):
     requires_backends(load_tf_weights_in_rembert, ["torch"])
 
 
+RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ResNetForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ResNetModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ResNetPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -3931,6 +3955,30 @@ class UniSpeechSatModel(metaclass=DummyObject):
 
 
 class UniSpeechSatPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+VAN_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class VanForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VanModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VanPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

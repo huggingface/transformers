@@ -163,14 +163,14 @@ Next, convert your datasets to the `tf.data.Dataset` format with `to_tf_dataset`
 `columns` argument:
 
 ```python
-tf_train_dataset = tokenized_imdb["train"].to_tf_dataset(
+tf_train_set = tokenized_imdb["train"].to_tf_dataset(
     columns=["attention_mask", "input_ids", "label"],
     shuffle=True,
     batch_size=16,
     collate_fn=data_collator,
 )
 
-tf_validation_dataset = tokenized_imdb["train"].to_tf_dataset(
+tf_validation_set = tokenized_imdb["test"].to_tf_dataset(
     columns=["attention_mask", "input_ids", "label"],
     shuffle=False,
     batch_size=16,
@@ -185,9 +185,9 @@ from transformers import create_optimizer
 import tensorflow as tf
 
 batch_size = 16
-num_epochs = 5
+num_train_epochs = 5
 batches_per_epoch = len(tokenized_imdb["train"]) // batch_size
-total_train_steps = int(batches_per_epoch * num_epochs)
+total_train_steps = int(batches_per_epoch * num_train_epochs)
 optimizer, schedule = create_optimizer(init_lr=2e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
 ```
 

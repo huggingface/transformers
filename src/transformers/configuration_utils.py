@@ -295,6 +295,7 @@ class PretrainedConfig(PushToHubMixin):
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
+        self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
@@ -622,7 +623,7 @@ class PretrainedConfig(PushToHubMixin):
         except HTTPError:
             raise EnvironmentError(
                 "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
-                f"{pretrained_model_name_or_path} is not the path to a directory conaining a {configuration_file} "
+                f"{pretrained_model_name_or_path} is not the path to a directory containing a {configuration_file} "
                 "file.\nCheckout your internet connection or see how to run the library in offline mode at "
                 "'https://huggingface.co/docs/transformers/installation#offline-mode'."
             )

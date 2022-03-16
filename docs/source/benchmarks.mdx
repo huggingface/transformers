@@ -39,12 +39,17 @@ backward pass.
 The benchmark classes [`PyTorchBenchmark`] and [`TensorFlowBenchmark`] expect an object of type [`PyTorchBenchmarkArguments`] and
 [`TensorFlowBenchmarkArguments`], respectively, for instantiation. [`PyTorchBenchmarkArguments`] and [`TensorFlowBenchmarkArguments`] are data classes and contain all relevant configurations for their corresponding benchmark class. In the following example, it is shown how a BERT model of type _bert-base-cased_ can be benchmarked.
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import PyTorchBenchmark, PyTorchBenchmarkArguments
 
 >>> args = PyTorchBenchmarkArguments(models=["bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512])
 >>> benchmark = PyTorchBenchmark(args)
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import TensorFlowBenchmark, TensorFlowBenchmarkArguments
 
 >>> args = TensorFlowBenchmarkArguments(
@@ -52,6 +57,8 @@ The benchmark classes [`PyTorchBenchmark`] and [`TensorFlowBenchmark`] expect an
 ... )
 >>> benchmark = TensorFlowBenchmark(args)
 ```
+</tf>
+</frameworkcontent>
 
 Here, three arguments are given to the benchmark argument data classes, namely `models`, `batch_sizes`, and
 `sequence_lengths`. The argument `models` is required and expects a `list` of model identifiers from the
@@ -63,11 +70,10 @@ and `src/transformers/benchmark/benchmark_args_tf.py` (for Tensorflow). Alternat
 commands from root will print out a descriptive list of all configurable parameters for PyTorch and Tensorflow
 respectively.
 
+<frameworkcontent>
+<pt>
 ```bash
 python examples/pytorch/benchmarking/run_benchmark.py --help
-
-===PT-TF-SPLIT===
-python examples/tensorflow/benchmarking/run_benchmark_tf.py --help
 ```
 
 An instantiated benchmark object can then simply be run by calling `benchmark.run()`.
@@ -118,8 +124,18 @@ bert-base-uncased          8              512            1539
 - gpu_power_watts: 280.0
 - gpu_performance_state: 2
 - use_tpu: False
+```
+</pt>
+<tf>
+```bash
+python examples/tensorflow/benchmarking/run_benchmark_tf.py --help
+```
 
-===PT-TF-SPLIT===
+An instantiated benchmark object can then simply be run by calling `benchmark.run()`.
+
+```py
+>>> results = benchmark.run()
+>>> print(results)
 >>> results = benchmark.run()
 >>> print(results)
 ====================       INFERENCE - SPEED - RESULT       ====================
@@ -166,6 +182,8 @@ bert-base-uncased          8              512            1770
 - gpu_performance_state: 2
 - use_tpu: False
 ```
+</tf>
+</frameworkcontent>
 
 By default, the _time_ and the _required memory_ for _inference_ are benchmarked. In the example output above the first
 two sections show the result corresponding to _inference time_ and _inference memory_. In addition, all relevant
@@ -179,6 +197,8 @@ Instead of benchmarking pre-trained models via their model identifier, _e.g._ `b
 alternatively benchmark an arbitrary configuration of any available model class. In this case, a `list` of
 configurations must be inserted with the benchmark args as follows.
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import PyTorchBenchmark, PyTorchBenchmarkArguments, BertConfig
 
@@ -250,8 +270,10 @@ bert-6-lay                 8              512            1359
 - gpu_power_watts: 280.0
 - gpu_performance_state: 2
 - use_tpu: False
-
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import TensorFlowBenchmark, TensorFlowBenchmarkArguments, BertConfig
 
 >>> args = TensorFlowBenchmarkArguments(
@@ -323,6 +345,8 @@ bert-6-lay                 8              512            1540
 - gpu_performance_state: 2
 - use_tpu: False
 ```
+</tf>
+</frameworkcontent>
 
 Again, _inference time_ and _required memory_ for _inference_ are measured, but this time for customized configurations
 of the `BertModel` class. This feature can especially be helpful when deciding for which configuration the model

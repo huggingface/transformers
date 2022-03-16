@@ -115,7 +115,9 @@ _SPECIAL_SUPPORTED_MODELS = [
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
-_SUPPORTED_MODELS = tuple(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)
+_SUPPORTED_MODELS = tuple(
+    sorted(list(set(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)), key=lambda c: c.__name__)
+)
 
 
 class HFProxy(Proxy):

@@ -38,7 +38,7 @@
   - local: multilingual
     title: Inference for multilingual models
   - local: troubleshooting
-    title: Troubleshooting
+    title: Troubleshoot
   - local: custom_datasets
     title: Fine-tuning with custom datasets
   - sections:
@@ -56,6 +56,12 @@
       title: Summarization
     - local: tasks/multiple_choice
       title: Multiple choice
+    - local: tasks/audio_classification
+      title: Audio classification
+    - local: tasks/asr
+      title: Automatic speech recognition
+    - local: tasks/image_classification
+      title: Image classification
     title: Fine-tune for downstream tasks
   - local: run_scripts
     title: Train with a script
@@ -288,6 +294,8 @@
       title: Reformer
     - local: model_doc/rembert
       title: RemBERT
+    - local: model_doc/resnet
+      title: ResNet
     - local: model_doc/retribert
       title: RetriBERT
     - local: model_doc/roberta
@@ -326,6 +334,8 @@
       title: UniSpeech
     - local: model_doc/unispeech-sat
       title: UniSpeech-SAT
+    - local: model_doc/van
+      title: VAN
     - local: model_doc/vilt
       title: ViLT
     - local: model_doc/vision-encoder-decoder

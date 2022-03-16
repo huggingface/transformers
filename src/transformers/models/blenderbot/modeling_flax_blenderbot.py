@@ -711,12 +711,19 @@ class FlaxBlenderbotEncoder(nn.Module):
         last_hidden_states = outputs[0]
         last_hidden_states = self.layer_norm(last_hidden_states)
 
+        # update the last element in `hidden_states` after applying `layernorm` above
+        hidden_states = None
+        if output_hidden_states:
+            hidden_states = outputs[1]
+            hidden_states = hidden_states[:-1] + (last_hidden_states,)
+
         if not return_dict:
-            return (last_hidden_states,) + outputs[1:]
+            outputs = (last_hidden_states, hidden_states) + (outputs[2:] if output_hidden_states else outputs[1:])
+            return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutput(
             last_hidden_state=last_hidden_states,
-            hidden_states=outputs.hidden_states,
+            hidden_states=hidden_states,
             attentions=outputs.attentions,
         )
 
@@ -782,12 +789,19 @@ class FlaxBlenderbotDecoder(nn.Module):
         last_hidden_states = outputs[0]
         last_hidden_states = self.layer_norm(last_hidden_states)
 
+        # update the last element in `hidden_states` after applying `layernorm` above
+        hidden_states = None
+        if output_hidden_states:
+            hidden_states = outputs[1]
+            hidden_states = hidden_states[:-1] + (last_hidden_states,)
+
         if not return_dict:
-            return (last_hidden_states,) + outputs[1:]
+            outputs = (last_hidden_states, hidden_states) + (outputs[2:] if output_hidden_states else outputs[1:])
+            return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=last_hidden_states,
-            hidden_states=outputs.hidden_states,
+            hidden_states=hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
@@ -883,7 +897,7 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         # make sure initialization pass will work for FlaxBlenderbotForSequenceClassificationModule
-        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
+        input_ids = input_ids.at[(..., -1)].set(self.config.eos_token_id)
         attention_mask = jnp.ones_like(input_ids)
         decoder_input_ids = input_ids
         decoder_attention_mask = jnp.ones_like(input_ids)

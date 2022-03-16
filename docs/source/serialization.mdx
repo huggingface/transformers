@@ -162,6 +162,8 @@ To export a model that's stored locally, you'll need to have the model's weights
 and tokenizer files stored in a directory. For example, we can load and save a
 checkpoint as follows:
 
+<frameworkcontent>
+<pt>
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
@@ -171,7 +173,17 @@ checkpoint as follows:
 >>> # Save to disk
 >>> tokenizer.save_pretrained("local-pt-checkpoint")
 >>> pt_model.save_pretrained("local-pt-checkpoint")
-===PT-TF-SPLIT===
+```
+
+Once the checkpoint is saved, we can export it to ONNX by pointing the `--model`
+argument of the `transformers.onnx` package to the desired directory:
+
+```bash
+python -m transformers.onnx --model=local-pt-checkpoint onnx/
+```
+</pt>
+<tf>
+```python
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 >>> # Load tokenizer and TensorFlow weights from the Hub
@@ -186,10 +198,10 @@ Once the checkpoint is saved, we can export it to ONNX by pointing the `--model`
 argument of the `transformers.onnx` package to the desired directory:
 
 ```bash
-python -m transformers.onnx --model=local-pt-checkpoint onnx/
-===PT-TF-SPLIT===
 python -m transformers.onnx --model=local-tf-checkpoint onnx/
 ```
+</tf>
+</frameworkcontent>
 
 ### Selecting features for different model topologies
 

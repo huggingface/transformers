@@ -43,8 +43,8 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
-    input_processing,
     keras_serializable,
+    unpack_inputs,
 )
 from ...tf_utils import shape_list
 from ...utils import logging
@@ -757,6 +757,7 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
+    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -771,43 +772,28 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
         training: bool = False,
         **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
 
-        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
+        if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif inputs["input_ids"] is not None:
-            input_shape = shape_list(inputs["input_ids"])
-        elif inputs["inputs_embeds"] is not None:
-            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
+        elif input_ids is not None:
+            input_shape = shape_list(input_ids)
+        elif inputs_embeds is not None:
+            input_shape = shape_list(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if inputs["attention_mask"] is None:
-            inputs["attention_mask"] = tf.fill(dims=input_shape, value=1)
+        if attention_mask is None:
+            attention_mask = tf.fill(dims=input_shape, value=1)
 
-        if inputs["token_type_ids"] is None:
-            inputs["token_type_ids"] = tf.fill(dims=input_shape + [len(self.config.type_vocab_sizes)], value=0)
+        if token_type_ids is None:
+            token_type_ids = tf.fill(dims=input_shape + [len(self.config.type_vocab_sizes)], value=0)
 
         embedding_output = self.embeddings(
-            input_ids=inputs["input_ids"],
-            position_ids=inputs["position_ids"],
-            token_type_ids=inputs["token_type_ids"],
-            inputs_embeds=inputs["inputs_embeds"],
-            training=inputs["training"],
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            training=training,
         )
 
         # We create a 3D attention mask from a 2D tensor mask.
@@ -815,7 +801,7 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = tf.reshape(inputs["attention_mask"], (input_shape[0], 1, 1, input_shape[1]))
+        extended_attention_mask = tf.reshape(attention_mask, (input_shape[0], 1, 1, input_shape[1]))
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
@@ -832,29 +818,29 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        if inputs["head_mask"] is not None:
+        if head_mask is not None:
             raise NotImplementedError
         else:
-            inputs["head_mask"] = [None] * self.config.num_hidden_layers
+            head_mask = [None] * self.config.num_hidden_layers
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=inputs["head_mask"],
+            head_mask=head_mask,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
             past_key_values=None,
             use_cache=None,
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
         )
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             return (
                 sequence_output,
                 pooled_output,
@@ -979,6 +965,7 @@ class TFTapasModel(TFTapasPreTrainedModel):
 
         self.tapas = TFTapasMainLayer(config, name="tapas")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1020,9 +1007,7 @@ class TFTapasModel(TFTapasPreTrainedModel):
 
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        outputs = self.tapas(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1033,19 +1018,6 @@ class TFTapasModel(TFTapasPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.tapas(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
 
         return outputs
@@ -1079,6 +1051,7 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
     def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.lm_head.predictions
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1130,9 +1103,7 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         >>> outputs = model(**inputs, labels=labels)
         >>> logits = outputs.logits
         ```"""
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        outputs = self.tapas(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1142,31 +1113,13 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
             training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.tapas(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
-        loss = (
-            None
-            if inputs["labels"] is None
-            else self.hf_compute_loss(labels=inputs["labels"], logits=prediction_scores)
-        )
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=prediction_scores)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (prediction_scores,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1311,6 +1264,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             )
         self.config = config
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFTableQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1385,38 +1339,17 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         >>> logits_aggregation = outputs.logits_aggregation
         ```"""
 
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        outputs = self.tapas(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            table_mask=table_mask,
-            aggregation_labels=aggregation_labels,
-            float_answer=float_answer,
-            numeric_values=numeric_values,
-            numeric_values_scale=numeric_values_scale,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
             training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.tapas(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
 
         sequence_output = outputs[0]
@@ -1424,14 +1357,14 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
 
         sequence_output = self.dropout(sequence_output)
 
-        if inputs["input_ids"] is not None:
-            input_shape = shape_list(inputs["input_ids"])
+        if input_ids is not None:
+            input_shape = shape_list(input_ids)
         else:
-            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
+            input_shape = shape_list(inputs_embeds)[:-1]
 
         # Construct indices for the table.
-        if inputs["token_type_ids"] is None:
-            inputs["token_type_ids"] = tf.fill(input_shape + [len(self.config.type_vocab_sizes)], 0)
+        if token_type_ids is None:
+            token_type_ids = tf.fill(input_shape + [len(self.config.type_vocab_sizes)], 0)
 
         token_types = [
             "segment_ids",
@@ -1443,8 +1376,8 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             "numeric_relations",
         ]
 
-        row_ids = inputs["token_type_ids"][:, :, token_types.index("row_ids")]
-        column_ids = inputs["token_type_ids"][:, :, token_types.index("column_ids")]
+        row_ids = token_type_ids[:, :, token_types.index("row_ids")]
+        column_ids = token_type_ids[:, :, token_types.index("column_ids")]
 
         # Construct indices for the table.
         row_index = IndexMap(
@@ -1460,19 +1393,15 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         cell_index = ProductIndexMap(row_index, col_index)
 
         # Masks.
-        input_shape = (
-            shape_list(inputs["input_ids"])
-            if inputs["input_ids"] is not None
-            else shape_list(inputs["inputs_embeds"])[:-1]
-        )
-        if inputs["attention_mask"] is None:
-            inputs["attention_mask"] = tf.ones(input_shape)
+        input_shape = shape_list(input_ids) if input_ids is not None else shape_list(inputs_embeds)[:-1]
+        if attention_mask is None:
+            attention_mask = tf.ones(input_shape)
         # Table cells only, without question tokens and table headers.
-        if inputs["table_mask"] is None:
-            inputs["table_mask"] = tf.where(row_ids > 0, tf.ones_like(row_ids), tf.zeros_like(row_ids))
+        if table_mask is None:
+            table_mask = tf.where(row_ids > 0, tf.ones_like(row_ids), tf.zeros_like(row_ids))
         # <float32>[batch_size, seq_length]
-        input_mask_float = tf.cast(inputs["attention_mask"], tf.float32)
-        table_mask_float = tf.cast(inputs["table_mask"], tf.float32)
+        input_mask_float = tf.cast(attention_mask, tf.float32)
+        table_mask_float = tf.cast(table_mask, tf.float32)
 
         # Mask for cells that exist in the table (i.e. that are not padding).
         cell_mask, _ = reduce_mean(input_mask_float, cell_index)
@@ -1495,7 +1424,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         # Total loss calculation
         total_loss = 0.0
         calculate_loss = False
-        if inputs["labels"] is not None:
+        if labels is not None:
             calculate_loss = True
             is_supervised = not self.config.num_aggregation_labels > 0 or not self.config.use_answer_as_supervision
 
@@ -1509,16 +1438,16 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             if is_supervised:
                 aggregate_mask = None
             else:
-                if inputs["float_answer"] is not None:
+                if float_answer is not None:
                     assert (
-                        shape_list(inputs["labels"])[0] == shape_list(inputs["float_answer"])[0]
+                        shape_list(labels)[0] == shape_list(float_answer)[0]
                     ), "Make sure the answers are a FloatTensor of shape (batch_size,)"
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
-                        inputs["float_answer"],
+                        float_answer,
                         pooled_output,
                         self.config.cell_selection_preference,
-                        inputs["labels"],
+                        labels,
                         self.aggregation_classifier,
                     )
                 else:
@@ -1535,17 +1464,17 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             selection_loss_per_example = None
             if not self.config.select_one_column:
                 weight = tf.where(
-                    inputs["labels"] == 0,
-                    tf.ones_like(inputs["labels"], dtype=tf.float32),
-                    self.config.positive_label_weight * tf.ones_like(inputs["labels"], dtype=tf.float32),
+                    labels == 0,
+                    tf.ones_like(labels, dtype=tf.float32),
+                    self.config.positive_label_weight * tf.ones_like(labels, dtype=tf.float32),
                 )
-                selection_loss_per_token = -dist_per_token.log_prob(inputs["labels"]) * weight
+                selection_loss_per_token = -dist_per_token.log_prob(labels) * weight
                 selection_loss_per_example = tf.reduce_sum(selection_loss_per_token * input_mask_float, axis=1) / (
                     tf.reduce_sum(input_mask_float, axis=1) + EPSILON_ZERO_DIVISION
                 )
             else:
                 selection_loss_per_example, logits = _single_column_cell_selection_loss(
-                    logits, column_logits, inputs["labels"], cell_index, col_index, cell_mask
+                    logits, column_logits, labels, cell_index, col_index, cell_mask
                 )
                 dist_per_token = tfp.distributions.Bernoulli(logits=logits)
 
@@ -1562,14 +1491,14 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             if self.config.num_aggregation_labels > 0:
                 if is_supervised:
                     # Note that `aggregate_mask` is None if the setting is supervised.
-                    if inputs["aggregation_labels"] is not None:
+                    if aggregation_labels is not None:
                         assert (
-                            shape_list(inputs["labels"])[0] == shape_list(inputs["aggregation_labels"])[0]
+                            shape_list(labels)[0] == shape_list(aggregation_labels)[0]
                         ), "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
                         per_example_additional_loss = _calculate_aggregation_loss(
                             logits_aggregation,
                             aggregate_mask,
-                            inputs["aggregation_labels"],
+                            aggregation_labels,
                             self.config.use_answer_as_supervision,
                             self.config.num_aggregation_labels,
                             self.config.aggregation_loss_weight,
@@ -1579,7 +1508,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                             "You have to specify aggregation labels in order to calculate the aggregation loss"
                         )
                 else:
-                    aggregation_labels = tf.zeros(shape_list(inputs["labels"])[0], dtype=tf.int32)
+                    aggregation_labels = tf.zeros(shape_list(labels)[0], dtype=tf.int32)
                     per_example_additional_loss = _calculate_aggregation_loss(
                         logits_aggregation,
                         aggregate_mask,
@@ -1590,15 +1519,15 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                     )
 
                 if self.config.use_answer_as_supervision:
-                    if inputs["numeric_values"] is not None and inputs["numeric_values_scale"] is not None:
-                        assert shape_list(inputs["numeric_values"]) == shape_list(inputs["numeric_values_scale"])
+                    if numeric_values is not None and numeric_values_scale is not None:
+                        assert shape_list(numeric_values) == shape_list(numeric_values_scale)
                         # Add regression loss for numeric answers which require aggregation.
                         answer_loss, large_answer_loss_mask = _calculate_regression_loss(
-                            inputs["float_answer"],
+                            float_answer,
                             aggregate_mask,
                             dist_per_token,
-                            inputs["numeric_values"],
-                            inputs["numeric_values_scale"],
+                            numeric_values,
+                            numeric_values_scale,
                             table_mask_float,
                             logits_aggregation,
                             self.config,
@@ -1618,7 +1547,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             _, logits = _single_column_cell_selection_loss(
                 logits, column_logits, labels, cell_index, col_index, cell_mask
             )
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (logits, logits_aggregation) + outputs[2:]
             return ((total_loss,) + output) if calculate_loss else output
 
@@ -1657,6 +1586,7 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1712,9 +1642,7 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         >>> logits = outputs.logits
         ```"""
 
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        outputs = self.tapas(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1724,28 +1652,14 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
             training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.tapas(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         pooled_output = outputs[1]
-        pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
+        pooled_output = self.dropout(inputs=pooled_output, training=training)
         logits = self.classifier(inputs=pooled_output)
-        loss = None if inputs["labels"] is None else self.hf_compute_loss(labels=inputs["labels"], logits=logits)
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 

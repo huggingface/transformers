@@ -89,6 +89,8 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 `DataCollatorForMultipleChoice` will flatten all the model inputs, apply padding, and then unflatten the results:
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from dataclasses import dataclass
 >>> from transformers.tokenization_utils_base import PreTrainedTokenizerBase, PaddingStrategy
@@ -128,7 +130,10 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ...         batch = {k: v.view(batch_size, num_choices, -1) for k, v in batch.items()}
 ...         batch["labels"] = torch.tensor(labels, dtype=torch.int64)
 ...         return batch
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from dataclasses import dataclass
 >>> from transformers.tokenization_utils_base import PreTrainedTokenizerBase, PaddingStrategy
 >>> from typing import Optional, Union
@@ -168,6 +173,8 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ...         batch["labels"] = tf.convert_to_tensor(labels, dtype=tf.int64)
 ...         return batch
 ```
+</tf>
+</frameworkcontent>
 
 ## Fine-tune with Trainer
 

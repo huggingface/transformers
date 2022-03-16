@@ -82,6 +82,7 @@ config_common_kwargs = {
     "eos_token_id": 8,
     "sep_token_id": 9,
     "decoder_start_token_id": 10,
+    "exponential_decay_length_penalty": (5, 1.01),
     "task_specific_params": {"translation": "some_params"},
     "problem_type": "regression",
 }

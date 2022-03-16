@@ -160,6 +160,51 @@ class FlaxEncoderDecoderMixin:
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
+    def check_encoder_decoder_model_from_encoder_decoder_pretrained(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        **kwargs
+    ):
+        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        # assert that model attributes match those of configs
+        self.assertEqual(config.use_cache, encoder_model.config.use_cache)
+        self.assertEqual(decoder_config.use_cache, decoder_model.config.use_cache)
+
+        with tempfile.TemporaryDirectory() as enc_tmpdir:
+            with tempfile.TemporaryDirectory() as dec_tmpdir:
+                encoder_model.save_pretrained(enc_tmpdir)
+                decoder_model.save_pretrained(dec_tmpdir)
+                # load a model from pretrained encoder and decoder checkpoints, setting one encoder and one decoder kwarg opposite to that specified in their respective configs
+                enc_dec_model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained(
+                    encoder_pretrained_model_name_or_path=enc_tmpdir,
+                    decoder_pretrained_model_name_or_path=dec_tmpdir,
+                    encoder_use_cache=not config.use_cache,
+                    decoder_use_cache=not decoder_config.use_cache,
+                )
+
+        # assert that setting encoder and decoder kwargs opposite to those in the configs has correctly been applied
+        self.assertNotEqual(config.use_cache, enc_dec_model.config.encoder.use_cache)
+        self.assertNotEqual(decoder_config.use_cache, enc_dec_model.config.decoder.use_cache)
+
+        outputs_encoder_decoder = enc_dec_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            output_hidden_states=True,
+            return_dict=True,
+        )
+
+        self.assertEqual(
+            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+        )
+
     def check_encoder_decoder_model_output_attentions(
         self,
         config,
@@ -325,6 +370,10 @@ class FlaxEncoderDecoderMixin:
     def test_save_and_load_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_save_and_load(**input_ids_dict)
+
+    def test_encoder_decoder_model_from_encoder_decoder_pretrained(self):
+        input_ids_dict = self.prepare_config_and_inputs()
+        self.check_encoder_decoder_model_from_encoder_decoder_pretrained(**input_ids_dict)
 
     def test_encoder_decoder_model_output_attentions(self):
         input_ids_dict = self.prepare_config_and_inputs()

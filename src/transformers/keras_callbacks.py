@@ -264,7 +264,7 @@ class PushToHubCallback(Callback):
         save_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"epoch"`):
             The checkpoint save strategy to adopt during training. Possible values are:
 
-                - `"no"`: No save is done during training.
+                - `"no"`: Save is done at the end of training.
                 - `"epoch"`: Save is done at the end of each epoch.
                 - `"steps"`: Save is done every `save_steps`
         save_steps (`int`, *optional*):
@@ -331,7 +331,7 @@ class PushToHubCallback(Callback):
         self.training_history = []
 
     def on_train_batch_end(self, batch, logs=None):
-        if self.save_strategy == IntervalStrategy.STEPS and batch + 1 % self.save_steps == 0:
+        if self.save_strategy == IntervalStrategy.STEPS and (batch + 1) % self.save_steps == 0:
             if self.last_job is not None and not self.last_job.is_done:
                 return  # The last upload is still running, don't start another
             self.model.save_pretrained(self.output_dir)
