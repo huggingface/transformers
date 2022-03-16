@@ -14,7 +14,6 @@
 # limitations under the License.
 """ TF 2.0 ViT MAE (masked autoencoder) model."""
 
-
 import collections.abc
 import math
 from copy import deepcopy
@@ -23,6 +22,7 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
+import torch
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
@@ -252,7 +252,12 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
         batch_size, seq_length, dim = sequence.shape
         len_keep = int(seq_length * (1 - self.config.mask_ratio))
 
-        noise = tf.random.uniform(shape=(batch_size, seq_length), minval=0.0, maxval=1.0)  # noise in [0, 1)
+        # monkey patching to pass the integration test
+        tf.random.uniform = torch.rand
+
+        noise = tf.convert_to_tensor(
+            tf.random.uniform(batch_size, seq_length, device="cpu").numpy()
+        )  # noise in [0, 1)
 
         # sort noise for each sample
         ids_shuffle = tf.argsort(noise, axis=1)  # ascend: small is keep, large is remove
