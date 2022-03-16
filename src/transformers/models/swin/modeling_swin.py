@@ -348,7 +348,7 @@ class SwinPatchMerging(nn.Module):
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
-    def maybe_pad(self, input_feature, width, height):
+    def maybe_pad(self, input_feature, height, width):
         should_pad = (height % 2 == 1) or (width % 2 == 1)
         if should_pad:
             pad_values = (0, 0, 0, width % 2, 0, height % 2)
@@ -564,7 +564,7 @@ class SwinOutput(nn.Module):
         return hidden_states
 
 
-class SwinBlock(nn.Module):
+class SwinLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -677,14 +677,14 @@ class SwinBlock(nn.Module):
         return layer_outputs
 
 
-class SwinLayer(nn.Module):
+class SwinStage(nn.Module):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
         self.config = config
         self.dim = dim
         self.blocks = nn.ModuleList(
             [
-                SwinBlock(
+                SwinLayer(
                     config=config,
                     dim=dim,
                     input_resolution=input_resolution,
@@ -705,28 +705,28 @@ class SwinLayer(nn.Module):
 
     def forward(self, hidden_states, input_dimensions, head_mask=None, output_attentions=False):
         height, width = input_dimensions
-        block_attentions = () if output_attentions else None
-        for i, block_module in enumerate(self.blocks):
+        layer_attentions = () if output_attentions else None
+        for i, layer_module in enumerate(self.blocks):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            block_outputs = block_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
             if output_attentions:
-                block_attentions += block_outputs[1:]
+                layer_attentions += layer_outputs[1:]
 
-            hidden_states = block_outputs[0]
+            hidden_states = layer_outputs[0]
 
         if self.downsample is not None:
             height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
             output_dimensions = (height, width, height_downsampled, width_downsampled)
-            hidden_states = self.downsample(block_outputs[0], input_dimensions)
+            hidden_states = self.downsample(layer_outputs[0], input_dimensions)
         else:
             output_dimensions = (height, width, height, width)
 
         layer_outputs = (hidden_states, output_dimensions)
 
         if output_attentions:
-            layer_outputs += block_attentions
+            layer_outputs += layer_attentions
         return layer_outputs
 
 
@@ -738,7 +738,7 @@ class SwinEncoder(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         self.layers = nn.ModuleList(
             [
-                SwinLayer(
+                SwinStage(
                     config=config,
                     dim=int(config.embed_dim * 2**i_layer),
                     input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
