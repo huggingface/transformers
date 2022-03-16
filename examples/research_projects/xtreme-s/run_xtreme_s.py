@@ -15,7 +15,6 @@
 
 """ Fine-tuning a 🤗 Transformers pretrained speech model on the XTREME-S benchmark tasks"""
 
-import functools
 import json
 import logging
 import os
