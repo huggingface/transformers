@@ -15,7 +15,6 @@
 
 """ Fine-tuning a 🤗 Transformers pretrained speech model on the XTREME-S benchmark tasks"""
 
-import functools
 import json
 import logging
 import os
@@ -152,8 +151,8 @@ class DataTrainingArguments:
     """
 
     dataset_name: str = field(
-        default="xtreme_s",
-        metadata={"help": "The name of the dataset to use (via the datasets library). Defaults to 'xtreme_s'"},
+        default="google/xtreme_s",
+        metadata={"help": "The name of the dataset to use (via the datasets library). Defaults to 'google/xtreme_s'"},
     )
     task: str = field(
         default=None,
@@ -169,21 +168,20 @@ class DataTrainingArguments:
     train_split_name: str = field(
         default="train",
         metadata={
-            "help": "The name of the training data set split to use (via the datasets library). " "Defaults to 'train'"
+            "help": "The name of the training dataset split to use (via the datasets library). Defaults to 'train'"
         },
     )
     eval_split_name: str = field(
         default="validation",
         metadata={
-            "help": "The name of the evaluation data set split to use (via the datasets library). "
+            "help": "The name of the evaluation dataset split to use (via the datasets library). "
             "Defaults to 'validation'"
         },
     )
     predict_split_name: str = field(
         default="test",
         metadata={
-            "help": "The name of the prediction data set split to use (via the datasets library). "
-            "Defaults to 'test'"
+            "help": "The name of the prediction dataset split to use (via the datasets library). " "Defaults to 'test'"
         },
     )
     audio_column_name: str = field(
@@ -191,10 +189,10 @@ class DataTrainingArguments:
         metadata={"help": "The name of the dataset column containing the audio data. Defaults to 'audio'"},
     )
     target_column_name: str = field(
-        default="transcription",
+        default=None,
         metadata={
             "help": "The name of the dataset column containing the target data "
-            "(transcription/translation/label). Defaults to 'transcription'"
+            "(transcription/translation/label). If None, the name will be inferred from the task. Defaults to None."
         },
     )
     overwrite_cache: bool = field(
@@ -348,8 +346,10 @@ def create_vocabulary_from_data(
     )
 
     # take union of all unique characters in each dataset
-    vocab_set = functools.reduce(
-        lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]), vocabs.values()
+    vocab_set = (
+        (set(vocabs["train"]["vocab"][0]) if "train" in vocabs else set())
+        | (set(vocabs["eval"]["vocab"][0]) if "eval" in vocabs else set())
+        | (set(vocabs["predict"]["vocab"][0]) if "predict" in vocabs else set())
     )
 
     vocab_dict = {v: k for k, v in enumerate(sorted(list(vocab_set)))}
@@ -434,7 +434,10 @@ def main():
             " for multi-lingual fine-tuning."
         )
 
-    target_column_name = TASK_TO_TARGET_COLUMN_NAME[task_name]
+    if data_args.target_column_name is None:
+        target_column_name = TASK_TO_TARGET_COLUMN_NAME[task_name]
+    else:
+        target_column_name = data_args.target_column_name
 
     # here we differentiate between tasks with text as the target and classification tasks
     is_text_target = target_column_name in ("transcription", "translation")
@@ -457,9 +460,9 @@ def main():
                 f"{', '.join(raw_datasets['train'].column_names)}."
             )
 
-        if data_args.target_column_name not in raw_datasets["train"].column_names:
+        if target_column_name not in raw_datasets["train"].column_names:
             raise ValueError(
-                f"--target_column_name {data_args.target_column_name} not found in dataset '{data_args.dataset_name}'. "
+                f"--target_column_name {target_column_name} not found in dataset '{data_args.dataset_name}'. "
                 "Make sure to set `--target_column_name` to the correct text column - one of "
                 f"{', '.join(raw_datasets['train'].column_names)}."
             )
@@ -468,7 +471,7 @@ def main():
             raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
 
         if not is_text_target:
-            label_list = raw_datasets["train"].features[data_args.target_column_name].names
+            label_list = raw_datasets["train"].features[target_column_name].names
             num_labels = len(label_list)
 
     if training_args.do_eval:
@@ -684,7 +687,7 @@ def main():
         if is_text_target:
             batch["labels"] = tokenizer(batch["target_text"], **additional_kwargs).input_ids
         else:
-            batch["labels"] = batch[data_args.target_column_name]
+            batch["labels"] = batch[target_column_name]
         return batch
 
     with training_args.main_process_first(desc="dataset map preprocessing"):
@@ -809,10 +812,10 @@ def main():
         trainer.save_metrics("train", metrics)
         trainer.save_state()
 
-    # Evaluation
+    # Evaluation on the test set
     results = {}
     if training_args.do_predict:
-        logger.info("*** Predicte ***")
+        logger.info(f"*** Evaluating on the `{data_args.predict_split_name}` set ***")
         metrics = trainer.evaluate(vectorized_datasets["predict"])
         max_predict_samples = (
             data_args.max_predict_samples
@@ -831,9 +834,8 @@ def main():
         "tags": [task_name, data_args.dataset_name],
         "dataset_args": f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}, Predict split: {data_args.predict_split_name}",
         "dataset": f"{data_args.dataset_name.upper()} - {config_name.upper()}",
+        "language": data_args.language,
     }
-    if "common_voice" in data_args.dataset_name:
-        kwargs["language"] = config_name
 
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)
