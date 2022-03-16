@@ -111,7 +111,7 @@ class ResNetEmbeddings(nn.Sequential):
     def __init__(self, num_channels: int, out_channels: int, activation: str = "relu"):
         super().__init__()
         self.embedder = ResNetConvLayer(num_channels, out_channels, kernel_size=7, stride=2, activation=activation)
-        self.pooling = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.pooler = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
 
 class ResNetShortCut(nn.Sequential):
@@ -308,7 +308,7 @@ class ResNetModel(ResNetPreTrainedModel):
         self.config = config
         self.embedder = ResNetEmbeddings(config.num_channels, config.embedding_size, config.hidden_act)
         self.encoder = ResNetEncoder(config)
-        self.poolinger = nn.AdaptiveAvgPool2d((1, 1))
+        self.pooler = nn.AdaptiveAvgPool2d((1, 1))
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -337,7 +337,7 @@ class ResNetModel(ResNetPreTrainedModel):
 
         last_hidden_state = encoder_outputs[0]
 
-        pooled_output = self.poolinger(last_hidden_state)
+        pooled_output = self.pooler(last_hidden_state)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
