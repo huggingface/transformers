@@ -77,6 +77,8 @@ class GLPNConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         max_depth (`int`, *optional*, defaults to 10):
             The maximum depth of the decoder.
+        in_index (`int`, *optional*, defaults to -1):
+            The index of the features to use in the head.
 
     Example:
 
@@ -116,6 +118,7 @@ class GLPNConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         is_encoder_decoder=False,
         max_depth=10,
+        in_index=-1,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -139,3 +142,4 @@ class GLPNConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.max_depth = max_depth
+        self.in_index = in_index

@@ -17,6 +17,7 @@
 
 import collections
 import math
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -505,7 +506,13 @@ class GLPNModel(GLPNPreTrainedModel):
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.forward
-    def forward(self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None):
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -549,22 +556,28 @@ class GLPNDecoder(nn.Module):
     def forward(self, encoder_hidden_states):
         x_1, x_2, x_3, x_4 = encoder_hidden_states
 
+        output = []
+
         x_4_ = self.bot_conv(x_4)
         out = self.up(x_4_)
+        output.append(out)
 
         x_3_ = self.skip_conv1(x_3)
         out = self.fusion1(x_3_, out)
         out = self.up(out)
+        output.append(out)
 
         x_2_ = self.skip_conv2(x_2)
         out = self.fusion2(x_2_, out)
         out = self.up(out)
+        output.append(out)
 
         out = self.fusion3(x_1, out)
         out = self.up(out)
         out = self.up(out)
+        output.append(out)
 
-        return out
+        return output
 
 
 class GLPNSelectiveFeatureFusion(nn.Module):
@@ -612,21 +625,39 @@ class SiLogLoss(nn.Module):
         return loss
 
 
+class GLPNDepthEstimationHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.config = config
+
+        features = config.hidden_sizes[0]
+        self.head = nn.Sequential(
+            nn.Conv2d(features, features, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=False),
+            nn.Conv2d(features, 1, kernel_size=3, stride=1, padding=1),
+        )
+
+    def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
+        # use last features of the decoder
+        hidden_states = hidden_states[self.config.in_index]
+
+        logits = self.head(hidden_states)
+
+        return logits
+
+
 @add_start_docstrings(
-    """GLPN Model transformer with a lightweight decode head on top e.g. for KITTI, NYUv2.""",
+    """GLPN Model transformer with a lightweight depth estimation head on top e.g. for KITTI, NYUv2.""",
     GLPN_START_DOCSTRING,
 )
 class GLPNForDepthEstimation(GLPNPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+
         self.glpn = GLPNModel(config)
         self.decoder = GLPNDecoder(config)
-        out_channels = config.hidden_sizes[0]
-        self.head = nn.Sequential(
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(inplace=False),
-            nn.Conv2d(out_channels, 1, kernel_size=3, stride=1, padding=1),
-        )
+        self.head = GLPNDepthEstimationHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()

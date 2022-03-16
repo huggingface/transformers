@@ -76,7 +76,7 @@ def rename_keys(state_dict):
             idx = key[key.find("linear_c") + len("linear_c")]
             key = key.replace(f"linear_c{idx}", f"linear_c.{int(idx)-1}")
         if key.startswith("module.last_layer_depth"):
-            key = key.replace("module.last_layer_depth", "head")
+            key = key.replace("module.last_layer_depth", "head.head")
         new_state_dict[key] = value
 
     return new_state_dict
@@ -161,6 +161,7 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
 
         assert logits.shape == expected_shape
         assert torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4)
+        print("Looks ok!")
 
     # finally, push to hub if required
     if push_to_hub:
@@ -186,7 +187,7 @@ if __name__ == "__main__":
         "--checkpoint_path",
         default=None,
         type=str,
-        help="Path to the original PyTorch checkpoint (.pth file). Should include the string 'kitti' or 'NYU' in case you want to upload the model to the hub.",
+        help="Path to the original PyTorch checkpoint (.pth file).",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
