@@ -56,7 +56,7 @@ python run_xtreme_s.py \
     --push_to_hub
 ```
 
-where `TASK_NAME` can be one of: `mls, voxpopuli, covost2, fleurs, minds14`.
+where `TASK_NAME` can be one of: `mls, voxpopuli, covost2, fleurs-asr, fleurs-lang_id, minds14`.
 
 We get the following results on the test set of the benchmark's datasets. 
 The corresponding training commands for each dataset are given in the sections below:
