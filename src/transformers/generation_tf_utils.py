@@ -1597,7 +1597,7 @@ class TFGenerationMixin:
                 length_penalty=length_penalty,
                 early_stopping=early_stopping,
                 logits_processor=logits_processor,
-                model_kwargs=model_kwargs,
+                **model_kwargs,
             )
 
         else:
@@ -2305,6 +2305,8 @@ class TFGenerationMixin:
         length_penalty: Optional[float] = None,
         early_stopping: Optional[bool] = None,
         logits_processor: Optional[TFLogitsProcessorList] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[TFBeamSearchOutput, tf.Tensor]:
         r"""
@@ -2327,6 +2329,12 @@ class TFGenerationMixin:
             logits_processor (`TFLogitsProcessorList`, *optional*):
                 An instance of [`TFLogitsProcessorList`]. List of instances of class derived from [`TFLogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
+            output_attentions (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more details.
+            output_hidden_states (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more details.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `call` function of the model. If model is an
                 encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -2392,20 +2400,16 @@ class TFGenerationMixin:
                 return tensor
             return tf.reshape(tensor, (batch_size, num_beams) + tensor.shape[1:])
 
-        def gather_beams(nested, beam_indices, batch_size, new_num_beams):
+        def gather_beams(nested, beam_indices):
             """
             Gathers the beam slices indexed by beam_indices into new beam array.
             """
-            batch_indices = tf.reshape(
-                tf.range(batch_size * new_num_beams) // new_num_beams, (batch_size, new_num_beams)
-            )
-
             def gather_fn(tensor):
                 # ignore scalars (e.g. cache index)
                 if tf.rank(tensor) == 0:
                     return tensor
                 else:
-                    return tensor[batch_indices, beam_indices]
+                    return tf.gather(params=tensor, indices=beam_indices, axis=1, batch_dims=1)
 
             return tf.nest.map_structure(gather_fn, nested)
 
@@ -2413,6 +2417,10 @@ class TFGenerationMixin:
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
 
@@ -2433,6 +2441,13 @@ class TFGenerationMixin:
             size=max_length,
             clear_after_read=False,
         )
+        intermediary_running_sequences = tf.TensorArray(
+            element_shape=(batch_size, num_beams*2),
+            dtype=tf.int32,
+            dynamic_size=False,
+            size=max_length,
+            clear_after_read=False,
+        )
 
         # write prompt to running_sequences
         for i in range(cur_len):
@@ -2442,12 +2457,10 @@ class TFGenerationMixin:
         is_sent_finished = tf.zeros((batch_size, num_beams), dtype=tf.bool)
 
         # per batch, beam-item score, logprobs
-        running_scores = tf.tile(tf.convert_to_tensor([0.0] + [-1.0e7] * (num_beams - 1)), [batch_size, 1])
+        running_scores = tf.tile(
+            tf.expand_dims(tf.convert_to_tensor([0.0] + [-1.0e7] * (num_beams - 1)), axis=0), [batch_size, 1]
+        )
         scores = tf.ones((batch_size, num_beams)) * -1.0e7
-
-        # For Seq2Seq generation, we only need to use the decoder instead of the whole model in generation loop
-        # and pass it the `encoder_outputs`, which are part of the `model_kwargs`.
-        model = self.decode if self.config.is_encoder_decoder else self
 
         # flatten beam dim
         if "encoder_outputs" in model_kwargs:
@@ -2456,9 +2469,6 @@ class TFGenerationMixin:
             )
         if "attention_mask" in model_kwargs:
             model_kwargs["attention_mask"] = flatten_beam_dim(model_kwargs["attention_mask"])
-
-        # initialize model specific kwargs
-        model_kwargs = self.prepare_inputs_for_generation(flatten_beam_dim(input_ids), max_length, **model_kwargs)
 
         # define stop-condition and auto-regressive function
         def beam_search_cond_fn(
@@ -2490,22 +2500,25 @@ class TFGenerationMixin:
             is_sent_finished,
             model_kwargs,
             input_ids_length=1,
+            intermediary_running_sequences=None,
         ):
             """beam search state update fn."""
             # 1. Forward current tokens
-            # Collect the current position slice along length to feed the fast
-            # autoregressive decoder model.  Flatten the beam dimension into batch
-            # dimension for feeding into the model.
-            # unflatten beam dimension
-            # Unflatten beam dimension in attention cache arrays
-            input_token = flatten_beam_dim(
-                tf.slice(
-                    running_sequences,
-                    (0, 0, cur_len - input_ids_length),
-                    (batch_size, num_beams, input_ids_length),
-                )
+
+            # TF places the dynamic dimension (seq_len) in the first axis, we want it in the last
+            running_sequences_seq_last = tf.transpose(running_sequences.stack(), perm=[1, 2, 0])
+            input_token = tf.slice(
+                running_sequences_seq_last,
+                (0, 0, cur_len - input_ids_length),
+                (batch_size, num_beams, input_ids_length),
             )
-            model_outputs = model(input_token, **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(flatten_beam_dim(input_token), **model_kwargs)
+            model_outputs = self(
+                **model_inputs,
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
 
             logits = unflatten_beam_dim(model_outputs.logits[:, -1], batch_size, num_beams)
             cache = tf.nest.map_structure(
@@ -2517,11 +2530,11 @@ class TFGenerationMixin:
             # process logits with processors (*e.g.* min_length, ...), and
             # add new logprobs to existing running logprobs scores.
             log_probs = tf.nn.log_softmax(logits)
-            log_probs = logits_processor(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
+            log_probs = logits_processor(flatten_beam_dim(running_sequences_seq_last), flatten_beam_dim(log_probs))
             log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + tf.expand_dims(running_scores, axis=2)
             vocab_size = log_probs.shape[2]
-            log_probs = log_probs.reshape((batch_size, num_beams * vocab_size))
+            log_probs = tf.reshape(log_probs, (batch_size, num_beams * vocab_size))
 
             # 3. Retrieve top-K
             # Each item in batch has num_beams * vocab_size candidate sequences.
@@ -2537,9 +2550,15 @@ class TFGenerationMixin:
             beams_to_keep = 2 * num_beams
             topk_log_probs, topk_indices = tf.math.top_k(log_probs, k=beams_to_keep)
             topk_beam_indices = topk_indices // vocab_size
-            topk_running_sequences = gather_beams(running_sequences, topk_beam_indices, batch_size, beams_to_keep)
-            topk_ids = tf.expand_dims(topk_indices % vocab_size, axis=2)
-            topk_sequences = topk_running_sequences.write(cur_len, topk_ids[:, :, :])
+            topk_running_sequences = gather_beams(running_sequences_seq_last, topk_beam_indices)
+            topk_ids = topk_indices % vocab_size
+
+            # writes the new token
+            topk_running_sequences_seq_first = tf.transpose(topk_running_sequences, perm=[2, 0, 1])
+            intermediary_running_sequences = intermediary_running_sequences.unstack(topk_running_sequences_seq_first)
+            topk_sequences = intermediary_running_sequences.write(cur_len, topk_ids)
+            topk_sequences_seq_last = tf.transpose(topk_sequences.stack(), perm=[1, 2, 0])
+            breakpoint()
 
             # 4. Check which sequences have ended
             # Update current sequences:
@@ -2555,7 +2574,7 @@ class TFGenerationMixin:
             # and gather top k beams (from top 2*k beams).
             next_topk_indices = tf.reverse(tf.math.top_k(running_topk_log_probs, k=num_beams)[1], axis=1)
             next_running_sequences, next_running_scores = gather_beams(
-                [topk_sequences, running_topk_log_probs], next_topk_indices, batch_size, num_beams
+                [topk_sequences, running_topk_log_probs], next_topk_indices
             )
 
             # 6. Process topk logits
@@ -2591,7 +2610,9 @@ class TFGenerationMixin:
             next_running_indices = gather_beams(topk_beam_indices, next_topk_indices, batch_size, num_beams)
             next_cache = gather_beams(cache, next_running_indices, batch_size, num_beams)
             model_outputs["past_key_values"] = tf.nest.map_structure(lambda x: flatten_beam_dim(x), next_cache)
-            next_model_kwargs = self.update_inputs_for_generation(model_outputs, model_kwargs)
+            next_model_kwargs = self._update_model_kwargs_for_generation(
+                model_outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+            )
 
             return (
                 cur_len + 1,
@@ -2602,6 +2623,9 @@ class TFGenerationMixin:
                 next_is_sent_finished,
                 next_model_kwargs,
             )
+
+        # Adds the `intermediary_running_sequences` TensorArray into the body, needed as a scratchpad
+        beam_search_body_fn = partial(beam_search_body_fn, intermediary_running_sequences=intermediary_running_sequences)
 
         # 1st generation step has to be run before to initialize `past`
         cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs = partial(
