@@ -148,7 +148,7 @@ class MarianAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
-        dropout: Optiona[float] = 0.0,
+        dropout: Optional[float] = 0.0,
         is_decoder: Optional[bool] = False,
         bias: Optional[bool] = True,
     ):
