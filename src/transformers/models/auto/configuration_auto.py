@@ -236,7 +236,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("convnext", "ConvNext"),
         ("van", "VAN"),
         ("resnet", "ResNet"),
-        ("regnet", "regnet"),
+        ("regnet", "RegNet"),
         ("yoso", "YOSO"),
         ("swin", "Swin"),
         ("vilt", "ViLT"),
