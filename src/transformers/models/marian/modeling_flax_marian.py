@@ -892,7 +892,7 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         # make sure initialization pass will work for FlaxMarianForSequenceClassificationModule
-        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
+        input_ids = input_ids.at[(..., -1)].set(self.config.eos_token_id)
         attention_mask = jnp.ones_like(input_ids)
         decoder_input_ids = input_ids
         decoder_attention_mask = jnp.ones_like(input_ids)
@@ -1422,7 +1422,7 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
 
     def _adapt_logits_for_beam_search(self, logits):
         """This function enforces the padding token never to be generated."""
-        logits = jax.ops.index_update(logits, jax.ops.index[:, :, self.config.pad_token_id], float("-inf"))
+        logits = logits.at[jax.ops.index[:, :, self.config.pad_token_id]].set(float("-inf"))
         return logits
 
     def prepare_inputs_for_generation(
