@@ -471,7 +471,7 @@ class DPTReassembleLayer(nn.Module):
     def __init__(self, config, channels, factor):
         super().__init__()
         # projection
-        self.project = nn.Conv2d(in_channels=config.hidden_size, out_channels=channels, kernel_size=1)
+        self.projection = nn.Conv2d(in_channels=config.hidden_size, out_channels=channels, kernel_size=1)
 
         # up/down sampling depending on factor
         if factor > 1:
@@ -483,7 +483,7 @@ class DPTReassembleLayer(nn.Module):
             self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=int(1 / factor), padding=1)
 
     def forward(self, hidden_state):
-        hidden_state = self.project(hidden_state)
+        hidden_state = self.projection(hidden_state)
         hidden_state = self.resize(hidden_state)
         return hidden_state
 
@@ -494,7 +494,7 @@ class DPTFeatureFusionStage(nn.Module):
         self.layers = nn.ModuleList()
         for _ in range(len(config.neck_hidden_sizes)):
             self.layers.append(DPTFeatureFusionLayer(config))
-        self.layers[0].res_conv_unit1 = None
+        self.layers[0].residual_layer1 = None
 
     def forward(self, hidden_states):
         # reversing the hidden_states, we start from the last
@@ -525,8 +525,8 @@ class DPTPreActResidualLayer(nn.Module):
         super().__init__()
 
         self.use_batch_norm = config.use_batch_norm_in_fusion_residual
-        self.act1 = ACT2FN["relu"]
-        self.conv1 = nn.Conv2d(
+        self.activation1 = ACT2FN["relu"]
+        self.convolution1 = nn.Conv2d(
             config.fusion_hidden_size,
             config.fusion_hidden_size,
             kernel_size=3,
@@ -535,8 +535,8 @@ class DPTPreActResidualLayer(nn.Module):
             bias=not self.use_batch_norm,
         )
 
-        self.act2 = ACT2FN["relu"]
-        self.conv2 = nn.Conv2d(
+        self.activation2 = ACT2FN["relu"]
+        self.convolution2 = nn.Conv2d(
             config.fusion_hidden_size,
             config.fusion_hidden_size,
             kernel_size=3,
@@ -551,20 +551,20 @@ class DPTPreActResidualLayer(nn.Module):
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         residual = hidden_state
-        x = self.act1(hidden_state)
+        hidden_state = self.activation1(hidden_state)
 
-        x = self.conv1(x)
-
-        if self.use_batch_norm:
-            x = self.batch_norm1(x)
-
-        x = self.act2(x)
-        x = self.conv2(x)
+        hidden_state = self.convolution1(hidden_state)
 
         if self.use_batch_norm:
-            x = self.batch_norm2(x)
+            hidden_state = self.batch_norm1(hidden_state)
 
-        return x + residual
+        hidden_state = self.activation2(hidden_state)
+        hidden_state = self.convolution2(hidden_state)
+
+        if self.use_batch_norm:
+            hidden_state = self.batch_norm2(hidden_state)
+
+        return hidden_state + residual
 
 
 class DPTFeatureFusionLayer(nn.Module):
@@ -582,10 +582,10 @@ class DPTFeatureFusionLayer(nn.Module):
 
         self.align_corners = align_corners
 
-        self.project = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
+        self.projection = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
 
-        self.res_conv_unit1 = DPTPreActResidualLayer(config)
-        self.res_conv_unit2 = DPTPreActResidualLayer(config)
+        self.residual_layer1 = DPTPreActResidualLayer(config)
+        self.residual_layer2 = DPTPreActResidualLayer(config)
 
     def forward(self, *inputs):
         x = inputs[0]
@@ -596,11 +596,11 @@ class DPTFeatureFusionLayer(nn.Module):
                 )
             else:
                 res = inputs[1]
-            x = x + self.res_conv_unit1(res)
+            x = x + self.residual_layer1(res)
 
-        x = self.res_conv_unit2(x)
+        x = self.residual_layer2(x)
         x = nn.functional.interpolate(x, scale_factor=2, mode="bilinear", align_corners=self.align_corners)
-        x = self.project(x)
+        x = self.projection(x)
 
         return x
 

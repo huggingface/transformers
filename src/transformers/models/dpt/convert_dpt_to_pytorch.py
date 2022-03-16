@@ -110,11 +110,15 @@ def rename_key(name):
         # tricky here: we need to map 4 to 0, 3 to 1, 2 to 2 and 1 to 3
         name = name.replace(f"refinenet{layer_idx}", f"fusion_stage.layers.{abs(layer_idx-4)}")
     if "out_conv" in name:
-        name = name.replace("out_conv", "project")
+        name = name.replace("out_conv", "projection")
     if "resConfUnit1" in name:
-        name = name.replace("resConfUnit1", "res_conv_unit1")
+        name = name.replace("resConfUnit1", "residual_layer1")
     if "resConfUnit2" in name:
-        name = name.replace("resConfUnit2", "res_conv_unit2")
+        name = name.replace("resConfUnit2", "residual_layer2")
+    if "conv1" in name:
+        name = name.replace("conv1", "convolution1")
+    if "conv2" in name:
+        name = name.replace("conv2", "convolution2")
     # readout blocks
     if "pretrained.act_postprocess1.0.project.0" in name:
         name = name.replace("pretrained.act_postprocess1.0.project.0", "neck.reassemble_stage.readout_projects.0.0")
@@ -126,17 +130,17 @@ def rename_key(name):
         name = name.replace("pretrained.act_postprocess4.0.project.0", "neck.reassemble_stage.readout_projects.3.0")
     # resize blocks
     if "pretrained.act_postprocess1.3" in name:
-        name = name.replace("pretrained.act_postprocess1.3", "neck.reassemble_stage.layers.0.project")
+        name = name.replace("pretrained.act_postprocess1.3", "neck.reassemble_stage.layers.0.projection")
     if "pretrained.act_postprocess1.4" in name:
         name = name.replace("pretrained.act_postprocess1.4", "neck.reassemble_stage.layers.0.resize")
     if "pretrained.act_postprocess2.3" in name:
-        name = name.replace("pretrained.act_postprocess2.3", "neck.reassemble_stage.layers.1.project")
+        name = name.replace("pretrained.act_postprocess2.3", "neck.reassemble_stage.layers.1.projection")
     if "pretrained.act_postprocess2.4" in name:
         name = name.replace("pretrained.act_postprocess2.4", "neck.reassemble_stage.layers.1.resize")
     if "pretrained.act_postprocess3.3" in name:
-        name = name.replace("pretrained.act_postprocess3.3", "neck.reassemble_stage.layers.2.project")
+        name = name.replace("pretrained.act_postprocess3.3", "neck.reassemble_stage.layers.2.projection")
     if "pretrained.act_postprocess4.3" in name:
-        name = name.replace("pretrained.act_postprocess4.3", "neck.reassemble_stage.layers.3.project")
+        name = name.replace("pretrained.act_postprocess4.3", "neck.reassemble_stage.layers.3.projection")
     if "pretrained.act_postprocess4.4" in name:
         name = name.replace("pretrained.act_postprocess4.4", "neck.reassemble_stage.layers.3.resize")
     if "pretrained" in name:
