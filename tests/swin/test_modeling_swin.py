@@ -250,7 +250,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            expected_num_attentions = sum(self.model_tester.depths)
+            expected_num_attentions = len(self.model_tester.depths)
             self.assertEqual(len(attentions), expected_num_attentions)
 
             # check that output_attentions also work using config
