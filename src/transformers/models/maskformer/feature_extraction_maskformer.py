@@ -164,7 +164,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         images: ImageInput,
         segmentation_maps: ImageInput = None,
         pad_and_return_pixel_mask: Optional[bool] = True,
-        instance_id_to_label_id: Optional[Dict[int, int]] = None,
+        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
@@ -197,7 +197,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            instance_id_to_label_id (`Dict[int, int]`, *optional*):
+            instance_id_to_semantic_id (`Dict[int, int]`, *optional*):
                 If passed, we treat `segmentation_maps` as an instance segmentation map where each pixel represents an
                 instance id. To convert it to a binary mask of shape (`batch, num_labels, height, width`) we need a
                 dictionary mapping instance ids to label ids to create a semantic segmentation map.
@@ -285,7 +285,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             segmentation_maps,
             pad_and_return_pixel_mask,
             num_labels=self.num_labels,
-            instance_id_to_label_id=instance_id_to_label_id,
+            instance_id_to_semantic_id=instance_id_to_semantic_id,
             return_tensors=return_tensors,
         )
 
@@ -310,7 +310,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         return maxes
 
     def convert_segmentation_map_to_binary_masks(
-        self, segmentation_map: "np.ndarray", num_labels: int, instance_id_to_label_id: Optional[Dict[int, int]] = None
+        self,
+        segmentation_map: "np.ndarray",
+        num_labels: int,
+        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ):
         if self.reduce_labels:
             segmentation_map[segmentation_map == 0] = self.ignore_index
@@ -318,10 +321,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             segmentation_map -= 1
             segmentation_map[segmentation_map == self.ignore_index - 1] = self.ignore_index
 
-        if instance_id_to_label_id is not None:
+        if instance_id_to_semantic_id is not None:
             # segmentation_map will be treated as an instance segmentation map where each pixel is a instance id
             # thus it has to be converted to a semantic segmentation map
-            for instance_id, label_id in instance_id_to_label_id.items():
+            for instance_id, label_id in instance_id_to_semantic_id.items():
                 segmentation_map[segmentation_map == instance_id] = label_id
         # get all the labels in the image
         labels = np.unique(segmentation_map)
@@ -347,7 +350,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         segmentation_maps: ImageInput = None,
         pad_and_return_pixel_mask: bool = True,
         num_labels: Optional[int] = None,
-        instance_id_to_label_id: Optional[Dict[int, int]] = None,
+        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ):
         """
@@ -369,7 +372,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            instance_id_to_label_id (`Dict[int, int]`, *optional*):
+            num_labels (`int`, *optional*):
+                The number of labels in the dataset.
+
+            instance_id_to_semantic_id (`Dict[int, int]`, *optional*):
                 If passed, we treat `segmentation_maps` as an instance segmentation map where each pixel represents an
                 instance id. To convert it to a binary mask of shape (`batch, num_labels, height, width`) we need a
                 dictionary mapping instance ids to label ids to create a semantic segmentation map.

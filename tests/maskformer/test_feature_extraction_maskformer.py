@@ -283,13 +283,13 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         batch_size = self.feature_extract_tester.batch_size
         num_labels = self.feature_extract_tester.num_labels
         annotations = None
-        instance_id_to_label_id = None
+        instance_id_to_semantic_id = None
         if with_segmentation_maps:
             high = num_labels
             if is_instance_map:
                 high * 2
                 labels_expanded = list(range(num_labels)) * 2
-                instance_id_to_label_id = {
+                instance_id_to_semantic_id = {
                     instance_id: label_id for instance_id, label_id in enumerate(labels_expanded)
                 }
             annotations = [np.random.randint(0, high, (384, 384)).astype(np.uint8) for _ in range(batch_size)]
@@ -301,7 +301,7 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             image_inputs,
             annotations,
             return_tensors="pt",
-            instance_id_to_label_id=instance_id_to_label_id,
+            instance_id_to_semantic_id=instance_id_to_semantic_id,
             pad_and_return_pixel_mask=True,
         )
 
