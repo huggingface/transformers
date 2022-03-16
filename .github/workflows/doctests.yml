@@ -65,7 +65,7 @@ jobs:
           python3 utils/prepare_for_doc_test.py src docs --remove_new_line
 
       - name: Failure short reports
-                if: ${{ failure() }}
+        if: ${{ failure() }}
         continue-on-error: true
         run: cat /transformers/reports/doc_tests_gpu/failures_short.txt
 
