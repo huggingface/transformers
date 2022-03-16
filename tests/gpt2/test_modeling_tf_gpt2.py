@@ -522,6 +522,34 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(output_strings, expected_output_string)
 
     @slow
+    def test_lm_generate_greedy_distilgpt2_beam_search_special(self):
+        model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
+
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+
+        sentences = ["Today is a beautiful day and", "Yesterday was"]
+        input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
+
+        generation_kwargs = {
+            "bad_words_ids": [tokenizer("is").input_ids, tokenizer("angry about").input_ids],
+            "no_repeat_ngram_size": 2,
+            "do_sample": False,
+            "repetition_penalty": 1.3,
+            "num_beams": 2,
+        }
+
+        output_ids = model.generate(input_ids, **generation_kwargs)
+
+        output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        expected_output_string = [
+            "Today is a beautiful day and I hope you enjoy it.\nI am very happy to announce that",
+            "Yesterday was the first time I've ever seen a game where you can play with",
+        ]
+        self.assertListEqual(output_strings, expected_output_string)
+
+    @slow
     def test_lm_generate_gpt2(self):
         model = TFGPT2LMHeadModel.from_pretrained("gpt2")
         input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
