@@ -81,9 +81,9 @@ The following command shows how to fine-tune the [XLS-R](https://huggingface.co/
 python -m torch.distributed.launch \
     --nproc_per_node=8 \
     run_xtreme_s.py \
+    --task="mls" \
+    --language="all" \
     --model_name_or_path="facebook/wav2vec2-xls-r-300m" \
-    --dataset_name="google/xtreme_s" \
-    --dataset_config_name="mls.all" \
     --eval_split_name="test" \
     --output_dir="xtreme_s_xlsr_300m_mls" \
     --overwrite_output_dir \
@@ -94,7 +94,6 @@ python -m torch.distributed.launch \
     --learning_rate="3e-4" \
     --warmup_steps=3000 \
     --evaluation_strategy="steps" \
-    --target_column_name="transcription" \
     --max_duration_in_seconds=20 \
     --save_steps=500 \
     --eval_steps=500 \
@@ -126,10 +125,9 @@ The following command shows how to fine-tune the [XLS-R](https://huggingface.co/
 python -m torch.distributed.launch \
     --nproc_per_node=2 \
     run_xtreme_s.py \
+    --task="minds14" \
+    --language="all" \
     --model_name_or_path="facebook/wav2vec2-xls-r-300m" \
-    --dataset_name="google/xtreme_s" \
-    --dataset_config_name="minds14.all" \
-    --eval_split_name="test" \
     --output_dir="xtreme_s_xlsr_300m_minds14" \
     --overwrite_output_dir \
     --num_train_epochs=50 \
@@ -139,7 +137,6 @@ python -m torch.distributed.launch \
     --learning_rate="3e-4" \
     --warmup_steps=1500 \
     --evaluation_strategy="steps" \
-    --target_column_name="intent_class" \
     --max_duration_in_seconds=30 \
     --save_steps=200 \
     --eval_steps=200 \
