@@ -39,9 +39,7 @@ export TASK_NAME=mls.all
 
 python run_xtreme_s.py \
     --model_name_or_path="facebook/wav2vec2-xls-r-300m" \
-    --dataset_name="google/xtreme_s" \
-    --dataset_config_name="${TASK_NAME}" \
-    --eval_split_name="validation" \
+    --task="${TASK_NAME}" \
     --output_dir="xtreme_s_xlsr_${TASK_NAME}" \
     --num_train_epochs=100 \
     --per_device_train_batch_size=32 \
@@ -49,16 +47,16 @@ python run_xtreme_s.py \
     --target_column_name="transcription" \
     --save_steps=500 \
     --eval_steps=500 \
-    --freeze_feature_encoder \
     --gradient_checkpointing \
     --fp16 \
     --group_by_length \
     --do_train \
     --do_eval \
+    --do_predict \
     --push_to_hub
 ```
 
-where `TASK_NAME` can be one of: `mls.all, voxpopuli, covost2.all, fleurs.all, minds14.all`.
+where `TASK_NAME` can be one of: `mls, voxpopuli, covost2, fleurs, minds14`.
 
 We get the following results on the test set of the benchmark's datasets. 
 The corresponding training commands for each dataset are given in the sections below:
@@ -109,6 +107,7 @@ python -m torch.distributed.launch \
     --group_by_length \
     --do_train \
     --do_eval \
+    --do_predict \
     --metric_for_best_model="wer" \
     --greater_is_better=False \
     --load_best_model_at_end \
@@ -152,6 +151,7 @@ python -m torch.distributed.launch \
     --group_by_length \
     --do_train \
     --do_eval \
+    --do_predict \
     --metric_for_best_model="f1" \
     --greater_is_better=True \
     --load_best_model_at_end \
