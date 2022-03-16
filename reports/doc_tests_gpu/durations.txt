@@ -1,0 +1,6 @@
+slowest durations
+5.28s call     src/transformers/models/van/modeling_van.py::transformers.models.van.modeling_van.VanModel.forward
+2.24s call     src/transformers/models/van/modeling_van.py::transformers.models.van.modeling_van.VanForImageClassification.forward
+2.12s call     src/transformers/models/resnet/modeling_resnet.py::transformers.models.resnet.modeling_resnet.ResNetForImageClassification.forward
+2.11s call     src/transformers/models/resnet/modeling_resnet.py::transformers.models.resnet.modeling_resnet.ResNetModel.forward
+8 durations < 0.05 secs were omitted

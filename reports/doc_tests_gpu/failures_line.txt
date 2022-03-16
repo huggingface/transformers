@@ -1,0 +1,11 @@
+====================================================== FAILURES ======================================================
+562 
+563     ```python
+564     >>> from transforme
+539     >>> feature_extractor = AutoFeatureExtract
+435 
+436     ```python
+437     >>> from transforme
+393 
+394     ```python
+395     >>> from transforme

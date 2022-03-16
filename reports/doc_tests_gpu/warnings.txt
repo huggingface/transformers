@@ -1,0 +1,6 @@
+============================================== warnings summary (final) ==============================================
+../anaconda3/envs/hf/lib/python3.9/site-packages/flatbuffers/compat.py:19
+  /home/patrick/anaconda3/envs/hf/lib/python3.9/site-packages/flatbuffers/compat.py:19: DeprecationWarning: the imp module is deprecated in favour of importlib; see the module's documentation for alternative uses
+    import imp
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html

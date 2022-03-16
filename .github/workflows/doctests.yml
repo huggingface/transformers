@@ -43,24 +43,24 @@ jobs:
           nvidia-smi
 
       - name: GPU visibility
-        working-directory: transformers
+        working-directory: /transformers
         run: |
           utils/print_env_pt.py
           TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
           TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
       - name: Prepare files for doctests
-        working-directory: transformers
+        working-directory: /transformers
         run: |
           python3 utils/prepare_for_doc_test.py src docs
 
       - name: Run doctests
-        working-directory: transformers
+        working-directory: /transformers
         run: |
           python3 -m pytest -v --make-reports doc_tests_gpu --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
 
       - name: Clean files after doctests
-        working-directory: transformers
+        working-directory: /transformers
         run: |
           python3 utils/prepare_for_doc_test.py src docs --remove_new_line
 
