@@ -262,8 +262,7 @@ Shape = List[int]
 
 def _load(f, shapes, prefix=""):
     """
-    Recursive internal function to load all the names
-    of the tensors included in an h5 file
+    Recursive internal function to load all the names of the tensors included in an h5 file
     """
     import h5py
 
@@ -290,8 +289,7 @@ def load_h5_weight_names(resolved_archive_file) -> Dict[str, Shape]:
 
 def load_single(f, fullname):
     """
-    Given an h5 file (as file handle), returns the data
-    under the `fullname`  location.
+    Given an h5 file (as file handle), returns the data under the `fullname` location.
     """
     names = fullname.strip("/").split("/")
 
@@ -304,8 +302,8 @@ def load_single(f, fullname):
 
 def set_weight(pt_model, pt_name, data, transpose):
     """
-    Given a PyTorch model, the attribute's name and some data pointer (memoryview)
-    Set the corresponding PT tensor with the data (and eventual tranpose)
+    Given a PyTorch model, the attribute's name and some data pointer (memoryview) Set the corresponding PT tensor with
+    the data (and eventual tranpose)
     """
     import torch
 
@@ -320,9 +318,8 @@ def set_weight(pt_model, pt_name, data, transpose):
 
 def apply_transpose(array, transpose, ptr):
     """
-    Given a numpy array, a transpose enum, and the target tensor shape
-    Attempt to modify the array into something fitting the target tensor
-    The direction here is TF -> PT
+    Given a numpy array, a transpose enum, and the target tensor shape Attempt to modify the array into something
+    fitting the target tensor The direction here is TF -> PT
     """
     if transpose is TransposeType.CONV2D:
         # Conv2D weight:
@@ -359,9 +356,8 @@ def apply_transpose(array, transpose, ptr):
 
 def apply_reverse(array, transpose, symbolic_weight):
     """
-    Given a numpy array, a transpose enum, and the target tensor shape
-    Attempt to modify the array into something fitting the target tensor
-    The direction here is PT -> TF
+    Given a numpy array, a transpose enum, and the target tensor shape Attempt to modify the array into something
+    fitting the target tensor The direction here is PT -> TF
     """
     if transpose is TransposeType.CONV2D:
         # Conv2D weight:
