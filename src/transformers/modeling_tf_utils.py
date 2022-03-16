@@ -909,20 +909,32 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         This is a thin wrapper that sets the model's loss output head as the loss if the user does not specify a loss
         function themselves.
         """
+        # TODO:
+        #     1: Try training all the different classes of BERT model with this + metrics and seeing how it does
+        #     2: After the type annotation sprint is done, scan all model classes and check that none have
+        #        double output types.
+        #     3: Check the possible_label_names is reliable.
         if loss == "passthrough":
             logger.warning(
                 "No loss specified in compile() - the model's internal loss computation will be used as the "
                 "loss. Don't panic - this is a common way to train TensorFlow models in Transformers! "
-                "Please ensure your labels are passed as keys in the input dict so that they are "
-                "accessible to the model during the forward pass. To disable this behaviour, please pass a "
-                "loss argument, or explicitly pass loss=None if you do not want your model to compute a loss."
+                "To disable this behaviour, please pass a loss argument, or explicitly pass "
+                "loss=None if you do not want your model to compute a loss."
             )
             loss = {"loss": dummy_loss}
             self._using_dummy_loss = True
             if metrics is not None and not isinstance(metrics, dict):
                 return_types = get_type_hints(self.call)['return'].__args__
                 output_types = [return_type for return_type in return_types if is_dataclass(return_type)]
-                assert len(output_types) == 1
+                if len(output_types) == 0:
+                    raise TypeError(f"Code analysis failed to identify the output types of model f{type(self)}! "
+                                    "This is most likely because that model class does not have type annotations. "
+                                    "Please pass a `dict` of metrics instead of a tuple/list, specifying the output "
+                                    "heads of the model for each metric.")
+                if len(output_types) > 1:
+                    raise TypeError("This model has an unusual output structure, and we could not automatically "
+                                    "determine output heads for metrics. Please pass a `dict` of metrics instead "
+                                    "of a list/tuple, specifying the output heads of the model for each metric.")
                 output_type = output_types[0]
                 # Optional fields that allow NoneType (this includes loss) are not the main model outputs
                 outputs = [field.name for field in fields(output_type) if
@@ -969,7 +981,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         additional loss function that reduces a `loss` output, and the model will output a `loss` component (notice the
         name matching) containing the loss that was used to train the pre-trained model.
         """
-        possible_label_cols = {"labels", "label", "label_ids", "start_positions", "start_position", "end_positions", "end_position", "next_sentence_label"}
+        possible_label_cols = {"labels", "label", "label_ids", "start_positions", "start_position", "end_positions",
+                               "end_position", "next_sentence_label"}
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
         data = data_adapter.expand_1d(data)
