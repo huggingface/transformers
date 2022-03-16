@@ -152,7 +152,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             width = int(np.ceil(width / self.size_divisibility)) * self.size_divisibility
 
         size = (width, height)
-        image = self.resize(image, size=size)
+        image = self.resize(image, size=size, resample=self.resample)
 
         if target is not None:
             target = self.resize(target, size=size, resample=Image.NEAREST)
