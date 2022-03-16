@@ -925,11 +925,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             loss = {"loss": dummy_loss}
             self._using_dummy_loss = True
             if metrics is not None and not isinstance(metrics, dict):
-                return_types = get_type_hints(self.call)["return"].__args__
-                output_types = [return_type for return_type in return_types if is_dataclass(return_type)]
+                type_hints = get_type_hints(self.call)
+                if "return" not in type_hints:
+                    output_types = []
+                else:
+                    return_types = get_type_hints(self.call)["return"].__args__
+                    output_types = [return_type for return_type in return_types if is_dataclass(return_type)]
                 if len(output_types) == 0:
                     raise TypeError(
-                        f"Code analysis failed to identify the output types of model f{type(self)}! "
+                        f"Code analysis failed to identify the output types of model {type(self)}! "
                         "This is most likely because that model class does not have type annotations. "
                         "Please pass a `dict` of metrics instead of a tuple/list, specifying the output "
                         "heads of the model for each metric."
