@@ -20,7 +20,7 @@ import unittest
 
 from transformers import is_torch_available, is_vision_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -35,6 +35,8 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
+
+    from transformers import GLPNFeatureExtractor
 
 
 class GLPNConfigTester(ConfigTester):
@@ -332,7 +334,27 @@ def prepare_img():
 
 
 @require_torch
+@require_vision
+@slow
 class GLPNModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_depth_estimation(self):
-        raise NotImplementedError("")
+        feature_extractor = GLPNFeatureExtractor.from_pretrained(GLPN_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        model = GLPNForDepthEstimation.from_pretrained(GLPN_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size([1, 480, 640])
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[3.4291, 2.7865, 2.5151], [3.2841, 2.7021, 2.3502], [3.1147, 2.4625, 2.2481]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))

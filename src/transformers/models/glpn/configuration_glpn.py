@@ -20,8 +20,9 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "kaist/gdpdepth-kitti": "https://huggingface.co/kaist/gdpdepth-kitti/resolve/main/config.json",
+GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    # TODO update model name
+    "nielsr/glpn-kitti": "https://huggingface.co/nielsr/gdpdepth-kitti/resolve/main/config.json",
     # See all GLPN models at https://huggingface.co/models?filter=gdpdepth
 }
 

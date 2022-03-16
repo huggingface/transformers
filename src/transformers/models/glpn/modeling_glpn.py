@@ -52,7 +52,8 @@ _IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
 
 GLPN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/glpn-b0-finetuned-ade-512-512",
+    # TODO update model name
+    "nielsr/glpn-kitti",
     # See all GLPN models at https://huggingface.co/models?filter=glpn
 ]
 
