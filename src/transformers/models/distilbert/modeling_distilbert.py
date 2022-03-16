@@ -349,7 +349,7 @@ class Transformer(nn.Module):
             layer_outputs = layer_module(
                 x=hidden_state, attn_mask=attn_mask, head_mask=head_mask[i], output_attentions=output_attentions
             )
-            hidden_state: torch.Tensor = layer_outputs[-1]
+            hidden_state = layer_outputs[-1]
 
             if output_attentions:
                 assert len(layer_outputs) == 2
@@ -542,7 +542,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[BaseModelOutput, Tuple[torch.Tensor]]:
+    ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -641,7 +641,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[MaskedLMOutput, Tuple[torch.Tensor]]:
+    ) -> Union[MaskedLMOutput, Tuple[torch.Tensor, ...]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
