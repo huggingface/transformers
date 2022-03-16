@@ -18,9 +18,10 @@
 
 import os
 import re
+from collections import defaultdict
 from typing import Dict, List
 
-import numpy
+import numpy as np
 
 from .file_utils import ExplicitEnum
 from .utils import logging
@@ -201,36 +202,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
         array = pt_state_dict[name].numpy()
 
-        if transpose is TransposeType.CONV2D:
-            # Conv2D weight:
-            #    PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
-            # -> TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
-            array = numpy.transpose(array, axes=(2, 3, 1, 0))
-        elif transpose is TransposeType.CONV1D:
-            # Conv1D weight:
-            #    PT: (num_out_channel, num_in_channel, kernel)
-            # -> TF: (kernel, num_in_channel, num_out_channel)
-            array = numpy.transpose(array, axes=(2, 1, 0))
-        elif transpose is TransposeType.SIMPLE:
-            array = numpy.transpose(array)
-
-        if len(symbolic_weight.shape) < len(array.shape):
-            array = numpy.squeeze(array)
-        elif len(symbolic_weight.shape) > len(array.shape):
-            array = numpy.expand_dims(array, axis=0)
-
-        if list(symbolic_weight.shape) != list(array.shape):
-            try:
-                array = numpy.reshape(array, symbolic_weight.shape)
-            except AssertionError as e:
-                e.args += (symbolic_weight.shape, array.shape)
-                raise e
-
-        try:
-            assert list(symbolic_weight.shape) == list(array.shape)
-        except AssertionError as e:
-            e.args += (symbolic_weight.shape, array.shape)
-            raise e
+        array = apply_reverse(array, transpose, symbolic_weight)
 
         tf_loaded_numel += array.size
         # logger.warning(f"Initialize TF weight {symbolic_weight.name}")
@@ -289,6 +261,10 @@ Shape = List[int]
 
 
 def _load(f, shapes, prefix=""):
+    """
+    Recursive internal function to load all the names
+    of the tensors included in an h5 file
+    """
     import h5py
 
     for k in f.keys():
@@ -299,6 +275,9 @@ def _load(f, shapes, prefix=""):
 
 
 def load_h5_weight_names(resolved_archive_file) -> Dict[str, Shape]:
+    """
+    Load all names and shapes of tensors included in a given TF file.
+    """
     import h5py
 
     # Read the H5 file
@@ -309,7 +288,11 @@ def load_h5_weight_names(resolved_archive_file) -> Dict[str, Shape]:
     return shapes
 
 
-def load_single(resolved_archive_file, fullname, f):
+def load_single(f, fullname):
+    """
+    Given an h5 file (as file handle), returns the data
+    under the `fullname`  location.
+    """
     names = fullname.strip("/").split("/")
 
     # Retrieve the name of each layer from the H5 file
@@ -320,38 +303,100 @@ def load_single(resolved_archive_file, fullname, f):
 
 
 def set_weight(pt_model, pt_name, data, transpose):
-    import numpy as np
+    """
+    Given a PyTorch model, the attribute's name and some data pointer (memoryview)
+    Set the corresponding PT tensor with the data (and eventual tranpose)
+    """
     import torch
 
     ptr = pt_model
     for name in pt_name.split("."):
         ptr = getattr(ptr, name)
 
-    tensor = torch.from_numpy(np.array(data))
+    array = np.array(data)
+    array = apply_transpose(array, transpose, ptr)
+    ptr.data = torch.from_numpy(array)
+
+
+def apply_transpose(array, transpose, ptr):
+    """
+    Given a numpy array, a transpose enum, and the target tensor shape
+    Attempt to modify the array into something fitting the target tensor
+    The direction here is TF -> PT
+    """
     if transpose is TransposeType.CONV2D:
         # Conv2D weight:
         #    TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
         # -> PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
-        tensor = tensor.permute(3, 2, 0, 1)
+        array = np.transpose(array, axes=(3, 2, 0, 1))
     elif transpose is TransposeType.CONV1D:
         # Conv1D weight:
         #    TF: (kernel, num_in_channel, num_out_channel)
         # -> PT: (num_out_channel, num_in_channel, kernel)
-        tensor = tensor.permute(2, 1, 0)
+        array = np.transpose(array, axes=(2, 1, 0))
     elif transpose is TransposeType.SIMPLE:
-        indices = list(reversed(range(len(tensor.shape))))
-        tensor = tensor.permute(*indices)
+        array = np.transpose(array)
 
-    if len(ptr.shape) < len(tensor.shape):
-        tensor = tensor.squeeze()
+    if len(ptr.shape) < len(array.shape):
+        array = array.squeeze()
     elif len(ptr.shape) > len(ptr.shape):
-        tensor = tensor.unsqueeze(0)
-    if list(ptr.shape) != list(tensor.shape):
-        try:
-            tensor = tensor.reshape(ptr.shape)
-        except AssertionError as e:
-            raise e
-    ptr.data = tensor
+        array = np.expand_dims(array, axis=0)
+    if list(ptr.shape) != list(array.shape):
+        squeezed_tensor_shape = [dim for dim in ptr.shape if dim != 1]
+        squeezed_array_shape = [dim for dim in array.shape if dim != 1]
+        # Making sure we don't do wrong reshape
+        if squeezed_tensor_shape == squeezed_array_shape:
+            try:
+                array = array.reshape(ptr.shape)
+            except AssertionError as e:
+                raise e
+    # logger.warning(f"Initialize PyTorch weight {pt_weight_name}")
+    # Make sure we have a proper numpy array
+    if np.isscalar(array):
+        array = np.array(array)
+    return array
+
+
+def apply_reverse(array, transpose, symbolic_weight):
+    """
+    Given a numpy array, a transpose enum, and the target tensor shape
+    Attempt to modify the array into something fitting the target tensor
+    The direction here is PT -> TF
+    """
+    if transpose is TransposeType.CONV2D:
+        # Conv2D weight:
+        #    PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
+        # -> TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
+        array = np.transpose(array, axes=(2, 3, 1, 0))
+    elif transpose is TransposeType.CONV1D:
+        # Conv1D weight:
+        #    PT: (num_out_channel, num_in_channel, kernel)
+        # -> TF: (kernel, num_in_channel, num_out_channel)
+        array = np.transpose(array, axes=(2, 1, 0))
+    elif transpose is TransposeType.SIMPLE:
+        array = np.transpose(array)
+
+    if len(symbolic_weight.shape) < len(array.shape):
+        array = np.squeeze(array)
+    elif len(symbolic_weight.shape) > len(array.shape):
+        array = np.expand_dims(array, axis=0)
+
+    if list(symbolic_weight.shape) != list(array.shape):
+        squeezed_tensor_shape = [dim for dim in symbolic_weight.shape if dim != 1]
+        squeezed_array_shape = [dim for dim in array.shape if dim != 1]
+        if squeezed_array_shape == squeezed_tensor_shape:
+            try:
+                array = np.reshape(array, symbolic_weight.shape)
+            except AssertionError as e:
+                e.args += (symbolic_weight.shape, array.shape)
+                raise e
+
+    try:
+        assert list(symbolic_weight.shape) == list(array.shape)
+    except AssertionError as e:
+        e.args += (symbolic_weight.shape, array.shape)
+        raise e
+    return array
 
 
 def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
@@ -437,24 +482,34 @@ def load_pytorch_model_with_h5(
                 h5_name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=weight_shape
             )
 
-            data = load_single(tf_checkpoint_path, full_h5_name, f)
+            data = load_single(f, full_h5_name)
             if pt_name not in expected_names:
                 unexpected_keys.add(pt_name)
             mapped_names[pt_name] = (data, transpose)
 
         # Some tensors could have different names but be shared
+        # We need to structures, one is to mark things as completed
+        # so we don't need to do the work again if the shared pointer
+        # was already handled.
+        # The second one, is if the shared pointer that doesn't have the shared
+        # name comes in first, we need to clear it later.
         visited_ptr = set()
+        possibly_shared = defaultdict(list)
         for name, weight in pt_model.named_parameters():
             if weight.data_ptr() in visited_ptr:
-                # TODO This is actually incorrect,
-                # we cannot be sure that the first name can be loaded
-                # We could have W1 and W2 being shared weights
-                # and W2 is the name within the H5 file.
+
+                # If we have visited some shared tensor before
+                # we need to mark them as not missing
+                for shared_name in possibly_shared.get(weight.data_ptr(), []):
+                    expected_names.remove(shared_name)
+
                 expected_names.remove(name)
                 continue
 
             if name not in mapped_names:
+                possibly_shared[weight.data_ptr()].append(name)
                 continue
+            visited_ptr.add(weight.data_ptr())
             data_, transpose_ = mapped_names[name]
             expected_names.remove(name)
             set_weight(pt_model, name, data_, transpose_)
@@ -520,41 +575,8 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
         array, transpose = tf_weights_map[pt_weight_name]
 
-        if transpose is TransposeType.CONV2D:
-            # Conv2D weight:
-            #    TF: (kernel[0], kernel[1], num_in_channel, num_out_channel)
-            # -> PT: (num_out_channel, num_in_channel, kernel[0], kernel[1])
-            array = numpy.transpose(array, axes=(3, 2, 0, 1))
-        elif transpose is TransposeType.CONV1D:
-            # Conv1D weight:
-            #    TF: (kernel, num_in_channel, num_out_channel)
-            # -> PT: (num_out_channel, num_in_channel, kernel)
-            array = numpy.transpose(array, axes=(2, 1, 0))
-        elif transpose is TransposeType.SIMPLE:
-            array = numpy.transpose(array)
+        array = apply_transpose(array, transpose, pt_weight)
 
-        if len(pt_weight.shape) < len(array.shape):
-            array = numpy.squeeze(array)
-        elif len(pt_weight.shape) > len(array.shape):
-            array = numpy.expand_dims(array, axis=0)
-
-        if list(pt_weight.shape) != list(array.shape):
-            try:
-                array = numpy.reshape(array, pt_weight.shape)
-            except AssertionError as e:
-                e.args += (pt_weight.shape, array.shape)
-                raise e
-
-        try:
-            assert list(pt_weight.shape) == list(array.shape)
-        except AssertionError as e:
-            e.args += (pt_weight.shape, array.shape)
-            raise e
-
-        # logger.warning(f"Initialize PyTorch weight {pt_weight_name}")
-        # Make sure we have a proper numpy array
-        if numpy.isscalar(array):
-            array = numpy.array(array)
         new_pt_params_dict[pt_weight_name] = torch.from_numpy(array)
         loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = torch.from_numpy(array)
         all_tf_weights.discard(pt_weight_name)
