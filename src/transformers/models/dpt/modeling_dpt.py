@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Embodied AI Foundation, OpenMMLab and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Intel Labs, OpenMMLab and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -54,17 +54,16 @@ _CONFIG_FOR_DOC = "DPTConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "DPTFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "intel/dpt-lare"
+_CHECKPOINT_FOR_DOC = "Intel/dpt-lare"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "intel/dpt-large"
+_IMAGE_CLASS_CHECKPOINT = "Intel/dpt-large"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "'Egyptian cat'"
 
 
 DPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # TODO update to organization
-    "nielsr/dpt-large",
+    "Intel/dpt-large",
     # See all DPT models at https://huggingface.co/models?filter=dpt
 ]
 
@@ -498,13 +497,19 @@ class DPTFeatureFusionStage(nn.Module):
         self.layers[0].res_conv_unit1 = None
 
     def forward(self, hidden_states):
-        output = []
-        out = self.layers[0](hidden_states[-1])
-        for i in range(1, len(self.layers)):
-            out = self.layers[i](out, hidden_states[-(i + 1)])
-            output.append(out)
+        # reversing the hidden_states, we start from the last
+        hidden_states = hidden_states[::-1]
 
-        return output
+        fused_hidden_states = []
+        # first layer only uses the last hidden_state
+        fused_hidden_state = self.layers[0](hidden_states[0])
+        fused_hidden_states.append(fused_hidden_state)
+        # looping from the last layer to the second
+        for hidden_state, layer in zip(hidden_states[1:], self.layers[1:]):
+            fused_hidden_state = layer(fused_hidden_state, hidden_state)
+            fused_hidden_states.append(fused_hidden_state)
+
+        return fused_hidden_states
 
 
 class DPTPreActResidualLayer(nn.Module):

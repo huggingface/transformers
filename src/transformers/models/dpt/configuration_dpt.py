@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 DPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Intel/dpt-large": "https://huggingface.co/intel/dpt-large/resolve/main/config.json",
+    "Intel/dpt-large": "https://huggingface.co/Intel/dpt-large/resolve/main/config.json",
     # See all DPT models at https://huggingface.co/models?filter=dpt
 }
 
@@ -31,7 +31,7 @@ class DPTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DPTModel`]. It is used to instantiate an DPT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DPT
-    [google/dpt-large](https://huggingface.co/google/dpt-large) architecture.
+    [Intel/dpt-large](https://huggingface.co/Intel/dpt-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
