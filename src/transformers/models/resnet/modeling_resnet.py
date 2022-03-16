@@ -225,14 +225,7 @@ class ResNetEncoder(nn.Module):
         )
         in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
         for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
-            self.stages.append(
-                ResNetStage(
-                    config,
-                    in_channels,
-                    out_channels,
-                    depth=depth,
-                )
-            )
+            self.stages.append(ResNetStage(config, in_channels, out_channels, depth=depth))
 
     def forward(
         self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
