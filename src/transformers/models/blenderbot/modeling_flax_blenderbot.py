@@ -897,7 +897,7 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         # make sure initialization pass will work for FlaxBlenderbotForSequenceClassificationModule
-        input_ids = jax.ops.index_update(input_ids, (..., -1), self.config.eos_token_id)
+        input_ids = input_ids.at[(..., -1)].set(self.config.eos_token_id)
         attention_mask = jnp.ones_like(input_ids)
         decoder_input_ids = input_ids
         decoder_attention_mask = jnp.ones_like(input_ids)
