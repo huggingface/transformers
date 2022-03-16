@@ -338,16 +338,12 @@ def apply_transpose(array, transpose, ptr):
         array = array.squeeze()
     elif len(ptr.shape) > len(ptr.shape):
         array = np.expand_dims(array, axis=0)
-    if list(ptr.shape) != list(array.shape):
-        squeezed_tensor_shape = [dim for dim in ptr.shape if dim != 1]
-        squeezed_array_shape = [dim for dim in array.shape if dim != 1]
-        # Making sure we don't do wrong reshape
-        if squeezed_tensor_shape == squeezed_array_shape:
-            try:
-                array = array.reshape(ptr.shape)
-            except AssertionError as e:
-                raise e
-    # logger.warning(f"Initialize PyTorch weight {pt_weight_name}")
+    # if list(ptr.shape) != list(array.shape):
+    #     squeezed_tensor_shape = [dim for dim in ptr.shape if dim != 1]
+    #     squeezed_array_shape = [dim for dim in array.shape if dim != 1]
+    #     # Making sure we don't do wrong reshape
+    #     if squeezed_tensor_shape == squeezed_array_shape:
+    #         array = array.reshape(ptr.shape)
     # Make sure we have a proper numpy array
     if np.isscalar(array):
         array = np.array(array)
@@ -377,15 +373,15 @@ def apply_reverse(array, transpose, symbolic_weight):
     elif len(symbolic_weight.shape) > len(array.shape):
         array = np.expand_dims(array, axis=0)
 
-    if list(symbolic_weight.shape) != list(array.shape):
-        squeezed_tensor_shape = [dim for dim in symbolic_weight.shape if dim != 1]
-        squeezed_array_shape = [dim for dim in array.shape if dim != 1]
-        if squeezed_array_shape == squeezed_tensor_shape:
-            try:
-                array = np.reshape(array, symbolic_weight.shape)
-            except AssertionError as e:
-                e.args += (symbolic_weight.shape, array.shape)
-                raise e
+    # if list(symbolic_weight.shape) != list(array.shape):
+    #     squeezed_tensor_shape = [dim for dim in symbolic_weight.shape if dim != 1]
+    #     squeezed_array_shape = [dim for dim in array.shape if dim != 1]
+    #     if squeezed_array_shape == squeezed_tensor_shape:
+    #         try:
+    #             array = np.reshape(array, symbolic_weight.shape)
+    #         except AssertionError as e:
+    #             e.args += (symbolic_weight.shape, array.shape)
+    #             raise e
 
     try:
         assert list(symbolic_weight.shape) == list(array.shape)
