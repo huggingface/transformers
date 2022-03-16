@@ -431,9 +431,9 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.convnext = TFConvNextMainLayer(config, add_pooling_layer=add_pooling_layer, name="convnext")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -509,9 +509,9 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             name="classifier",
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
-    @unpack_inputs
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
