@@ -1416,7 +1416,7 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         input_shape: Optional[tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
-        do_init: bool = True,
+        _do_init: bool = True,
         **kwargs
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
@@ -1425,7 +1425,7 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         elif input_shape is None:
             input_shape = (1, 1)
 
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, do_init=do_init)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         # init input tensors
@@ -1894,14 +1894,14 @@ class FlaxBigBirdForMultipleChoice(FlaxBigBirdPreTrainedModel):
         input_shape: Optional[tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
-        do_init: bool = True,
+        _do_init: bool = True,
         **kwargs
     ):
         if config.attention_type == "block_sparse" and input_shape is None:
             input_shape = (1, 1, 12 * config.block_size)
         elif input_shape is None:
             input_shape = (1, 1)
-        super().__init__(config, input_shape=input_shape, seed=seed, dtype=dtype, do_init=do_init)
+        super().__init__(config, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
 
 overwrite_call_docstring(

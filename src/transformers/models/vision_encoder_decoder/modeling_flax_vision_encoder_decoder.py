@@ -282,12 +282,12 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         input_shape: Optional[Tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
-        do_init: bool = True,
+        _do_init: bool = True,
         **kwargs
     ):
-        if not do_init:
+        if not _do_init:
             raise ValueError(
-                "`FlaxVisionEncoderDecoderModel` cannot be created without initializing, `do_init` must be `True`."
+                "`FlaxVisionEncoderDecoderModel` cannot be created without initializing, `_do_init` must be `True`."
             )
 
         if input_shape is None:
@@ -307,7 +307,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
                 )
 
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, do_init=do_init)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         encoder_input_shape, decoder_input_shape = input_shape

@@ -901,14 +901,14 @@ class FlaxModelTesterMixin:
             else:
                 _check_attentions_validity(outputs.attentions)
 
-    def test_do_init(self):
+    def test__do_init(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            model = model_class(config, do_init=False)
+            model = model_class(config, _do_init=False)
 
-            # Check that accesing parmas raises an ValueError when do_init is False
+            # Check that accesing parmas raises an ValueError when _do_init is False
             with self.assertRaises(ValueError):
                 params = model.params
 
@@ -927,7 +927,7 @@ class FlaxModelTesterMixin:
                     "Shapes of {} do not match. Expecting {}, got {}.".format(k, v.shape, flat_params[k].shape),
                 )
 
-            # Check that setting params raises an ValueError when do_init is False
+            # Check that setting params raises an ValueError when _do_init is False
             with self.assertRaises(ValueError):
                 model.params = params
 
@@ -936,7 +936,7 @@ class FlaxModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class).copy()
             model(**inputs, params=params)
 
-    def test_from_pretrained_with_do_init(self):
+    def test_from_pretrained_with__do_init(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
@@ -945,12 +945,12 @@ class FlaxModelTesterMixin:
             model = model_class(config)
 
             # save the model in the temporary directory
-            # load the saved model with do_init=False
+            # load the saved model with _do_init=False
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model, params = model_class.from_pretrained(tmpdirname, do_init=False)
+                model, params = model_class.from_pretrained(tmpdirname, _do_init=False)
 
-            # Check that accesing parmas raises an ValueError when do_init is False
+            # Check that accesing parmas raises an ValueError when _do_init is False
             with self.assertRaises(ValueError):
                 params = model.params
 
@@ -966,7 +966,7 @@ class FlaxModelTesterMixin:
                     "Shapes of {} do not match. Expecting {}, got {}.".format(k, v.shape, flat_params[k].shape),
                 )
 
-            # Check that setting params raises an ValueError when do_init is False
+            # Check that setting params raises an ValueError when _do_init is False
             with self.assertRaises(ValueError):
                 model.params = params
 
@@ -979,7 +979,7 @@ class FlaxModelTesterMixin:
                 model.save_pretrained(tmpdirname, params=params)
 
                 with self.assertRaises(ValueError):
-                    model, params = model_class.from_pretrained(tmpdirname, do_init=False)
+                    model, params = model_class.from_pretrained(tmpdirname, _do_init=False)
 
 
 @require_flax
