@@ -21,8 +21,9 @@ import os
 import pickle
 import re
 import warnings
-from typing import Dict, List, Optional, Union, get_type_hints
+from collections import OrderedDict
 from dataclasses import fields, is_dataclass
+from typing import Dict, List, Optional, Union, get_type_hints
 
 import h5py
 import numpy as np
@@ -34,7 +35,6 @@ from tensorflow.python.keras.saving import hdf5_format
 
 from huggingface_hub import Repository, list_repo_files
 from requests import HTTPError
-from collections import OrderedDict
 
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
@@ -81,6 +81,7 @@ TFModelInputType = Union[
 
 def dummy_loss(y_true, y_pred):
     return tf.reduce_mean(y_pred)
+
 
 class IndexableOrderedDict(OrderedDict):
     def __getitem__(self, item):
@@ -924,21 +925,28 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             loss = {"loss": dummy_loss}
             self._using_dummy_loss = True
             if metrics is not None and not isinstance(metrics, dict):
-                return_types = get_type_hints(self.call)['return'].__args__
+                return_types = get_type_hints(self.call)["return"].__args__
                 output_types = [return_type for return_type in return_types if is_dataclass(return_type)]
                 if len(output_types) == 0:
-                    raise TypeError(f"Code analysis failed to identify the output types of model f{type(self)}! "
-                                    "This is most likely because that model class does not have type annotations. "
-                                    "Please pass a `dict` of metrics instead of a tuple/list, specifying the output "
-                                    "heads of the model for each metric.")
+                    raise TypeError(
+                        f"Code analysis failed to identify the output types of model f{type(self)}! "
+                        "This is most likely because that model class does not have type annotations. "
+                        "Please pass a `dict` of metrics instead of a tuple/list, specifying the output "
+                        "heads of the model for each metric."
+                    )
                 if len(output_types) > 1:
-                    raise TypeError("This model has an unusual output structure, and we could not automatically "
-                                    "determine output heads for metrics. Please pass a `dict` of metrics instead "
-                                    "of a list/tuple, specifying the output heads of the model for each metric.")
+                    raise TypeError(
+                        "This model has an unusual output structure, and we could not automatically "
+                        "determine output heads for metrics. Please pass a `dict` of metrics instead "
+                        "of a list/tuple, specifying the output heads of the model for each metric."
+                    )
                 output_type = output_types[0]
                 # Optional fields that allow NoneType (this includes loss) are not the main model outputs
-                outputs = [field.name for field in fields(output_type) if
-                           type(None) not in getattr(field.type, "__args__", [])]
+                outputs = [
+                    field.name
+                    for field in fields(output_type)
+                    if type(None) not in getattr(field.type, "__args__", [])
+                ]
                 metrics = {output: metrics for output in outputs}
         else:
             self._using_dummy_loss = False
@@ -981,8 +989,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         additional loss function that reduces a `loss` output, and the model will output a `loss` component (notice the
         name matching) containing the loss that was used to train the pre-trained model.
         """
-        possible_label_cols = {"labels", "label", "label_ids", "start_positions", "start_position", "end_positions",
-                               "end_position", "next_sentence_label"}
+        possible_label_cols = {
+            "labels",
+            "label",
+            "label_ids",
+            "start_positions",
+            "start_position",
+            "end_positions",
+            "end_position",
+            "next_sentence_label",
+        }
         # These are the only transformations `Model.fit` applies to user-input
         # data when a `tf.data.Dataset` is provided.
         data = data_adapter.expand_1d(data)
@@ -1962,7 +1978,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.initializer_range = hidden_size ** -0.5 if initializer_range is None else initializer_range
+        self.initializer_range = hidden_size**-0.5 if initializer_range is None else initializer_range
 
     def build(self, input_shape):
         """
