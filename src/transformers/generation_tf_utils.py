@@ -16,6 +16,7 @@
 
 import inspect
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -2331,11 +2332,11 @@ class TFGenerationMixin:
                 encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation_tf_utils.TFBeamSearchDecoderOnlyOutput`], [`~generation_tf_utils.TFBeamSearchEncoderDecoderOutput`]
-            or `tf.Tensor`: A `tf.Tensor` containing the generated tokens (default behaviour) or a
-            [`~generation_tf_utils.TFBeamSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
-            `return_dict_in_generate=True` or a [`~generation_tf_utils.TFBeamSearchEncoderDecoderOutput`] if
-            `model.config.is_encoder_decoder=True`.
+            [`~generation_tf_utils.TFBeamSearchDecoderOnlyOutput`],
+            [`~generation_tf_utils.TFBeamSearchEncoderDecoderOutput`] or `tf.Tensor`: A `tf.Tensor` containing the
+            generated tokens (default behaviour) or a [`~generation_tf_utils.TFBeamSearchDecoderOnlyOutput`] if
+            `model.config.is_encoder_decoder=False` and `return_dict_in_generate=True` or a
+            [`~generation_tf_utils.TFBeamSearchEncoderDecoderOutput`] if `model.config.is_encoder_decoder=True`.
 
         Examples:
 
@@ -2372,45 +2373,41 @@ class TFGenerationMixin:
         ...     [TFMinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)]
         ... )
 
-        >>> outputs = model.beam_sample(
-        ...     input_ids, logits_processor=logits_processor, **model_kwargs
-        ... )
+        >>> outputs = model.beam_sample(input_ids, logits_processor=logits_processor, **model_kwargs)
 
         >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         ```"""
 
-        ## done until here
-
         def flatten_beam_dim(tensor):
             """Flattens the first two dimensions of a non-scalar array."""
             # ignore scalars (e.g. cache index)
-            if tensor.ndim == 0:
+            if tf.rank(tensor) == 0:
                 return tensor
-            return tensor.reshape((tensor.shape[0] * tensor.shape[1],) + tensor.shape[2:])
+            return tf.reshape(tensor, (tensor.shape[0] * tensor.shape[1],) + tensor.shape[2:])
 
         def unflatten_beam_dim(tensor, batch_size, num_beams):
             """Unflattens the first, flat batch*beam dimension of a non-scalar array."""
             # ignore scalars (e.g. cache index)
-            if tensor.ndim == 0:
+            if tf.rank(tensor) == 0:
                 return tensor
-            return tensor.reshape((batch_size, num_beams) + tensor.shape[1:])
+            return tf.reshape(tensor, (batch_size, num_beams) + tensor.shape[1:])
 
         def gather_beams(nested, beam_indices, batch_size, new_num_beams):
             """
             Gathers the beam slices indexed by beam_indices into new beam array.
             """
-            batch_indices = jnp.reshape(
-                jnp.arange(batch_size * new_num_beams) // new_num_beams, (batch_size, new_num_beams)
+            batch_indices = tf.reshape(
+                tf.range(batch_size * new_num_beams) // new_num_beams, (batch_size, new_num_beams)
             )
 
             def gather_fn(tensor):
                 # ignore scalars (e.g. cache index)
-                if tensor.ndim == 0:
+                if tf.rank(tensor) == 0:
                     return tensor
                 else:
                     return tensor[batch_indices, beam_indices]
 
-            return jax.tree_map(gather_fn, nested)
+            return tf.nest.map_structure(gather_fn, nested)
 
         # init values
         max_length = max_length if max_length is not None else self.config.max_length
@@ -2421,21 +2418,32 @@ class TFGenerationMixin:
 
         batch_size, num_beams, cur_len = input_ids.shape
 
-        eos_token_id = jnp.array(eos_token_id)
-        pad_token_id = jnp.array(pad_token_id)
-        cur_len = jnp.array(cur_len)
+        # per batch, beam-item holding current token in loop.
+        sequences = tf.TensorArray(
+            element_shape=(batch_size, num_beams),
+            dtype=tf.int32,
+            dynamic_size=False,
+            size=max_length,
+            clear_after_read=False,
+        )
+        running_sequences = tf.TensorArray(
+            element_shape=(batch_size, num_beams),
+            dtype=tf.int32,
+            dynamic_size=False,
+            size=max_length,
+            clear_after_read=False,
+        )
 
-        # per batch,beam-item holding current token in loop.
-        sequences = jnp.full((batch_size, num_beams, max_length), pad_token_id, dtype=jnp.int32)
-        running_sequences = jnp.full((batch_size, num_beams, max_length), pad_token_id, dtype=jnp.int32)
-        running_sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0, 0))
+        # write prompt to running_sequences
+        for i in range(cur_len):
+            running_sequences = running_sequences.write(i, input_ids[:, :, i])
 
         # per batch,beam-item state bit indicating if sentence has finished.
-        is_sent_finished = jnp.zeros((batch_size, num_beams), dtype=jnp.bool_)
+        is_sent_finished = tf.zeros((batch_size, num_beams), dtype=tf.bool)
 
-        # per batch,beam-item score, logprobs
-        running_scores = jnp.tile(jnp.array([0.0] + [np.array(-1.0e7)] * (num_beams - 1)), [batch_size, 1])
-        scores = jnp.ones((batch_size, num_beams)) * np.array(-1.0e7)
+        # per batch, beam-item score, logprobs
+        running_scores = tf.tile(tf.convert_to_tensor([0.0] + [-1.0e7] * (num_beams - 1)), [batch_size, 1])
+        scores = tf.ones((batch_size, num_beams)) * -1.0e7
 
         # For Seq2Seq generation, we only need to use the decoder instead of the whole model in generation loop
         # and pass it the `encoder_outputs`, which are part of the `model_kwargs`.
@@ -2452,36 +2460,37 @@ class TFGenerationMixin:
         # initialize model specific kwargs
         model_kwargs = self.prepare_inputs_for_generation(flatten_beam_dim(input_ids), max_length, **model_kwargs)
 
-        # initialize state
-        state = BeamSearchState(
-            cur_len=cur_len,
-            running_sequences=running_sequences,
-            running_scores=running_scores,
-            sequences=sequences,
-            scores=scores,
-            is_sent_finished=is_sent_finished,
-            model_kwargs=model_kwargs,
-        )
-
-        def beam_search_cond_fn(state):
+        # define stop-condition and auto-regressive function
+        def beam_search_cond_fn(
+            cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs
+        ):
             """beam search state termination condition fn."""
 
             # 1. is less than max length?
-            not_max_length_yet = state.cur_len < max_length
+            not_max_length_yet = cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
-            worst_finished_score = jnp.where(
-                state.is_sent_finished, jnp.min(state.scores, axis=1, keepdims=True), np.array(-1.0e7)
+            best_running_score = running_scores[:, -1:] / (max_length**length_penalty)
+            worst_finished_score = tf.where(
+                is_sent_finished, tf.math.reduce_min(scores, axis=1, keepdims=True), -1.0e7
             )
-            improvement_still_possible = jnp.all(worst_finished_score < best_running_score)
+            improvement_still_possible = tf.math.reduce_all(worst_finished_score < best_running_score)
 
             # 3. is there still a beam that has not finished?
-            still_open_beam = ~(jnp.all(state.is_sent_finished) & early_stopping)
+            still_open_beam = ~(tf.math.reduce_all(is_sent_finished) & early_stopping)
 
             return not_max_length_yet & still_open_beam & improvement_still_possible
 
-        def beam_search_body_fn(state, input_ids_length=1):
+        def beam_search_body_fn(
+            cur_len,
+            running_sequences,
+            running_scores,
+            sequences,
+            scores,
+            is_sent_finished,
+            model_kwargs,
+            input_ids_length=1,
+        ):
             """beam search state update fn."""
             # 1. Forward current tokens
             # Collect the current position slice along length to feed the fast
@@ -2490,32 +2499,27 @@ class TFGenerationMixin:
             # unflatten beam dimension
             # Unflatten beam dimension in attention cache arrays
             input_token = flatten_beam_dim(
-                lax.dynamic_slice(
-                    state.running_sequences,
-                    (0, 0, state.cur_len - input_ids_length),
+                tf.slice(
+                    running_sequences,
+                    (0, 0, cur_len - input_ids_length),
                     (batch_size, num_beams, input_ids_length),
                 )
             )
-            model_outputs = model(input_token, params=params, **state.model_kwargs)
+            model_outputs = model(input_token, **model_kwargs)
 
             logits = unflatten_beam_dim(model_outputs.logits[:, -1], batch_size, num_beams)
-            cache = jax.tree_map(
+            cache = tf.nest.map_structure(
                 lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams), model_outputs.past_key_values
             )
-
-            # adapt logits for FlaxMarianMTModel
-            logits = self._adapt_logits_for_beam_search(logits)
 
             # 2. Compute log probs
             # get log probabilities from logits,
             # process logits with processors (*e.g.* min_length, ...), and
             # add new logprobs to existing running logprobs scores.
-            log_probs = jax.nn.log_softmax(logits)
-            log_probs = logits_processor(
-                flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), state.cur_len
-            )
+            log_probs = tf.nn.log_softmax(logits)
+            log_probs = logits_processor(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
             log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
-            log_probs = log_probs + jnp.expand_dims(state.running_scores, axis=2)
+            log_probs = log_probs + tf.expand_dims(running_scores, axis=2)
             vocab_size = log_probs.shape[2]
             log_probs = log_probs.reshape((batch_size, num_beams * vocab_size))
 
@@ -2531,13 +2535,11 @@ class TFGenerationMixin:
             # Recover token id by modulo division and expand Id array for broadcasting.
             # Update sequences for the 2*K top-k new sequences.
             beams_to_keep = 2 * num_beams
-            topk_log_probs, topk_indices = lax.top_k(log_probs, k=beams_to_keep)
+            topk_log_probs, topk_indices = tf.math.top_k(log_probs, k=beams_to_keep)
             topk_beam_indices = topk_indices // vocab_size
-            topk_running_sequences = gather_beams(
-                state.running_sequences, topk_beam_indices, batch_size, beams_to_keep
-            )
-            topk_ids = jnp.expand_dims(topk_indices % vocab_size, axis=2)
-            topk_sequences = lax.dynamic_update_slice(topk_running_sequences, topk_ids, (0, 0, state.cur_len))
+            topk_running_sequences = gather_beams(running_sequences, topk_beam_indices, batch_size, beams_to_keep)
+            topk_ids = tf.expand_dims(topk_indices % vocab_size, axis=2)
+            topk_sequences = topk_running_sequences.write(cur_len, topk_ids[:, :, :])
 
             # 4. Check which sequences have ended
             # Update current sequences:
@@ -2545,12 +2547,13 @@ class TFGenerationMixin:
             # To prevent these just finished sequences from being added to the current sequences
             # set of active beam search sequences, set their log probs to a very large
             # negative value.
-            did_topk_just_finished = topk_sequences[:, :, state.cur_len] == eos_token_id
-            running_topk_log_probs = topk_log_probs + did_topk_just_finished * np.array(-1.0e7)
+            did_topk_just_finished = topk_sequences[:, :, cur_len] == eos_token_id
+            running_topk_log_probs = topk_log_probs + did_topk_just_finished * -1.0e7
+
             # 5. Get running sequences scores for next
             # Determine the top k beam indices (from top 2*k beams) from log probs
             # and gather top k beams (from top 2*k beams).
-            next_topk_indices = jnp.flip(lax.top_k(running_topk_log_probs, k=num_beams)[1], axis=1)
+            next_topk_indices = tf.reverse(tf.math.top_k(running_topk_log_probs, k=num_beams)[1], axis=1)
             next_running_sequences, next_running_scores = gather_beams(
                 [topk_sequences, running_topk_log_probs], next_topk_indices, batch_size, num_beams
             )
@@ -2560,22 +2563,24 @@ class TFGenerationMixin:
             # - add length penalty
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
-            topk_log_probs = topk_log_probs / (state.cur_len**length_penalty)
+            topk_log_probs = topk_log_probs / (cur_len**length_penalty)
             beams_in_batch_are_full = (
-                jnp.broadcast_to(state.is_sent_finished.all(axis=-1, keepdims=True), did_topk_just_finished.shape)
+                tf.broadcast_to(
+                    tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), did_topk_just_finished.shape
+                )
                 & early_stopping
             )
             add_penalty = ~did_topk_just_finished | beams_in_batch_are_full
-            topk_log_probs += add_penalty * np.array(-1.0e7)
+            topk_log_probs += add_penalty * -1.0e7
 
             # 7. Get scores, sequences, is sentence finished for next.
             # Combine sequences, scores, and flags along the beam dimension and compare
             # new finished sequence scores to existing finished scores and select the
             # best from the new set of beams
-            merged_sequences = jnp.concatenate([state.sequences, topk_sequences], axis=1)
-            merged_scores = jnp.concatenate([state.scores, topk_log_probs], axis=1)
-            merged_is_sent_finished = jnp.concatenate([state.is_sent_finished, did_topk_just_finished], axis=1)
-            topk_merged_indices = jnp.flip(lax.top_k(merged_scores, k=num_beams)[1], axis=1)
+            merged_sequences = tf.concat([sequences, topk_sequences], axis=1)
+            merged_scores = tf.concat([scores, topk_log_probs], axis=1)
+            merged_is_sent_finished = tf.concat([is_sent_finished, did_topk_just_finished], axis=1)
+            topk_merged_indices = tf.reverse(tf.math.top_k(merged_scores, k=num_beams)[1], axis=1)
             next_sequences, next_scores, next_is_sent_finished = gather_beams(
                 [merged_sequences, merged_scores, merged_is_sent_finished], topk_merged_indices, batch_size, num_beams
             )
@@ -2585,39 +2590,48 @@ class TFGenerationMixin:
             # With these, gather the top k beam-associated caches.
             next_running_indices = gather_beams(topk_beam_indices, next_topk_indices, batch_size, num_beams)
             next_cache = gather_beams(cache, next_running_indices, batch_size, num_beams)
-            model_outputs["past_key_values"] = jax.tree_map(lambda x: flatten_beam_dim(x), next_cache)
-            next_model_kwargs = self.update_inputs_for_generation(model_outputs, state.model_kwargs)
+            model_outputs["past_key_values"] = tf.nest.map_structure(lambda x: flatten_beam_dim(x), next_cache)
+            next_model_kwargs = self.update_inputs_for_generation(model_outputs, model_kwargs)
 
-            return BeamSearchState(
-                cur_len=state.cur_len + 1,
-                running_scores=next_running_scores,
-                running_sequences=next_running_sequences,
-                scores=next_scores,
-                sequences=next_sequences,
-                is_sent_finished=next_is_sent_finished,
-                model_kwargs=next_model_kwargs,
+            return (
+                cur_len + 1,
+                next_running_scores,
+                next_running_sequences,
+                next_scores,
+                next_sequences,
+                next_is_sent_finished,
+                next_model_kwargs,
             )
 
-        # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
-        if input_ids.shape[-1] > 1:
-            state = partial(beam_search_body_fn, input_ids_length=input_ids.shape[-1])(state)
+        # 1st generation step has to be run before to initialize `past`
+        cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs = partial(
+            beam_search_body_fn, input_ids_length=input_ids.shape[-1]
+        )(cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs)
 
-        if not trace:
-            state = self._run_loop_in_debug(beam_search_cond_fn, beam_search_body_fn, state)
-        else:
-            state = lax.while_loop(beam_search_cond_fn, beam_search_body_fn, state)
+        # 2-to-n generation steps can then be run in autoregressive fashion
+        # only in case 1st generation step does NOT yield EOS token though
+        if beam_search_cond_fn(
+            cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs
+        ):
+            maximum_iterations = max_length - cur_len - 1
+            _, running_scores, running_sequences, scores, sequences, is_sent_finished, _ = tf.while_loop(
+                beam_search_cond_fn,
+                beam_search_body_fn,
+                (cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs),
+                maximum_iterations=maximum_iterations,
+            )
 
         # Account for the edge-case where there are no finished sequences for a
         # particular batch item. If so, return running sequences for that batch item.
-        none_finished = jnp.any(state.is_sent_finished, axis=1)
-        sequences = jnp.where(none_finished[:, None, None], state.sequences, state.running_sequences)
-        scores = jnp.where(none_finished[:, None], state.scores, state.running_scores)
+        none_finished = tf.math.reduce_any(is_sent_finished, axis=1)
+        sequences = tf.where(none_finished[:, None, None], sequences, running_sequences)
+        scores = tf.where(none_finished[:, None], scores, running_scores)
 
         # take best beam for each batch
         sequences = sequences[:, -1]
         scores = scores[:, -1]
 
-        return FlaxBeamSearchOutput(sequences=sequences, scores=scores)
+        return TFBeamSearchOutput(sequences=sequences, scores=scores)
 
 
 def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
