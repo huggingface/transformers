@@ -45,7 +45,7 @@ class RegNetConfig(PretrainedConfig):
         depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
             Depth (number of layers) for each stage.
         layer_type (`str`, *optional*, defaults to `"bottleneck"`):
-            The layer to use, it can be either `"x" or `"y"` (like `x` but with squeeze and excitation).
+            The layer to use, it can be either `"x" or `"y"` (like `x` but with squeeze and excitation). Please refer to the paper for a detailed explanation of how these layers were constructed.
         hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function in each block. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"`
             are supported.
@@ -56,9 +56,9 @@ class RegNetConfig(PretrainedConfig):
     ```python
     >>> from transformers import RegNetConfig, RegNetModel
 
-    >>> # Initializing a RegNet regnety-40 style configuration
+    >>> # Initializing a RegNet regnet-y-40 style configuration
     >>> configuration = RegNetConfig()
-    >>> # Initializing a model from the regnety-40 style configuration
+    >>> # Initializing a model from the regnet-y-40 style configuration
     >>> model = RegNetModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
