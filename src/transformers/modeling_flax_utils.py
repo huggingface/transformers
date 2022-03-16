@@ -125,7 +125,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             init_fn = partial(self.init_weights, input_shape=input_shape)
             params_shape_tree = jax.eval_shape(init_fn, self.key)
 
-            logger.warning(
+            logger.info(
                 "Model weights are not initialized as `_do_init` is set to `False`. "
                 f"Make sure to call `{self.__class__.__name__}.init_weights` manually to initialize the weights."
             )
