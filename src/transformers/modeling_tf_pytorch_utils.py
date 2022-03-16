@@ -339,7 +339,18 @@ def set_weight(pt_model, pt_name, data, transpose):
         # -> PT: (num_out_channel, num_in_channel, kernel)
         tensor = tensor.permute(2, 1, 0)
     elif transpose is TransposeType.SIMPLE:
-        tensor = tensor.permute(1, 0)
+        indices = list(reversed(range(len(tensor.shape))))
+        tensor = tensor.permute(*indices)
+
+    if len(ptr.shape) < len(tensor.shape):
+        tensor = tensor.squeeze()
+    elif len(ptr.shape) > len(ptr.shape):
+        tensor = tensor.unsqueeze(0)
+    if list(ptr.shape) != list(tensor.shape):
+        try:
+            tensor = tensor.reshape(ptr.shape)
+        except AssertionError as e:
+            raise e
     ptr.data = tensor
 
 
