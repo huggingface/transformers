@@ -77,7 +77,7 @@ class ViTEmbeddings(nn.Module):
 
     """
 
-    def __init__(self, config, use_mask_token: Optional[bool] = False) -> None:
+    def __init__(self, config, use_mask_token: bool = False) -> None:
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
@@ -128,7 +128,7 @@ class ViTEmbeddings(nn.Module):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
+        interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
@@ -180,7 +180,7 @@ class PatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: Optional[bool] = False) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if not interpolate_pos_encoding:
             if height != self.image_size[0] or width != self.image_size[1]:
@@ -216,7 +216,7 @@ class ViTSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: Optional[bool] = False
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -299,7 +299,7 @@ class ViTAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
@@ -358,7 +358,7 @@ class ViTLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
@@ -394,9 +394,9 @@ class ViTEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -509,9 +509,7 @@ VIT_INPUTS_DOCSTRING = r"""
     VIT_START_DOCSTRING,
 )
 class ViTModel(ViTPreTrainedModel):
-    def __init__(
-        self, config: ViTConfig, add_pooling_layer: Optional[bool] = True, use_mask_token: Optional[bool] = False
-    ):
+    def __init__(self, config: ViTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
         super().__init__(config)
         self.config = config
 

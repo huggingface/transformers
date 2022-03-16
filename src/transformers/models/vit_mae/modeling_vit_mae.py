@@ -342,7 +342,7 @@ class ViTMAESelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: Optional[bool] = False
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -427,7 +427,7 @@ class ViTMAEAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
@@ -489,7 +489,7 @@ class ViTMAELayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViTMAE, layernorm is applied before self-attention
@@ -526,9 +526,9 @@ class ViTMAEEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
