@@ -61,8 +61,8 @@ class GLPNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if not isinstance(image, Image.Image):
             image = self.to_pil_image(image)
 
-        w, h = image.size
-        new_h, new_w = h // size_divisor * size_divisor, w // size_divisor * size_divisor
+        width, height = image.size
+        new_h, new_w = height // size_divisor * size_divisor, width // size_divisor * size_divisor
 
         image = self.resize(image, size=(new_w, new_h), resample=resample)
 

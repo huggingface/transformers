@@ -545,10 +545,14 @@ class GLPNDecoder(nn.Module):
         out_channels = config.hidden_sizes[0]
 
         self.bot_conv = nn.Conv2d(in_channels=config.hidden_sizes[-1], out_channels=out_channels, kernel_size=1)
-        self.skip_conv1 = nn.Conv2d(in_channels=config.hidden_sizes[-2], out_channels=out_channels, kernel_size=1)
-        self.skip_conv2 = nn.Conv2d(in_channels=config.hidden_sizes[-3], out_channels=out_channels, kernel_size=1)
+        self.skip_convolution1 = nn.Conv2d(
+            in_channels=config.hidden_sizes[-2], out_channels=out_channels, kernel_size=1
+        )
+        self.skip_convolution2 = nn.Conv2d(
+            in_channels=config.hidden_sizes[-3], out_channels=out_channels, kernel_size=1
+        )
 
-        self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
+        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
 
         self.fusion1 = GLPNSelectiveFeatureFusion(out_channels)
         self.fusion2 = GLPNSelectiveFeatureFusion(out_channels)
@@ -560,22 +564,22 @@ class GLPNDecoder(nn.Module):
         output = []
 
         x_4_ = self.bot_conv(x_4)
-        out = self.up(x_4_)
+        out = self.upsample(x_4_)
         output.append(out)
 
-        x_3_ = self.skip_conv1(x_3)
+        x_3_ = self.skip_convolution1(x_3)
         out = self.fusion1(x_3_, out)
-        out = self.up(out)
+        out = self.upsample(out)
         output.append(out)
 
-        x_2_ = self.skip_conv2(x_2)
+        x_2_ = self.skip_convolution2(x_2)
         out = self.fusion2(x_2_, out)
-        out = self.up(out)
+        out = self.upsample(out)
         output.append(out)
 
         out = self.fusion3(x_1, out)
-        out = self.up(out)
-        out = self.up(out)
+        out = self.upsample(out)
+        out = self.upsample(out)
         output.append(out)
 
         return output
@@ -585,27 +589,29 @@ class GLPNSelectiveFeatureFusion(nn.Module):
     def __init__(self, in_channel=64):
         super().__init__()
 
-        self.conv1 = nn.Sequential(
+        self.convolution_layer1 = nn.Sequential(
             nn.Conv2d(in_channels=int(in_channel * 2), out_channels=in_channel, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(in_channel),
             nn.ReLU(),
         )
 
-        self.conv2 = nn.Sequential(
+        self.convolution_layer2 = nn.Sequential(
             nn.Conv2d(in_channels=in_channel, out_channels=int(in_channel / 2), kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(int(in_channel / 2)),
             nn.ReLU(),
         )
 
-        self.conv3 = nn.Conv2d(in_channels=int(in_channel / 2), out_channels=2, kernel_size=3, stride=1, padding=1)
+        self.convolution_layer3 = nn.Conv2d(
+            in_channels=int(in_channel / 2), out_channels=2, kernel_size=3, stride=1, padding=1
+        )
 
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x_local, x_global):
         x = torch.cat((x_local, x_global), dim=1)
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
+        x = self.convolution_layer1(x)
+        x = self.convolution_layer2(x)
+        x = self.convolution_layer3(x)
         attn = self.sigmoid(x)
 
         out = x_local * attn[:, 0, :, :].unsqueeze(1) + x_global * attn[:, 1, :, :].unsqueeze(1)
@@ -614,6 +620,10 @@ class GLPNSelectiveFeatureFusion(nn.Module):
 
 
 class SiLogLoss(nn.Module):
+    """
+    Implements the Scale-invariant log scale loss [Eigen et al., 2014](https://arxiv.org/abs/1406.2283).
+    """
+
     def __init__(self, lambd=0.5):
         super().__init__()
         self.lambd = lambd

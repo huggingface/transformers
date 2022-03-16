@@ -75,6 +75,10 @@ def rename_keys(state_dict):
             # replace for example linear_c4 by linear_c.3
             idx = key[key.find("linear_c") + len("linear_c")]
             key = key.replace(f"linear_c{idx}", f"linear_c.{int(idx)-1}")
+        if "skip_conv" in key:
+            key = key.replace("skip_conv", "skip_convolution")
+        if "fusion" in key and "conv" in key:
+            key = key.replace("conv", "convolution_layer")
         if key.startswith("module.last_layer_depth"):
             key = key.replace("module.last_layer_depth", "head.head")
         new_state_dict[key] = value
