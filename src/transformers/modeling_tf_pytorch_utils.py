@@ -257,8 +257,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 # TF 2.0 => PyTorch #
 #####################
 
-Shape = List[int]
-
 
 def _load(f, shapes, prefix=""):
     """
@@ -273,7 +271,7 @@ def _load(f, shapes, prefix=""):
             _load(f[k], shapes, prefix=f"{prefix}/{k}")
 
 
-def load_h5_weight_names(resolved_archive_file) -> Dict[str, Shape]:
+def load_h5_weight_names(resolved_archive_file) -> Dict[str, List[int]]:
     """
     Load all names and shapes of tensors included in a given TF file.
     """
@@ -316,7 +314,7 @@ def set_weight(pt_model, pt_name, data, transpose):
     ptr.data = torch.from_numpy(array)
 
 
-def apply_transpose(array, transpose, ptr):
+def apply_transpose(array, transpose, pt_weight):
     """
     Given a numpy array, a transpose enum, and the target tensor shape Attempt to modify the array into something
     fitting the target tensor The direction here is TF -> PT
@@ -334,23 +332,22 @@ def apply_transpose(array, transpose, ptr):
     elif transpose is TransposeType.SIMPLE:
         array = np.transpose(array)
 
-    if len(ptr.shape) < len(array.shape):
-        array = array.squeeze()
-    elif len(ptr.shape) > len(ptr.shape):
+    if len(pt_weight.shape) < len(array.shape):
+        array = np.squeeze(array)
+    elif len(pt_weight.shape) > len(pt_weight.shape):
         array = np.expand_dims(array, axis=0)
-    if list(ptr.shape) != list(array.shape):
-        squeezed_tensor_shape = [dim for dim in ptr.shape if dim != 1]
+    if list(pt_weight.shape) != list(array.shape):
+        squeezed_tensor_shape = [dim for dim in pt_weight.shape if dim != 1]
         squeezed_array_shape = [dim for dim in array.shape if dim != 1]
         # Making sure we don't do wrong reshape
         if squeezed_tensor_shape == squeezed_array_shape:
-            try:
-                array = array.reshape(ptr.shape)
-            except AssertionError as e:
-                raise e
-    # logger.warning(f"Initialize PyTorch weight {pt_weight_name}")
+            array = array.reshape(pt_weight.shape)
     # Make sure we have a proper numpy array
     if np.isscalar(array):
         array = np.array(array)
+    assert list(pt_weight.shape) == list(
+        array.shape
+    ), f"We could not match the dimensions of tensors {pt_weight.shape} vs {array.shape}"
     return array
 
 
@@ -381,17 +378,11 @@ def apply_reverse(array, transpose, symbolic_weight):
         squeezed_tensor_shape = [dim for dim in symbolic_weight.shape if dim != 1]
         squeezed_array_shape = [dim for dim in array.shape if dim != 1]
         if squeezed_array_shape == squeezed_tensor_shape:
-            try:
-                array = np.reshape(array, symbolic_weight.shape)
-            except AssertionError as e:
-                e.args += (symbolic_weight.shape, array.shape)
-                raise e
+            array = np.reshape(array, symbolic_weight.shape)
 
-    try:
-        assert list(symbolic_weight.shape) == list(array.shape)
-    except AssertionError as e:
-        e.args += (symbolic_weight.shape, array.shape)
-        raise e
+    assert list(symbolic_weight.shape) == list(
+        array.shape
+    ), f"We could not match the dimensions of tensors {symbolic_weight.shape} vs {array.shape}"
     return array
 
 
@@ -453,7 +444,7 @@ def eventual_warnings(pt_model, unexpected_keys, missing_keys):
 
 
 def load_pytorch_model_with_h5(
-    pt_model, tf_checkpoint_path: str, weight_shapes: Dict[str, Shape], allow_missing_keys=False
+    pt_model, tf_checkpoint_path: str, weight_shapes: Dict[str, List[int]], allow_missing_keys=False
 ):
     # Make sure we are able to load PyTorch base models as well as derived models (with heads)
     # TF models always have a prefix, some of PyTorch models (base ones) don't
@@ -489,10 +480,10 @@ def load_pytorch_model_with_h5(
         # was already handled.
         # The second one, is if the shared pointer that doesn't have the shared
         # name comes in first, we need to clear it later.
-        visited_ptr = set()
+        visited_pointer = set()
         possibly_shared = defaultdict(list)
         for name, weight in pt_model.named_parameters():
-            if weight.data_ptr() in visited_ptr:
+            if weight.data_ptr() in visited_pointer:
 
                 # If we have visited some shared tensor before
                 # we need to mark them as not missing
@@ -505,7 +496,7 @@ def load_pytorch_model_with_h5(
             if name not in mapped_names:
                 possibly_shared[weight.data_ptr()].append(name)
                 continue
-            visited_ptr.add(weight.data_ptr())
+            visited_pointer.add(weight.data_ptr())
             data_, transpose_ = mapped_names[name]
             expected_names.remove(name)
             set_weight(pt_model, name, data_, transpose_)
