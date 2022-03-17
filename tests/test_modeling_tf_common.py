@@ -476,6 +476,7 @@ class TFModelTesterMixin:
                         "TFFunnelForPreTraining",
                         "TFElectraForPreTraining",
                         "TFXLMWithLMHeadModel",
+                        "TFTransfoXLLMHeadModel",
                     ]:
                         self.assertEqual(tf_loss is None, pt_loss is None)
 
@@ -490,7 +491,8 @@ class TFModelTesterMixin:
                         "TFFunnelForPreTraining",
                         "TFElectraForPreTraining",
                         "TFXLMWithLMHeadModel",
-                    ] + ["TFTransfoXLLMHeadModel"]:
+                        "TFTransfoXLLMHeadModel",
+                    ]:
                         self.assertEqual(tf_keys, pt_keys)
 
                 # Since we deliberately make some tests pass above (regarding the `loss`), let's still try to test
