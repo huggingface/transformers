@@ -650,8 +650,9 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
 
         # Batch size does not affect outputs (attention_mask are required)
-        outputs = token_classifier(["This is a test !", "This is another test that is longer"])
-        outputs_batched = token_classifier(["This is a test !", "This is another test that is longer"], batch_size=2)
+        sentences = ["This is a test !", "Another test this is with longer sentence"]
+        outputs = token_classifier(sentences)
+        outputs_batched = token_classifier(sentences, batch_size=2)
         # Batching does not make a difference in predictions
         self.assertEqual(nested_simplify(outputs_batched), nested_simplify(outputs))
         self.assertEqual(
@@ -661,10 +662,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
                     {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
                 ],
-                [
-                    {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
-                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
-                ],
+                [],
             ],
         )
 
