@@ -1696,9 +1696,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
 
         # merge `global_attention_mask` and `attention_mask`
         if global_attention_mask is not None:
-            attention_mask = self._merge_to_attention_mask(
-                attention_mask, global_attention_mask
-            )
+            attention_mask = self._merge_to_attention_mask(attention_mask, global_attention_mask)
 
         (
             padding_len,
@@ -1727,9 +1725,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
         attention_mask_shape = shape_list(attention_mask)
-        extended_attention_mask = tf.reshape(
-            attention_mask, (attention_mask_shape[0], attention_mask_shape[1], 1, 1)
-        )
+        extended_attention_mask = tf.reshape(attention_mask, (attention_mask_shape[0], attention_mask_shape[1], 1, 1))
 
         # Since attention_mask is 1.0 for positions we want to attend locally and 0.0 for
         # masked and global attn positions, this operation will create a tensor which is 0.0 for
@@ -2213,10 +2209,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
 
         # set global attention on question tokens
         if global_attention_mask is None and input_ids is not None:
-            if (
-                shape_list(tf.where(input_ids == self.config.sep_token_id))[0]
-                != 3 * shape_list(input_ids)[0]
-            ):
+            if shape_list(tf.where(input_ids == self.config.sep_token_id))[0] != 3 * shape_list(input_ids)[0]:
                 logger.warning(
                     f"There should be exactly three separator tokens: {self.config.sep_token_id} in every sample for questions answering. You might also consider to set `global_attention_mask` manually in the forward function to avoid this. This is most likely an error. The global attention is disabled for this forward pass."
                 )
@@ -2226,9 +2219,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
                 # put global attention on all tokens until `config.sep_token_id` is reached
                 sep_token_indices = tf.where(input_ids == self.config.sep_token_id)
                 sep_token_indices = tf.cast(sep_token_indices, dtype=input_ids.dtype)
-                global_attention_mask = _compute_global_attention_mask(
-                    shape_list(input_ids), sep_token_indices
-                )
+                global_attention_mask = _compute_global_attention_mask(shape_list(input_ids), sep_token_indices)
 
         outputs = self.longformer(
             input_ids=input_ids,
@@ -2475,15 +2466,9 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             seq_length = shape_list(inputs_embeds)[2]
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
-        flat_attention_mask = (
-            tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
-        )
-        flat_token_type_ids = (
-            tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
-        )
-        flat_position_ids = (
-            tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
-        )
+        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
+        flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
+        flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
         flat_global_attention_mask = (
             tf.reshape(global_attention_mask, (-1, shape_list(global_attention_mask)[-1]))
             if global_attention_mask is not None
