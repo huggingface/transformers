@@ -44,19 +44,19 @@ class GLPNConfig(PretrainedConfig):
             The number of input channels.
         num_encoder_blocks (`int`, *optional*, defaults to 4):
             The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
-        depths (`List[int]`, *optional*, defaults to [2, 2, 2, 2]):
+        depths (`List[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
             The number of layers in each encoder block.
-        sr_ratios (`List[int]`, *optional*, defaults to [8, 4, 2, 1]):
+        sr_ratios (`List[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
             Sequence reduction ratios in each encoder block.
-        hidden_sizes (`List[int]`, *optional*, defaults to [32, 64, 160, 256]):
+        hidden_sizes (`List[int]`, *optional*, defaults to `[32, 64, 160, 256]`):
             Dimension of each of the encoder blocks.
-        downsampling_rates (`List[int]`, *optional*, defaults to [1, 4, 8, 16]):
+        downsampling_rates (`List[int]`, *optional*, defaults to `[1, 4, 8, 16]`):
             Downsample rate of the image resolution compared to the original image size before each encoder block.
-        patch_sizes (`List[int]`, *optional*, defaults to [7, 3, 3, 3]):
+        patch_sizes (`List[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
             Patch size before each encoder block.
-        strides (`List[int]`, *optional*, defaults to [4, 2, 2, 2]):
+        strides (`List[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
             Stride before each encoder block.
-        num_attention_heads (`List[int]`, *optional*, defaults to [1, 2, 4, 8]):
+        num_attention_heads (`List[int]`, *optional*, defaults to `[1, 2, 4, 8]`):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
         mlp_ratios (`List[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
@@ -76,6 +76,8 @@ class GLPNConfig(PretrainedConfig):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
+        decoder_hidden_size (`int`, *optional*, defaults to 32):
+            The dimension of the decoder.
         max_depth (`int`, *optional*, defaults to 10):
             The maximum depth of the decoder.
         in_index (`int`, *optional*, defaults to -1):
@@ -118,6 +120,7 @@ class GLPNConfig(PretrainedConfig):
         drop_path_rate=0.1,
         layer_norm_eps=1e-6,
         is_encoder_decoder=False,
+        decoder_hidden_size=64,
         max_depth=10,
         in_index=-1,
         **kwargs
@@ -142,5 +145,6 @@ class GLPNConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
+        self.decoder_hidden_size = decoder_hidden_size
         self.max_depth = max_depth
         self.in_index = in_index

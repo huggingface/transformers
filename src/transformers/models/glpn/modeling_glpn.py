@@ -542,7 +542,7 @@ class GLPNDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        out_channels = config.hidden_sizes[0]
+        out_channels = config.decoder_hidden_size
 
         self.bot_conv = nn.Conv2d(in_channels=config.hidden_sizes[-1], out_channels=out_channels, kernel_size=1)
         self.skip_convolution1 = nn.Conv2d(
@@ -558,8 +558,8 @@ class GLPNDecoder(nn.Module):
         self.fusion2 = GLPNSelectiveFeatureFusion(out_channels)
         self.fusion3 = GLPNSelectiveFeatureFusion(out_channels)
 
-    def forward(self, encoder_hidden_states):
-        x_1, x_2, x_3, x_4 = encoder_hidden_states
+    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
+        x_1, x_2, x_3, x_4 = hidden_states
 
         output = []
 
@@ -719,9 +719,9 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
             return_dict=return_dict,
         )
 
-        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
-        out = self.decoder(encoder_hidden_states)
+        out = self.decoder(hidden_states)
         logits = self.head(out)
         logits = torch.sigmoid(logits) * self.config.max_depth
         logits = logits.squeeze(dim=1)

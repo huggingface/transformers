@@ -119,7 +119,7 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
     """
 
     # load GLPN configuration (Segformer-B4 size)
-    config = GLPNConfig(hidden_sizes=[64, 128, 320, 512], decoder_hidden_size=768, depths=[3, 8, 27, 3])
+    config = GLPNConfig(hidden_sizes=[64, 128, 320, 512], decoder_hidden_size=64, depths=[3, 8, 27, 3])
 
     # load feature extractor (only resize + rescale)
     feature_extractor = GLPNFeatureExtractor()
