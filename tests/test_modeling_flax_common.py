@@ -168,7 +168,7 @@ class FlaxModelTesterMixin:
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-    def check_outputs(self, fx_outputs, pt_outputs, model_class, names, context, results):
+    def check_outputs(self, fx_outputs, pt_outputs, model_class, names):
         """
         Args:
             model_class: The class of the model that is currently testing. For example, ..., etc.
@@ -183,10 +183,10 @@ class FlaxModelTesterMixin:
             self.assertEqual(len(fx_outputs), len(pt_outputs))
             if type(names) == tuple:
                 for fo, po, name in zip(fx_outputs, pt_outputs, names):
-                    self.check_outputs(fo, po, model_class, names=name, context=context, results=results)
+                    self.check_outputs(fo, po, model_class, names=name)
             elif type(names) == str:
                 for idx, (fo, po) in enumerate(zip(fx_outputs, pt_outputs)):
-                    self.check_outputs(fo, po, model_class, names=f"{names}_{idx}", context=context, results=results)
+                    self.check_outputs(fo, po, model_class, names=f"{names}_{idx}")
             else:
                 raise ValueError(f"`names` should be a `tuple` or a string. Got {type(names)} instead.")
         elif isinstance(fx_outputs, jnp.ndarray):
@@ -206,12 +206,6 @@ class FlaxModelTesterMixin:
 
             max_diff = np.amax(np.abs(fx_outputs - pt_outputs))
             self.assertLessEqual(max_diff, 1e-5)
-
-            if context not in results[model_class.__name__]:
-                results[model_class.__name__][context] = {}
-            if names not in results[model_class.__name__][context]:
-                results[model_class.__name__][context][names] = []
-            results[model_class.__name__][context][names].append(float(max_diff))
         else:
             raise ValueError(
                 f"`fx_outputs` should be a `tuple` or an instance of `jnp.ndarray`. Got {type(fx_outputs)} instead."
@@ -223,150 +217,112 @@ class FlaxModelTesterMixin:
         # But logically, it is fine.
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        results = {}
-
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
 
-                results[model_class.__name__] = {}
+                # Output all for aggressive testing
+                config.output_hidden_states = True
 
-                for _ in range(3):
+                # prepare inputs
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
 
-                    # Output all for aggressive testing
-                    config.output_hidden_states = True
+                # load corresponding PyTorch class
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
 
-                    # prepare inputs
-                    prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                    pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
+                pt_model = pt_model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
+                fx_model = model_class(config, dtype=jnp.float32)
 
-                    # load corresponding PyTorch class
-                    pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
-                    pt_model_class = getattr(transformers, pt_model_class_name)
+                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
+                fx_model.params = fx_state
 
-                    pt_model = pt_model_class(config).eval()
-                    # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                    # So we disable `use_cache` here for PyTorch model.
-                    pt_model.config.use_cache = False
-                    fx_model = model_class(config, dtype=jnp.float32)
+                # send pytorch model to the correct device
+                pt_model.to(torch_device)
 
-                    fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
-                    fx_model.params = fx_state
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs)
+                fx_outputs = fx_model(**prepared_inputs_dict)
 
-                    # send pytorch model to the correct device
-                    pt_model.to(torch_device)
+                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
 
-                    with torch.no_grad():
-                        pt_outputs = pt_model(**pt_inputs)
-                    fx_outputs = fx_model(**prepared_inputs_dict)
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
 
-                    fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                    pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    pt_model.save_pretrained(tmpdirname)
+                    fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
 
-                    self.assertEqual(fx_keys, pt_keys)
-                    self.check_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys, context="load_via_memory", results=results)
+                fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict)
 
-                    with tempfile.TemporaryDirectory() as tmpdirname:
-                        pt_model.save_pretrained(tmpdirname)
-                        fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
+                fx_keys = tuple([k for k, v in fx_outputs_loaded.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
 
-                    fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict)
-
-                    fx_keys = tuple([k for k, v in fx_outputs_loaded.items() if v is not None])
-                    pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
-
-                    self.assertEqual(fx_keys, pt_keys)
-                    self.check_outputs(fx_outputs_loaded.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys, context="load_via_disk", results=results)
-
-        if len(self.all_model_classes) > 0:
-
-            for model_class_name in results:
-
-                for context in results[model_class_name]:
-                    for names in results[model_class_name][context]:
-                        results[model_class_name][context][names] = float(
-                            np.amax(np.array(results[model_class_name][context][names])))
-
-            import json
-            with open(f"pt_to_flax_test_results_{type(self).__name__}.json", "w", encoding="UTF-8") as fp:
-                json.dump(results, fp, ensure_ascii=False, indent=4)
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_outputs(fx_outputs_loaded.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
 
     @is_pt_flax_cross_test
     def test_equivalence_flax_to_pt(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        results = {}
-
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
 
-                results[model_class.__name__] = {}
+                # Output all for aggressive testing
+                config.output_hidden_states = True
+                # Pure convolutional models have no attention
 
-                for _ in range(3):
+                # prepare inputs
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
 
-                    # Output all for aggressive testing
-                    config.output_hidden_states = True
-                    # Pure convolutional models have no attention
+                # load corresponding PyTorch class
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
 
-                    # prepare inputs
-                    prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                    pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
+                pt_model = pt_model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
+                fx_model = model_class(config, dtype=jnp.float32)
 
-                    # load corresponding PyTorch class
-                    pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
-                    pt_model_class = getattr(transformers, pt_model_class_name)
+                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
 
-                    pt_model = pt_model_class(config).eval()
-                    # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                    # So we disable `use_cache` here for PyTorch model.
-                    pt_model.config.use_cache = False
-                    fx_model = model_class(config, dtype=jnp.float32)
+                # make sure weights are tied in PyTorch
+                pt_model.tie_weights()
 
-                    pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
+                # send pytorch model to the correct device
+                pt_model.to(torch_device)
 
-                    # make sure weights are tied in PyTorch
-                    pt_model.tie_weights()
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs)
+                fx_outputs = fx_model(**prepared_inputs_dict)
 
-                    # send pytorch model to the correct device
-                    pt_model.to(torch_device)
+                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
 
-                    with torch.no_grad():
-                        pt_outputs = pt_model(**pt_inputs)
-                    fx_outputs = fx_model(**prepared_inputs_dict)
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys)
 
-                    fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                    pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    fx_model.save_pretrained(tmpdirname)
+                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
 
-                    self.assertEqual(fx_keys, pt_keys)
-                    self.check_outputs(fx_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, names=fx_keys, context="load_via_memory", results=results)
+                # send pytorch model to the correct device
+                pt_model_loaded.to(torch_device)
 
-                    with tempfile.TemporaryDirectory() as tmpdirname:
-                        fx_model.save_pretrained(tmpdirname)
-                        pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
+                with torch.no_grad():
+                    pt_outputs_loaded = pt_model_loaded(**pt_inputs)
 
-                    # send pytorch model to the correct device
-                    pt_model_loaded.to(torch_device)
+                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs_loaded.items() if v is not None])
 
-                    with torch.no_grad():
-                        pt_outputs_loaded = pt_model_loaded(**pt_inputs)
-
-                    fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
-                    pt_keys = tuple([k for k, v in pt_outputs_loaded.items() if v is not None])
-
-                    self.assertEqual(fx_keys, pt_keys)
-                    self.check_outputs(fx_outputs.to_tuple(), pt_outputs_loaded.to_tuple(), model_class, names=fx_keys, context="load_via_disk", results=results)
-
-        if len(self.all_model_classes) > 0:
-
-            for model_class_name in results:
-
-                for context in results[model_class_name]:
-                    for names in results[model_class_name][context]:
-                        results[model_class_name][context][names] = float(
-                            np.amax(np.array(results[model_class_name][context][names])))
-
-            import json
-            with open(f"flax_to_pt_test_results_{type(self).__name__}.json", "w", encoding="UTF-8") as fp:
-                json.dump(results, fp, ensure_ascii=False, indent=4)
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_outputs(fx_outputs.to_tuple(), pt_outputs_loaded.to_tuple(), model_class, names=fx_keys)
 
     def test_from_pretrained_save_pretrained(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
