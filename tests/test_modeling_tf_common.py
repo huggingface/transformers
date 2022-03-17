@@ -476,7 +476,7 @@ class TFModelTesterMixin:
                         "TFFunnelForPreTraining",
                         "TFElectraForPreTraining",
                         "TFXLMWithLMHeadModel",
-                    ]:
+                    ] + ["TFTransfoXLLMHeadModel"]:
                         self.assertEqual(tf_loss is None, pt_loss is None)
 
                 tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
