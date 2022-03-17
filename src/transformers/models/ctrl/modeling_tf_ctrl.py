@@ -258,7 +258,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
     def call(
         self,
         input_ids=None,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -274,7 +274,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
         # If using past key value states, only the last tokens
         # should be given as an input
-        if past is not None:
+        if past_key_values is not None:
             if input_ids is not None:
                 input_ids = input_ids[:, -1:]
             if inputs_embeds is not None:
@@ -292,11 +292,11 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if past is None:
+        if past_key_values is None:
             past_length = 0
-            past = [None] * len(self.h)
+            past_key_values = [None] * len(self.h)
         else:
-            past_length = shape_list(past[0][0])[-2]
+            past_length = shape_list(past_key_values[0][0])[-2]
         if position_ids is None:
             position_ids = tf.expand_dims(tf.range(past_length, input_shape[-1] + past_length, dtype=tf.int32), axis=0)
             position_ids = tf.tile(position_ids, [input_shape[0], 1])
@@ -355,7 +355,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         presents = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        for i, (h, layer_past) in enumerate(zip(self.h, past)):
+        for i, (h, layer_past) in enumerate(zip(self.h, past_key_values)):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
             outputs = h(
@@ -531,7 +531,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
     def call(
         self,
         input_ids=None,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -546,7 +546,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
     ):
         outputs = self.transformer(
             input_ids=input_ids,
-            past=past,
+            past_key_values=past_key_values,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -642,7 +642,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
     def call(
         self,
         input_ids=None,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -663,7 +663,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         """
         transformer_outputs = self.transformer(
             input_ids=input_ids,
-            past=past,
+            past_key_values=past_key_values,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -754,7 +754,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
     def call(
         self,
         input_ids=None,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -776,7 +776,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
 
         transformer_outputs = self.transformer(
             input_ids=input_ids,
-            past=past,
+            past_key_values=past_key_values,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
