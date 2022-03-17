@@ -743,7 +743,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         # The received `past_key_values` is a tuple of 2 elements.
         # The 1st element is `encoder_hidden_states`. The 2nd element is a tuple of `n_layers` elements,
         # each element is a tuple of 4 tensors of shape (batch_size, n_heads, seq_len - 1, embed_size_per_head)
-        if past_key_values is not None:
+        if type(past_key_values) == tuple and len(past_key_values) == 2 and type(past_key_values[1]) == tuple:
             past_key_values = past_key_values[1]
 
         if not self.config.is_decoder:
