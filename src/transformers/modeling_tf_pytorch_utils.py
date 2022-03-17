@@ -203,7 +203,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         array = pt_state_dict[name].numpy()
 
         array = apply_reverse(array, transpose, symbolic_weight)
-        check_valid(array, symbolic_weight)
 
         tf_loaded_numel += array.size
         # logger.warning(f"Initialize TF weight {symbolic_weight.name}")
@@ -314,7 +313,6 @@ def set_weight(pt_model, pt_name, data, transpose):
 
     array = np.array(data)
     array = apply_transpose(array, transpose, pt_weight)
-    check_valid(array, pt_weight)
     ptr.data = torch.from_numpy(array)
 
 
@@ -349,9 +347,7 @@ def apply_transpose(array, transpose, pt_weight):
     # Make sure we have a proper numpy array
     if np.isscalar(array):
         array = np.array(array)
-    assert list(pt_weight.shape) == list(
-        array.shape
-    ), f"We could not match the dimensions of tensors {pt_weight.shape} vs {array.shape}"
+    check_valid(array, pt_weight)
     return array
 
 
@@ -383,6 +379,8 @@ def apply_reverse(array, transpose, symbolic_weight):
         squeezed_array_shape = [dim for dim in array.shape if dim != 1]
         if squeezed_array_shape == squeezed_tensor_shape:
             array = np.reshape(array, symbolic_weight.shape)
+
+    check_valid(array, symbolic_weight)
 
     return array
 
@@ -570,7 +568,6 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
         array, transpose = tf_weights_map[pt_weight_name]
 
         array = apply_transpose(array, transpose, pt_weight)
-        check_valid(array, new_pt_params_dict[pt_weight_name])
         new_pt_params_dict[pt_weight_name] = torch.from_numpy(array)
         loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = torch.from_numpy(array)
         all_tf_weights.discard(pt_weight_name)
