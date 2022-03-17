@@ -594,12 +594,13 @@ class FlaxRoFormerClassificationHead(nn.Module):
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
+        self.activation = ACT2FN[self.config.hidden_act]
 
     def __call__(self, hidden_states, deterministic=True):
         hidden_states = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = self.dense(hidden_states)
-        hidden_states = nn.tanh(hidden_states)
+        hidden_states = self.activation(hidden_states)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = self.out_proj(hidden_states)
         return hidden_states
