@@ -17,6 +17,7 @@ import tempfile
 import unittest
 
 import numpy as np
+from pytest import skip
 
 from transformers import is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow, torch_device
@@ -486,6 +487,7 @@ class FlaxEncoderDecoderMixin:
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_save_and_load(**input_ids_dict)
 
+    @skip("Re-enable this test once this issue is fixed: https://github.com/google/jax/issues/9941")
     def test_encoder_decoder_model_from_encoder_decoder_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_from_encoder_decoder_pretrained(**input_ids_dict)
