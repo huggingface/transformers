@@ -43,7 +43,7 @@ class DiTIntegrationTest(unittest.TestCase):
 
         image = dataset["train"][0]["image"].convert("RGB")
 
-        inputs = feature_extractor(image, return_tensors="pt")
+        inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
