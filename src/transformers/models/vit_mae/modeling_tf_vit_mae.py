@@ -22,7 +22,6 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
-import torch
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
@@ -241,23 +240,21 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def random_masking(self, sequence: tf.Tensor):
+    def random_masking(self, sequence: tf.Tensor, noise: tf.Tensor = None):
         """
         Perform per-sample random masking by per-sample shuffling. Per-sample shuffling is done by argsort random
         noise.
 
         Args:
             sequence (`tf.Tensor` of shape `(batch_size, sequence_length, dim)`)
+            noise (`tf.Tensor` of shape `(1, sequence_length)`) which is only used
+                for testing purposes to control randomness
         """
         batch_size, seq_length, dim = sequence.shape
         len_keep = int(seq_length * (1 - self.config.mask_ratio))
 
-        # monkey patching to pass the integration test
-        tf.random.uniform = torch.rand
-
-        noise = tf.convert_to_tensor(
-            tf.random.uniform(batch_size, seq_length, device="cpu").numpy()
-        )  # noise in [0, 1)
+        if noise is None:
+            noise = tf.random.uniform(shape=(batch_size, seq_length), minval=0.0, maxval=1.0)  # noise in [0, 1)
 
         # sort noise for each sample
         ids_shuffle = tf.argsort(noise, axis=1)  # ascend: small is keep, large is remove
@@ -284,7 +281,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
 
         return sequence_masked, mask, ids_restore
 
-    def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
+    def call(self, pixel_values: tf.Tensor, noise: tf.Tensor = None) -> tf.Tensor:
         batch_size, height, width, num_channels = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values)
 
@@ -292,7 +289,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
         embeddings = embeddings + self.position_embeddings[:, 1:, :]
 
         # masking: length -> length * config.mask_ratio
-        embeddings, mask, ids_restore = self.random_masking(embeddings)
+        embeddings, mask, ids_restore = self.random_masking(embeddings, noise)
 
         # append cls token
         cls_token = self.cls_token + self.position_embeddings[:, :1, :]
@@ -680,6 +677,7 @@ class TFViTMAEMainLayer(tf.keras.layers.Layer):
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
+        noise: tf.Tensor = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -706,7 +704,9 @@ class TFViTMAEMainLayer(tf.keras.layers.Layer):
             raise ValueError("You have to specify pixel_values")
 
         embedding_output, mask, ids_restore = self.embeddings(
-            pixel_values=inputs["pixel_values"], training=inputs["training"]
+            pixel_values=inputs["pixel_values"],
+            training=inputs["training"],
+            noise=noise,
         )
 
         # Prepare head mask if needed
@@ -861,6 +861,7 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
+        noise: tf.Tensor = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -905,6 +906,7 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
 
         outputs = self.vit(
             pixel_values=inputs["pixel_values"],
+            noise=noise,
             head_mask=inputs["head_mask"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
@@ -1088,6 +1090,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
+        noise: tf.Tensor = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1136,6 +1139,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
 
         outputs = self.vit(
             pixel_values=inputs["pixel_values"],
+            noise=noise,
             head_mask=inputs["head_mask"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
