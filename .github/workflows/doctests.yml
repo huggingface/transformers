@@ -70,7 +70,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: doc_tests_gpu_test_reports
-          path: reports/doc_tests_gpu/failures_short.txt
+          path: reports/doc_tests_gpu
 
 
   send_results:
