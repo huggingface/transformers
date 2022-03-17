@@ -72,11 +72,10 @@ jobs:
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
-        working-directory: transformers
         uses: actions/upload-artifact@v2
         with:
           name: doc_tests_gpu_test_reports
-          path: cat reports/doc_tests_gpu/failures_short.txt
+          path: cat transformers/reports/doc_tests_gpu/failures_short.txt
 
 
   send_results:
