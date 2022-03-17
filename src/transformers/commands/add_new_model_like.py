@@ -502,7 +502,7 @@ def filter_framework_files(
         `List[Union[str, os.PathLike]]`: The list of filtered files.
     """
     if frameworks is None:
-        return files
+        frameworks = get_default_frameworks()
 
     framework_to_file = {}
     others = []
