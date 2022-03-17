@@ -143,10 +143,10 @@ class FlaxTopPLogitsWarper(FlaxLogitsWarper):
 
         # include the token that is higher than top_p as well
         score_mask = jnp.roll(score_mask, 1)
-        score_mask |= score_mask.at[jax.ops.index[:, 0]].set(True)
+        score_mask |= score_mask.at[:, 0].set(True)
 
         # min tokens to keep
-        score_mask = score_mask.at[jax.ops.index[:, : self.min_tokens_to_keep]].set(True)
+        score_mask = score_mask.at[:, : self.min_tokens_to_keep].set(True)
 
         topk_next_scores = jnp.where(score_mask, topk_scores, mask_scores)
         next_scores = jax.lax.sort_key_val(topk_indices, topk_next_scores)[-1]
@@ -207,7 +207,7 @@ class FlaxForcedBOSTokenLogitsProcessor(FlaxLogitsProcessor):
 
         apply_penalty = 1 - jnp.bool_(cur_len - 1)
 
-        scores = jnp.where(apply_penalty, new_scores.at[jax.ops.index[:, self.bos_token_id]].set(0), scores)
+        scores = jnp.where(apply_penalty, new_scores.at[:, self.bos_token_id].set(0), scores)
 
         return scores
 
@@ -232,7 +232,7 @@ class FlaxForcedEOSTokenLogitsProcessor(FlaxLogitsProcessor):
 
         apply_penalty = 1 - jnp.bool_(cur_len - self.max_length + 1)
 
-        scores = jnp.where(apply_penalty, new_scores.at[jax.ops.index[:, self.eos_token_id]].set(0), scores)
+        scores = jnp.where(apply_penalty, new_scores.at[:, self.eos_token_id].set(0), scores)
 
         return scores
 
@@ -263,6 +263,6 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
         # create boolean flag to decide if min length penalty should be applied
         apply_penalty = 1 - jnp.clip(cur_len - self.min_length, 0, 1)
 
-        scores = jnp.where(apply_penalty, scores.at[jax.ops.index[:, self.eos_token_id]].set(-float("inf")), scores)
+        scores = jnp.where(apply_penalty, scores.at[:, self.eos_token_id].set(-float("inf")), scores)
 
         return scores
