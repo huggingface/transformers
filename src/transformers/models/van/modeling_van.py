@@ -175,11 +175,11 @@ class VanMlpLayer(nn.Sequential):
         dropout_rate: float = 0.5,
     ):
         super().__init__()
-        self.convolution1 = nn.Conv2d(in_channels, hidden_size, kernel_size=1)
+        self.in_dense = nn.Conv2d(in_channels, hidden_size, kernel_size=1)
         self.depth_wise = nn.Conv2d(hidden_size, hidden_size, kernel_size=3, padding=1, groups=hidden_size)
         self.activation = ACT2FN[hidden_act]
         self.dropout1 = nn.Dropout(dropout_rate)
-        self.convolution2 = nn.Conv2d(hidden_size, out_channels, kernel_size=1)
+        self.out_dense = nn.Conv2d(hidden_size, out_channels, kernel_size=1)
         self.dropout2 = nn.Dropout(dropout_rate)
 
 
@@ -269,7 +269,7 @@ class VanLayer(nn.Module):
     ):
         super().__init__()
         self.drop_path = VanDropPath(drop_path) if drop_path_rate > 0.0 else nn.Identity()
-        self.pre_normalization = nn.BatchNorm2d(hidden_size)
+        self.pre_normomalization = nn.BatchNorm2d(hidden_size)
         self.attention = VanSpatialAttentionLayer(hidden_size, config.hidden_act)
         self.attention_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
         self.post_normalization = nn.BatchNorm2d(hidden_size)
@@ -281,7 +281,7 @@ class VanLayer(nn.Module):
     def forward(self, hidden_state):
         residual = hidden_state
         # attention
-        hidden_state = self.pre_normalization(hidden_state)
+        hidden_state = self.pre_normomalization(hidden_state)
         hidden_state = self.attention(hidden_state)
         hidden_state = self.attention_scaling(hidden_state)
         hidden_state = self.drop_path(hidden_state)
@@ -317,7 +317,15 @@ class VanStage(nn.Module):
         super().__init__()
         self.embeddings = VanOverlappingPatchEmbedder(in_channels, hidden_size, patch_size, stride)
         self.layers = nn.Sequential(
-            *[VanLayer(config, hidden_size, mlp_ratio=mlp_ratio, drop_path_rate=drop_path_rate) for _ in range(depth)]
+            *[
+                VanLayer(
+                    config,
+                    hidden_size,
+                    mlp_ratio=mlp_ratio,
+                    drop_path_rate=drop_path_rate,
+                )
+                for _ in range(depth)
+            ]
         )
         self.normalization = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 

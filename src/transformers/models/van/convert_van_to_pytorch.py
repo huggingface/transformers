@@ -207,10 +207,10 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     }
 
     names_to_original_checkpoints = {
-        "van-tiny": "https://huggingface.co/Visual-Attention-Network/VAN-Tiny/resolve/main/van_tiny_754.pth.tar",
-        "van-small": "https://huggingface.co/Visual-Attention-Network/VAN-Small/resolve/main/van_small_811.pth.tar",
-        "van-base": "https://huggingface.co/Visual-Attention-Network/VAN-Base/resolve/main/van_base_828.pth.tar",
-        "van-large": "https://huggingface.co/Visual-Attention-Network/VAN-Large/resolve/main/van_large_839.pth.tar",
+        "van-tiny": "https://huggingface.co/Visual-Attention-Network/VAN-Tiny-original/resolve/main/van_tiny_754.pth.tar",
+        "van-small": "https://huggingface.co/Visual-Attention-Network/VAN-Small-original/resolve/main/van_small_811.pth.tar",
+        "van-base": "https://huggingface.co/Visual-Attention-Network/VAN-Base-original/resolve/main/van_base_828.pth.tar",
+        "van-large": "https://huggingface.co/Visual-Attention-Network/VAN-Large-original/resolve/main/van_large_839.pth.tar",
     }
 
     if model_name:
