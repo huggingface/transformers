@@ -121,3 +121,27 @@ Another option is to get a better traceback from the GPU. Add the following envi
 
 >>> os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 ```
+
+## Incorrect output when padding tokens aren't masked
+
+In some cases, you may notice the output `hidden_state` may be incorrect if the `input_ids` include padding tokens. For example, a batch of tensors may look like this before you pass it to `forward()`:
+
+```py
+>>> padding_id = 100
+>>> input_ids = torch.tensor([[7592, 2057, 2097, 2393, 9611, 2115], [7592, 100, 100, 100, 100, 100]])
+>>> outputs = model(input_ids)
+```
+
+The output value here will be different than if you included an attention mask because the model also attends to the padding tokens.
+
+Most of the time, you should provide an `attention_mask` to your model to ignore the padding tokens:
+
+```py
+>>> attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1], [1, 0, 0, 0, 0, 0]])
+>>> outputs = model(input_ids, attention_mask=attention_mask)
+```
+
+🤗 Transformers doesn't automatically create an `attention_mask` if a padding token is present because:
+
+- Some models don't have a padding token. 
+- For some use-cases, users want a model to attend to a padding token.
