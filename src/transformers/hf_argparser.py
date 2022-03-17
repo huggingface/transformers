@@ -89,9 +89,7 @@ class HfArgumentParser(ArgumentParser):
             if bool not in field.type.__args__:
                 # filter `NoneType` in Union (except for `Union[bool, NoneType]`)
                 field.type = (
-                    field.type.__args__[0]
-                    if isinstance(None, field.type.__args__[1])
-                    else field.type.__args__[1]
+                    field.type.__args__[0] if isinstance(None, field.type.__args__[1]) else field.type.__args__[1]
                 )
                 origin_type = getattr(field.type, "__origin__", field.type)
 
