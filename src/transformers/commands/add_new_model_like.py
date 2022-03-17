@@ -610,6 +610,7 @@ def get_default_frameworks():
         frameworks.append("tf")
     if is_flax_available():
         frameworks.append("flax")
+    return frameworks
 
 
 _re_model_mapping = re.compile("MODEL_([A-Z_]*)MAPPING_NAMES")
@@ -699,9 +700,9 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
             available_frameworks.append("pt")
 
     if frameworks is None:
-        frameworks = available_frameworks.copy()
-    else:
-        frameworks = [f for f in frameworks if f in available_frameworks]
+        frameworks = get_default_frameworks()
+
+    frameworks = [f for f in frameworks if f in available_frameworks]
 
     model_classes = retrieve_model_classes(model_type, frameworks=frameworks)
 
