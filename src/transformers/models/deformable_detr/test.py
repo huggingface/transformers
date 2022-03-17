@@ -1,9 +1,11 @@
-from transformers import DeformableDetrConfig, DeformableDetrModel, DeformableDetrForObjectDetection
 import torch
+
+from transformers import DeformableDetrConfig, DeformableDetrForObjectDetection
+
 
 model = DeformableDetrForObjectDetection(DeformableDetrConfig()).to("cuda")
 
-pixel_values = torch.randn(1,3,224,224).to("cuda")
+pixel_values = torch.randn(1, 3, 224, 224).to("cuda")
 
 print("Dict output:")
 dict_outputs = model(pixel_values)

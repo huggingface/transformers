@@ -432,7 +432,8 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
         outputs = model(**inputs)
 
-        output = outputs[0]
+        # we take the second output since last_hidden_state is the second item
+        output = outputs[1]
 
         encoder_hidden_states = outputs.encoder_hidden_states[0]
         encoder_attentions = outputs.encoder_attentions[0]
@@ -506,18 +507,19 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if "bbox_attention" in name and "bias" not in name:
-                        self.assertLess(
-                            100000,
-                            abs(param.data.max().item()),
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
+                    # if "level_embed" in name:
+                    #     print(param.data.mean())
+                    #     self.assertLess(
+                    #         100000,
+                    #         abs(param.data.max().item()),
+                    #         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    #     )
+                    # else:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
 
 TOLERANCE = 1e-4
