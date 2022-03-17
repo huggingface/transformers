@@ -142,14 +142,7 @@ class GLPNModelTester:
 @require_torch
 class GLPNModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            GLPNModel,
-            GLPNForDepthEstimation,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (GLPNModel, GLPNForDepthEstimation) if is_torch_available() else ()
 
     test_head_masking = False
     test_pruning = False

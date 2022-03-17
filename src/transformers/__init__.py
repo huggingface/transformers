@@ -635,7 +635,6 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1000,7 +999,6 @@ if is_torch_available():
         [
             "GLPN_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GLPNForDepthEstimation",
-            "GLPNLayer",
             "GLPNModel",
             "GLPNPreTrainedModel",
         ]
@@ -3213,7 +3211,6 @@ if TYPE_CHECKING:
         from .models.glpn import (
             GLPN_PRETRAINED_MODEL_ARCHIVE_LIST,
             GLPNForDepthEstimation,
-            GLPNLayer,
             GLPNModel,
             GLPNPreTrainedModel,
         )

@@ -58,7 +58,7 @@ class GLPNConfig(PretrainedConfig):
             Stride before each encoder block.
         num_attention_heads (`List[int]`, *optional*, defaults to [1, 2, 4, 8]):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
-        mlp_ratios (`List[int]`, *optional*, defaults to [4, 4, 4, 4]):
+        mlp_ratios (`List[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
