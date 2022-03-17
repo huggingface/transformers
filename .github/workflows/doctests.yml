@@ -68,7 +68,7 @@ jobs:
         if: ${{ failure() }}
         continue-on-error: true
         working-directory: transformers
-        run: cat transformers/reports/doc_tests_gpu/failures_short.txt
+        run: cat reports/doc_tests_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -76,7 +76,7 @@ jobs:
         with:
           name: doc_tests_gpu_test_reports
           working-directory: transformers
-          path: cat transformers/reports/doc_tests_gpu/failures_short.txt
+          path: cat reports/doc_tests_gpu/failures_short.txt
 
 
   send_results:
