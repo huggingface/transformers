@@ -99,11 +99,11 @@ class ResNetDConvLayer(nn.Sequential):
         self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
     ):
         super().__init__()
-        self.conv = nn.Conv2d(
+        self.convolution = nn.Conv2d(
             in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=kernel_size // 2, bias=False
         )
-        self.bn = nn.BatchNorm2d(out_channels)
-        self.act = ACT2FN[activation] if activation is not None else nn.Identity()
+        self.normalization = nn.BatchNorm2d(out_channels)
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
 
 class ResNetDEmbeddings(nn.Sequential):
@@ -121,7 +121,7 @@ class ResNetDEmbeddings(nn.Sequential):
             ResNetDConvLayer(hidden_size // 2, hidden_size // 2, kernel_size=3, activation=activation),
             ResNetDConvLayer(hidden_size // 2, hidden_size, kernel_size=3, activation=activation),
         )
-        self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.pooler = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
 
 class ResNetDShortCut(nn.Sequential):
@@ -131,9 +131,9 @@ class ResNetDShortCut(nn.Sequential):
 
     def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
         super().__init__()
-        self.pool = nn.AvgPool2d(kernel_size=2, stride=2, ceil_mode=True) if stride == 2 else nn.Identity()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
-        self.bn = nn.BatchNorm2d(out_channels)
+        self.pooler = nn.AvgPool2d(kernel_size=2, stride=2, ceil_mode=True) if stride == 2 else nn.Identity()
+        self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+        self.normalization = nn.BatchNorm2d(out_channels)
 
 
 # Copied from transformers.models.resnet.modeling_resnet.ResNetBasicLayer with ResNet->ResNetD
@@ -205,21 +205,20 @@ class ResNetDStage(nn.Sequential):
 
     def __init__(
         self,
+        config: ResNetDConfig,
         in_channels: int,
         out_channels: int,
         stride: int = 2,
         depth: int = 2,
-        layer_type: str = "basic",
-        activation: str = "relu",
     ):
         super().__init__()
 
-        layer = ResNetDBottleNeckLayer if layer_type == "bottleneck" else ResNetDBasicLayer
+        layer = ResNetDBottleNeckLayer if config.layer_type == "bottleneck" else ResNetDBasicLayer
 
         self.layers = nn.Sequential(
             # downsampling is done in the first layer with stride of 2
-            layer(in_channels, out_channels, stride=stride, activation=activation),
-            *[layer(out_channels, out_channels, activation=activation) for _ in range(depth - 1)],
+            layer(in_channels, out_channels, stride=stride, activation=config.hidden_act),
+            *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)],
         )
 
 
@@ -231,21 +230,16 @@ class ResNetDEncoder(nn.Module):
         # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
         self.stages.append(
             ResNetDStage(
+                config,
                 config.embedding_size,
                 config.hidden_sizes[0],
                 stride=2 if config.downsample_in_first_stage else 1,
                 depth=config.depths[0],
-                layer_type=config.layer_type,
-                activation=config.hidden_act,
             )
         )
         in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
         for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
-            self.stages.append(
-                ResNetDStage(
-                    in_channels, out_channels, depth=depth, layer_type=config.layer_type, activation=config.hidden_act
-                )
-            )
+            self.stages.append(ResNetDStage(config, in_channels, out_channels, depth=depth))
 
     def forward(
         self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
