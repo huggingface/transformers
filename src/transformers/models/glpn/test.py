@@ -20,4 +20,9 @@ print("Shape of pixel values:", pixel_values.shape)
 
 outputs = model(pixel_values)
 
-print("Shape of logits:", outputs.logits.shape)
+print("Shape of predicted depth:", outputs.predicted_depth.shape)
+
+outputs = model(pixel_values, output_hidden_states=True)
+
+for i in outputs.hidden_states:
+    print(i.shape)

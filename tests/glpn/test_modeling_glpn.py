@@ -66,6 +66,7 @@ class GLPNModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
+        decoder_hidden_size=16,
         num_labels=3,
         scope=None,
     ):
@@ -85,6 +86,7 @@ class GLPNModelTester:
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
+        self.decoder_hidden_size = decoder_hidden_size
         self.num_labels = num_labels
         self.scope = scope
 
@@ -110,6 +112,7 @@ class GLPNModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
+            decoder_hidden_size=self.decoder_hidden_size,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -128,9 +131,9 @@ class GLPNModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.image_size, self.image_size))
+        self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.image_size, self.image_size))
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.image_size, self.image_size))
+        self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.image_size, self.image_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

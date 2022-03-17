@@ -30,7 +30,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutput, SemanticSegmentationModelOutput
+from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_glpn import GLPNConfig
@@ -653,9 +653,12 @@ class GLPNDepthEstimationHead(nn.Module):
         # use last features of the decoder
         hidden_states = hidden_states[self.config.in_index]
 
-        logits = self.head(hidden_states)
+        hidden_states = self.head(hidden_states)
 
-        return logits
+        predicted_depth = torch.sigmoid(hidden_states) * self.config.max_depth
+        predicted_depth = predicted_depth.squeeze(dim=1)
+
+        return predicted_depth
 
 
 @add_start_docstrings(
@@ -674,7 +677,7 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(GLPN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SemanticSegmentationModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -684,9 +687,8 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+        labels (`torch.FloatTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth depth estimation maps for computing the loss.
 
         Returns:
 
@@ -722,25 +724,23 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         out = self.decoder(hidden_states)
-        logits = self.head(out)
-        logits = torch.sigmoid(logits) * self.config.max_depth
-        logits = logits.squeeze(dim=1)
+        predicted_depth = self.head(out)
 
         loss = None
         if labels is not None:
             loss_fct = SiLogLoss()
-            loss = loss_fct(logits, labels)
+            loss = loss_fct(predicted_depth, labels)
 
         if not return_dict:
             if output_hidden_states:
-                output = (logits,) + outputs[1:]
+                output = (predicted_depth,) + outputs[1:]
             else:
-                output = (logits,) + outputs[2:]
+                output = (predicted_depth,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SemanticSegmentationModelOutput(
+        return DepthEstimatorOutput(
             loss=loss,
-            logits=logits,
+            predicted_depth=predicted_depth,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )

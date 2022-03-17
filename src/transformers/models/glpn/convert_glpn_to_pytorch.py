@@ -156,9 +156,9 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
 
     # forward pass
     outputs = model(pixel_values)
-    logits = outputs.logits
+    predicted_depth = outputs.predicted_depth
 
-    # verify logits
+    # verify output
     if model_name is not None:
         if "nyu" in model_name:
             expected_slice = torch.tensor(
@@ -173,8 +173,8 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
 
         expected_shape = torch.Size([1, 480, 640])
 
-        assert logits.shape == expected_shape
-        assert torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4)
+        assert predicted_depth.shape == expected_shape
+        assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-4)
         print("Looks ok!")
 
     # finally, push to hub if required
