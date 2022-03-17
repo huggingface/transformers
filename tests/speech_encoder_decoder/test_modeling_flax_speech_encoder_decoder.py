@@ -17,7 +17,6 @@ import tempfile
 import unittest
 
 import numpy as np
-from pytest import skip
 
 from transformers import is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow, torch_device
@@ -692,7 +691,7 @@ class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
         self.assertEqual(len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch")
         self.assert_almost_equals(fx_logits, pt_logits_loaded.numpy(), 4e-2)
 
-    @skip("Re-enable this test once this issue is fixed: https://github.com/google/jax/issues/9941")
+    @unittest.skip("Re-enable this test once this issue is fixed: https://github.com/google/jax/issues/9941")
     def test_encoder_decoder_model_from_encoder_decoder_pretrained(self):
         pass
 
@@ -813,6 +812,6 @@ class FlaxWav2Vec2BartModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
         self.assertEqual(len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch")
         self.assert_almost_equals(fx_logits, pt_logits_loaded.numpy(), 4e-2)
 
-    @skip("Re-enable this test once this issue is fixed: https://github.com/google/jax/issues/9941")
+    @unittest.skip("Re-enable this test once this issue is fixed: https://github.com/google/jax/issues/9941")
     def test_encoder_decoder_model_from_encoder_decoder_pretrained(self):
         pass
