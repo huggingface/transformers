@@ -82,12 +82,12 @@ class HfArgumentParser(ArgumentParser):
                 "`typing.get_type_hints` method by default"
             )
 
-        # remove `NoneType` in Union except for `Union[bool, NoneType]`
-        origin_type: type = getattr(field.type, "__origin__", field.type)
+        origin_type = getattr(field.type, "__origin__", field.type)
         if origin_type is Union:
-            if len(field.type.__args__) != 2 and type(None) not in field.type.__args__:
+            if len(field.type.__args__) != 2 or type(None) not in field.type.__args__:
                 raise ValueError("Only `Union[X, NoneType]` (i.e., `Optional[X]`) is allowed for `Union`")
             if bool not in field.type.__args__:
+                # filter `NoneType` in Union (except for `Union[bool, NoneType]`)
                 field.type = next(
                     filter(lambda t: not isinstance(None, getattr(t, "__origin__", t)), field.type.__args__)
                 )
