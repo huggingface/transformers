@@ -44,10 +44,11 @@ class DiTIntegrationTest(unittest.TestCase):
         image = dataset["train"][0]["image"].convert("RGB")
 
         inputs = feature_extractor(image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
 
         # forward pass
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model(pixel_values)
             logits = outputs.logits
 
         expected_shape = torch.Size((1, 16))
