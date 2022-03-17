@@ -92,7 +92,7 @@ if stale_egg_info.exists():
 # 1. all dependencies should be listed here with their version requirements if any
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
-    "Pillow>9.0.0",
+    "Pillow",
     "black~=22.0",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.2",
