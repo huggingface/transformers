@@ -203,6 +203,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         array = pt_state_dict[name].numpy()
 
         array = apply_reverse(array, transpose, symbolic_weight)
+        check_valid(array, symbolic_weight)
 
         tf_loaded_numel += array.size
         # logger.warning(f"Initialize TF weight {symbolic_weight.name}")
@@ -309,8 +310,11 @@ def set_weight(pt_model, pt_name, data, transpose):
     for name in pt_name.split("."):
         ptr = getattr(ptr, name)
 
+    pt_weight = ptr
+
     array = np.array(data)
-    array = apply_transpose(array, transpose, ptr)
+    array = apply_transpose(array, transpose, pt_weight)
+    check_valid(array, pt_weight)
     ptr.data = torch.from_numpy(array)
 
 
@@ -380,10 +384,13 @@ def apply_reverse(array, transpose, symbolic_weight):
         if squeezed_array_shape == squeezed_tensor_shape:
             array = np.reshape(array, symbolic_weight.shape)
 
-    assert list(symbolic_weight.shape) == list(
-        array.shape
-    ), f"We could not match the dimensions of tensors {symbolic_weight.shape} vs {array.shape}"
     return array
+
+
+def check_valid(array, tensor):
+    """Make sure the modified tensor and the target tensor match, raises ValueError if they don't"""
+    if tensor.shape != array.shape:
+        raise ValueError(f"We could not match the dimensions of tensors {tensor.shape} vs {array.shape}")
 
 
 def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
@@ -563,7 +570,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
         array, transpose = tf_weights_map[pt_weight_name]
 
         array = apply_transpose(array, transpose, pt_weight)
-
+        check_valid(array, new_pt_params_dict[pt_weight_name])
         new_pt_params_dict[pt_weight_name] = torch.from_numpy(array)
         loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = torch.from_numpy(array)
         all_tf_weights.discard(pt_weight_name)
