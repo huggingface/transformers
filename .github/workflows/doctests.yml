@@ -65,11 +65,13 @@ jobs:
           python3 utils/prepare_for_doc_test.py src docs --remove_new_line
 
       - name: Failure short reports
+        working-directory: transformers
         if: ${{ failure() }}
         continue-on-error: true
         run: cat transformers/reports/doc_tests_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
+        working-directory: transformers
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
