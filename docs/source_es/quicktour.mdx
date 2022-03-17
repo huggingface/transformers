@@ -27,12 +27,11 @@ Si no fuese así, se espera que el código funcione para ambos backends sin ning
 
 [`pipeline`] es la forma más fácil de usar un modelo preentrenado para una tarea dada.
 
-<Youtube id="tiZFewofSLM" />
+<Youtube id="tiZFewofSLM"/>
 
 El [`pipeline`] soporta muchas tareas comunes listas para usar:
 
 **Texto**:
-
 - Análisis de Sentimientos: clasifica la polaridad de un texto dado.
 - Generación de texto (solo en inglés): genera texto a partir de un input dado.
 - Name entity recognition (NER): etiqueta cada palabra con la entidad que representa (persona, fecha, ubicación, etc.).
@@ -43,13 +42,11 @@ El [`pipeline`] soporta muchas tareas comunes listas para usar:
 - Extracción de características: crea una representación tensorial del texto.
 
 **Imagen**:
-
 - Clasificación de imágenes: clasifica una imagen.
 - Segmentación de imágenes: clasifica cada pixel de una imagen.
 - Detección de objetos: detecta objetos dentro de una imagen.
 
 **Audio**:
-
 - Clasificación de audios: asigna una etiqueta a un segmento de audio.
 - Automatic speech recognition (ASR): transcribe datos de audio a un texto.
 
@@ -177,7 +174,7 @@ Si no pudieras encontrar el modelo para tu caso respectivo de uso necesitarás a
 
 ## AutoClass
 
-<Youtube id="AhChOFRegn4" />
+<Youtube id="AhChOFRegn4"/>
 
 Debajo del capó, las clases [`AutoModelForSequenceClassification`] y [`AutoTokenizer`] trabajan juntas para dar poder al [`pipeline`]. Una [AutoClass](./model_doc/auto) es un atajo que automáticamente recupera la arquitectura de un modelo preentrenado con su nombre o el path. Sólo necesitarás seleccionar el `AutoClass` apropiado para tu tarea y tu tokenizador asociado con [`AutoTokenizer`].
 
@@ -185,7 +182,7 @@ Regresemos a nuestro ejemplo y veamos cómo puedes usar el `AutoClass` para repr
 
 ### AutoTokenizer
 
-Un tokenizador es responsable de procesar el texto a un formato que sea entendible para el modelo. Primero, el tokenizador separará el texto en palabras llamadas _tokens_. Hay múltiples reglas que gobiernan el proceso de tokenización incluyendo el cómo separar una palabra y en qué nivel (aprende más sobre tokenización [aquí](./tokenizer_summary)). Lo más importante es recordar que necesitarás instanciar el tokenizador con el mismo nombre del modelo para asegurar que estás usando las mismas reglas de tokenización con las que el modelo fue preentrenado.
+Un tokenizador es responsable de procesar el texto a un formato que sea entendible para el modelo. Primero, el tokenizador separará el texto en palabras llamadas *tokens*. Hay múltiples reglas que gobiernan el proceso de tokenización incluyendo el cómo separar una palabra y en qué nivel (aprende más sobre tokenización [aquí](./tokenizer_summary)). Lo más importante es recordar que necesitarás instanciar el tokenizador con el mismo nombre del modelo para asegurar que estás usando las mismas reglas de tokenización con las que el modelo fue preentrenado.
 
 Carga un tokenizador con [`AutoTokenizer`]:
 
@@ -196,7 +193,7 @@ Carga un tokenizador con [`AutoTokenizer`]:
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
 
-Después, el tokenizador convierte los tokens a números para construir un tensor que servirá como input para el modelo. Esto es conocido como el _vocabulario_ del modelo.
+Después, el tokenizador convierte los tokens a números para construir un tensor que servirá como input para el modelo. Esto es conocido como el *vocabulario* del modelo.
 
 Pasa tu texto al tokenizador:
 
@@ -210,8 +207,8 @@ Pasa tu texto al tokenizador:
 
 El tokenizador devolverá un diccionario conteniendo:
 
-- [input_ids](./glossary#input-ids): representaciones numéricas de los tokens.
-- [atttention_mask](.glossary#attention-mask): indica cuáles tokens deben ser atendidos.
+* [input_ids](./glossary#input-ids): representaciones numéricas de los tokens.
+* [atttention_mask](.glossary#attention-mask): indica cuáles tokens deben ser atendidos.
 
 Como con el [`pipeline`], el tokenizador aceptará una lista de inputs. Además, el tokenizador también puede rellenar (pad, en inglés) y truncar el texto para devolver un lote (batch, en inglés) de longitud uniforme:
 
@@ -306,7 +303,7 @@ tf.Tensor(
 
 <Tip>
 
-Todos los modelos de 🤗 Transformers (PyTorch o TensorFlow) producirán los tensores _antes_ de la función de activación
+Todos los modelos de 🤗 Transformers (PyTorch o TensorFlow) producirán los tensores *antes* de la función de activación
 final (como softmax) porque la función de activación final es comúnmente fusionada con la pérdida.
 
 </Tip>
