@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           repository: 'huggingface/transformers'
-          path: transformers
+          path: /transformers
 
       - name: NVIDIA-SMI
         run: |
