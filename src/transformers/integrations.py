@@ -761,7 +761,7 @@ class AzureMLCallback(TrainerCallback):
 class MLflowCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that sends the logs to [MLflow](https://www.mlflow.org/). Can be disabled by setting
-    environemnt variable DISABLE_MLFLOW_INTEGRATION = TRUE.
+    environment variable `DISABLE_MLFLOW_INTEGRATION = TRUE`.
     """
 
     def __init__(self):
