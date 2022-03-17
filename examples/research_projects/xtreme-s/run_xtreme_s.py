@@ -593,31 +593,33 @@ def main():
     )
 
     # adapt config
-    config.update(
-        {
-            "feat_proj_dropout": model_args.feat_proj_dropout,
-            "attention_dropout": model_args.attention_dropout,
-            "hidden_dropout": model_args.hidden_dropout,
-            "final_dropout": model_args.final_dropout,
-            "mask_time_prob": model_args.mask_time_prob,
-            "mask_time_length": model_args.mask_time_length,
-            "mask_feature_prob": model_args.mask_feature_prob,
-            "mask_feature_length": model_args.mask_feature_length,
-            "gradient_checkpointing": training_args.gradient_checkpointing,
-            "layerdrop": model_args.layerdrop,
-            "ctc_loss_reduction": model_args.ctc_loss_reduction,
-            "activation_dropout": model_args.activation_dropout,
-        }
-    )
-    if training_args.do_train:
-        if is_text_target:
-            config.pad_token_id = tokenizer.pad_token_id
-            config.vocab_size = len(tokenizer)
-        else:
-            label_to_id = {v: i for i, v in enumerate(label_list)}
-            config.label2id = label_to_id
-            config.id2label = {id: label for label, id in label_to_id.items()}
-            config.num_labels = num_labels
+    # (speech translation requires pre-configured seq2seq models)
+    if task_name != "covost2":
+        config.update(
+            {
+                "feat_proj_dropout": model_args.feat_proj_dropout,
+                "attention_dropout": model_args.attention_dropout,
+                "hidden_dropout": model_args.hidden_dropout,
+                "final_dropout": model_args.final_dropout,
+                "mask_time_prob": model_args.mask_time_prob,
+                "mask_time_length": model_args.mask_time_length,
+                "mask_feature_prob": model_args.mask_feature_prob,
+                "mask_feature_length": model_args.mask_feature_length,
+                "gradient_checkpointing": training_args.gradient_checkpointing,
+                "layerdrop": model_args.layerdrop,
+                "ctc_loss_reduction": model_args.ctc_loss_reduction,
+                "activation_dropout": model_args.activation_dropout,
+            }
+        )
+        if training_args.do_train:
+            if is_text_target:
+                config.pad_token_id = tokenizer.pad_token_id
+                config.vocab_size = len(tokenizer)
+            else:
+                label_to_id = {v: i for i, v in enumerate(label_list)}
+                config.label2id = label_to_id
+                config.id2label = {id: label for label, id in label_to_id.items()}
+                config.num_labels = num_labels
 
     # create model
     if target_column_name == "transcription":
