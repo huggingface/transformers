@@ -538,70 +538,23 @@ class GLPNModel(GLPNPreTrainedModel):
         )
 
 
-class GLPNDecoder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        out_channels = config.decoder_hidden_size
-
-        self.bot_conv = nn.Conv2d(in_channels=config.hidden_sizes[-1], out_channels=out_channels, kernel_size=1)
-        self.skip_convolution1 = nn.Conv2d(
-            in_channels=config.hidden_sizes[-2], out_channels=out_channels, kernel_size=1
-        )
-        self.skip_convolution2 = nn.Conv2d(
-            in_channels=config.hidden_sizes[-3], out_channels=out_channels, kernel_size=1
-        )
-
-        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
-
-        self.fusion1 = GLPNSelectiveFeatureFusion(out_channels)
-        self.fusion2 = GLPNSelectiveFeatureFusion(out_channels)
-        self.fusion3 = GLPNSelectiveFeatureFusion(out_channels)
-
-    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
-        x_1, x_2, x_3, x_4 = hidden_states
-
-        output = []
-
-        x_4_ = self.bot_conv(x_4)
-        out = self.upsample(x_4_)
-        output.append(out)
-
-        x_3_ = self.skip_convolution1(x_3)
-        out = self.fusion1(x_3_, out)
-        out = self.upsample(out)
-        output.append(out)
-
-        x_2_ = self.skip_convolution2(x_2)
-        out = self.fusion2(x_2_, out)
-        out = self.upsample(out)
-        output.append(out)
-
-        out = self.fusion3(x_1, out)
-        out = self.upsample(out)
-        out = self.upsample(out)
-        output.append(out)
-
-        return output
-
-
 class GLPNSelectiveFeatureFusion(nn.Module):
     def __init__(self, in_channel=64):
         super().__init__()
 
-        self.convolution_layer1 = nn.Sequential(
+        self.convolutional_layer1 = nn.Sequential(
             nn.Conv2d(in_channels=int(in_channel * 2), out_channels=in_channel, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(in_channel),
             nn.ReLU(),
         )
 
-        self.convolution_layer2 = nn.Sequential(
+        self.convolutional_layer2 = nn.Sequential(
             nn.Conv2d(in_channels=in_channel, out_channels=int(in_channel / 2), kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(int(in_channel / 2)),
             nn.ReLU(),
         )
 
-        self.convolution_layer3 = nn.Conv2d(
+        self.convolutional_layer3 = nn.Conv2d(
             in_channels=int(in_channel / 2), out_channels=2, kernel_size=3, stride=1, padding=1
         )
 
@@ -609,14 +562,61 @@ class GLPNSelectiveFeatureFusion(nn.Module):
 
     def forward(self, x_local, x_global):
         x = torch.cat((x_local, x_global), dim=1)
-        x = self.convolution_layer1(x)
-        x = self.convolution_layer2(x)
-        x = self.convolution_layer3(x)
+        x = self.convolutional_layer1(x)
+        x = self.convolutional_layer2(x)
+        x = self.convolutional_layer3(x)
         attn = self.sigmoid(x)
 
         out = x_local * attn[:, 0, :, :].unsqueeze(1) + x_global * attn[:, 1, :, :].unsqueeze(1)
 
         return out
+
+
+class GLPNDecoderStage(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        should_skip = in_channels == out_channels
+        self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size=1) if not should_skip else nn.Identity()
+        self.fusion = GLPNSelectiveFeatureFusion(out_channels)
+        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
+
+    def forward(self, hidden_state, residual=None):
+        hidden_state = self.convolution(hidden_state)
+        if residual is not None:
+            hidden_state = self.fusion(hidden_state, residual)
+        hidden_state = self.upsample(hidden_state)
+
+        return hidden_state
+
+        hidden_state = self.upsample(hidden_state)
+        return hidden_state
+
+
+class GLPNDecoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        # we use features from end -> start
+        reserved_hidden_sizes = config.hidden_sizes[::-1]
+        out_channels = config.decoder_hidden_size
+
+        self.stages = nn.ModuleList(
+            [GLPNDecoderStage(hidden_size, out_channels) for hidden_size in reserved_hidden_sizes]
+        )
+        # don't fuse in first stage
+        self.stages[0].fusion = None
+
+        self.final_upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
+
+    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
+        stage_hidden_states = []
+        stage_hidden_state = None
+        for hidden_state, stage in zip(hidden_states[::-1], self.stages):
+            stage_hidden_state = stage(hidden_state, stage_hidden_state)
+            stage_hidden_states.append(stage_hidden_state)
+
+        stage_hidden_states[-1] = self.final_upsample(stage_hidden_state)
+
+        return stage_hidden_states
 
 
 class SiLogLoss(nn.Module):

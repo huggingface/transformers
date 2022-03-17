@@ -37,7 +37,7 @@ def rename_keys(state_dict):
         if key.startswith("module.encoder"):
             key = key.replace("module.encoder", "glpn.encoder")
         if key.startswith("module.decoder"):
-            key = key.replace("module.decoder", "decoder")
+            key = key.replace("module.decoder", "decoder.stages")
         if "patch_embed" in key:
             # replace for example patch_embed1 by patch_embeddings.0
             idx = key[key.find("patch_embed") + len("patch_embed")]
@@ -75,10 +75,20 @@ def rename_keys(state_dict):
             # replace for example linear_c4 by linear_c.3
             idx = key[key.find("linear_c") + len("linear_c")]
             key = key.replace(f"linear_c{idx}", f"linear_c.{int(idx)-1}")
-        if "skip_conv" in key:
-            key = key.replace("skip_conv", "skip_convolution")
+        if "bot_conv" in key:
+            key = key.replace("bot_conv", "0.convolution")
+        if "skip_conv1" in key:
+            key = key.replace("skip_conv1", "1.convolution")
+        if "skip_conv2" in key:
+            key = key.replace("skip_conv2", "2.convolution")
+        if "fusion1" in key:
+            key = key.replace("fusion1", "1.fusion")
+        if "fusion2" in key:
+            key = key.replace("fusion2", "2.fusion")
+        if "fusion3" in key:
+            key = key.replace("fusion3", "3.fusion")
         if "fusion" in key and "conv" in key:
-            key = key.replace("conv", "convolution_layer")
+            key = key.replace("conv", "convolutional_layer")
         if key.startswith("module.last_layer_depth"):
             key = key.replace("module.last_layer_depth", "head.head")
         new_state_dict[key] = value
