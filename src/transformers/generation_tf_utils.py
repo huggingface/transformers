@@ -2307,6 +2307,8 @@ class TFGenerationMixin:
         logits_processor: Optional[TFLogitsProcessorList] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_scores: Optional[bool] = None,
+        return_dict_in_generate: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[TFBeamSearchOutput, tf.Tensor]:
         r"""
@@ -2413,7 +2415,7 @@ class TFGenerationMixin:
 
             return tf.nest.map_structure(gather_fn, nested)
 
-        # init values
+        # 1. init beam_search values
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
@@ -2421,9 +2423,21 @@ class TFGenerationMixin:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        output_scores = output_scores if output_scores is not None else self.config.output_scores
+        return_dict_in_generate = (
+            return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
+        )
+
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
 
+        # 2. init `attentions`, `hidden_states`, and `scores` tuples
+        scores = [] if (return_dict_in_generate and output_scores) else None
+        decoder_attentions = [] if (return_dict_in_generate and output_attentions) else None
+        cross_attentions = [] if (return_dict_in_generate and output_attentions) else None
+        decoder_hidden_states = [] if (return_dict_in_generate and output_hidden_states) else None
+
+        # 3. init tensors to use for "xla-compileable" generate function
         batch_size, num_beams, cur_len = input_ids.shape
 
         # per batch, beam-item holding current token in loop.
@@ -2442,7 +2456,7 @@ class TFGenerationMixin:
             clear_after_read=False,
         )
         intermediary_running_sequences = tf.TensorArray(
-            element_shape=(batch_size, num_beams*2),
+            element_shape=(batch_size, num_beams * 2),
             dtype=tf.int32,
             dynamic_size=False,
             size=max_length,
@@ -2470,6 +2484,7 @@ class TFGenerationMixin:
         if "attention_mask" in model_kwargs:
             model_kwargs["attention_mask"] = flatten_beam_dim(model_kwargs["attention_mask"])
 
+        # 4. define "xla-compile-able" stop-condition and auto-regressive function
         # define stop-condition and auto-regressive function
         def beam_search_cond_fn(
             cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs
@@ -2503,6 +2518,9 @@ class TFGenerationMixin:
             intermediary_running_sequences=None,
         ):
             """beam search state update fn."""
+            # TODO (joao): this loop is probably faster with gather/scatters, instead of using `tf.TensorArray`.
+            # Experiment when enabling XLA.
+
             # 1. Forward current tokens
 
             # TF places the dynamic dimension (seq_len) in the first axis, we want it in the last
@@ -2550,15 +2568,15 @@ class TFGenerationMixin:
             beams_to_keep = 2 * num_beams
             topk_log_probs, topk_indices = tf.math.top_k(log_probs, k=beams_to_keep)
             topk_beam_indices = topk_indices // vocab_size
-            topk_running_sequences = gather_beams(running_sequences_seq_last, topk_beam_indices)
+            topk_running_sequences_seq_last = gather_beams(running_sequences_seq_last, topk_beam_indices)
             topk_ids = topk_indices % vocab_size
 
             # writes the new token
-            topk_running_sequences_seq_first = tf.transpose(topk_running_sequences, perm=[2, 0, 1])
-            intermediary_running_sequences = intermediary_running_sequences.unstack(topk_running_sequences_seq_first)
+            intermediary_running_sequences = intermediary_running_sequences.unstack(
+                tf.transpose(topk_running_sequences_seq_last, perm=[2, 0, 1])
+            )
             topk_sequences = intermediary_running_sequences.write(cur_len, topk_ids)
             topk_sequences_seq_last = tf.transpose(topk_sequences.stack(), perm=[1, 2, 0])
-            breakpoint()
 
             # 4. Check which sequences have ended
             # Update current sequences:
@@ -2566,15 +2584,15 @@ class TFGenerationMixin:
             # To prevent these just finished sequences from being added to the current sequences
             # set of active beam search sequences, set their log probs to a very large
             # negative value.
-            did_topk_just_finished = topk_sequences[:, :, cur_len] == eos_token_id
-            running_topk_log_probs = topk_log_probs + did_topk_just_finished * -1.0e7
+            did_topk_just_finished = topk_sequences_seq_last[:, :, cur_len] == eos_token_id
+            running_topk_log_probs = topk_log_probs + tf.cast(did_topk_just_finished, tf.float32) * -1.0e7
 
             # 5. Get running sequences scores for next
             # Determine the top k beam indices (from top 2*k beams) from log probs
             # and gather top k beams (from top 2*k beams).
-            next_topk_indices = tf.reverse(tf.math.top_k(running_topk_log_probs, k=num_beams)[1], axis=1)
-            next_running_sequences, next_running_scores = gather_beams(
-                [topk_sequences, running_topk_log_probs], next_topk_indices
+            next_topk_indices = tf.reverse(tf.math.top_k(running_topk_log_probs, k=num_beams)[1], axis=[1])
+            next_running_sequences_seq_last, next_running_scores = gather_beams(
+                [topk_sequences_seq_last, running_topk_log_probs], next_topk_indices
             )
 
             # 6. Process topk logits
@@ -2590,40 +2608,48 @@ class TFGenerationMixin:
                 & early_stopping
             )
             add_penalty = ~did_topk_just_finished | beams_in_batch_are_full
-            topk_log_probs += add_penalty * -1.0e7
+            topk_log_probs += tf.cast(add_penalty, tf.float32) * -1.0e7
 
             # 7. Get scores, sequences, is sentence finished for next.
             # Combine sequences, scores, and flags along the beam dimension and compare
             # new finished sequence scores to existing finished scores and select the
             # best from the new set of beams
-            merged_sequences = tf.concat([sequences, topk_sequences], axis=1)
+            sequences_seq_last = tf.transpose(sequences.stack(), perm=[1, 2, 0])
+            merged_sequences = tf.concat([sequences_seq_last, topk_sequences_seq_last], axis=1)
             merged_scores = tf.concat([scores, topk_log_probs], axis=1)
             merged_is_sent_finished = tf.concat([is_sent_finished, did_topk_just_finished], axis=1)
-            topk_merged_indices = tf.reverse(tf.math.top_k(merged_scores, k=num_beams)[1], axis=1)
-            next_sequences, next_scores, next_is_sent_finished = gather_beams(
-                [merged_sequences, merged_scores, merged_is_sent_finished], topk_merged_indices, batch_size, num_beams
+            topk_merged_indices = tf.reverse(tf.math.top_k(merged_scores, k=num_beams)[1], axis=[1])
+            next_sequences_seq_last, next_scores, next_is_sent_finished = gather_beams(
+                [merged_sequences, merged_scores, merged_is_sent_finished], topk_merged_indices
             )
 
             # 8. Update model kwargs.
             # Determine the top k beam indices from the original set of all beams.
             # With these, gather the top k beam-associated caches.
-            next_running_indices = gather_beams(topk_beam_indices, next_topk_indices, batch_size, num_beams)
-            next_cache = gather_beams(cache, next_running_indices, batch_size, num_beams)
+            next_running_indices = gather_beams(topk_beam_indices, next_topk_indices)
+            next_cache = gather_beams(cache, next_running_indices)
             model_outputs["past_key_values"] = tf.nest.map_structure(lambda x: flatten_beam_dim(x), next_cache)
             next_model_kwargs = self._update_model_kwargs_for_generation(
                 model_outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
+            # 9. Prepare the `tf.TensorArray` for the next iteration
+            next_sequences = sequences.unstack(tf.transpose(next_sequences_seq_last, perm=[2, 0, 1]))
+            next_running_sequences = running_sequences.unstack(
+                tf.transpose(next_running_sequences_seq_last, perm=[2, 0, 1])
+            )
+
             return (
                 cur_len + 1,
-                next_running_scores,
                 next_running_sequences,
-                next_scores,
+                next_running_scores,
                 next_sequences,
+                next_scores,
                 next_is_sent_finished,
                 next_model_kwargs,
             )
 
+        # 5. run generation
         # Adds the `intermediary_running_sequences` TensorArray into the body, needed as a scratchpad
         beam_search_body_fn = partial(beam_search_body_fn, intermediary_running_sequences=intermediary_running_sequences)
 
@@ -2638,24 +2664,58 @@ class TFGenerationMixin:
             cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs
         ):
             maximum_iterations = max_length - cur_len - 1
-            _, running_scores, running_sequences, scores, sequences, is_sent_finished, _ = tf.while_loop(
+            cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, _ = tf.while_loop(
                 beam_search_cond_fn,
                 beam_search_body_fn,
                 (cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs),
                 maximum_iterations=maximum_iterations,
             )
 
+        # 6. prepare outputs
+        # convert the sequneces to tf.Tensor with shape (batch_size, num_beams, seq_len)
+        sequences_seq_last = tf.transpose(sequences.stack(), perm=[1, 2, 0])
+        running_sequences_seq_last = tf.transpose(running_sequences.stack(), perm=[1, 2, 0])
+
         # Account for the edge-case where there are no finished sequences for a
         # particular batch item. If so, return running sequences for that batch item.
         none_finished = tf.math.reduce_any(is_sent_finished, axis=1)
-        sequences = tf.where(none_finished[:, None, None], sequences, running_sequences)
+        sequences_seq_last = tf.where(none_finished[:, None, None], sequences_seq_last, running_sequences_seq_last)
         scores = tf.where(none_finished[:, None], scores, running_scores)
 
         # take best beam for each batch
-        sequences = sequences[:, -1]
+        sequences_seq_last = sequences_seq_last[:, -1]
         scores = scores[:, -1]
 
-        return TFBeamSearchOutput(sequences=sequences, scores=scores)
+        # (non-XLA) cut for backward compatibility
+        sequences_seq_last = sequences_seq_last[:, :cur_len]
+
+        if return_dict_in_generate:
+            if self.config.is_encoder_decoder:
+                # if model is an encoder-decoder, retrieve encoder attention weights
+                # and hidden states
+                encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+                encoder_hidden_states = (
+                    model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
+                )
+
+                return TFBeamSearchEncoderDecoderOutput(
+                    sequences=sequences_seq_last,
+                    scores=scores,
+                    encoder_attentions=encoder_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
+                    decoder_hidden_states=decoder_hidden_states,
+                )
+            else:
+                return TFBeamSearchDecoderOnlyOutput(
+                    sequences=sequences_seq_last,
+                    scores=scores,
+                    attentions=decoder_attentions,
+                    hidden_states=decoder_hidden_states,
+                )
+        else:
+            return sequences_seq_last
 
 
 def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
