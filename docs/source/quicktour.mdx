@@ -81,6 +81,7 @@ Import [`pipeline`] and specify the task you want to complete:
 >>> from transformers import pipeline
 
 >>> classifier = pipeline("sentiment-analysis")
+
 ```
 
 The pipeline downloads and caches a default [pretrained model](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) and tokenizer for sentiment analysis. Now you can use the `classifier` on your target text:
@@ -88,6 +89,7 @@ The pipeline downloads and caches a default [pretrained model](https://huggingfa
 ```py
 >>> classifier("We are very happy to show you the 🤗 Transformers library.")
 [{'label': 'POSITIVE', 'score': 0.9998}]
+
 ```
 
 For more than one sentence, pass a list of sentences to the [`pipeline`] which returns a list of dictionaries:
@@ -98,6 +100,7 @@ For more than one sentence, pass a list of sentences to the [`pipeline`] which r
 ...     print(f"label: {result['label']}, with score: {round(result['score'], 4)}")
 label: POSITIVE, with score: 0.9998
 label: NEGATIVE, with score: 0.5309
+
 ```
 
 The [`pipeline`] can also iterate over an entire dataset. Start by installing the [🤗 Datasets](https://huggingface.co/docs/datasets/) library:
@@ -113,6 +116,7 @@ Create a [`pipeline`] with the task you want to solve for and the model you want
 >>> from transformers import pipeline
 
 >>> speech_recognizer = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h")
+
 ```
 
 Next, load a dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) for more details) you'd like to iterate over. For example, let's load the [SUPERB](https://huggingface.co/datasets/superb) dataset:
@@ -121,6 +125,7 @@ Next, load a dataset (see the 🤗 Datasets [Quick Start](https://huggingface.co
 >>> import datasets
 
 >>> dataset = datasets.load_dataset("superb", name="asr", split="test")  # doctest: +IGNORE_RESULT
+
 ```
 
 You can pass a whole dataset pipeline:
@@ -132,6 +137,7 @@ You can pass a whole dataset pipeline:
  {'text': 'STUFFERED INTO YOU HIS BELLY COUNSELLED HIM'},
  {'text': 'AFTER EARLY NIGHTFALL THE YELLOW LAMPS WOULD LIGHT UP HERE AND THERE THE SQUALID QUARTER OF THE BROTHELS'},
  {'text': 'HO BERTIE ANY GOOD IN YOUR MIND'}]
+
 ```
 
 For a larger dataset where the inputs are big (like in speech or vision), you will want to pass along a generator instead of a list that loads all the inputs in memory. See the [pipeline documentation](./main_classes/pipelines) for more information.
@@ -142,6 +148,7 @@ The [`pipeline`] can accommodate any model from the [Model Hub](https://huggingf
 
 ```py
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
+
 ```
 
 <frameworkcontent>
@@ -153,6 +160,7 @@ Use the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the
 
 >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
+
 ```
 </pt>
 <tf>
@@ -163,6 +171,7 @@ Use the [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load t
 
 >>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
+
 ```
 </tf>
 </frameworkcontent>
@@ -173,6 +182,7 @@ Then you can specify the model and tokenizer in the [`pipeline`], and apply the 
 >>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
 >>> classifier("Nous sommes très heureux de vous présenter la bibliothèque 🤗 Transformers.")
 [{'label': '5 stars', 'score': 0.7273}]
+
 ```
 
 If you can't find a model for your use-case, you will need to fine-tune a pretrained model on your data. Take a look at our [fine-tuning tutorial](./training) to learn how. Finally, after you've fine-tuned your pretrained model, please consider sharing it (see tutorial [here](./model_sharing)) with the community on the Model Hub to democratize NLP for everyone! 🤗
@@ -196,6 +206,7 @@ Load a tokenizer with [`AutoTokenizer`]:
 
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
+
 ```
 
 Next, the tokenizer converts the tokens into numbers in order to construct a tensor as input to the model. This is known as the model's *vocabulary*.
@@ -208,6 +219,7 @@ Pass your text to the tokenizer:
 {'input_ids': [101, 11312, 10320, 12495, 19308, 10114, 11391, 10855, 10103, 100, 58263, 13299, 119, 102],
  'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
  'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
+
 ```
 
 The tokenizer will return a dictionary containing:
@@ -227,6 +239,7 @@ Just like the [`pipeline`], the tokenizer will accept a list of inputs. In addit
 ...     max_length=512,
 ...     return_tensors="pt",
 ... )
+
 ```
 </pt>
 <tf>
@@ -238,6 +251,7 @@ Just like the [`pipeline`], the tokenizer will accept a list of inputs. In addit
 ...     max_length=512,
 ...     return_tensors="tf",
 ... )
+
 ```
 </tf>
 </frameworkcontent>
@@ -255,6 +269,7 @@ Read the [preprocessing](./preprocessing) tutorial for more details about tokeni
 
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
+
 ```
 
 <Tip>
@@ -267,6 +282,7 @@ Now you can pass your preprocessed batch of inputs directly to the model. You ju
 
 ```py
 >>> pt_outputs = pt_model(**pt_batch)
+
 ```
 
 The model outputs the final activations in the `logits` attribute. Apply the softmax function to the `logits` to retrieve the probabilities:
@@ -278,6 +294,7 @@ The model outputs the final activations in the `logits` attribute. Apply the sof
 >>> print(pt_predictions)
 tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
+
 ```
 </pt>
 <tf>
@@ -288,6 +305,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
+
 ```
 
 <Tip>
@@ -300,6 +318,7 @@ Now you can pass your preprocessed batch of inputs directly to the model by pass
 
 ```py
 >>> tf_outputs = tf_model(tf_batch)
+
 ```
 
 The model outputs the final activations in the `logits` attribute. Apply the softmax function to the `logits` to retrieve the probabilities:
@@ -308,10 +327,12 @@ The model outputs the final activations in the `logits` attribute. Apply the sof
 >>> import tensorflow as tf
 
 >>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
->>> print(tf.math.round(tf_predictions * 10**4) / 10**4)
-tf.Tensor(
-[[0.0021 0.0018 0.0116 0.2121 0.7725]
- [0.2084 0.1826 0.1969 0.1755  0.2365]], shape=(2, 5), dtype=float32)
+>>> tf_predictions
+<tf.Tensor: shape=(2, 5), dtype=float32, numpy=
+array([[0.00205667, 0.00176607, 0.01154934, 0.21209256, 0.7725354 ],
+	   [0.20841935, 0.1826222 , 0.19692972, 0.17550416, 0.2365246 ]],
+	  dtype=float32)>
+
 ```
 </tf>
 </frameworkcontent>
@@ -342,12 +363,14 @@ Once your model is fine-tuned, you can save it with its tokenizer using [`PreTra
 >>> pt_save_directory = "./pt_save_pretrained"
 >>> tokenizer.save_pretrained(pt_save_directory)  # doctest: +IGNORE_RESULT
 >>> pt_model.save_pretrained(pt_save_directory)
+
 ```
 
 When you are ready to use the model again, reload it with [`PreTrainedModel.from_pretrained`]:
 
 ```py
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
+
 ```
 </pt>
 <tf>
@@ -357,12 +380,14 @@ Once your model is fine-tuned, you can save it with its tokenizer using [`TFPreT
 >>> tf_save_directory = "./tf_save_pretrained"
 >>> tokenizer.save_pretrained(tf_save_directory)  # doctest: +IGNORE_RESULT
 >>> tf_model.save_pretrained(tf_save_directory)
+
 ```
 
 When you are ready to use the model again, reload it with [`TFPreTrainedModel.from_pretrained`]:
 
 ```py
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
+
 ```
 </tf>
 </frameworkcontent>
@@ -376,6 +401,7 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 
 >>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
+
 ```
 </pt>
 <tf>
@@ -384,6 +410,7 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 
 >>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
+
 ```
 </tf>
 </frameworkcontent>
