@@ -1476,6 +1476,15 @@ class ModelTesterMixin:
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
                 elif key == "input_features":
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
+                # To deal with the edge cases from `TFTapasForQuestionAnswering`.
+                # PyTorch can deal with type casting automatically, but TensorFlow is more strict!
+                # TODO: find a clean/better way to deal with these extra keys that are not common.
+                elif key == "float_answer":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
+                elif key == "numeric_values":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
+                elif key == "numeric_values_scale":
+                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
                 else:
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.int32)
 
