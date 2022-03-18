@@ -674,7 +674,7 @@ XLM_INPUTS_DOCSTRING = r"""
             behaviors between training and evaluation).
 """
 
-@unpack_inputs
+
 @add_start_docstrings(
     "The bare XLM Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_START_DOCSTRING,
@@ -684,6 +684,7 @@ class TFXLMModel(TFXLMPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -819,6 +820,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
             langs = None
         return {"input_ids": inputs, "langs": langs}
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -826,7 +828,6 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         output_type=TFXLMWithLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -892,6 +893,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -899,7 +901,6 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1000,6 +1001,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
                 "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
             }
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1007,7 +1009,6 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1125,6 +1126,7 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="classifier"
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1132,7 +1134,6 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
@@ -1211,6 +1212,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="qa_outputs"
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1218,7 +1220,6 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
