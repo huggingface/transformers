@@ -43,11 +43,6 @@ from .file_utils import (
     RepositoryNotFoundError,
     RevisionNotFoundError,
     TensorType,
-    _is_jax,
-    _is_numpy,
-    _is_tensorflow,
-    _is_torch,
-    _is_torch_device,
     add_end_docstrings,
     cached_path,
     copy_func,
@@ -62,6 +57,7 @@ from .file_utils import (
     to_py_obj,
     torch_required,
 )
+from .generic_utils import _is_jax, _is_numpy, _is_tensorflow, _is_torch, _is_torch_device
 from .utils import logging
 
 

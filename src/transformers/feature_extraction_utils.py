@@ -34,9 +34,6 @@ from .file_utils import (
     RepositoryNotFoundError,
     RevisionNotFoundError,
     TensorType,
-    _is_jax,
-    _is_numpy,
-    _is_torch_device,
     cached_path,
     copy_func,
     hf_bucket_url,
@@ -47,6 +44,7 @@ from .file_utils import (
     is_torch_available,
     torch_required,
 )
+from .generic_utils import _is_jax, _is_numpy, _is_torch_device
 from .utils import logging
 
 
