@@ -147,7 +147,7 @@ class PatchEmbeddings(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DeiT
 class DeiTSelfAttention(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -213,7 +213,7 @@ class DeiTSelfOutput(nn.Module):
     layernorm applied before each block.
     """
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -228,7 +228,7 @@ class DeiTSelfOutput(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->DeiT
 class DeiTAttention(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.attention = DeiTSelfAttention(config)
         self.output = DeiTSelfOutput(config)
@@ -268,7 +268,7 @@ class DeiTAttention(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->DeiT
 class DeiTIntermediate(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -286,7 +286,7 @@ class DeiTIntermediate(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->DeiT
 class DeiTOutput(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -304,7 +304,7 @@ class DeiTOutput(nn.Module):
 class DeiTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -345,7 +345,7 @@ class DeiTLayer(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->DeiT
 class DeiTEncoder(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: DeiTConfig) -> None:
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([DeiTLayer(config) for _ in range(config.num_hidden_layers)])
@@ -553,7 +553,7 @@ class DeiTModel(DeiTPreTrainedModel):
 
 # Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->DeiT
 class DeiTPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DeiTConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
