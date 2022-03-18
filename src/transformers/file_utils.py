@@ -58,7 +58,11 @@ from .generic_utils import cached_property  # noqa: F401
 from .generic_utils import is_tensor  # noqa: F401
 from .generic_utils import to_numpy  # noqa: F401
 from .generic_utils import to_py_obj  # noqa: F401
+from .import_utils import ENV_VARS_TRUE_AND_AUTO_VALUES  # noqa: F401
 from .import_utils import TORCH_FX_REQUIRED_VERSION  # noqa: F401
+from .import_utils import USE_JAX  # noqa: F401
+from .import_utils import USE_TF  # noqa: F401
+from .import_utils import USE_TORCH  # noqa: F401
 from .import_utils import DummyObject  # noqa: F401
 from .import_utils import _LazyModule  # noqa: F401
 from .import_utils import is_apex_available  # noqa: F401
@@ -108,6 +112,7 @@ from .import_utils import torch_only_method  # noqa: F401
 from .import_utils import torch_required  # noqa: F401
 from .import_utils import torch_version  # noqa: F401
 from .import_utils import (
+    ENV_VARS_TRUE_VALUES,
     _tf_version,
     _torch_version,
     is_tf_available,
@@ -120,7 +125,6 @@ from .utils import logging
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
-ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
 _is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
 
 

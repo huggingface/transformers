@@ -321,6 +321,7 @@ def is_torch_tf32_available():
     return True
 
 
+torch_version = None
 _torch_fx_available = _torch_onnx_dict_inputs_support_available = False
 if _torch_available:
     torch_version = version.parse(importlib_metadata.version("torch"))
