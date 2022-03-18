@@ -414,6 +414,10 @@ class TrainingArguments:
             `huggingface-cli login`.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        smp_save_partial (`bool`, *optional*, defaults to `False`):
+            If True, saves checkpoints partially. `"smp_save_partial"` can only be used with Sagemaker Model Parallel library.
+        smp_load_partial (`bool`, *optional*, defaults to `False`):
+            If True, loads partial checkpoints. `"smp_load_partial"` can only be used with Sagemaker Model Parallel library.
     """
 
     output_dir: str = field(
@@ -730,6 +734,9 @@ class TrainingArguments:
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
     )
+    smp_save_partial: bool = field(default=False, metadata={"help": "Save checkpoints partially for SMP."})
+    smp_load_partial: bool = field(default=False, metadata={"help": "Load partial checkpoints for SMP."})
+
     # Deprecated arguments
     fp16_backend: str = field(
         default="auto",
@@ -747,6 +754,7 @@ class TrainingArguments:
         default="",
         metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
     )
+
 
     def __post_init__(self):
         # Handle --use_env option in torch.distributed.launch (local_rank not passed as an arg then).
@@ -964,6 +972,9 @@ class TrainingArguments:
                 f"{self.hub_model_id}).",
                 FutureWarning,
             )
+
+        if (self.smp_save_partial or self.smp_load_partial) and not is_sagemaker_mp_enabled():
+            raise ValueError(f"smp_save_partial and smp_load_partial can only be used with Sagemaker Model Parallel library.")
 
     def __str__(self):
         self_as_dict = asdict(self)
@@ -1192,7 +1203,10 @@ class TrainingArguments:
             return self.local_process_index == 0
         else:
             if is_sagemaker_mp_enabled():
-                return smp.rank() == 0
+                if self.smp_save_partial:
+                    return smp.rdp_rank() == 0
+                else: 
+                    return smp.rank() == 0
             else:
                 return self.process_index == 0
 
