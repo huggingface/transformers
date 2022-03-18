@@ -89,4 +89,4 @@ jobs:
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
         run: |
           pip install slack_sdk
-          python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"
+          python utils/notification_service_doc_tests.py
