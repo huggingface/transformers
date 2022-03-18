@@ -15,14 +15,12 @@
 # limitations under the License.
 """ TF 2.0 OpenAI GPT-2 model."""
 
-from optparse import Option
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
 from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
-from torch import Tensor
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
@@ -354,7 +352,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        input_ids: Optional[TFModelInputType ] =None,
+        input_ids: Optional[TFModelInputType] = None,
         past: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -954,7 +952,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] =None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
         encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -965,7 +963,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
         **kwargs,
-    )->Union[TFCausalLMOutputWithCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFCausalLMOutputWithCrossAttentions, Tuple[tf.Tensor]]:
         r"""
         encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
