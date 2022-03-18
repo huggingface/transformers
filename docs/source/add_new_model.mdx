@@ -107,10 +107,10 @@ own regarding how code should be written :-)
 2. The code should be fully understandable, even by a non-native English speaker. This means you should pick
    descriptive variable names and avoid abbreviations. As an example, `activation` is preferred to `act`.
    One-letter variable names are strongly discouraged unless it's an index in a for loop. 
-1. More generally we prefer longer explicit code to short magical one.
-1. Avoid subclassing `nn.Sequential` in PyTorch but subclass `nn.Module` and write the forward pass, so that anyone
+3. More generally we prefer longer explicit code to short magical one.
+4. Avoid subclassing `nn.Sequential` in PyTorch but subclass `nn.Module` and write the forward pass, so that anyone
    using your code can quickly debug it by adding print statements or breaking points.
-1. Your function signature should be type-annotated. For the rest, good variable names are way more readable and
+5. Your function signature should be type-annotated. For the rest, good variable names are way more readable and
    understandable than type annotations.
 
 ### Overview of tokenizers
