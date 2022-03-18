@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("ofa", "OFAModel"),
         ("maskformer", "MaskFormerModel"),
         ("poolformer", "PoolFormerModel"),
         ("convnext", "ConvNextModel"),
@@ -168,6 +169,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
+        ("ofa", "OFAForConditionalGeneration"),
         ("yoso", "YosoForMaskedLM"),
         ("nystromformer", "NystromformerForMaskedLM"),
         ("plbart", "PLBartForConditionalGeneration"),
@@ -224,6 +226,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("ofa", "OFAForCausalLM"),
         ("xglm", "XGLMForCausalLM"),
         ("plbart", "PLBartForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
@@ -382,6 +385,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        ("ofa", "OFAForConditionalGeneration"),
         ("plbart", "PLBartForConditionalGeneration"),
         ("bigbird_pegasus", "BigBirdPegasusForConditionalGeneration"),
         ("m2m_100", "M2M100ForConditionalGeneration"),
@@ -411,6 +415,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("ofa", "OFAForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
         ("plbart", "PLBartForSequenceClassification"),
@@ -463,6 +468,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
+        ("ofa", "OFAForQuestionAnswering"),
         ("yoso", "YosoForQuestionAnswering"),
         ("nystromformer", "NystromformerForQuestionAnswering"),
         ("qdqbert", "QDQBertForQuestionAnswering"),

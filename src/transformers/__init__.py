@@ -260,6 +260,7 @@ _import_structure = {
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
     ],
+    "models.ofa": ["OFA_PRETRAINED_CONFIG_ARCHIVE_MAP", "OFAConfig", "OFATokenizer"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
@@ -434,6 +435,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.ofa"].append("OFATokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
@@ -633,6 +635,7 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1205,6 +1208,17 @@ if is_torch_available():
             "NystromformerLayer",
             "NystromformerModel",
             "NystromformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.ofa"].extend(
+        [
+            "OFA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "OFAForCausalLM",
+            "OFAForConditionalGeneration",
+            "OFAForQuestionAnswering",
+            "OFAForSequenceClassification",
+            "OFAModel",
+            "OFAPreTrainedModel",
         ]
     )
     _import_structure["models.openai"].extend(
@@ -2580,6 +2594,7 @@ if TYPE_CHECKING:
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
+    from .models.ofa import OFA_PRETRAINED_CONFIG_ARCHIVE_MAP, OFAConfig, OFATokenizer
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
@@ -2762,6 +2777,7 @@ if TYPE_CHECKING:
         from .models.mobilebert import MobileBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
+        from .models.ofa import OFATokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.realm import RealmTokenizerFast
@@ -2841,6 +2857,7 @@ if TYPE_CHECKING:
         from .utils.dummy_scatter_objects import *
 
     if is_torch_available():
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -3370,6 +3387,15 @@ if TYPE_CHECKING:
             NystromformerLayer,
             NystromformerModel,
             NystromformerPreTrainedModel,
+        )
+        from .models.ofa import (
+            OFA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OFAForCausalLM,
+            OFAForConditionalGeneration,
+            OFAForQuestionAnswering,
+            OFAForSequenceClassification,
+            OFAModel,
+            OFAPreTrainedModel,
         )
         from .models.openai import (
             OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
