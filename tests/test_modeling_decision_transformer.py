@@ -205,10 +205,13 @@ class DecisionTransformerModelIntegrationTest(unittest.TestCase):
 
         NUM_STEPS = 2  # number of steps of autoregressive prediction we will perform
         TARGET_RETURN = 10  # defined by the RL environment, may be normalized
-        config = DecisionTransformerConfig()
-        model = DecisionTransformerModel(config).to(torch_device)
-
+        model = DecisionTransformerModel.from_pretrained("edbeeching/decision-transformer-gym-hopper-expert")
+        model = model.to(torch_device)
+        config = model.config
+        torch.manual_seed(0)
         state = torch.randn(1, 1, config.state_dim).to(device=torch_device, dtype=torch.float32)  # env.reset()
+
+        expected_outputs = torch.tensor([[0.2384, -0.2955, 0.8741], [0.6765, -0.0793, -0.1298]], device=torch_device)
 
         returns_to_go = torch.tensor(TARGET_RETURN, device=torch_device, dtype=torch.float32).reshape(1, 1, 1)
         states = state
@@ -234,7 +237,7 @@ class DecisionTransformerModelIntegrationTest(unittest.TestCase):
                 )
 
             self.assertEqual(action_pred.shape, actions.shape)
-
+            self.assertTrue(torch.allclose(action_pred[0, -1], expected_outputs[step], atol=1e-4))
             state, reward, _, _ = (  # env.step(action)
                 torch.randn(1, 1, config.state_dim).to(device=torch_device, dtype=torch.float32),
                 1.0,
