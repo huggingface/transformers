@@ -104,7 +104,7 @@ class RegNetConvLayer(nn.Sequential):
         groups: int = 1,
     ):
         super().__init__()
-        self.conv = nn.Conv2d(
+        self.convolution = nn.Conv2d(
             in_channels,
             out_channels,
             kernel_size=kernel_size,
@@ -113,8 +113,8 @@ class RegNetConvLayer(nn.Sequential):
             groups=groups,
             bias=False,
         )
-        self.norm = nn.BatchNorm2d(out_channels)
-        self.act = ACT2FN[hidden_act] if hidden_act is not None else nn.Identity()
+        self.normalization = nn.BatchNorm2d(out_channels)
+        self.activation = ACT2FN[hidden_act] if hidden_act is not None else nn.Identity()
 
 
 class RegNetEmbeddings(nn.Sequential):
@@ -136,8 +136,8 @@ class RegNetShortCut(nn.Sequential):
 
     def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
-        self.norm = nn.BatchNorm2d(out_channels)
+        self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
+        self.normalization = nn.BatchNorm2d(out_channels)
 
 
 class RegNetSELayer(nn.Module):
@@ -183,14 +183,14 @@ class RegNetXLayer(nn.Module):
             RegNetConvLayer(out_channels, out_channels, stride=stride, groups=groups),
             RegNetConvLayer(out_channels, out_channels, kernel_size=1, hidden_act=None),
         )
-        self.act = ACT2FN[hidden_act]
+        self.activation = ACT2FN[hidden_act]
 
     def forward(self, hidden_state):
         residual = hidden_state
         hidden_state = self.layer(hidden_state)
         residual = self.shortcut(residual)
         hidden_state += residual
-        hidden_state = self.act(hidden_state)
+        hidden_state = self.activation(hidden_state)
         return hidden_state
 
 
@@ -214,14 +214,14 @@ class RegNetYLayer(nn.Module):
             RegNetSELayer(out_channels, reduced_channels=in_channels // 4),
             RegNetConvLayer(out_channels, out_channels, kernel_size=1, hidden_act=None),
         )
-        self.act = ACT2FN[hidden_act]
+        self.activation = ACT2FN[hidden_act]
 
     def forward(self, hidden_state):
         residual = hidden_state
         hidden_state = self.layer(hidden_state)
         residual = self.shortcut(residual)
         hidden_state += residual
-        hidden_state = self.act(hidden_state)
+        hidden_state = self.activation(hidden_state)
         return hidden_state
 
 
