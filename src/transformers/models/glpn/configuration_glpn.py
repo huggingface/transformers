@@ -80,7 +80,7 @@ class GLPNConfig(PretrainedConfig):
             The dimension of the decoder.
         max_depth (`int`, *optional*, defaults to 10):
             The maximum depth of the decoder.
-        in_index (`int`, *optional*, defaults to -1):
+        head_in_index (`int`, *optional*, defaults to -1):
             The index of the features to use in the head.
 
     Example:
@@ -122,7 +122,7 @@ class GLPNConfig(PretrainedConfig):
         is_encoder_decoder=False,
         decoder_hidden_size=64,
         max_depth=10,
-        in_index=-1,
+        head_in_index=-1,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -147,4 +147,4 @@ class GLPNConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.decoder_hidden_size = decoder_hidden_size
         self.max_depth = max_depth
-        self.in_index = in_index
+        self.head_in_index = head_in_index

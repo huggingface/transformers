@@ -651,7 +651,7 @@ class GLPNDepthEstimationHead(nn.Module):
 
     def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
         # use last features of the decoder
-        hidden_states = hidden_states[self.config.in_index]
+        hidden_states = hidden_states[self.config.head_in_index]
 
         hidden_states = self.head(hidden_states)
 
