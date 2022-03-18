@@ -58,6 +58,7 @@ from .generic_utils import cached_property  # noqa: F401
 from .generic_utils import is_tensor  # noqa: F401
 from .generic_utils import to_numpy  # noqa: F401
 from .generic_utils import to_py_obj  # noqa: F401
+from .import_utils import TORCH_FX_REQUIRED_VERSION  # noqa: F401
 from .import_utils import DummyObject  # noqa: F401
 from .import_utils import _LazyModule  # noqa: F401
 from .import_utils import is_apex_available  # noqa: F401
@@ -105,6 +106,7 @@ from .import_utils import requires_backends  # noqa: F401
 from .import_utils import tf_required  # noqa: F401
 from .import_utils import torch_only_method  # noqa: F401
 from .import_utils import torch_required  # noqa: F401
+from .import_utils import torch_version  # noqa: F401
 from .import_utils import (
     _tf_version,
     _torch_version,
