@@ -1165,8 +1165,16 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
+
         if resume_from_checkpoint is not None:
-            if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+            if self.args.smp_load_partial:
+                import glob
+                # SMP partial checkpoints are in {filename}_{pp_rank()}_{tp_rank()} or {filename}_{pp_rank()}_{tp_rank()}_{rdp_rank()} format.
+                checkpoint_file_exists = glob.glob(os.path.join(resume_from_checkpoint, WEIGHTS_NAME) + "_*")
+            else:
+                checkpoint_file_exists = os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME))
+
+            if not checkpoint_file_exists:
                 raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
             logger.info(f"Loading model from {resume_from_checkpoint}).")
@@ -1185,13 +1193,12 @@ class Trainer:
                 # will be resumed in deepspeed_init
                 pass
             else:
-                # We load the model state dict on the CPU to avoid an OOM error.
-                state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
-                # If the model is on the GPU, it still works!
-                self._load_state_dict_in_model(state_dict)
+                if not (is_sagemaker_mp_enabled() and self.args.smp_load_partial):
+                    state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
+                    self._load_state_dict_in_model(state_dict)
 
-                # release memory
-                del state_dict
+                    # release memory
+                    del state_dict
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
@@ -1271,6 +1278,11 @@ class Trainer:
             self.model.gradient_checkpointing_enable()
 
         model = self._wrap_model(self.model_wrapped)
+
+        if resume_from_checkpoint is not None:
+            if is_sagemaker_mp_enabled() and self.args.smp_load_partial:
+                state_dict = smp.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), partial=self.args.smp_load_partial)
+                model.load_state_dict(state_dict)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -1715,16 +1727,22 @@ class Trainer:
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
             if smp.rdp_rank() == 0:
-                # Consolidate the state dict on all processed of rdp_rank 0
-                opt_state_dict = self.optimizer.state_dict()
-                # Save it and the scheduler on the main process
-                if self.args.should_save:
+            # Consolidate the state dict on all processed of rdp_rank 0
+                if self.args.smp_save_partial:
+                    opt_state_dict = self.optimizer.local_state_dict()
+                else:
+                    opt_state_dict = self.optimizer.state_dict()
+            # Save it and the scheduler on the main process
+            if self.args.should_save:
+                if self.args.smp_save_partial:
+                    smp.save(opt_state_dict, os.path.join(output_dir, OPTIMIZER_NAME), partial=self.args.smp_save_partial)
+                else:
                     torch.save(opt_state_dict, os.path.join(output_dir, OPTIMIZER_NAME))
-                    with warnings.catch_warnings(record=True) as caught_warnings:
-                        torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
-                    reissue_pt_warnings(caught_warnings)
-                    if self.do_grad_scaling:
-                        torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+                reissue_pt_warnings(caught_warnings)
+                if self.do_grad_scaling:
+                    torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
         elif self.args.should_save and not self.deepspeed:
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
@@ -1795,7 +1813,14 @@ class Trainer:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             return
 
-        if os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME)) and os.path.isfile(
+        if self.args.smp_load_partial:
+            import glob
+            # SMP partial checkpoints are in {filename}_{pp_rank()}_{tp_rank()} or {filename}_{pp_rank()}_{tp_rank()}_{rdp_rank()} format.
+            checkpoint_file_exists = glob.glob(os.path.join(checkpoint, OPTIMIZER_NAME) + "_*")
+        else:
+            checkpoint_file_exists = os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME))
+
+        if checkpoint_file_exists and os.path.isfile(
             os.path.join(checkpoint, SCHEDULER_NAME)
         ):
             # Load in optimizer and scheduler states
@@ -1813,7 +1838,10 @@ class Trainer:
                 self.lr_scheduler.load_state_dict(lr_scheduler_state)
             else:
                 map_location = "cpu" if is_sagemaker_mp_enabled() else self.args.device
-                self.optimizer.load_state_dict(
+                if is_sagemaker_mp_enabled() and self.args.smp_load_partial:
+                    self.optimizer.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=self.args.smp_load_partial))
+                else:
+                    self.optimizer.load_state_dict(
                     torch.load(os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location)
                 )
                 with warnings.catch_warnings(record=True) as caught_warnings:
@@ -2083,11 +2111,15 @@ class Trainer:
         if output_dir is None:
             output_dir = self.args.output_dir
 
+
         if is_torch_tpu_available():
             self._save_tpu(output_dir)
         elif is_sagemaker_mp_enabled():
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
-            state_dict = self.model_wrapped.state_dict()
+            if self.args.smp_save_partial:
+                state_dict = self.model_wrapped.local_state_dict()
+            else:
+                state_dict = self.model_wrapped.state_dict()
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
         elif (
@@ -2175,9 +2207,15 @@ class Trainer:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 if state_dict is None:
                     state_dict = self.model.state_dict()
-                torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                if self.args.smp_save_partial:
+                    smp.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME), partial=self.args.smp_save_partial)
+                else:
+                    torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir, state_dict=state_dict)
+            if self.args.smp_save_partial:
+                self.model.save_pretrained(output_dir, save_function=smp.save, state_dict=state_dict)
+            else:
+                self.model.save_pretrained(output_dir, save_function=torch.save, state_dict=state_dict)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
 
