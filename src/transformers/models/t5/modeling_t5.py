@@ -1549,7 +1549,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] =None,
+        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
