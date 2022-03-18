@@ -248,7 +248,7 @@ class BaseModelOutputWithPastAndCrossAttentions(ModelOutput):
 @dataclass
 class DecisionTransformerOutput(ModelOutput):
     """
-    Base class for model's outputs that also contains a pooling of the last hidden states. TODO
+    Base class for model's outputs that also contains a pooling of the last hidden states.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):

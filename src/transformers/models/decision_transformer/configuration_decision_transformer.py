@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DecisionTransformer model configuration"""
+""" Decision Transformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -29,7 +29,7 @@ DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class DecisionTransformerConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DecisionTransformerModel`]. It is used to
-    instantiate a DecisionTransformer model according to the specified arguments, defining the model architecture.
+    instantiate a Decision Transformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the standard
     DecisionTransformer architecture. Many of the config options are used to instatiate the GPT2 model that is used as
     part of the architecture.
@@ -61,8 +61,8 @@ class DecisionTransformerConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         n_head (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        n_inner (`int`, *optional*, defaults to None):
-            Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
+        n_inner (`int`, *optional*):
+            Dimensionality of the inner feed-forward layers. If unset, will default to 4 times `n_embd`.
         activation_function (`str`, *optional*, defaults to `"gelu"`):
             Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
         resid_pdrop (`float`, *optional*, defaults to 0.1):
