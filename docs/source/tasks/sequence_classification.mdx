@@ -103,7 +103,7 @@ Load DistilBERT with [`AutoModelForSequenceClassification`] along with the numbe
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](training#finetune-with-trainer)!
+If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#finetune-with-trainer)!
 
 </Tip>
 
@@ -147,21 +147,21 @@ To fine-tune a model in TensorFlow is just as easy, with only a few differences.
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
+If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](../training#finetune-with-keras)!
 
 </Tip>
 
 Convert your datasets to the `tf.data.Dataset` format with [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
 
 ```py
->>> tf_train_dataset = tokenized_imdb["train"].to_tf_dataset(
+>>> tf_train_set = tokenized_imdb["train"].to_tf_dataset(
 ...     columns=["attention_mask", "input_ids", "label"],
 ...     shuffle=True,
 ...     batch_size=16,
 ...     collate_fn=data_collator,
 ... )
 
->>> tf_validation_dataset = tokenized_imdb["train"].to_tf_dataset(
+>>> tf_validation_set = tokenized_imdb["test"].to_tf_dataset(
 ...     columns=["attention_mask", "input_ids", "label"],
 ...     shuffle=False,
 ...     batch_size=16,
