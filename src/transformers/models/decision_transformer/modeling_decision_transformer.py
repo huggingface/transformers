@@ -98,10 +98,7 @@ DECISION_TRANSFORMER_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings(
-    "The DecisionTransformer Model",
-    DECISION_TRANSFORMER_START_DOCSTRING,
-)
+@add_start_docstrings("The Decision Transformer Model", DECISION_TRANSFORMER_START_DOCSTRING)
 class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
     """
 
