@@ -19,6 +19,7 @@ import copy
 import math
 import os
 import warnings
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -44,7 +45,7 @@ from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices,
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
-from typing import Optional, Tuple, Union
+
 
 logger = logging.get_logger(__name__)
 
@@ -330,7 +331,7 @@ class T5LayerFF(nn.Module):
 
 
 class T5Attention(nn.Module):
-    def __init__(self, config: T5Config, has_relative_attention_bias: bool = False):
+    def __init__(self, config: T5Config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
