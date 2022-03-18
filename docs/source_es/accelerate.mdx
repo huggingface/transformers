@@ -32,7 +32,7 @@ Luego, importamos y creamos un objeto [`Accelerator`](https://huggingface.co/doc
 
 ## Prepárate para acelerar
 
-El siguiente paso es pasar todos los objetos relevantes para el entrenamiento al metodo [`prepare`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.prepare). Esto incluye los DataLoaders de entrenamiento y evaluación, un modelo y un optimizador:
+El siguiente paso es pasar todos los objetos relevantes para el entrenamiento al método [`prepare`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.prepare). Esto incluye los DataLoaders de entrenamiento y evaluación, un modelo y un optimizador:
 
 ```py
 >>> train_dataloader, eval_dataloader, model, optimizer = accelerator.prepare(
@@ -40,9 +40,9 @@ El siguiente paso es pasar todos los objetos relevantes para el entrenamiento al
 ... )
 ```
 
-## Retroprograpacion
+## Backward
 
-La ultima adicion es reemplazar el tipico `loss.backward()` en tu bucle de entrenamiento con el metodo [`backward`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.backward) de 🤗 Accelerate:
+La última adición es reemplazar el típico `loss.backward()` en tu bucle de entrenamiento con el metodo [`backward`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.backward) de 🤗 Accelerate:
 
 ```py
 >>> for epoch in range(num_epochs):
@@ -57,7 +57,7 @@ La ultima adicion es reemplazar el tipico `loss.backward()` en tu bucle de entre
 ...         progress_bar.update(1)
 ```
 
-Como se puede ver en el siguiente código, solo necesitas adicionar cuatro líneas de código a tu bucle de entrenamiento para habilitar el entrenamiento distribuido!
+Como se puede ver en el siguiente código, ¡solo necesitas adicionar cuatro líneas de código a tu bucle de entrenamiento para habilitar el entrenamiento distribuido!
 
 ```diff
 + from accelerate import Accelerator
@@ -107,7 +107,7 @@ Una vez hayas añadido las líneas de código relevantes, inicia el entrenamient
 
 ### Entrenar con un script
 
-Si estas corriendo tu entrenamiento desde un script, ejecuta el siguiente comando para crear y guardar un archivo de configuración:
+Si estas corriendo tu entrenamiento desde un script ejecuta el siguiente comando para crear y guardar un archivo de configuración:
 
 ```bash
 accelerate config
@@ -121,7 +121,7 @@ accelerate launch train.py
 
 ### Entrenar con un notebook
 
-Si estás planeando utilizar las TPUs de Colaboratory, 🤗 Accelerate puede correr en un notebook. Encierra el código responsable del entrenamiento en una función y pasalo a `notebook_launcher`:
+🤗 Accelerate puede correr en un notebook si estás planeando utilizar las TPUs de Colaboratory. Encierra el código responsable del entrenamiento en una función y pásalo a `notebook_launcher`:
 
 ```py
 >>> from accelerate import notebook_launcher
