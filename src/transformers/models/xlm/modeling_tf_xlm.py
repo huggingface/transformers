@@ -674,7 +674,7 @@ XLM_INPUTS_DOCSTRING = r"""
             behaviors between training and evaluation).
 """
 
-
+@unpack_inputs
 @add_start_docstrings(
     "The bare XLM Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_START_DOCSTRING,
@@ -691,7 +691,6 @@ class TFXLMModel(TFXLMPreTrainedModel):
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @unpack_inputs
     def call(
         self,
         input_ids=None,
