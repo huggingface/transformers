@@ -34,10 +34,6 @@ jobs:
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - uses: actions/checkout@v2
-#        with:
-#          repository: 'huggingface/transformers'
-#          path: /transformers
-
       - name: NVIDIA-SMI
         run: |
           nvidia-smi

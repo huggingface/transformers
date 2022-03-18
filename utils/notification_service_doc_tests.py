@@ -27,20 +27,6 @@ from slack_sdk import WebClient
 
 client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
 
-NON_MODEL_TEST_MODULES = [
-    "benchmark",
-    "deepspeed",
-    "extended",
-    "fixtures",
-    "generation",
-    "onnx",
-    "optimization",
-    "pipelines",
-    "sagemaker",
-    "trainer",
-    "utils",
-]
-
 
 def handle_test_results(test_results):
     expressions = test_results.split(" ")
@@ -340,11 +326,9 @@ if __name__ == "__main__":
         ("*.mdx", "MDX Other"),
     ])
 
-    # This dict will contain all the information relative to each model:
-    # - Failures: the total, as well as the number of failures per-category defined above
-    # - Success: total
-    # - Time spent: as a comma-separated list of elapsed time
-    # - Failures: as a line-break separated list of errors
+    # This dict will contain all the information relative to each doc test category:
+    # - failed: list of failed tests
+    # - failures: dict in the format 'test': 'error_message'
     doc_test_results = {
         v: {
             "failed": [],
