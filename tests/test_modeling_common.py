@@ -1479,11 +1479,7 @@ class ModelTesterMixin:
                 # To deal with the edge cases from `TFTapasForQuestionAnswering`.
                 # PyTorch can deal with type casting automatically, but TensorFlow is more strict!
                 # TODO: find a clean/better way to deal with these extra keys that are not common.
-                elif key == "float_answer":
-                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
-                elif key == "numeric_values":
-                    tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
-                elif key == "numeric_values_scale":
+                elif key in ["float_answer", "numeric_values", "numeric_values_scale"]:
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.float32)
                 else:
                     tf_inputs_dict[key] = tf.convert_to_tensor(tensor.cpu().numpy(), dtype=tf.int32)
@@ -1663,11 +1659,7 @@ class ModelTesterMixin:
                 # transformers does not have TF version yet
                 return
 
-            # Output all for aggressive testing
-            config.output_hidden_states = True
-            # Pure convolutional models have no attention
-            # TODO: use a better and general criteria
-            if "ConvNext" not in model_class.__name__:
+            if self.has_attentions:
                 config.output_attentions = True
 
             for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
