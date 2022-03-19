@@ -85,14 +85,7 @@ class ViTMAEModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                self.num_channels,
-                self.image_size,
-                self.image_size,
-            ]
-        )
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
         if self.use_labels:
@@ -129,10 +122,7 @@ class ViTMAEModelTester:
         patch_size = to_2tuple(self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         expected_seq_len = int(math.ceil((1 - config.mask_ratio) * (num_patches + 1)))
-        self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (self.batch_size, expected_seq_len, self.hidden_size),
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, self.hidden_size))
 
     def create_and_check_for_pretraining(self, config, pixel_values, labels):
         model = ViTMAEForPreTraining(config)
@@ -145,10 +135,7 @@ class ViTMAEModelTester:
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         expected_seq_len = num_patches
         expected_num_channels = self.patch_size**2 * self.num_channels
-        self.parent.assertEqual(
-            result.logits.shape,
-            (self.batch_size, expected_seq_len, expected_num_channels),
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, expected_seq_len, expected_num_channels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -177,12 +164,7 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ViTMAEModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
-            config_class=ViTMAEConfig,
-            has_text_modality=False,
-            hidden_size=37,
-        )
+        self.config_tester = ConfigTester(self, config_class=ViTMAEConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -221,10 +203,7 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
     def test_attention_outputs(self):
-        (
-            config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
         # in ViTMAE, the seq_len equals (number of patches + 1) * (1 - mask_ratio), rounded above
@@ -264,21 +243,12 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
             if chunk_length is not None:
                 self.assertListEqual(
                     list(attentions[0].shape[-4:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        encoder_seq_length,
-                        chunk_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
                 )
             else:
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        encoder_seq_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
             out_len = len(outputs)
 
@@ -305,21 +275,12 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
             if chunk_length is not None:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-4:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        encoder_seq_length,
-                        chunk_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
                 )
             else:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        encoder_seq_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
     def test_hidden_states_output(self):
@@ -334,9 +295,7 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_layers = getattr(
-                self.model_tester,
-                "expected_num_hidden_layers",
-                self.model_tester.num_hidden_layers + 1,
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -351,10 +310,7 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
                 [seq_length, self.model_tester.hidden_size],
             )
 
-        (
-            config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
@@ -368,10 +324,7 @@ class ViTMAEModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_save_load(self):
 
-        (
-            config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -471,17 +424,7 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [
-                [-0.0548, -1.7023, -0.9325],
-                [0.3721, -0.5670, -0.2233],
-                [0.8235, -1.3878, -0.3524],
-            ]
+            [[-0.0548, -1.7023, -0.9325], [0.3721, -0.5670, -0.2233], [0.8235, -1.3878, -0.3524]]
         )
 
-        self.assertTrue(
-            torch.allclose(
-                outputs.logits[0, :3, :3],
-                expected_slice.to(torch_device),
-                atol=1e-4,
-            )
-        )
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice.to(torch_device), atol=1e-4))
