@@ -142,8 +142,7 @@ def to_2tuple(x):
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
     """
-    Create 2D sin/cos positional embeddings. (sayakpaul): Utility prototyped here:
-        https://colab.research.google.com/gist/sayakpaul/44cb65b7bac8ec3204ecf9348e8b08c6/scratchpad.ipynb
+    Create 2D sin/cos positional embeddings. 
 
     Args:
         embed_dim (`int`):
