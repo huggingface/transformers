@@ -796,7 +796,7 @@ VIT_MAE_START_DOCSTRING = r"""
     behavior.
 
     <Tip>
- 
+
     TF 2.0 models accepts two formats as inputs:
 
     - having all inputs as keyword arguments (like PyTorch models), or
