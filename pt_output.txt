@@ -1,5 +1,0 @@
-tensor(0.3890)
-torch.Size([1, 196, 768])
-torch.Size([1, 196])
-torch.Size([1, 196])
-None
