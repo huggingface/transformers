@@ -187,6 +187,7 @@ class FlaxT5Attention(nn.Module):
 
     def setup(self):
         self.relative_attention_num_buckets = self.config.relative_attention_num_buckets
+        self.relative_attention_max_distance = self.config.relative_attention_max_distance
         self.d_model = self.config.d_model
         self.key_value_proj_dim = self.config.d_kv
         self.n_heads = self.config.num_heads
@@ -275,6 +276,7 @@ class FlaxT5Attention(nn.Module):
             relative_position,
             bidirectional=(not self.causal),
             num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
         )
 
         values = self.relative_attention_bias(relative_position_bucket)

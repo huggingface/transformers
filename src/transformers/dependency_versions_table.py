@@ -22,7 +22,7 @@ deps = {
     "importlib_metadata": "importlib_metadata",
     "ipadic": "ipadic>=1.0.0,<2.0",
     "isort": "isort>=5.5.4",
-    "jax": "jax>=0.2.8",
+    "jax": "jax>=0.2.8,!=0.3.2",
     "jaxlib": "jaxlib>=0.1.65",
     "jieba": "jieba",
     "nltk": "nltk",

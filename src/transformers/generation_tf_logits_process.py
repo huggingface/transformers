@@ -260,7 +260,6 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
         return tf.convert_to_tensor(token_penalties, dtype=tf.float32)
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
-
         score_penalties = self._create_score_penalties(input_ids, scores)
 
         scores = tf.math.multiply(scores, score_penalties)

@@ -33,6 +33,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("maskformer", "MaskFormerConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("convnext", "ConvNextConfig"),
+        ("van", "VanConfig"),
+        ("resnet", "ResNetConfig"),
         ("yoso", "YosoConfig"),
         ("swin", "SwinConfig"),
         ("vilt", "ViltConfig"),
@@ -133,6 +135,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("poolformer", "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("convnext", "CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("van", "VAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("resnet", "RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -220,6 +224,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("maskformer", "MaskFormer"),
         ("poolformer", "PoolFormer"),
         ("convnext", "ConvNext"),
+        ("van", "VAN"),
+        ("resnet", "ResNet"),
         ("yoso", "YOSO"),
         ("swin", "Swin"),
         ("vilt", "ViLT"),
@@ -582,7 +588,7 @@ class AutoConfig:
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.

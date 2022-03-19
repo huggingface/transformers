@@ -134,15 +134,22 @@ Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference
 
 Use [`DefaultDataCollator`] to create a batch of examples. Unlike other data collators in 🤗 Transformers, the `DefaultDataCollator` does not apply additional preprocessing such as padding.
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import DefaultDataCollator
 
 >>> data_collator = DefaultDataCollator()
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import DefaultDataCollator
 
 >>> data_collator = DefaultDataCollator(return_tensors="tf")
 ```
+</tf>
+</frameworkcontent>
 
 ## Fine-tune with Trainer
 
@@ -156,7 +163,7 @@ Load DistilBERT with [`AutoModelForQuestionAnswering`]:
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](training#finetune-with-trainer)!
+If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#finetune-with-trainer)!
 
 </Tip>
 
@@ -195,7 +202,7 @@ To fine-tune a model in TensorFlow is just as easy, with only a few differences.
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
+If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](../training#finetune-with-keras)!
 
 </Tip>
 

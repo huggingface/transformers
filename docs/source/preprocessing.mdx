@@ -149,6 +149,9 @@ Finally, you want the tokenizer to return the actual tensors that are fed to the
 
 Set the `return_tensors` parameter to either `pt` for PyTorch, or `tf` for TensorFlow:
 
+<frameworkcontent>
+<pt>
+
 ```py
 >>> batch_sentences = [
 ...     "But what about second breakfast?",
@@ -163,7 +166,10 @@ Set the `return_tensors` parameter to either `pt` for PyTorch, or `tf` for Tenso
                            [0, 0, 0, 0, 0, 0, 0, 0, 0]]), 
  'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1],
                            [1, 1, 1, 1, 1, 1, 1, 1, 0]])}
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> batch_sentences = [
 ...     "But what about second breakfast?",
 ...     "Don't think he knows about second breakfast, Pip.",
@@ -182,6 +188,8 @@ array([[0, 0, 0, 0, 0, 0, 0, 0, 0],
 array([[1, 1, 1, 1, 1, 1, 1, 1, 1],
        [1, 1, 1, 1, 1, 1, 1, 1, 0]], dtype=int32)>}
 ```
+</tf>
+</frameworkcontent>
 
 ## Audio
 

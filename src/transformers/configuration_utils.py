@@ -473,7 +473,7 @@ class PretrainedConfig(PushToHubMixin):
             use_auth_token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `transformers-cli login` (stored in `~/.huggingface`).
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
@@ -623,7 +623,7 @@ class PretrainedConfig(PushToHubMixin):
         except HTTPError:
             raise EnvironmentError(
                 "We couldn't connect to 'https://huggingface.co/' to load this model and it looks like "
-                f"{pretrained_model_name_or_path} is not the path to a directory conaining a {configuration_file} "
+                f"{pretrained_model_name_or_path} is not the path to a directory containing a {configuration_file} "
                 "file.\nCheckout your internet connection or see how to run the library in offline mode at "
                 "'https://huggingface.co/docs/transformers/installation#offline-mode'."
             )

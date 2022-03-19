@@ -12,12 +12,13 @@ specific language governing permissions and limitations under the License.
 
 # Generation
 
-The methods for auto-regressive text generation, namely [`~generation_utils.GenerationMixin.generate`] (for the PyTorch models), [`~generation_tf_utils.TFGenerationMixin.generate`] (for the TensorFlow models) and [`~generation_flax_utils.FlaxGenerationMixin.generate`] (for the Flax/JAX models), are implemented in [`~generation_utils.GenerationMixin`], [`~generation_tf_utils.TFGenerationMixin`] and [`~generation_flax_utils.FlaxGenerationMixin`] respectively.
+Each framework has a generate method for auto-regressive text generation implemented in their respective `GenerationMixin` class:
 
-The `GenerationMixin` classes are inherited by the corresponding base model classes, *e.g.* [`PreTrainedModel`], [`TFPreTrainedModel`], and [`FlaxPreTrainedModel`] respectively, therefore exposing all 
-methods for auto-regressive text generation to every model class.
+- PyTorch [`~generation_utils.GenerationMixin.generate`] is implemented in [`~generation_utils.GenerationMixin`].
+- TensorFlow [`~generation_tf_utils.TFGenerationMixin.generate`] is implemented in [`~generation_tf_utils.TFGenerationMixin`].
+- Flax/JAX [`~generation_flax_utils.FlaxGenerationMixin.generate`] is implemented in [`~generation_flax_utils.FlaxGenerationMixin`].
 
-## GenerationMixn
+## GenerationMixin
 
 [[autodoc]] generation_utils.GenerationMixin
 	- generate
@@ -28,12 +29,12 @@ methods for auto-regressive text generation to every model class.
 	- group_beam_search
 	- constrained_beam_search
 
-## TFGenerationMixn
+## TFGenerationMixin
 
 [[autodoc]] generation_tf_utils.TFGenerationMixin
 	- generate
 
-## FlaxGenerationMixn
+## FlaxGenerationMixin
 
 [[autodoc]] generation_flax_utils.FlaxGenerationMixin
 	- generate

@@ -134,15 +134,22 @@ Use 🤗 Datasets [`map`](https://huggingface.co/docs/datasets/package_reference
 
 Use [`DataCollatorForTokenClassification`] to create a batch of examples. It will also *dynamically pad* your text and labels to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import DataCollatorForTokenClassification
 
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
-===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import DataCollatorForTokenClassification
 
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
 ```
+</tf>
+</frameworkcontent>
 
 ## Fine-tune with Trainer
 
@@ -156,7 +163,7 @@ Load DistilBERT with [`AutoModelForTokenClassification`] along with the number o
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](training#finetune-with-trainer)!
+If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#finetune-with-trainer)!
 
 </Tip>
 
@@ -195,7 +202,7 @@ To fine-tune a model in TensorFlow is just as easy, with only a few differences.
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
+If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](../training#finetune-with-keras)!
 
 </Tip>
 

@@ -741,7 +741,7 @@ class GenerationMixin:
                 )
         if bad_words_ids is not None:
             processors.append(NoBadWordsLogitsProcessor(bad_words_ids, eos_token_id))
-        if min_length is not None and eos_token_id is not None and min_length > -1:
+        if min_length is not None and eos_token_id is not None and min_length > 0:
             processors.append(MinLengthLogitsProcessor(min_length, eos_token_id))
         if prefix_allowed_tokens_fn is not None:
             processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams // num_beam_groups))
@@ -3075,7 +3075,7 @@ class GenerationMixin:
         ...     )
         ... }
 
-        >>> constraint_str = "sind"
+        >>> constraint_str = "Sie"
         >>> constraint_token_ids = tokenizer.encode(constraint_str)[:-1]  # slice to remove eos token
         >>> constraints = [PhrasalConstraint(token_ids=constraint_token_ids)]
 
@@ -3174,10 +3174,6 @@ class GenerationMixin:
                 cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
 
-            next_token_logits = outputs.logits[:, -1, :]
-
-            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
             next_token_logits = outputs.logits[:, -1, :]
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `nn.functional.log_softmax` operation.

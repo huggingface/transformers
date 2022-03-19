@@ -76,7 +76,7 @@ jobs:
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
 
-      - name: Run all non-slow tests on GPU
+      - name: Run all tests on GPU
         working-directory: /transformers
         run: python3 -m pytest -v --make-reports=${{ matrix.machines }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
 

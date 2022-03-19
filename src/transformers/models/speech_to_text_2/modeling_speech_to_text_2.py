@@ -870,7 +870,7 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
         >>> from datasets import load_dataset
 
         >>> feature_extractor = Wav2Vec2FeatureExtractor()
-        >>> tokenizer = Speech2Text2Tokenizer.from_pretrained(_CHECKPOINT_FOR_DOC)
+        >>> tokenizer = Speech2Text2Tokenizer.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
 
         >>> encoder = Wav2Vec2Model(Wav2Vec2Config())
         >>> decoder = Speech2Text2ForCausalLM(Speech2Text2Config())

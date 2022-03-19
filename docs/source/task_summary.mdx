@@ -87,6 +87,8 @@ each other. The process is the following:
 4. Compute the softmax of the result to get probabilities over the classes.
 5. Print the results.
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
 >>> import torch
@@ -122,8 +124,10 @@ is paraphrase: 90%
 ...     print(f"{classes[i]}: {int(round(not_paraphrase_results[i] * 100))}%")
 not paraphrase: 94%
 is paraphrase: 6%
-
->>> # ===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 >>> import tensorflow as tf
 
@@ -159,6 +163,8 @@ is paraphrase: 90%
 not paraphrase: 94%
 is paraphrase: 6%
 ```
+</tf>
+</frameworkcontent>
 
 ## Extractive Question Answering
 
@@ -214,6 +220,8 @@ Here is an example of question answering using a model and a tokenizer. The proc
 6. Fetch the tokens from the identified start and stop values, convert those tokens to a string.
 7. Print the results.
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForQuestionAnswering
 >>> import torch
@@ -259,8 +267,10 @@ Question: What does 🤗 Transformers provide?
 Answer: general - purpose architectures
 Question: 🤗 Transformers provides interoperability between which frameworks?
 Answer: tensorflow 2. 0 and pytorch
-
->>> # ===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import AutoTokenizer, TFAutoModelForQuestionAnswering
 >>> import tensorflow as tf
 
@@ -306,6 +316,8 @@ Answer: general - purpose architectures
 Question: 🤗 Transformers provides interoperability between which frameworks?
 Answer: tensorflow 2. 0 and pytorch
 ```
+</tf>
+</frameworkcontent>
 
 ## Language Modeling
 
@@ -382,6 +394,8 @@ Here is an example of doing masked language modeling using a model and a tokeniz
 5. Retrieve the top 5 tokens using the PyTorch `topk` or TensorFlow `top_k` methods.
 6. Replace the mask token by the tokens and print the results
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import AutoModelForMaskedLM, AutoTokenizer
 >>> import torch
@@ -409,8 +423,10 @@ Distilled models are smaller than the models they mimic. Using them instead of t
 Distilled models are smaller than the models they mimic. Using them instead of the large versions would help decrease our carbon footprint.
 Distilled models are smaller than the models they mimic. Using them instead of the large versions would help offset our carbon footprint.
 Distilled models are smaller than the models they mimic. Using them instead of the large versions would help improve our carbon footprint.
-
->>> # ===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import TFAutoModelForMaskedLM, AutoTokenizer
 >>> import tensorflow as tf
 
@@ -438,6 +454,8 @@ Distilled models are smaller than the models they mimic. Using them instead of t
 Distilled models are smaller than the models they mimic. Using them instead of the large versions would help offset our carbon footprint.
 Distilled models are smaller than the models they mimic. Using them instead of the large versions would help improve our carbon footprint.
 ```
+</tf>
+</frameworkcontent>
 
 This prints five sequences, with the top 5 tokens predicted by the model.
 
@@ -452,8 +470,10 @@ for generation tasks. If you would like to fine-tune a model on a causal languag
 Usually, the next token is predicted by sampling from the logits of the last hidden state the model produces from the
 input sequence.
 
+<frameworkcontent>
+<pt>
 Here is an example of using the tokenizer and model and leveraging the
-[`PreTrainedModel.top_k_top_p_filtering`] method to sample the next token following an input sequence
+[`top_k_top_p_filtering`] method to sample the next token following an input sequence
 of tokens.
 
 ```py
@@ -484,8 +504,14 @@ of tokens.
 >>> resulting_string = tokenizer.decode(generated.tolist()[0])
 >>> print(resulting_string)
 Hugging Face is based in DUMBO, New York City, and ...
+```
+</pt>
+<tf>
+Here is an example of using the tokenizer and model and leveraging the
+[`tf_top_k_top_p_filtering`] method to sample the next token following an input sequence
+of tokens.
 
->>> # ===PT-TF-SPLIT===
+```py
 >>> from transformers import TFAutoModelForCausalLM, AutoTokenizer, tf_top_k_top_p_filtering
 >>> import tensorflow as tf
 
@@ -512,6 +538,8 @@ Hugging Face is based in DUMBO, New York City, and ...
 >>> print(resulting_string)
 Hugging Face is based in DUMBO, New York City, and ...
 ```
+</tf>
+</frameworkcontent>
 
 This outputs a (hopefully) coherent next token following the original sequence, which in our case is the word *is* or
 *features*.
@@ -526,6 +554,8 @@ continuation from the given context. The following example shows how *GPT-2* can
 As a default all models apply *Top-K* sampling when used in pipelines, as configured in their respective configurations
 (see [gpt-2 config](https://huggingface.co/gpt2/blob/main/config.json) for example).
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import pipeline
 
@@ -569,8 +599,10 @@ Below is an example of text generation using `XLNet` and its tokenizer, which in
 
 >>> print(generated)
 Today the weather is really nice and I am planning ...
-
->>> # ===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import TFAutoModelForCausalLM, AutoTokenizer
 
 >>> model = TFAutoModelForCausalLM.from_pretrained("xlnet-base-cased")
@@ -598,6 +630,8 @@ Today the weather is really nice and I am planning ...
 >>> print(generated)
 Today the weather is really nice and I am planning ...
 ```
+</tf>
+</frameworkcontent>
 
 Text generation is currently possible with *GPT-2*, *OpenAi-GPT*, *CTRL*, *XLNet*, *Transfo-XL* and *Reformer* in
 PyTorch and for most models in Tensorflow as well. As can be seen in the example above *XLNet* and *Transfo-XL* often
@@ -675,6 +709,8 @@ Here is an example of doing named entity recognition, using a model and a tokeni
    each token.
 6. Zip together each token with its prediction and print it.
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import AutoModelForTokenClassification, AutoTokenizer
 >>> import torch
@@ -692,7 +728,10 @@ Here is an example of doing named entity recognition, using a model and a tokeni
 
 >>> outputs = model(**inputs).logits
 >>> predictions = torch.argmax(outputs, dim=2)
->>> # ===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import TFAutoModelForTokenClassification, AutoTokenizer
 >>> import tensorflow as tf
 
@@ -710,6 +749,8 @@ Here is an example of doing named entity recognition, using a model and a tokeni
 >>> outputs = model(**inputs)[0]
 >>> predictions = tf.argmax(outputs, axis=2)
 ```
+</tf>
+</frameworkcontent>
 
 This outputs a list of each token mapped to its corresponding prediction. Differently from the pipeline, here every
 token has a prediction as we didn't remove the "0"th class, which means that no particular entity was found on that
@@ -816,6 +857,8 @@ Here is an example of doing summarization using a model and a tokenizer. The pro
 In this example we use Google's T5 model. Even though it was pre-trained only on a multi-task mixed dataset (including
 CNN / Daily Mail), it yields very good results.
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
@@ -832,8 +875,10 @@ CNN / Daily Mail), it yields very good results.
 <pad> prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal
 counts of "offering a false instrument for filing in the first degree" she has been married 10 times, nine of them
 between 1999 and 2002.</s>
-
->>> # ===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import TFAutoModelForSeq2SeqLM, AutoTokenizer
 
 >>> model = TFAutoModelForSeq2SeqLM.from_pretrained("t5-base")
@@ -850,6 +895,8 @@ between 1999 and 2002.</s>
 counts of "offering a false instrument for filing in the first degree" she has been married 10 times, nine of them
 between 1999 and 2002.
 ```
+</tf>
+</frameworkcontent>
 
 ## Translation
 
@@ -882,6 +929,8 @@ Here is an example of doing translation using a model and a tokenizer. The proce
 3. Add the T5 specific prefix "translate English to German: "
 4. Use the `PreTrainedModel.generate()` method to perform the translation.
 
+<frameworkcontent>
+<pt>
 ```py
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
@@ -896,8 +945,10 @@ Here is an example of doing translation using a model and a tokenizer. The proce
 
 >>> print(tokenizer.decode(outputs[0]))
 <pad> Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.</s>
-
->>> # ===PT-TF-SPLIT===
+```
+</pt>
+<tf>
+```py
 >>> from transformers import TFAutoModelForSeq2SeqLM, AutoTokenizer
 
 >>> model = TFAutoModelForSeq2SeqLM.from_pretrained("t5-base")
@@ -912,5 +963,7 @@ Here is an example of doing translation using a model and a tokenizer. The proce
 >>> print(tokenizer.decode(outputs[0]))
 <pad> Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
 ```
+</tf>
+</frameworkcontent>
 
 We get the same translation as with the pipeline example.

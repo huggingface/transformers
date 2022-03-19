@@ -1506,11 +1506,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             use_auth_token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `transformers-cli login` (stored in `~/.huggingface`).
-            revision(`str`, *optional*, defaults to `"main"`):
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
-            mirror(`str`, *optional*):
+            mirror (`str`, *optional*):
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
                 Please refer to the mirror site for more information.
