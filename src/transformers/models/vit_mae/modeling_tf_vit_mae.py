@@ -133,9 +133,7 @@ class TFViTMAEForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[tf.Tensor]] = None
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
+# copied from transformers.models.vit.modeling_tf_vit.to_2tuple
 def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
@@ -192,7 +190,7 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
 
     omega = tf.range(embed_dim // 2, dtype="float32")
     omega /= embed_dim / 2.0
-    omega = 1.0 / 10000 ** omega  # (D/2,)
+    omega = 1.0 / 10000**omega  # (D/2,)
 
     pos = tf.reshape(pos, [-1])  # (M,)
     out = tf.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
@@ -233,7 +231,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
         )
         pos_embed = get_2d_sincos_pos_embed(
             self.position_embeddings.shape[-1],
-            int(self.patch_embeddings.num_patches ** 0.5),
+            int(self.patch_embeddings.num_patches**0.5),
             add_cls_token=True,
         )[None, ...]
         self.position_embeddings.assign(pos_embed)
@@ -247,8 +245,8 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
 
         Args:
             sequence (`tf.Tensor` of shape `(batch_size, sequence_length, dim)`)
-            noise (`tf.Tensor` of shape `(1, sequence_length)`) which is only used
-                for testing purposes to control randomness
+            noise (`tf.Tensor` of shape `(batch_size, sequence_length)`) which is
+                mainly used for testing purposes to control randomness and maintain the reproducibility
         """
         batch_size, seq_length, dim = sequence.shape
         len_keep = int(seq_length * (1 - self.config.mask_ratio))
@@ -353,6 +351,7 @@ class TFPatchEmbeddings(tf.keras.layers.Layer):
         return x
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfAttention
 class TFViTMAESelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
@@ -442,6 +441,7 @@ class TFViTMAESelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfOutput with ViT->ViTMAE
 class TFViTMAESelfOutput(tf.keras.layers.Layer):
     """
     The residual connection is defined in TFViTMAELayer instead of here (as is the case with other models), due to the
@@ -470,6 +470,7 @@ class TFViTMAESelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTAttention with ViT->ViTMAE
 class TFViTMAEAttention(tf.keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
@@ -503,6 +504,7 @@ class TFViTMAEAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTIntermediate
 class TFViTMAEIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
@@ -525,6 +527,7 @@ class TFViTMAEIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTOutput
 class TFViTMAEOutput(tf.keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
@@ -552,6 +555,7 @@ class TFViTMAEOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTLayer with ViT->ViTMAE
 class TFViTMAELayer(tf.keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -604,6 +608,7 @@ class TFViTMAELayer(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTEncoder with ViT->ViTMAE
 class TFViTMAEEncoder(tf.keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
@@ -933,7 +938,7 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
 
         self.decoder_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="decoder_norm")
         self.decoder_pred = tf.keras.layers.Dense(
-            config.patch_size ** 2 * config.num_channels, name="decoder_pred"
+            config.patch_size**2 * config.num_channels, name="decoder_pred"
         )  # encoder to decoder
         self.config = config
         self.num_patches = num_patches
@@ -953,7 +958,7 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
         )
         decoder_pos_embed = get_2d_sincos_pos_embed(
             self.decoder_pos_embed.shape[-1],
-            int(self.num_patches ** 0.5),
+            int(self.num_patches**0.5),
             add_cls_token=True,
         )[None, ...]
         self.decoder_pos_embed.assign(decoder_pos_embed)
@@ -1053,7 +1058,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         h = w = imgs.shape[2] // p
         x = tf.reshape(imgs, (imgs.shape[0], h, p, w, p, 3))
         x = tf.einsum("nhpwqc->nhwpqc", x)
-        x = tf.reshape(x, (imgs.shape[0], h * w, p ** 2 * 3))
+        x = tf.reshape(x, (imgs.shape[0], h * w, p**2 * 3))
         return x
 
     def unpatchify(self, x):

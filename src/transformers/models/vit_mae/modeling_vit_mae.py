@@ -192,7 +192,7 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
 
     omega = np.arange(embed_dim // 2, dtype=np.float)
     omega /= embed_dim / 2.0
-    omega = 1.0 / 10000 ** omega  # (D/2,)
+    omega = 1.0 / 10000**omega  # (D/2,)
 
     pos = pos.reshape(-1)  # (M,)
     out = np.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
@@ -233,7 +233,7 @@ class ViTMAEEmbeddings(nn.Module):
         # initialize (and freeze) position embeddings by sin-cos embedding
         pos_embed = get_2d_sincos_pos_embed(
             self.position_embeddings.shape[-1],
-            int(self.patch_embeddings.num_patches ** 0.5),
+            int(self.patch_embeddings.num_patches**0.5),
             add_cls_token=True,
         )
         self.position_embeddings.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
@@ -252,8 +252,8 @@ class ViTMAEEmbeddings(nn.Module):
 
         Args:
             sequence (`torch.LongTensor` of shape `(batch_size, sequence_length, dim)`)
-            noise (`tf.Tensor` of shape `(1, sequence_length)`) which is only used
-                for testing purposes to control randomness
+            noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`) which is
+                mainly used for testing purposes to control randomness and maintain the reproducibility
         """
         batch_size, seq_length, dim = sequence.shape
         len_keep = int(seq_length * (1 - self.config.mask_ratio))
@@ -756,7 +756,7 @@ class ViTMAEDecoder(nn.Module):
         self.decoder_norm = nn.LayerNorm(config.decoder_hidden_size)
         self.decoder_pred = nn.Linear(
             config.decoder_hidden_size,
-            config.patch_size ** 2 * config.num_channels,
+            config.patch_size**2 * config.num_channels,
             bias=True,
         )  # encoder to decoder
         self.gradient_checkpointing = False
@@ -767,7 +767,7 @@ class ViTMAEDecoder(nn.Module):
         # initialize (and freeze) position embeddings by sin-cos embedding
         decoder_pos_embed = get_2d_sincos_pos_embed(
             self.decoder_pos_embed.shape[-1],
-            int(num_patches ** 0.5),
+            int(num_patches**0.5),
             add_cls_token=True,
         )
         self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
@@ -883,7 +883,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         h = w = imgs.shape[2] // p
         x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
         x = torch.einsum("nchpwq->nhwpqc", x)
-        x = x.reshape(shape=(imgs.shape[0], h * w, p ** 2 * 3))
+        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
         return x
 
     def unpatchify(self, x):
