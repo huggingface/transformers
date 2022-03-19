@@ -796,15 +796,15 @@ VIT_MAE_START_DOCSTRING = r"""
     behavior.
 
     <Tip>
-    
+ 
     TF 2.0 models accepts two formats as inputs:
-    
+
     - having all inputs as keyword arguments (like PyTorch models), or
     - having all inputs as a list, tuple or dict in the first positional arguments.
-    
+
     This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
     tensors in the first argument of the model call function: `model(inputs)`.
-    
+
     </Tip>
 
     Args:
@@ -818,17 +818,17 @@ VIT_MAE_INPUTS_DOCSTRING = r"""
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
             [`AutoFeatureExtractor.__call__`] for details.
-        
+
         head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        
+
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
             config will be used instead.
-        
+
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
