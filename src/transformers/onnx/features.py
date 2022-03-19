@@ -10,6 +10,7 @@ from ..models.distilbert import DistilBertOnnxConfig
 from ..models.electra import ElectraOnnxConfig
 from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
+from ..models.gptj import GPTJOnnxConfig
 from ..models.ibert import IBertOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
 from ..models.m2m_100 import M2M100OnnxConfig
@@ -222,6 +223,15 @@ class FeaturesManager:
             "sequence-classification",
             "token-classification",
             onnx_config_cls=GPT2OnnxConfig,
+        ),
+        "gpt-j": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls=GPTJOnnxConfig,
         ),
         "gpt-neo": supported_features_mapping(
             "default",
