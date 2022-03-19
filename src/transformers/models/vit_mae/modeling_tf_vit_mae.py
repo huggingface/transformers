@@ -142,7 +142,7 @@ def to_2tuple(x):
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
     """
-    Create 2D sin/cos positional embeddings. 
+    Create 2D sin/cos positional embeddings.
 
     Args:
         embed_dim (`int`):
