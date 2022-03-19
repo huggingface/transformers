@@ -26,18 +26,20 @@ EOF_STRINGS = ["\nclass", "\ndef", "\n#", "\n@", "\nprint", "\nif"]
 
 
 class TokenizeDataset(IterableDataset):
-    def __init__(self, tokenizer, dataset, max_length, n_tasks=None):
+    def __init__(self, tokenizer, dataset, n_tasks=None, n_copies=1):
         self.tokenizer = tokenizer
         self.dataset = dataset
-        self.max_length = max_length
         self.n_tasks = len(dataset) if n_tasks is None else n_tasks
+        self.n_copies = n_copies
 
     def __iter__(self):
         for task in range(self.n_tasks):
-            # why we need eos token? do we need strip?
-            prompt = self.tokenizer.eos_token + self.dataset[task]['prompt']
-            input_ids = self.tokenizer(prompt, max_length=self.max_length, padding='max_length', truncation=True)['input_ids']
-            yield {"ids": torch.tensor(input_ids)}
+            # with out strip, the model generate commented codes ...
+            prompt = self.tokenizer.eos_token + self.dataset[task]['prompt'].strip()
+            # codeparrot model is not robust to padding
+            input_ids = self.tokenizer(prompt)['input_ids']
+            for _ in range(self.n_copies):
+                yield {"ids": torch.tensor(input_ids)}
 
 
 class EndOfFunctionCriteria(StoppingCriteria):
@@ -50,45 +52,43 @@ class EndOfFunctionCriteria(StoppingCriteria):
 
     def __call__(self, input_ids, scores, **kwargs):
         """Returns true if all generated sequences contain any of the end-of-function strings."""
-        decoded_generations = self.tokenizer.batch_decode(input_ids[:, self.start_length :])
+        decoded_generations = self.tokenizer.batch_decode(input_ids[:, self.start_length:])
         done = []
         for decoded_generation in decoded_generations:
             done.append(any([stop_string in decoded_generation for stop_string in self.eof_strings]))
         return all(done)
 
 
-def first_block(string):
-    """Split off first block of code by scanning for class, def etc. on newlines."""
-    return re.split("|".join(EOF_STRINGS), string)[0].rstrip()
+def remove_last_block(string):
+    """Remove the last block of the code containing EOF_STRINGS
+    """
+    string_list = re.split("(%s)" % "|".join(EOF_STRINGS), string)
+    # last string should be ""
+    return "".join(string_list[:-2])
 
 
-def complete_code(pipe, prompt, num_completions=1, **gen_kwargs):
-    """Complete prompt with text generation pipeline and return num_completions."""
-    prompt = pipe.tokenizer.eos_token + prompt
-    code_gens = pipe(prompt, num_return_sequences=num_completions, **gen_kwargs)
-    return [first_block(code_gen["generated_text"][len(prompt) :]) for code_gen in code_gens]
-
-
-def complete_code_multi_gpu(model, tokenizer, dataloader, batch_size=20, **gen_kwargs):
-    accelerator = Accelerator()
-    model, dataloader = accelerator.prepare(model, dataloader)
+def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size=20, **gen_kwargs):
     gen_dataset_tokens = []  # list of shape n_steps
     for step, batch in enumerate(dataloader):
         with torch.no_grad():
-            generated_tokens = accelerator.unwrap_model(model).generate(input_ids=batch["ids"], num_return_sequences=batch_size, **gen_kwargs)
+            gen_kwargs["stopping_criteria"][0].start_length = batch["ids"].shape[-1]
+            generated_tokens = accelerator.unwrap_model(model).generate(
+                input_ids=batch["ids"], num_return_sequences=batch_size, **gen_kwargs)
             generated_tokens = accelerator.pad_across_processes(generated_tokens, dim=1, pad_index=tokenizer.pad_token_id)
             generated_tokens = accelerator.gather(generated_tokens).cpu().numpy()
             # generated_tokens of shape (n_processes*batch_size, n_tokens)
             gen_dataset_tokens.append(generated_tokens)
 
     code_gens = []
-    for generated_tokens in gen_dataset_tokens:
-        for i in range(len(generated_tokens) // batch_size):
-            task_gens = []
-            for s in generated_tokens[i * batch_size: (i + 1) * batch_size]:
+    # gen_dataset_tokens is of len n_tasks * (n_copies // num_processes)
+    task_size = len(gen_dataset_tokens) // n_tasks
+    for task in range(n_tasks):
+        task_gens = []
+        for generated_tokens in gen_dataset_tokens[task * task_size: (task + 1) * task_size]:
+            for s in generated_tokens:
                 gen_code = tokenizer.decode(s, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-                task_gens.append(first_block(gen_code))
-            code_gens.append(task_gens)
+                task_gens.append(remove_last_block(gen_code))
+        code_gens.append(task_gens)
     return code_gens
 
 
@@ -129,8 +129,13 @@ def main():
     code_eval_metric = load_metric("code_eval")
 
     # Use dataset load to feed to accelerate
+    accelerator = Accelerator()
+
     n_tasks = args.num_tasks if args.num_tasks is not None else len(human_eval["test"])
-    human_eval_td = TokenizeDataset(tokenizer, human_eval["test"], max_length=400, n_tasks=n_tasks)
+    n_copies = args.n_samples // args.batch_size
+    if n_copies % accelerator.num_processes != 0:
+        raise ValueError(f'n_samples({args.n_samples}) should be a mulitple of batch_size({args.batch_size}) x num_processes({accelerator.num_processes})')
+    human_eval_td = TokenizeDataset(tokenizer, human_eval["test"], n_copies=n_copies, n_tasks=n_tasks)
     human_eval_loader = DataLoader(human_eval_td, batch_size=1)
 
     # Run a quick test to see if code evaluation is enabled
@@ -142,27 +147,28 @@ def main():
         )
         raise exception
 
-    generations = complete_code_multi_gpu(model, tokenizer, human_eval_loader, batch_size=args.batch_size, **gen_kwargs)
-    for _ in range(args.n_samples // args.batch_size - 1):
-        _gens = complete_code_multi_gpu(model, tokenizer, human_eval_loader, batch_size=args.batch_size, **gen_kwargs) 
-        for i, g in enumerate(_gens):
-            generations[i].extend(g)
-    references = []
-
-    for task in tqdm(range(n_tasks)):
-        test_func = human_eval["test"][task]["test"]
-        entry_point = f"check({human_eval['test'][task]['entry_point']})"
-        references.append("\n" + test_func + "\n" + entry_point)
-
-    # Evaluate completions with "code_eval" metric
-    pass_at_k, _ = code_eval_metric.compute(
-        references=references, predictions=generations, num_workers=args.num_workers
+    model, human_eval_loader = accelerator.prepare(model, human_eval_loader)
+    generations = complete_code(
+        accelerator, model, tokenizer, human_eval_loader, n_tasks=n_tasks, batch_size=args.batch_size, **gen_kwargs
     )
-    print(f"Results: {pass_at_k}")
 
-    # Save results to json file
-    with open(args.output_file, "w") as fp:
-        json.dump(pass_at_k, fp)
+    if accelerator.is_main_process:
+        references = []
+
+        for task in tqdm(range(n_tasks)):
+            test_func = human_eval["test"][task]["test"]
+            entry_point = f"check({human_eval['test'][task]['entry_point']})"
+            references.append("\n" + test_func + "\n" + entry_point)
+
+        # Evaluate completions with "code_eval" metric
+        pass_at_k, _ = code_eval_metric.compute(
+            references=references, predictions=generations, num_workers=args.num_workers
+        )
+        print(f"Results: {pass_at_k}")
+
+        # Save results to json file
+        with open(args.output_file, "w") as fp:
+            json.dump(pass_at_k, fp)
 
 
 # For some reason the folliwng seems to be necessary sometimes for code_eval to work nice with multiprocessing
