@@ -142,7 +142,6 @@ class FlaubertConfig(XLMConfig):
         self.pre_norm = pre_norm
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, **kwargs)
 
-
     class FlaubertOnnxConfig(OnnxConfig):
         @property
         def inputs(self) -> Mapping[str, Mapping[int, str]]:
