@@ -274,7 +274,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
-            
+
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
