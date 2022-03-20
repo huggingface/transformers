@@ -42,7 +42,7 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
-    input_processing,
+    unpack_inputs,
     keras_serializable,
 )
 from ...tf_utils import shape_list
