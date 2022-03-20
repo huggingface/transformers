@@ -23,7 +23,7 @@ import unittest
 import numpy as np
 
 from transformers import ViTMAEConfig
-from transformers.file_utils import cached_property, is_tf_available, is_vision_available
+from transformers.file_utils import cached_property, is_tf_available, is_torch_available, is_vision_available
 from transformers.testing_utils import require_tf, require_vision, slow, tooslow
 
 from ..test_configuration_common import ConfigTester
@@ -35,6 +35,10 @@ if is_tf_available():
 
     from transformers import TFViTMAEForPreTraining, TFViTMAEModel
     from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+
+
+if is_torch_available():
+    import torch
 
 
 if is_vision_available():
@@ -152,10 +156,9 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (TFViTMAEModel, TFViTMAEForPreTraining) if is_tf_available() else ()
 
-    test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFViTMAEModelTester(self)
@@ -164,6 +167,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="ViTMAE does not use inputs_embeds")
     def test_inputs_embeds(self):
         # ViTMAE does not use inputs_embeds
         pass
@@ -182,7 +186,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            signature = inspect.signature(model.forward)
+            signature = inspect.signature(model.call)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
