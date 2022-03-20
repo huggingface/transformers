@@ -1156,6 +1156,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType]=None,
@@ -1200,68 +1201,47 @@ class TFT5Model(TFT5PreTrainedModel):
             warnings.warn(_HEAD_MASK_WARNING_MSG, FutureWarning)
             decoder_head_mask = head_mask
 
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            encoder_outputs=encoder_outputs,
+       # Encode if needed (training, first prediction pass)
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids,
+                attention_mask=attention_mask,
+                encoder_hidden_states=None,
+                encoder_attention_mask=None,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                past_key_values=None,
+                use_cache=False,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                training=training,
+            )
+
+        hidden_states = encoder_outputs[0]
+
+        # Decode
+        decoder_outputs = self.decoder(
+            decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
+            head_mask=decoder_head_mask,
+            encoder_head_mask=head_mask,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
         )
+        past = decoder_outputs[1] if use_cache else None
 
-        # Encode if needed (training, first prediction pass)
-        if inputs["encoder_outputs"] is None:
-            inputs["encoder_outputs"] = self.encoder(
-                inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                encoder_hidden_states=None,
-                encoder_attention_mask=None,
-                inputs_embeds=inputs["inputs_embeds"],
-                head_mask=inputs["head_mask"],
-                past_key_values=None,
-                use_cache=False,
-                output_attentions=inputs["output_attentions"],
-                output_hidden_states=inputs["output_hidden_states"],
-                return_dict=inputs["return_dict"],
-                training=inputs["training"],
-            )
-
-        hidden_states = inputs["encoder_outputs"][0]
-
-        # Decode
-        decoder_outputs = self.decoder(
-            inputs["decoder_input_ids"],
-            attention_mask=inputs["decoder_attention_mask"],
-            encoder_hidden_states=hidden_states,
-            encoder_attention_mask=inputs["attention_mask"],
-            inputs_embeds=inputs["decoder_inputs_embeds"],
-            head_mask=inputs["decoder_head_mask"],
-            encoder_head_mask=inputs["head_mask"],
-            past_key_values=inputs["past_key_values"],
-            use_cache=inputs["use_cache"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-        past = decoder_outputs[1] if inputs["use_cache"] else None
-
-        if not inputs["return_dict"]:
+        if not return_dict:
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
-            return decoder_outputs + inputs["encoder_outputs"]
+            return decoder_outputs + encoder_outputs
 
         return TFSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1269,9 +1249,9 @@ class TFT5Model(TFT5PreTrainedModel):
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=inputs["encoder_outputs"].last_hidden_state,
-            encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
-            encoder_attentions=inputs["encoder_outputs"].attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
         )
 
     def serving_output(self, output):
@@ -1352,6 +1332,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
     @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType]=None,
@@ -1407,65 +1388,43 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             warnings.warn(_HEAD_MASK_WARNING_MSG, FutureWarning)
             decoder_head_mask = head_mask
 
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            encoder_outputs=encoder_outputs,
+        # Encode if needed (training, first prediction pass)
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                training=training,
+            )
+
+        hidden_states = encoder_outputs[0]
+
+        if (
+            labels is not None
+            and decoder_input_ids is None
+            and decoder_inputs_embeds is None
+        ):
+            # get decoder inputs from shifting lm labels to the right
+            decoder_input_ids = self._shift_right(labels)
+
+        # Decode
+        decoder_outputs = self.decoder(
+            decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
+            head_mask=decoder_head_mask,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            labels=labels,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
-        )
-
-        # Encode if needed (training, first prediction pass)
-        if inputs["encoder_outputs"] is None:
-            inputs["encoder_outputs"] = self.encoder(
-                inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                inputs_embeds=inputs["inputs_embeds"],
-                head_mask=inputs["head_mask"],
-                output_attentions=inputs["output_attentions"],
-                output_hidden_states=inputs["output_hidden_states"],
-                return_dict=inputs["return_dict"],
-                training=inputs["training"],
-            )
-
-        hidden_states = inputs["encoder_outputs"][0]
-
-        if (
-            inputs["labels"] is not None
-            and inputs["decoder_input_ids"] is None
-            and inputs["decoder_inputs_embeds"] is None
-        ):
-            # get decoder inputs from shifting lm labels to the right
-            inputs["decoder_input_ids"] = self._shift_right(inputs["labels"])
-
-        # Decode
-        decoder_outputs = self.decoder(
-            inputs["decoder_input_ids"],
-            attention_mask=inputs["decoder_attention_mask"],
-            encoder_hidden_states=hidden_states,
-            encoder_attention_mask=inputs["attention_mask"],
-            inputs_embeds=inputs["decoder_inputs_embeds"],
-            head_mask=inputs["decoder_head_mask"],
-            past_key_values=inputs["past_key_values"],
-            use_cache=inputs["use_cache"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
 
         sequence_output = decoder_outputs[0]
@@ -1479,29 +1438,29 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         logits = tf.cast(logits, tf.float32)
 
-        loss = None if inputs["labels"] is None else self.hf_compute_loss(inputs["labels"], logits)
+        loss = None if labels is None else self.hf_compute_loss(labels, logits)
 
-        past = decoder_outputs[1] if inputs["use_cache"] else None
-        if not inputs["return_dict"]:
+        past = decoder_outputs[1] if use_cache else None
+        if not return_dict:
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
-            output = (logits,) + decoder_outputs[1:] + inputs["encoder_outputs"]
+            output = (logits,) + decoder_outputs[1:] + encoder_outputs
             return ((loss,) + output) if loss is not None else output
 
         # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
-        elif isinstance(inputs["encoder_outputs"], tuple):
-            last_hidden_state = inputs["encoder_outputs"][0]
+        elif isinstance(encoder_outputs, tuple):
+            last_hidden_state = encoder_outputs[0]
             hidden_states = None
             attentions = None
             idx = 0
-            if inputs["output_hidden_states"]:
+            if output_hidden_states:
                 idx += 1
-                hidden_states = inputs["encoder_outputs"][idx]
-            if inputs["output_attentions"]:
+                hidden_states = encoder_outputs[idx]
+            if output_attentions:
                 idx += 1
-                attentions = inputs["encoder_outputs"][idx]
+                attentions = encoder_outputs[idx]
 
-            inputs["encoder_outputs"] = TFBaseModelOutput(
+            encoder_outputs = TFBaseModelOutput(
                 last_hidden_state=last_hidden_state,
                 hidden_states=hidden_states,
                 attentions=attentions,
@@ -1514,9 +1473,9 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=inputs["encoder_outputs"].last_hidden_state,
-            encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
-            encoder_attentions=inputs["encoder_outputs"].attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
         )
 
     def serving_output(self, output):
@@ -1617,6 +1576,7 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(T5_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @unpack_inputs
     def call(
         self,
         input_ids: TFModelInputType,
@@ -1645,36 +1605,23 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         >>> ).input_ids  # Batch size 1
         >>> outputs = model(input_ids)
         ```"""
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
+
+        encoder_outputs = self.encoder(
+            input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
             inputs_embeds=inputs_embeds,
+            head_mask=head_mask,
+            past_key_values=None,
+            use_cache=False,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
         )
 
-        encoder_outputs = self.encoder(
-            input_ids,
-            attention_mask=inputs["attention_mask"],
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            inputs_embeds=inputs["inputs_embeds"],
-            head_mask=head_mask,
-            past_key_values=None,
-            use_cache=False,
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-
-        if not inputs["return_dict"]:
+        if not return_dict:
             return encoder_outputs
 
         return TFBaseModelOutput(
