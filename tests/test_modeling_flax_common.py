@@ -120,6 +120,7 @@ class FlaxModelTesterMixin:
     test_mismatched_shapes = True
     is_encoder_decoder = False
     test_head_masking = False
+    has_attentions = True
 
     def _prepare_for_class(self, inputs_dict, model_class):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -178,6 +179,11 @@ class FlaxModelTesterMixin:
                 Currently unused, but in the future, we could use this information to make the error message clearer
                 by giving the name(s) of the output tensor(s) with large difference(s) between PT and Flax.
         """
+
+        if type(names) == str and names.startswith("attentions"):
+            if model_class.__name__.startswith("FlaxBigBird"):
+                return
+
         if type(fx_outputs) in [tuple, list]:
             self.assertEqual(type(fx_outputs), type(pt_outputs))
             self.assertEqual(len(fx_outputs), len(pt_outputs))
@@ -222,6 +228,8 @@ class FlaxModelTesterMixin:
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
+                if self.has_attentions:
+                    config.output_attentions = True
 
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
@@ -274,7 +282,8 @@ class FlaxModelTesterMixin:
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
-                # Pure convolutional models have no attention
+                if self.has_attentions:
+                    config.output_attentions = True
 
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
