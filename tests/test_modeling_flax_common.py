@@ -210,8 +210,7 @@ class FlaxModelTesterMixin:
             pt_outputs[pt_nans] = 0
             fx_outputs[pt_nans] = 0
 
-            max_diff = np.amax(np.abs(fx_outputs - pt_outputs))
-            self.assertLessEqual(max_diff, 1e-5)
+            self.assert_almost_equals(fx_outputs, pt_outputs, 1e-5)
         else:
             raise ValueError(
                 f"`fx_outputs` should be a `tuple` or an instance of `jnp.ndarray`. Got {type(fx_outputs)} instead."
