@@ -23,22 +23,18 @@ import unittest
 import numpy as np
 
 from transformers import ViTMAEConfig
-from transformers.file_utils import cached_property, is_tf_available, is_torch_available, is_vision_available
-from transformers.testing_utils import require_tf, require_vision, slow, tooslow
+from transformers.file_utils import cached_property, is_tf_available, is_vision_available
+from transformers.testing_utils import require_tf, require_vision, slow
 
 from ..test_configuration_common import ConfigTester
 from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_tf_available():
-    import tensorflow as tf
+    import tensorflow
 
     from transformers import TFViTMAEForPreTraining, TFViTMAEModel
     from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
-
-
-if is_torch_available():
-    import torch
 
 
 if is_vision_available():
@@ -116,7 +112,7 @@ class TFViTMAEModelTester:
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFViTMAEModel(config=config)
-        result = model(pixel_values)
+        result = model(pixel_values, training=False)
         # expected sequence length = (num_patches + 1) * (1 - config.mask_ratio), rounded above
         # (we add 1 for the [CLS] token)
         image_size = to_2tuple(self.image_size)
@@ -127,7 +123,7 @@ class TFViTMAEModelTester:
 
     def create_and_check_for_pretraining(self, config, pixel_values, labels):
         model = TFViTMAEForPreTraining(config)
-        result = model(pixel_values)
+        result = model(pixel_values, training=False)
         # expected sequence length = num_patches
         image_size = to_2tuple(self.image_size)
         patch_size = to_2tuple(self.patch_size)
@@ -156,6 +152,8 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (TFViTMAEModel, TFViTMAEForPreTraining) if is_tf_available() else ()
 
+    test_pruning = False
+    test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
     test_onnx = False
@@ -276,7 +274,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
-
+            
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
@@ -316,7 +314,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config)
             # make random mask reproducible
-            torch.manual_seed(2)
+            # torch.manual_seed(2) -- remove this
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             out_2 = outputs[0].cpu().numpy()
@@ -326,7 +324,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname)
                 # make random mask reproducible
-                torch.manual_seed(2)
+                # torch.manual_seed(2) -- remove this
                 after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
                 # Make sure we don't have nans
@@ -398,7 +396,7 @@ class TFViTMAEModelIntegrationTest(unittest.TestCase):
         noise = np.random.uniform(size=(1, num_patches))
 
         # forward pass
-        outputs = model(**inputs, noise=tf.convert_to_tensor(noise))
+        outputs = model(**inputs, noise=noise)
 
         # verify the logits
         expected_shape = tf.convert_to_tensor([1, 196, 768])
@@ -408,4 +406,4 @@ class TFViTMAEModelIntegrationTest(unittest.TestCase):
             [[-0.0548, -1.7023, -0.9325], [0.3721, -0.5670, -0.2233], [0.8235, -1.3878, -0.3524]]
         )
 
-        self.assertTrue(tf.debugging.assert_near(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+        tf.debugging.assert_near(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
