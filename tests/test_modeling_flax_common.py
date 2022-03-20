@@ -179,7 +179,8 @@ class FlaxModelTesterMixin:
                 Currently unused, but in the future, we could use this information to make the error message clearer
                 by giving the name(s) of the output tensor(s) with large difference(s) between PT and Flax.
         """
-
+        # `bigbird_block_sparse_attention` in `FlaxBigBird` returns `attention_probs = None`, while in PyTorch version,
+        # an effort was done to return `attention_probs` (yet to be verified).
         if type(names) == str and names.startswith("attentions"):
             if model_class.__name__.startswith("FlaxBigBird"):
                 return
