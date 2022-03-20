@@ -522,9 +522,16 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
+<<<<<<< HEAD
     ):
 
         outputs = self.transformer(
+=======
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+>>>>>>> 52e35b68f23c4af1efbbf4dbba56f8565d43be56
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
