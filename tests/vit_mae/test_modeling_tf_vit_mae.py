@@ -394,14 +394,14 @@ class TFViTMAEModelIntegrationTest(unittest.TestCase):
         noise = np.random.uniform(size=(1, num_patches))
 
         # forward pass
-        outputs = model(**inputs, noise=torch.from_numpy(noise))
+        outputs = model(**inputs, noise=tf.convert_to_tensor(noise))
 
         # verify the logits
-        expected_shape = torch.Size((1, 196, 768))
+        expected_shape = tf.convert_to_tensor([1, 196, 768])
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor(
+        expected_slice = tf.convert_to_tensor(
             [[-0.0548, -1.7023, -0.9325], [0.3721, -0.5670, -0.2233], [0.8235, -1.3878, -0.3524]]
         )
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice.to(torch_device), atol=1e-4))
+        self.assertTrue(tf.debugging.assert_near(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
