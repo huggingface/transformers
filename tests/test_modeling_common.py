@@ -1918,6 +1918,9 @@ class ModelTesterMixin:
                     fx_model.save_pretrained(tmpdirname)
                     pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
 
+                # send pytorch model to the correct device
+                pt_model_loaded.to(torch_device)
+
                 with torch.no_grad():
                     pt_outputs_loaded = pt_model_loaded(**pt_inputs)
 
