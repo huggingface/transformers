@@ -1920,6 +1920,7 @@ class ModelTesterMixin:
 
                 # send pytorch model to the correct device
                 pt_model_loaded.to(torch_device)
+                pt_model_loaded.eval()
 
                 with torch.no_grad():
                     pt_outputs_loaded = pt_model_loaded(**pt_inputs)
