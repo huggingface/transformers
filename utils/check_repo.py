@@ -108,6 +108,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "xlm_roberta/test_modeling_xlm_roberta.py",
     "vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
     "vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
+    "decision_transformer/test_modeling_decision_transformer.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
