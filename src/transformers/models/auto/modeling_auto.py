@@ -31,6 +31,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("glpn", "GLPNModel"),
         ("maskformer", "MaskFormerModel"),
         ("decision_transformer", "DecisionTransformerModel"),
+        ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
         ("poolformer", "PoolFormerModel"),
         ("convnext", "ConvNextModel"),
         ("van", "VanModel"),

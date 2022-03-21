@@ -904,6 +904,8 @@ if is_torch_available():
     _import_structure["models.decision_transformer"].extend(
         [
             "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DecisionTransformerGPT2Model",
+            "DecisionTransformerGPT2PreTrainedModel",
             "DecisionTransformerModel",
             "DecisionTransformerPreTrainedModel",
         ]
@@ -3142,6 +3144,8 @@ if TYPE_CHECKING:
         )
         from .models.decision_transformer import (
             DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DecisionTransformerGPT2Model,
+            DecisionTransformerGPT2PreTrainedModel,
             DecisionTransformerModel,
             DecisionTransformerPreTrainedModel,
         )
