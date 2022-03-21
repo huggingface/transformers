@@ -540,8 +540,8 @@ class GLPNModel(GLPNPreTrainedModel):
 
 class GLPNSelectiveFeatureFusion(nn.Module):
     """
-    Selective Feature Fusion module, as explained in the [paper](https://arxiv.org/abs/2201.07436) (section 3.4). This module adaptively selects
-    and integrates local and global features by attaining an attention map for each feature.
+    Selective Feature Fusion module, as explained in the [paper](https://arxiv.org/abs/2201.07436) (section 3.4). This
+    module adaptively selects and integrates local and global features by attaining an attention map for each feature.
     """
 
     def __init__(self, in_channel=64):
@@ -575,7 +575,9 @@ class GLPNSelectiveFeatureFusion(nn.Module):
         # apply sigmoid to get two-channel attention map
         attn = self.sigmoid(features)
         # construct hybrid features by adding element-wise
-        hybrid_features = local_features * attn[:, 0, :, :].unsqueeze(1) + global_features * attn[:, 1, :, :].unsqueeze(1)
+        hybrid_features = local_features * attn[:, 0, :, :].unsqueeze(1) + global_features * attn[
+            :, 1, :, :
+        ].unsqueeze(1)
 
         return hybrid_features
 
@@ -630,6 +632,10 @@ class GLPNDecoder(nn.Module):
 class SiLogLoss(nn.Module):
     """
     Implements the Scale-invariant log scale loss [Eigen et al., 2014](https://arxiv.org/abs/1406.2283).
+
+    $$L=\frac{1}{n} \sum_{i} d_{i}^{2}-\frac{1}{2 n^{2}}\left(\sum_{i} d_{i}^{2}\right)$$ where $d_{i}=\log y_{i}-\log
+    y_{i}^{*}$.
+
     """
 
     def __init__(self, lambd=0.5):

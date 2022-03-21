@@ -15,7 +15,6 @@
 
 
 import unittest
-from base64 import encode
 
 import numpy as np
 

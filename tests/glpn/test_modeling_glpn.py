@@ -345,12 +345,12 @@ class GLPNModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        # verify the logits
+        # verify the predicted depth
         expected_shape = torch.Size([1, 480, 640])
-        self.assertEqual(outputs.logits.shape, expected_shape)
+        self.assertEqual(outputs.predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [[3.4291, 2.7865, 2.5151], [3.2841, 2.7021, 2.3502], [3.1147, 2.4625, 2.2481]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
