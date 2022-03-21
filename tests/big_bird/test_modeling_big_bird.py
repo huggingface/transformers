@@ -70,7 +70,7 @@ class BigBirdModelTester:
         attention_type="block_sparse",
         use_bias=True,
         rescale_embeddings=False,
-        block_size=16,
+        block_size=8,
         num_rand_blocks=3,
         position_embedding_type="absolute",
         scope=None,
