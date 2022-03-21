@@ -1,0 +1,5 @@
+=========================== short test summary info ============================
+PASSED src/transformers/models/van/modeling_van.py::transformers.models.van.modeling_van.VanModel.forward
+FAILED src/transformers/models/van/modeling_van.py::transformers.models.van.modeling_van.VanForImageClassification.forward
+FAILED src/transformers/models/resnet/modeling_resnet.py::transformers.models.resnet.modeling_resnet.ResNetForImageClassification.forward
+FAILED src/transformers/models/resnet/modeling_resnet.py::transformers.models.resnet.modeling_resnet.ResNetModel.forward

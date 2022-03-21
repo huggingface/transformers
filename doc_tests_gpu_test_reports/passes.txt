@@ -1,0 +1,5 @@
+==================================== PASSES ====================================
+_______ [doctest] transformers.models.van.modeling_van.VanModel.forward ________
+------------------------------ Captured log call -------------------------------
+WARNING  datasets.builder:builder.py:343 No config specified, defaulting to: cats_image/image
+WARNING  datasets.builder:builder.py:542 Reusing dataset cats_image (/mnt/cache/datasets/huggingface___cats_image/image/1.9.0/68fbc793fb10cd165e490867f5d61fa366086ea40c73e549a020103dcb4f597e)

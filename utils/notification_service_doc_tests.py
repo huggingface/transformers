@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fnmatch import fnmatch
 import collections
 import json
 import math
 import os
 import re
 import time
+from fnmatch import fnmatch
 from typing import Dict
 
 import requests
@@ -130,19 +130,27 @@ class Message:
 
     @property
     def category_failures(self) -> Dict:
-        n_blanks_left = 25
-        n_blanks_right = 15
-        category_failures = {k: len(v["failed"]) for k, v in doc_test_results.items() if isinstance(v, dict)}
-        category_failures_report = [f"| {category}".ljust(n_blanks_left, " ") + f"| {num}".ljust(n_blanks_right, " ") + "|" for category, num in category_failures.items()]
+        line_length = 40
+        category_failures = {k: v["failed"] for k, v in doc_test_results.items() if isinstance(v, dict)}
 
-        header = "| Category".ljust(n_blanks_left, " ") + "| # Failures ".ljust(n_blanks_right, " ") + "| \n"
-        category_failures_report = header + "\n".join(sorted(category_failures_report))
+        report = ""
+        for category, failures in category_failures.items():
+            if len(failures) == 0:
+                continue
+
+            if report != "":
+                report += "\n\n"
+
+            report += f"*{category} failures*:".ljust(line_length // 2).rjust(line_length // 2) + "\n"
+            report += "`"
+            report += "`\n`".join(failures)
+            report += "`"
 
         return {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"The following modeling categories had failures:\n\n```\n{category_failures_report}\n```",
+                "text": f"The following examples had failures:\n\n\n{report}\n",
             },
         }
 
@@ -316,15 +324,12 @@ if __name__ == "__main__":
     github_actions_job_links = get_job_links()
     available_artifacts = retrieve_available_artifacts()
 
-    docs = collections.OrderedDict([
-        ("src/transformers/models/*/*.py", "Python Models"),
-        ("src/transformers/generation_*.py", "Python Generation"),
-        ("*.py", "Python Other"),
-        ("docs/source/*.mdx", "MDX general doc"),
-        ("docs/source/main_classes/*.mdx", "MDX Main Classes"),
-        ("docs/source/model_doc/*.mdx", "MDX Model doc"),
-        ("*.mdx", "MDX Other"),
-    ])
+    docs = collections.OrderedDict(
+        [
+            ("*.py", "API Examples"),
+            ("*.mdx", "MDX Examples"),
+        ]
+    )
 
     # This dict will contain all the information relative to each doc test category:
     # - failed: list of failed tests
@@ -333,13 +338,14 @@ if __name__ == "__main__":
         v: {
             "failed": [],
             "failures": {},
-        } for v in docs.values()
+        }
+        for v in docs.values()
     }
 
     # Link to the GitHub Action job
     doc_test_results["job_link"] = github_actions_job_links.get("run_doctests")
 
-    artifact_path = available_artifacts['doc_tests_gpu_test_reports'].paths[0]
+    artifact_path = available_artifacts["doc_tests_gpu_test_reports"].paths[0]
     artifact = retrieve_artifact(artifact_path["name"])
     if "stats" in artifact:
         failed, success, time_spent = handle_test_results(artifact["stats"])
@@ -347,7 +353,7 @@ if __name__ == "__main__":
         doc_test_results["success"] = success
         doc_test_results["time_spent"] = time_spent[1:-1] + ", "
 
-        all_failures = extract_first_line_failure(artifact['failures_short'])
+        all_failures = extract_first_line_failure(artifact["failures_short"])
         for line in artifact["summary_short"].split("\n"):
             if re.search("FAILED", line):
 
