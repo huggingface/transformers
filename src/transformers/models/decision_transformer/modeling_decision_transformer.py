@@ -31,7 +31,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "decision_transformer"
 _CONFIG_FOR_DOC = "DecisionTransformerConfig"
-# _TOKENIZER_FOR_DOC = "DecisionTransformerTokenizer"
 
 DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "decision_transformer",
@@ -46,7 +45,6 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
     """
 
     config_class = DecisionTransformerConfig
-    # load_tf_weights = load_tf_weights_in_decision_transformer
     base_model_prefix = "decision_transformer"
     main_input_name = "states"
     supports_gradient_checkpointing = False
