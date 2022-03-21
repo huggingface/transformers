@@ -16,11 +16,7 @@
 import copy
 import math
 import random
-<<<<<<< HEAD
-from typing import Any, Optional, Tuple, Union
-=======
 from typing import List, Optional, Tuple, Union
->>>>>>> upstream/master
 
 import torch
 import torch.utils.checkpoint
@@ -1420,24 +1416,6 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
     # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
         self,
-<<<<<<< HEAD
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] =None,
-        decoder_input_ids: Optional[torch.LongTensor]=None,
-        decoder_attention_mask: Optional[torch.Tensor]=None,
-        head_mask: Optional[torch.Tensor] =None,
-        decoder_head_mask: Optional[torch.LongTensor]=None,
-        cross_attn_head_mask: Optional[torch.Tensor] =None,
-        encoder_outputs: Optional[List[torch.FloatTensor]]=None,
-        inputs_embeds: Optional[torch.FloatTensor] =None,
-        decoder_inputs_embeds=None,
-        labels: Optional[torch.Tensor] =None,
-        use_cache: Optional[bool] =None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None
-    )->Union[Tuple, Seq2SeqSequenceClassifierOutput]:
-=======
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
@@ -1454,7 +1432,6 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Seq2SeqSequenceClassifierOutput]:
->>>>>>> upstream/master
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1585,22 +1562,6 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-<<<<<<< HEAD
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] =None,
-        encoder_hidden_states: Optional[torch.FloatTensor] =None,
-        encoder_attention_mask: Optional[torch.LongTensor] =None,
-        head_mask: Optional[torch.Tensor] =None,
-        cross_attn_head_mask: Optional[torch.Tensor] =None,
-        past_key_values: Optional[List[torch.Tensor]] =None,
-        inputs_embeds: Optional[torch.FloatTensor] =None,
-        labels: Optional[torch.Tensor] =None,
-        use_cache: Optional[bool] =None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    )->Union[Tuple, CausalLMOutputWithCrossAttentions]:
-=======
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -1615,7 +1576,6 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
->>>>>>> upstream/master
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
