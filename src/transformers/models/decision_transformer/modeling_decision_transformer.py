@@ -14,26 +14,21 @@
 # limitations under the License.
 """ PyTorch DecisionTransformer model."""
 
-import os
 import math
+import os
 
 import torch
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 
-from packaging import version
+from ...activations import ACT2FN
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import DecisionTransformerOutput
-from ...modeling_utils import (
-    Conv1D,
-    PreTrainedModel,
-    find_pruneable_heads_and_indices,
-    prune_conv1d_layer,
-)
-
-from ...activations import ACT2FN
+from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
+
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
     is_amp_available = True
@@ -41,8 +36,8 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
 else:
     is_amp_available = False
 
-from .configuration_decision_transformer import DecisionTransformerConfig
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
+from .configuration_decision_transformer import DecisionTransformerConfig
 
 
 logger = logging.get_logger(__name__)
