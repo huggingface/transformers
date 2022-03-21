@@ -27,7 +27,7 @@ import torch.nn as nn
 from torch import Tensor
 
 import timm
-from classy_vision.models.regnet import RegNetY32gf, RegNetY64gf, RegNetY128gf, RegNetY256gf, RegNet, RegNetParams
+from classy_vision.models.regnet import RegNet, RegNetParams, RegNetY32gf, RegNetY64gf, RegNetY128gf, RegNetY256gf
 from huggingface_hub import cached_download, hf_hub_url
 from transformers import AutoFeatureExtractor, RegNetConfig, RegNetForImageClassification, RegNetModel
 from transformers.utils import logging
@@ -340,8 +340,8 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         # "regnet-y-2560-seer-in1k": ImageNetPreTrainedConfig(
         #     depths=[3, 7, 16, 1], hidden_sizes=[640, 1696, 2544, 5088], groups_width=640
         # ),
-         "regnet-y-10b-seer-in1k": ImageNetPreTrainedConfig(
-                      depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
+        "regnet-y-10b-seer-in1k": ImageNetPreTrainedConfig(
+            depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
         ),
     }
 
@@ -383,15 +383,12 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     #     lambda: FakeRegNetVisslWrapper(RegNetY256gf()),
     # )
 
-
     names_to_from_model_map["regnet-y-10b-seer"] = partial(
         load_using_classy_vision,
         "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_regnet10B/model_iteration124500_conso.torch",
-        lambda: FakeRegNetVisslWrapper(RegNet(RegNetParams(  depth = 27,
-        group_width = 1010,
-        w_0 = 1744,
-        w_a = 620.83,
-        w_m = 2.52))),
+        lambda: FakeRegNetVisslWrapper(
+            RegNet(RegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52))
+        ),
     )
 
     # IN1K finetuned
@@ -422,11 +419,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     names_to_from_model_map["regnet-y-10b-seer-in1k"] = partial(
         load_using_classy_vision,
         "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_finetuned/seer_10b_finetuned_in1k_model_phase28_conso.torch",
-        lambda: FakeRegNetVisslWrapper(RegNet(RegNetParams(  depth = 27,
-        group_width = 1010,
-        w_0 = 1744,
-        w_a = 620.83,
-        w_m = 2.52))),
+        lambda: FakeRegNetVisslWrapper(
+            RegNet(RegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52))
+        ),
     )
 
     if model_name:

@@ -44,9 +44,10 @@ class RegNetConfig(PretrainedConfig):
             Dimensionality (hidden size) at each stage.
         depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
             Depth (number of layers) for each stage.
-        layer_type (`str`, *optional*, defaults to `"bottleneck"`):
-            The layer to use, it can be either `"x" or `"y"` (like `x` but with squeeze and excitation). Please refer
-            to the paper for a detailed explanation of how these layers were constructed.
+        layer_type (`str`, *optional*, defaults to `"y"`):
+            The layer to use, it can be either `"x" or `"y"`. An `x` layer is a ResNet's BottleNeck layer with
+            `reduction` fixed to `1`. While a `y` layer is a `x` but with squeeze and excitation. Please refer to the
+            paper for a detailed explanation of how these layers were constructed.
         hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function in each block. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"`
             are supported.

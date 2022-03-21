@@ -100,7 +100,7 @@ class RegNetConvLayer(nn.Sequential):
         out_channels: int,
         kernel_size: int = 3,
         stride: int = 1,
-        hidden_act: str = "relu",
+        activation: str = "relu",
         groups: int = 1,
     ):
         super().__init__()
@@ -114,17 +114,21 @@ class RegNetConvLayer(nn.Sequential):
             bias=False,
         )
         self.normalization = nn.BatchNorm2d(out_channels)
-        self.activation = ACT2FN[hidden_act] if hidden_act is not None else nn.Identity()
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
 
-class RegNetEmbeddings(nn.Sequential):
+class RegNetEmbeddings(nn.Module):
     """
     RegNet Embedddings (stem) composed of a single aggressive convolution.
     """
 
-    def __init__(self, num_channels: int, out_channels: int, hidden_act: str = "relu"):
+    def __init__(self, num_channels: int, out_channels: int, activation: str = "relu"):
         super().__init__()
-        self.embedder = RegNetConvLayer(num_channels, out_channels, kernel_size=3, stride=2, hidden_act=hidden_act)
+        self.embedder = RegNetConvLayer(num_channels, out_channels, kernel_size=3, stride=2, activation=activation)
+
+    def forward(self, hidden_state):
+        hidden_state = self.embedder(hidden_state)
+        return hidden_state
 
 
 # Copied from transformers.models.resnet.modeling_resnet.ResNetShortCut with ResNet->RegNet
@@ -170,7 +174,7 @@ class RegNetXLayer(nn.Module):
     """
 
     def __init__(
-        self, in_channels: int, out_channels: int, stride: int = 1, groups_width: int = 1, hidden_act: str = "relu"
+        self, in_channels: int, out_channels: int, stride: int = 1, groups_width: int = 1, activation: str = "relu"
     ):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
@@ -181,9 +185,9 @@ class RegNetXLayer(nn.Module):
         self.layer = nn.Sequential(
             RegNetConvLayer(in_channels, out_channels, kernel_size=1),
             RegNetConvLayer(out_channels, out_channels, stride=stride, groups=groups),
-            RegNetConvLayer(out_channels, out_channels, kernel_size=1, hidden_act=None),
+            RegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None),
         )
-        self.activation = ACT2FN[hidden_act]
+        self.activation = ACT2FN[activation]
 
     def forward(self, hidden_state):
         residual = hidden_state
@@ -200,7 +204,7 @@ class RegNetYLayer(nn.Module):
     """
 
     def __init__(
-        self, in_channels: int, out_channels: int, stride: int = 1, groups_width: int = 1, hidden_act: str = "relu"
+        self, in_channels: int, out_channels: int, stride: int = 1, groups_width: int = 1, activation: str = "relu"
     ):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
@@ -212,9 +216,9 @@ class RegNetYLayer(nn.Module):
             RegNetConvLayer(in_channels, out_channels, kernel_size=1),
             RegNetConvLayer(out_channels, out_channels, stride=stride, groups=groups),
             RegNetSELayer(out_channels, reduced_channels=in_channels // 4),
-            RegNetConvLayer(out_channels, out_channels, kernel_size=1, hidden_act=None),
+            RegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None),
         )
-        self.activation = ACT2FN[hidden_act]
+        self.activation = ACT2FN[activation]
 
     def forward(self, hidden_state):
         residual = hidden_state
@@ -249,10 +253,10 @@ class RegNetStage(nn.Sequential):
                 out_channels,
                 stride=stride,
                 groups_width=config.groups_width,
-                hidden_act=config.hidden_act,
+                activation=config.hidden_act,
             ),
             *[
-                layer(out_channels, out_channels, groups_width=config.groups_width, hidden_act=config.hidden_act)
+                layer(out_channels, out_channels, groups_width=config.groups_width, activation=config.hidden_act)
                 for _ in range(depth - 1)
             ],
         )
@@ -274,14 +278,7 @@ class RegNetEncoder(nn.Module):
         )
         in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
         for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
-            self.stages.append(
-                RegNetStage(
-                    config,
-                    in_channels,
-                    out_channels,
-                    depth=depth
-                )
-            )
+            self.stages.append(RegNetStage(config, in_channels, out_channels, depth=depth))
 
     def forward(
         self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
