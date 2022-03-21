@@ -19,7 +19,7 @@ import argparse
 
 import torch
 
-from transformers import BigScience176BConfig, BigScience176BModel, load_tf_weights_in_bigscience176b
+from transformers import BigScience176BConfig, BigScience176BModel
 from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
 from transformers.utils import logging
 
@@ -36,7 +36,7 @@ def convert_bigscience176b_checkpoint_to_pytorch(bigscience176b_checkpoint_path,
     model = BigScience176BModel(config)
 
     # Load weights from numpy
-    load_tf_weights_in_bigscience176b(model, config, bigscience176b_checkpoint_path)
+    # load_tf_weights_in_bigscience176b(model, config, bigscience176b_checkpoint_path)
 
     # Save pytorch-model
     pytorch_weights_dump_path = pytorch_dump_folder_path + "/" + WEIGHTS_NAME
