@@ -1662,8 +1662,7 @@ class ModelTesterMixin:
 
             # Output all for aggressive testing
             config.output_hidden_states = True
-            if self.has_attentions:
-                config.output_attentions = True
+            config.output_attentions = self.has_attentions
 
             for k in ["attention_mask", "encoder_attention_mask", "decoder_attention_mask"]:
                 if k in inputs_dict:
@@ -1792,8 +1791,7 @@ class ModelTesterMixin:
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
-                if self.has_attentions:
-                    config.output_attentions = True
+                config.output_attentions = self.has_attentions
 
                 fx_model_class = getattr(transformers, fx_model_class_name)
 
@@ -1865,8 +1863,7 @@ class ModelTesterMixin:
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
-                if self.has_attentions:
-                    config.output_attentions = True
+                config.output_attentions = self.has_attentions
 
                 fx_model_class = getattr(transformers, fx_model_class_name)
 
