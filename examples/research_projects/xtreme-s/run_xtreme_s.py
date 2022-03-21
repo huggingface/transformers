@@ -20,7 +20,7 @@ import logging
 import os
 import re
 import sys
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
@@ -832,6 +832,7 @@ def main():
     if training_args.do_predict:
         logger.info(f"*** Evaluating on the `{data_args.predict_split_name}` set ***")
         if data_args.per_lang_metrics:
+            # separate the `test` dataset into language-specific subsets and compute metrics for each of them
             metrics = {}
             average_metrics = defaultdict(list)
             for lang_id in range(len(lang_list)):
@@ -839,10 +840,11 @@ def main():
                 lang_dataset = vectorized_datasets["predict"].filter(lambda example: example["lang"] == lang_id)
                 lang_metrics = trainer.evaluate(lang_dataset)
                 for metric_name, value in lang_metrics.items():
-                    metrics[f"{metric_name}_{lang_name}"] = value
                     average_metrics[metric_name].append(value)
+                    if metric_name not in ["eval_runtime", "eval_samples_per_second", "eval_steps_per_second"]:
+                        metrics[f"{metric_name}_{lang_name}"] = value
             for metric_name, value in average_metrics.items():
-                metrics[f"{metric_name}_average"] = np.mean(value)
+                metrics[metric_name] = np.mean(value)
         else:
             metrics = trainer.evaluate(vectorized_datasets["predict"])
         max_predict_samples = (
@@ -851,6 +853,9 @@ def main():
             else len(vectorized_datasets["predict"])
         )
         metrics["predict_samples"] = min(max_predict_samples, len(vectorized_datasets["predict"]))
+
+        # make sure that the `predict` metrics end up in the log history for the model card
+        trainer.log(OrderedDict(sorted(metrics.items())))
 
         trainer.log_metrics("predict", metrics)
         trainer.save_metrics("predict", metrics)

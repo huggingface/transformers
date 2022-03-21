@@ -67,7 +67,7 @@ The corresponding training commands for each dataset are given in the sections b
 | Speech Recognition    | VoxPopuli | -                     | -                                                                  | -             | -      |
 | Speech Recognition    | FLEURS    | -                     | -                                                                  | -             | -      |
 | Speech Translation    | CoVoST-2  | -                     | -                                                                  | -             | -      |
-| Speech Classification | Minds-14  | 90.56 F1 / 90.55 Acc. | [here](https://huggingface.co/anton-l/xtreme_s_xlsr_300m_minds14/) | 2:54:21       | 2xA100 |
+| Speech Classification | Minds-14  | 90.15 F1 / 90.33 Acc. | [here](https://huggingface.co/anton-l/xtreme_s_xlsr_300m_minds14/) | 2:54:21       | 2xA100 |
 | Speech Classification | FLEURS    | -                     | -                                                                  | -             | -      |
 | Speech Retrieval      | FLEURS    | -                     | -                                                                  | -             | -      |
 
@@ -157,4 +157,4 @@ python -m torch.distributed.launch \
     --push_to_hub
 ```
 
-On 2 A100 GPUs, this script should run in ~5 hours and yield a cross-entropy loss of **0.4033** and F1 score of **90.56**
+On 2 A100 GPUs, this script should run in ~5 hours and yield a cross-entropy loss of **0.4119** and F1 score of **90.15**
