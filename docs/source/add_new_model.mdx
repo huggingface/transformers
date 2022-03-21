@@ -95,6 +95,24 @@ different formats - the model to a *pytorch_model.bin* file and the configuratio
 [`~PretrainedConfig.save_pretrained`], so that both model and configuration are saved.
 
 
+### Code style
+
+When coding your new model, keep in mind that Transformers is an opinionated library and we have a few quirks of our
+own regarding how code should be written :-)
+
+1. The forward pass of your model should be fully written in the modeling file while being fully independent of other
+   models in the library. If you want to reuse a block from another model, copy the code and paste it with a
+   `# Copied from` comment on top (see [here](https://github.com/huggingface/transformers/blob/v4.17.0/src/transformers/models/roberta/modeling_roberta.py#L160)
+   for a good example).
+2. The code should be fully understandable, even by a non-native English speaker. This means you should pick
+   descriptive variable names and avoid abbreviations. As an example, `activation` is preferred to `act`.
+   One-letter variable names are strongly discouraged unless it's an index in a for loop. 
+3. More generally we prefer longer explicit code to short magical one.
+4. Avoid subclassing `nn.Sequential` in PyTorch but subclass `nn.Module` and write the forward pass, so that anyone
+   using your code can quickly debug it by adding print statements or breaking points.
+5. Your function signature should be type-annotated. For the rest, good variable names are way more readable and
+   understandable than type annotations.
+
 ### Overview of tokenizers
 
 Not quite ready yet :-( This section will be added soon!
@@ -380,15 +398,12 @@ In the special case that you are adding a model whose architecture exactly match
 existing model you only have to add a conversion script as described in [this section](#write-a-conversion-script).
 In this case, you can just re-use the whole model architecture of the already existing model.
 
-Otherwise, let's start generating a new model with the amazing Cookiecutter!
+Otherwise, let's start generating a new model. You have two choices here:
 
-**Use the Cookiecutter to automatically generate the model's code**
+- `transformers-cli add-new-model-like` to add a new model like an existing one
+- `transformers-cli add-new-model` to add a new model from our template (will look like BERT or Bart depending on the type of model you select)
 
-To begin with head over to the [🤗 Transformers templates](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model) to make use of our
-`cookiecutter` implementation to automatically generate all the relevant files for your model. Again, we recommend
-only adding the PyTorch version of the model at first. Make sure you follow the instructions of the `README.md` on
-the [🤗 Transformers templates](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model)
-carefully.
+In both cases, you will be prompted with a questionnaire to fill the basic information of your model. The second command requires to install `cookiecutter`, you can find more information on it [here](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model).
 
 **Open a Pull Request on the main huggingface/transformers repo**
 
