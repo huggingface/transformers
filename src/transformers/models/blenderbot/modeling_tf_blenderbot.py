@@ -301,7 +301,13 @@ class TFBlenderbotEncoderLayer(tf.keras.layers.Layer):
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
-    def call(self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training=False):
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        attention_mask: tf.Tensor,
+        layer_head_mask: tf.Tensor,
+        training: Optional[bool] = False,
+    ):
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
@@ -370,14 +376,14 @@ class TFBlenderbotDecoderLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        hidden_states,
+        hidden_states: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         encoder_hidden_states: Optional[tf.Tensor] = None,
         encoder_attention_mask: Optional[tf.Tensor] = None,
         layer_head_mask: Optional[tf.Tensor] = None,
         cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
         past_key_value: Optional[Tuple[tf.Tensor]] = None,
-        training=False,
+        training: Optional[bool] = False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
