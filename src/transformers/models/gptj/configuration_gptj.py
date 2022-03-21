@@ -14,11 +14,11 @@
 # limitations under the License.
 """ GPT-J model configuration"""
 from collections import OrderedDict
-from typing import Any, Mapping, Optional
+from typing import Any, List, Mapping, Optional
 
 from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast
+from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
 
 
@@ -141,7 +141,20 @@ class GPTJConfig(PretrainedConfig):
         )
 
 
+# Copied from transformers.models.gpt2.configuration_gpt2.GPT2OnnxConfig
 class GPTJOnnxConfig(OnnxConfigWithPast):
+    def __init__(
+        self,
+        config: PretrainedConfig,
+        task: str = "default",
+        patching_specs: List[PatchingSpec] = None,
+        use_past: bool = False,
+    ):
+        super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
+        if not getattr(self._config, "pad_token_id", None):
+            # TODO: how to do that better?
+            self._config.pad_token_id = 0
+
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
@@ -159,7 +172,7 @@ class GPTJOnnxConfig(OnnxConfigWithPast):
 
     @property
     def num_attention_heads(self) -> int:
-        return self._config.num_heads
+        return self._config.n_head
 
     def generate_dummy_inputs(
         self,
