@@ -154,8 +154,10 @@ class VanOverlappingPatchEmbedder(nn.Sequential):
 
     def __init__(self, in_channels: int, hidden_size: int, patch_size: int = 7, stride: int = 4):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, hidden_size, kernel_size=patch_size, stride=stride, padding=patch_size // 2)
-        self.norm = nn.BatchNorm2d(hidden_size)
+        self.convolution = nn.Conv2d(
+            in_channels, hidden_size, kernel_size=patch_size, stride=stride, padding=patch_size // 2
+        )
+        self.normalization = nn.BatchNorm2d(hidden_size)
 
 
 class VanMlpLayer(nn.Sequential):
@@ -173,12 +175,12 @@ class VanMlpLayer(nn.Sequential):
         dropout_rate: float = 0.5,
     ):
         super().__init__()
-        self.fc1 = nn.Conv2d(in_channels, hidden_size, kernel_size=1)
+        self.in_dense = nn.Conv2d(in_channels, hidden_size, kernel_size=1)
         self.depth_wise = nn.Conv2d(hidden_size, hidden_size, kernel_size=3, padding=1, groups=hidden_size)
         self.activation = ACT2FN[hidden_act]
-        self.drop1 = nn.Dropout(dropout_rate)
-        self.fc2 = nn.Conv2d(hidden_size, out_channels, kernel_size=1)
-        self.drop2 = nn.Dropout(dropout_rate)
+        self.dropout1 = nn.Dropout(dropout_rate)
+        self.out_dense = nn.Conv2d(hidden_size, out_channels, kernel_size=1)
+        self.dropout2 = nn.Dropout(dropout_rate)
 
 
 class VanLargeKernelAttention(nn.Sequential):
@@ -267,10 +269,10 @@ class VanLayer(nn.Module):
     ):
         super().__init__()
         self.drop_path = VanDropPath(drop_path) if drop_path_rate > 0.0 else nn.Identity()
-        self.pre_norm = nn.BatchNorm2d(hidden_size)
+        self.pre_normomalization = nn.BatchNorm2d(hidden_size)
         self.attention = VanSpatialAttentionLayer(hidden_size, config.hidden_act)
         self.attention_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
-        self.post_norm = nn.BatchNorm2d(hidden_size)
+        self.post_normalization = nn.BatchNorm2d(hidden_size)
         self.mlp = VanMlpLayer(
             hidden_size, hidden_size * mlp_ratio, hidden_size, config.hidden_act, config.dropout_rate
         )
@@ -279,7 +281,7 @@ class VanLayer(nn.Module):
     def forward(self, hidden_state):
         residual = hidden_state
         # attention
-        hidden_state = self.pre_norm(hidden_state)
+        hidden_state = self.pre_normomalization(hidden_state)
         hidden_state = self.attention(hidden_state)
         hidden_state = self.attention_scaling(hidden_state)
         hidden_state = self.drop_path(hidden_state)
@@ -287,7 +289,7 @@ class VanLayer(nn.Module):
         hidden_state = residual + hidden_state
         residual = hidden_state
         # mlp
-        hidden_state = self.post_norm(hidden_state)
+        hidden_state = self.post_normalization(hidden_state)
         hidden_state = self.mlp(hidden_state)
         hidden_state = self.mlp_scaling(hidden_state)
         hidden_state = self.drop_path(hidden_state)
@@ -325,7 +327,7 @@ class VanStage(nn.Module):
                 for _ in range(depth)
             ]
         )
-        self.norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
+        self.normalization = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_state):
         hidden_state = self.embeddings(hidden_state)
@@ -333,7 +335,7 @@ class VanStage(nn.Module):
         # rearrange b c h w -> b (h w) c
         batch_size, hidden_size, height, width = hidden_state.shape
         hidden_state = hidden_state.flatten(2).transpose(1, 2)
-        hidden_state = self.norm(hidden_state)
+        hidden_state = self.normalization(hidden_state)
         # rearrange  b (h w) c- > b c h w
         hidden_state = hidden_state.view(batch_size, height, width, hidden_size).permute(0, 3, 1, 2)
         return hidden_state

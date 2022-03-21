@@ -221,7 +221,7 @@ class DataCollatorWithPadding:
             among:
 
             - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
-              if provided).
+              is provided).
             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
               acceptable input length for the model if that argument is not provided.
             - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
@@ -273,7 +273,7 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             among:
 
             - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
-              if provided).
+              is provided).
             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
               acceptable input length for the model if that argument is not provided.
             - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
