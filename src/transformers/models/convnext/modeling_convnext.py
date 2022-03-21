@@ -176,6 +176,36 @@ class ConvNextLayerNorm(nn.Module):
             x = self.weight[:, None, None] * x + self.bias[:, None, None]
         return x
 
+class ConvNextLayerNorm2d(nn.Module):
+    """LayerNorm on channels for 2d images.
+
+    Args:
+        num_channels (int): The number of channels of the input tensor.
+        eps (float): a value added to the denominator for numerical stability.
+            Defaults to 1e-5.
+        elementwise_affine (bool): a boolean value that when set to ``True``,
+            this module has learnable per-element affine parameters initialized
+            to ones (for weights) and zeros (for biases). Defaults to True.
+    """
+
+    def __init__(self, normalized_shape: int, eps: float) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(normalized_shape))
+        self.eps = eps
+        self.normalized_shape = (normalized_shape,)
+
+    def forward(self, x):
+        assert x.dim() == 4, 'LayerNorm2d only supports inputs with shape ' \
+            f'(N, C, H, W), but got tensor with shape {x.shape}'
+        return torch.nn.functional.layer_norm(
+            x.permute(0, 2, 3, 1), 
+            self.normalized_shape, 
+            self.weight,
+            self.bias, 
+            self.eps
+        ).permute(0, 3, 1, 2)
+
 
 class ConvNextEmbeddings(nn.Module):
     """This class is comparable to (and inspired by) the SwinEmbeddings class
@@ -297,7 +327,7 @@ class ConvNextEncoder(nn.Module):
             self.layernorm = nn.ModuleList()
             for i in range(config.num_stages):
                 norm_size = config.hidden_sizes[i]
-                self.layernorm.append(ConvNextLayerNorm(norm_size, eps=1e-6, data_format="channels_first"))
+                self.layernorm.append(ConvNextLayerNorm2d(norm_size, eps=1e-6))
 
     def forward(self, hidden_states, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
