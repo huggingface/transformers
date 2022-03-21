@@ -150,6 +150,11 @@ _import_structure = {
         "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BigBirdPegasusConfig",
     ],
+    "models.bigscience176b": [
+        "BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BigScience176BConfig",
+        "BigScience176BTokenizer",
+    ],
     "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
     "models.blenderbot_small": [
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -492,6 +497,7 @@ else:
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
+    _import_structure["models.bigscience176b"].append("BigScience176BTokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
@@ -833,6 +839,14 @@ else:
             "BigBirdPegasusForSequenceClassification",
             "BigBirdPegasusModel",
             "BigBirdPegasusPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bigscience176b"].extend(
+        [
+            "BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BigScience176BLMHeadModel",
+            "BigScience176BModel",
+            "BigScience176BPreTrainedModel",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -2060,6 +2074,17 @@ else:
             "TFGPTJPreTrainedModel",
         ]
     )
+    _import_structure["models.bigscience176b"].extend(
+        [
+            "TF_BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFBigScience176BDoubleHeadsModel",
+            "TFBigScience176BForSequenceClassification",
+            "TFBigScience176BLMHeadModel",
+            "TFBigScience176BMainLayer",
+            "TFBigScience176BModel",
+            "TFBigScience176BPreTrainedModel",
+        ]
+    )
     _import_structure["models.hubert"].extend(
         [
             "TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2637,6 +2662,11 @@ if TYPE_CHECKING:
     from .models.bertweet import BertweetTokenizer
     from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
     from .models.bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig
+    from .models.bigscience176b import (
+        BIGSCIENCE176B_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BigScience176BConfig,
+        BigScience176BTokenizer,
+    )
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2934,6 +2964,7 @@ if TYPE_CHECKING:
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
+        from .models.bigscience176b import BigScience176BTokenizerFast
         from .models.blenderbot import BlenderbotTokenizerFast
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.camembert import CamembertTokenizerFast
@@ -3234,6 +3265,12 @@ if TYPE_CHECKING:
             BigBirdPegasusForSequenceClassification,
             BigBirdPegasusModel,
             BigBirdPegasusPreTrainedModel,
+        )
+        from .models.bigscience176b import (
+            BIGSCIENCE176B_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BigScience176BLMHeadModel,
+            BigScience176BModel,
+            BigScience176BPreTrainedModel,
         )
         from .models.blenderbot import (
             BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,

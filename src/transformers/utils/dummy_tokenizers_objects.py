@@ -38,6 +38,13 @@ class BigBirdTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class BigScience176BTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class BlenderbotTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
