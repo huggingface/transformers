@@ -66,8 +66,8 @@ class SEWDConfig(PretrainedConfig):
         position_biased_input (`bool`, *optional*, defaults to `False`):
             Whether to add absolute position embedding to content embedding.
         pos_att_type (`Tuple[str]`, *optional*, defaults to `("p2c", "c2p")`):
-            The type of relative position attention, it can be a combination of `("p2c", "c2p", "p2p")`, e.g.
-            `("p2c")`, `("p2c", "c2p")`, `("p2c", "c2p", 'p2p")`.
+            The type of relative position attention, it can be a combination of `("p2c", "c2p")`, e.g. `("p2c")`,
+            `("p2c", "c2p")`, `("p2c", "c2p")`.
         norm_rel_ebd (`str`, *optional*, defaults to `"layer_norm"`):
             Whether to use layer norm in relative embedding (`"layer_norm"` if yes)
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_python"`):
