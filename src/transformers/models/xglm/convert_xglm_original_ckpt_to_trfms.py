@@ -1,10 +1,11 @@
-from argparse import Namespace
 import argparse
+from argparse import Namespace
 
 import torch
 from torch import nn
 
-from transformers import XGLMForCausalLM, XGLMConfig
+from transformers import XGLMConfig, XGLMForCausalLM
+
 
 def remove_ignore_keys_(state_dict):
     ignore_keys = [
@@ -30,7 +31,7 @@ def convert_fairseq_xglm_checkpoint_from_disk(checkpoint_path):
     state_dict = checkpoint["model"]
     remove_ignore_keys_(state_dict)
     vocab_size = state_dict["decoder.embed_tokens.weight"].shape[0]
-    
+
     state_dict = {key.replace("decoder", "model"): val for key, val in state_dict.items()}
 
     config = XGLMConfig(
