@@ -44,16 +44,11 @@ _CONFIG_FOR_DOC = "GLPNConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "GLPNFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "nvidia/mit-b0"
-_EXPECTED_OUTPUT_SHAPE = [1, 256, 256]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_CHECKPOINT_FOR_DOC = "vinvino02/glpn-kitti"
+_EXPECTED_OUTPUT_SHAPE = [1, 512, 15, 20]
 
 GLPN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # TODO update model name
-    "nielsr/glpn-kitti",
+    "vinvino02/glpn-kitti",
     # See all GLPN models at https://huggingface.co/models?filter=glpn
 ]
 
@@ -709,19 +704,19 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import GLPNFeatureExtractor, GLPNForSemanticSegmentation
+        >>> from transformers import GLPNFeatureExtractor, GLPNForDepthEstimation
         >>> from PIL import Image
         >>> import requests
 
-        >>> feature_extractor = GLPNFeatureExtractor.from_pretrained("nvidia/glpn-b0-finetuned-ade-512-512")
-        >>> model = GLPNForSemanticSegmentation.from_pretrained("nvidia/glpn-b0-finetuned-ade-512-512")
+        >>> feature_extractor = GLPNFeatureExtractor.from_pretrained("vinvino02/glpn-kitti")
+        >>> model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> logits = outputs.logits  # shape (batch_size, num_labels, height, width)
+        >>> predicted_depth = outputs.predicted_depth  # shape (batch_size, height, width)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (

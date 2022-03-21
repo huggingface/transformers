@@ -21,8 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # TODO update model name
-    "nielsr/glpn-kitti": "https://huggingface.co/nielsr/gdpdepth-kitti/resolve/main/config.json",
+    "vinvino02/glpn-kitti": "https://huggingface.co/vinvino02/gdpdepth-kitti/resolve/main/config.json",
     # See all GLPN models at https://huggingface.co/models?filter=gdpdepth
 }
 
