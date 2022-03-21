@@ -105,13 +105,8 @@ class DecisionTransformerModelTester:
         self.parent.assertEqual(result.action_preds.shape, actions.shape)
         self.parent.assertEqual(result.return_preds.shape, returns_to_go.shape)
         self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (
-                self.batch_size,
-                self.seq_length * 3,
-                self.hidden_size,
-            ),  # seq length *3 as there are 3 modelities: states, returns and actions
-        )
+            result.last_hidden_state.shape, (self.batch_size, self.seq_length * 3, self.hidden_size)
+        )  # seq length *3 as there are 3 modelities: states, returns and actions
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -136,9 +131,7 @@ class DecisionTransformerModelTester:
 
 
 @require_torch
-class DecisionTransformerModelTest(  # ModelTesterMixin is removed as this model as the input / outputs of this model do not conform to a typical NLP model.
-    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
-):
+class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (DecisionTransformerModel,) if is_torch_available() else ()
     all_generative_model_classes = ()
