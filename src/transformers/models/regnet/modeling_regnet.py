@@ -166,7 +166,7 @@ class RegNetSELayer(nn.Module):
 
 class RegNetXLayer(nn.Module):
     """
-    RegNet's layer composed by a three `3x3` convolutions, same as a ResNet bottleneck layer with reduction = 1.
+    RegNet's layer composed by three `3x3` convolutions, same as a ResNet bottleneck layer with reduction = 1.
     """
 
     def __init__(
@@ -196,7 +196,7 @@ class RegNetXLayer(nn.Module):
 
 class RegNetYLayer(nn.Module):
     """
-    RegNet's X layer with Squeeze and Excitation.
+    RegNet's Y layer: an X layer with Squeeze and Excitation.
     """
 
     def __init__(
