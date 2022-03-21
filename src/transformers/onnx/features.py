@@ -229,6 +229,7 @@ class FeaturesManager:
             "default-with-past",
             "causal-lm",
             "causal-lm-with-past",
+            "question-answering",
             "sequence-classification",
             onnx_config_cls=GPTJOnnxConfig,
         ),
