@@ -1379,6 +1379,12 @@ class BigBirdAttention(nn.Module):
         from_blocked_mask=None,
         to_blocked_mask=None,
     ):
+        # fp16 compatibility
+        def convert_dtype(mask):
+            return tree_map(lambda x: x.to(hidden_states.dtype) if isinstance(x, torch.Tensor) else x, mask)
+        band_mask = convert_dtype(band_mask)
+        from_mask = convert_dtype(from_mask)
+        to_mask = convert_dtype(to_mask)
 
         if self.attention_type == "original_full":
             self_outputs = self.self(
@@ -1398,9 +1404,6 @@ class BigBirdAttention(nn.Module):
                 hidden_states, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
             )
 
-        self_outputs = tuple(
-            tree_map(lambda x: x.to(hidden_states.dtype) if isinstance(x, torch.Tensor) else x, self_outputs)
-        )  # fp16 compatibility
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
