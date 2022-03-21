@@ -40,8 +40,6 @@ class SegformerConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        image_size (`int`, *optional*, defaults to 512):
-            The size (resolution) of each image.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_encoder_blocks (`int`, *optional*, defaults to 4):
@@ -52,8 +50,6 @@ class SegformerConfig(PretrainedConfig):
             Sequence reduction ratios in each encoder block.
         hidden_sizes (`List[int]`, *optional*, defaults to [32, 64, 160, 256]):
             Dimension of each of the encoder blocks.
-        downsampling_rates (`List[int]`, *optional*, defaults to [1, 4, 8, 16]):
-            Downsample rate of the image resolution compared to the original image size before each encoder block.
         patch_sizes (`List[int]`, *optional*, defaults to [7, 3, 3, 3]):
             Patch size before each encoder block.
         strides (`List[int]`, *optional*, defaults to [4, 2, 2, 2]):
@@ -101,13 +97,11 @@ class SegformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        image_size=224,
         num_channels=3,
         num_encoder_blocks=4,
         depths=[2, 2, 2, 2],
         sr_ratios=[8, 4, 2, 1],
         hidden_sizes=[32, 64, 160, 256],
-        downsampling_rates=[1, 4, 8, 16],
         patch_sizes=[7, 3, 3, 3],
         strides=[4, 2, 2, 2],
         num_attention_heads=[1, 2, 5, 8],
@@ -133,13 +127,11 @@ class SegformerConfig(PretrainedConfig):
                 FutureWarning,
             )
 
-        self.image_size = image_size
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
         self.depths = depths
         self.sr_ratios = sr_ratios
         self.hidden_sizes = hidden_sizes
-        self.downsampling_rates = downsampling_rates
         self.patch_sizes = patch_sizes
         self.strides = strides
         self.mlp_ratios = mlp_ratios

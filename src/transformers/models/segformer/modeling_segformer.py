@@ -99,20 +99,16 @@ class DropPath(nn.Module):
 
 
 class SegformerOverlapPatchEmbeddings(nn.Module):
-    """Construct the patch embeddings from an image."""
+    """Construct the overlapping patch embeddings."""
 
-    def __init__(self, image_size, patch_size, stride, num_channels, hidden_size):
+    def __init__(self, patch_size, stride, num_channels, hidden_size):
         super().__init__()
-        image_size = to_2tuple(image_size)
-        patch_size = to_2tuple(patch_size)
-        self.height, self.width = image_size[0] // patch_size[0], image_size[1] // patch_size[1]
-        self.num_patches = self.height * self.width
         self.proj = nn.Conv2d(
             num_channels,
             hidden_size,
             kernel_size=patch_size,
             stride=stride,
-            padding=(patch_size[0] // 2, patch_size[1] // 2),
+            padding=patch_size // 2,
         )
 
         self.layer_norm = nn.LayerNorm(hidden_size)
@@ -335,7 +331,6 @@ class SegformerEncoder(nn.Module):
         for i in range(config.num_encoder_blocks):
             embeddings.append(
                 SegformerOverlapPatchEmbeddings(
-                    image_size=config.image_size // config.downsampling_rates[i],
                     patch_size=config.patch_sizes[i],
                     stride=config.strides[i],
                     num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
