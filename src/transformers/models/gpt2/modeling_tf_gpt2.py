@@ -911,6 +911,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         output_type=TFCausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
+    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -953,9 +954,8 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
             config.vocab_size - 1]`.
         """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+
+        transformer_outputs = self.transformer(
             input_ids=input_ids,
             past=past,
             attention_mask=attention_mask,
@@ -969,37 +969,19 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
             training=training,
-            kwargs_call=kwargs,
-        )
-        transformer_outputs = self.transformer(
-            input_ids=inputs["input_ids"],
-            past=inputs["past"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            encoder_hidden_states=inputs["encoder_hidden_states"],
-            encoder_attention_mask=inputs["encoder_attention_mask"],
-            use_cache=inputs["use_cache"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         hidden_states = transformer_outputs[0]
         logits = self.transformer.wte(hidden_states, mode="linear")
 
         loss = None
-        if inputs["labels"] is not None:
+        if labels is not None:
             # shift labels to the left and cut last logit token
             shifted_logits = logits[:, :-1]
-            labels = inputs["labels"][:, 1:]
+            labels = labels[:, 1:]
             loss = self.hf_compute_loss(labels, shifted_logits)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
