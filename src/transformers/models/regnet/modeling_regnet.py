@@ -279,7 +279,7 @@ class RegNetEncoder(nn.Module):
                     config,
                     in_channels,
                     out_channels,
-                    depth=depth,
+                    depth=depth
                 )
             )
 
@@ -300,10 +300,7 @@ class RegNetEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
 
-        return RegNetEncoderOutput(
-            last_hidden_state=hidden_state,
-            hidden_states=hidden_states,
-        )
+        return RegNetEncoderOutput(last_hidden_state=hidden_state, hidden_states=hidden_states)
 
 
 # Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->RegNet,resnet->regnet
