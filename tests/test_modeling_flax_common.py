@@ -228,8 +228,7 @@ class FlaxModelTesterMixin:
 
                 # Output all for aggressive testing
                 config.output_hidden_states = True
-                if self.has_attentions:
-                    config.output_attentions = True
+                config.output_attentions = self.has_attentions
 
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
