@@ -308,10 +308,7 @@ The model outputs the final activations in the `logits` attribute. Apply the sof
 >>> import tensorflow as tf
 
 >>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
->>> print(tf.math.round(tf_predictions * 10**4) / 10**4)
-tf.Tensor(
-[[0.0021 0.0018 0.0116 0.2121 0.7725]
- [0.2084 0.1826 0.1969 0.1755  0.2365]], shape=(2, 5), dtype=float32)
+>>> tf_predictions  # doctest: +IGNORE_RESULT
 ```
 </tf>
 </frameworkcontent>
