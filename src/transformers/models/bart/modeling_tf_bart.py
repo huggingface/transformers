@@ -18,6 +18,7 @@
 import random
 from typing import Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -39,6 +40,7 @@ from ...modeling_tf_outputs import (
 from ...modeling_tf_utils import (
     DUMMY_INPUTS,
     TFCausalLanguageModelingLoss,
+    TFModelInputType,
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
@@ -298,12 +300,12 @@ class TFBartEncoderLayer(tf.keras.layers.Layer):
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
     def call(
-        self, 
-        hidden_states: tf.Tensor, 
+        self,
+        hidden_states: tf.Tensor,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]],
-        layer_head_mask: Optional[tf.Tensor], 
-        training: Optional[bool] = False
-    ) -> tf.Tensor :
+        layer_head_mask: Optional[tf.Tensor],
+        training: Optional[bool] = False,
+    ) -> tf.Tensor:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -378,7 +380,7 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
         layer_head_mask: Optional[tf.Tensor] = None,
         cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
         past_key_value: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        training: Optional[bool] =False,
+        training: Optional[bool] = False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
@@ -678,7 +680,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]] :
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         """
         Args:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
@@ -833,7 +835,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]] :
+    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
         r"""
         Args:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
@@ -1053,7 +1055,7 @@ class TFBartMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs
-    ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.Tensor]] :
+    ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.Tensor]]:
 
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             use_cache = False
@@ -1166,7 +1168,7 @@ class TFBartModel(TFBartPretrainedModel):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]] :
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1272,7 +1274,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         labels: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]] :
+    ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
