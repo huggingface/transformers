@@ -112,7 +112,7 @@ _deps = [
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.2.8",
+    "jax>=0.2.8,!=0.3.2",
     "jaxlib>=0.1.65",
     "jieba",
     "nltk",

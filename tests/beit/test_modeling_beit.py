@@ -19,6 +19,7 @@ import inspect
 import unittest
 
 from datasets import load_dataset
+from packaging import version
 
 from transformers import BeitConfig
 from transformers.file_utils import cached_property, is_torch_available, is_vision_available
@@ -44,6 +45,7 @@ if is_torch_available():
 
 
 if is_vision_available():
+    import PIL
     from PIL import Image
 
     from transformers import BeitFeatureExtractor
@@ -536,12 +538,25 @@ class BeitModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 150, 160, 160))
         self.assertEqual(logits.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [
-                [[-4.9225, -2.3954, -3.0522], [-2.8822, -1.0046, -1.7561], [-2.9549, -1.3228, -2.1347]],
-                [[-5.8168, -3.4129, -4.0778], [-3.8651, -2.2214, -3.0277], [-3.8356, -2.4643, -3.3535]],
-                [[-0.0078, 3.9952, 4.0754], [2.9856, 4.6944, 5.0035], [3.2413, 4.7813, 4.9969]],
-            ]
-        ).to(torch_device)
+        is_pillow_less_than_9 = version.parse(PIL.__version__) < version.parse("9.0.0")
+
+        if is_pillow_less_than_9:
+            expected_slice = torch.tensor(
+                [
+                    [[-4.9225, -2.3954, -3.0522], [-2.8822, -1.0046, -1.7561], [-2.9549, -1.3228, -2.1347]],
+                    [[-5.8168, -3.4129, -4.0778], [-3.8651, -2.2214, -3.0277], [-3.8356, -2.4643, -3.3535]],
+                    [[-0.0078, 3.9952, 4.0754], [2.9856, 4.6944, 5.0035], [3.2413, 4.7813, 4.9969]],
+                ],
+                device=torch_device,
+            )
+        else:
+            expected_slice = torch.tensor(
+                [
+                    [[-4.8960, -2.3688, -3.0355], [-2.8478, -0.9836, -1.7418], [-2.9449, -1.3332, -2.1456]],
+                    [[-5.8081, -3.4124, -4.1006], [-3.8561, -2.2081, -3.0323], [-3.8365, -2.4601, -3.3669]],
+                    [[-0.0309, 3.9868, 4.0540], [2.9640, 4.6877, 4.9976], [3.2081, 4.7690, 4.9942]],
+                ],
+                device=torch_device,
+            )
 
         self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
