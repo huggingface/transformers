@@ -56,6 +56,13 @@ from ...modeling_utils import (
 from ...utils import logging
 from .configuration_bert import BertConfig
 
+# Brainwave msfp libraries
+import sys
+sImport = os.path.abspath(os.path.abspath("C:\\work\\BrainwaveML\\lib\\"))
+if sImport not in sys.path: sys.path.append(sImport)
+from pyt_msfp.Brainwave.BsBERT.encoder import BertEncoder as BsBertEncoder
+from pyt_msfp import utils as msfp_utils
+
 
 logger = logging.get_logger(__name__)
 
@@ -863,7 +870,20 @@ class BertModel(BertPreTrainedModel):
         self.config = config
 
         self.embeddings = BertEmbeddings(config)
-        self.encoder = BertEncoder(config)
+        
+        # Use Pytorch original encoder or Brainslice msfp encoder based on config
+        if(not(hasattr(config, "encoder_backend")) or config.encoder_backend == "pytorch"):
+            self.encoder = BertEncoder(config)
+        elif(config.encoder_backend == "bs_msfp"):
+            if(config.msfp_detail=="low" or config.msfp_detail=="high"):
+                msfp_specs = msfp_utils.MsfpSpecs(sku_filename=config.msfp_SKU_file, detail=config.msfp_detail)
+            else:
+                print ("Warning: Only low or high detail Brainslice MSFP supported -- Brainslice disabling MSFP")
+                msfp_specs = msfp_utils.getNotQuantizedMsfpSpecs()
+            self.encoder = BsBertEncoder(config, msfp_specs=msfp_specs)
+        else:
+            print("!!! Error: Unexpected encoder_backend in config.json !!!")
+            exit()
 
         self.pooler = BertPooler(config) if add_pooling_layer else None
 

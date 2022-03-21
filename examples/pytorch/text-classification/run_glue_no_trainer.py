@@ -64,6 +64,14 @@ task_to_keys = {
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
     parser.add_argument(
+        "--encoder_backend",
+        type=str,
+        default=None,
+        help="The backend of BertEncoder.",
+    )
+    parser.add_argument("--msfp_detail", type=str, default=None,)
+    parser.add_argument("--msfp_SKU_file", type=str, default=None,)
+    parser.add_argument(
         "--task_name",
         type=str,
         default=None,
@@ -259,7 +267,7 @@ def main():
     #
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-    config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name)
+    config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name,encoder_backend=args.encoder_backend,msfp_detail=args.msfp_detail,msfp_SKU_file=args.msfp_SKU_file)
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=not args.use_slow_tokenizer)
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,

@@ -679,6 +679,8 @@ class PretrainedConfig(PushToHubMixin):
                 setattr(config, key, value)
                 if key != "torch_dtype":
                     to_remove.append(key)
+            if key == "encoder_backend" or key == "msfp_detail" or key == "msfp_SKU_file":
+                setattr(config, key, value)
         for key in to_remove:
             kwargs.pop(key, None)
 
