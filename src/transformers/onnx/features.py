@@ -12,6 +12,7 @@ from ..models.gpt2 import GPT2OnnxConfig
 from ..models.gpt_neo import GPTNeoOnnxConfig
 from ..models.ibert import IBertOnnxConfig
 from ..models.layoutlm import LayoutLMOnnxConfig
+from ..models.layoutlmv2 import LayoutLMv2OnnxConfig
 from ..models.m2m_100 import M2M100OnnxConfig
 from ..models.marian import MarianOnnxConfig
 from ..models.mbart import MBartOnnxConfig
@@ -237,6 +238,13 @@ class FeaturesManager:
             "sequence-classification",
             "token-classification",
             onnx_config_cls=LayoutLMOnnxConfig,
+        ),
+        "layoutlmv2": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls=LayoutLMv2OnnxConfig,
         ),
         "electra": supported_features_mapping(
             "default",
