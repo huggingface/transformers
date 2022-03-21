@@ -230,7 +230,6 @@ class FeaturesManager:
             "causal-lm",
             "causal-lm-with-past",
             "sequence-classification",
-            "token-classification",
             onnx_config_cls=GPTJOnnxConfig,
         ),
         "gpt-neo": supported_features_mapping(
