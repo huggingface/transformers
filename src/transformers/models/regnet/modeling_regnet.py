@@ -152,7 +152,7 @@ class RegNetSELayer(nn.Module):
     def __init__(self, in_channels: int, reduced_channels: int):
         super().__init__()
 
-        self.pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.pooler = nn.AdaptiveAvgPool2d((1, 1))
         self.attention = nn.Sequential(
             nn.Conv2d(in_channels, reduced_channels, kernel_size=1),
             nn.ReLU(),
@@ -162,7 +162,7 @@ class RegNetSELayer(nn.Module):
 
     def forward(self, hidden_state):
         # b c h w -> b c 1 1
-        pooled = self.pool(hidden_state)
+        pooled = self.pooler(hidden_state)
         attention = self.attention(pooled)
         hidden_state = hidden_state * attention
         return hidden_state
