@@ -63,7 +63,8 @@ def main():
 
     # Allocate the model
     model = FeaturesManager.get_model_from_feature(
-        args.feature, args.model, framework=args.framework, cache_dir=args.cache_dir)
+        args.feature, args.model, framework=args.framework, cache_dir=args.cache_dir
+    )
     model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=args.feature)
     onnx_config = model_onnx_config(model.config)
 
