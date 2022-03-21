@@ -486,7 +486,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
-        feature_extractor = cls(**feature_extractor_dict)
+        feature_extractor = cls(**feature_extractor_dict, **kwargs)
 
         # Update feature_extractor with kwargs if needed
         to_remove = []

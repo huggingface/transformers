@@ -1862,6 +1862,8 @@ class MaskFormerLoss(nn.Module):
             **self.loss_labels(class_queries_logits, class_labels, indices),
         }
 
+        print(losses)
+
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if auxiliary_predictions is not None:
             for idx, aux_outputs in enumerate(auxiliary_predictions):
@@ -2384,6 +2386,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         weighted_loss_dict: Dict[str, Tensor] = {
             k: v * self.weight_dict[k] for k, v in loss_dict.items() if k in self.weight_dict
         }
+        print(weighted_loss_dict)
         return weighted_loss_dict
 
     def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
