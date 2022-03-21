@@ -1382,6 +1382,7 @@ class BigBirdAttention(nn.Module):
         # fp16 compatibility
         def convert_dtype(mask):
             return tree_map(lambda x: x.to(hidden_states.dtype) if isinstance(x, torch.Tensor) else x, mask)
+
         band_mask = convert_dtype(band_mask)
         from_mask = convert_dtype(from_mask)
         to_mask = convert_dtype(to_mask)
