@@ -18,7 +18,7 @@
 import os
 import random
 import warnings
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -1137,24 +1137,24 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
+        input_ids: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        decoder_input_ids: Optional[tf.Tensor] = None,
+        decoder_attention_mask: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        decoder_head_mask: Optional[tf.Tensor] = None,
+        cross_attn_head_mask: Optional[tf.Tensor] = None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        past_key_values: Optional[List[tf.Tensor]] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        decoder_inputs_embeds: Optional[tf.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
         **kwargs
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFSeq2SeqModelOutput]:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1253,25 +1253,25 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel, TFCausal
     @add_end_docstrings(BLENDERBOT_GENERATION_EXAMPLE)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs: Optional[TFBaseModelOutput] = None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        decoder_input_ids: Optional[tf.Tensor] = None,
+        decoder_attention_mask: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        decoder_head_mask: Optional[tf.Tensor] = None,
+        cross_attn_head_mask: Optional[tf.Tensor] = None,
+        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
+        past_key_values: Optional[List[tf.Tensor]] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        decoder_inputs_embeds: Optional[tf.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[tf.Tensor] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFSeq2SeqLMOutput]:
         r"""
         labels (`tf.tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
