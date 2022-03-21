@@ -36,7 +36,7 @@ def convert_fairseq_xglm_checkpoint_from_disk(checkpoint_path):
 
     config = XGLMConfig(
         vocab_size=vocab_size,
-        max_position_embeddings=2048,
+        max_position_embeddings=args.max_target_positions,
         num_layers=args.decoder_layers,
         attention_heads=args.decoder_attention_heads,
         ffn_dim=args.decoder_ffn_embed_dim,
@@ -46,6 +46,8 @@ def convert_fairseq_xglm_checkpoint_from_disk(checkpoint_path):
         attention_dropout=args.attention_dropout,
         activation_dropout=args.activation_dropout,
         activation_function="gelu",
+        scale_embedding=not args.no_scale_embedding,
+        tie_word_embeddings=args.share_decoder_input_output_embed,
     )
 
     model = XGLMForCausalLM(config)
