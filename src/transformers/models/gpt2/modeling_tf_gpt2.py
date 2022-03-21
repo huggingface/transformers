@@ -1031,6 +1031,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFGPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
+    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1081,64 +1082,46 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
         >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
         ```"""
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
+
+        if input_ids is not None:
+            input_shapes = shape_list(input_ids)
+        else:
+            input_shapes = shape_list(inputs_embeds)[:-1]
+
+        seq_length = input_shapes[-1]
+        flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
+        flat_attention_mask = (
+            tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
+        )
+        flat_token_type_ids = (
+            tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
+        )
+        flat_position_ids = (
+            tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
+        )
+        transformer_outputs = self.transformer(
+            input_ids=flat_input_ids,
             past=past,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
+            attention_mask=flat_attention_mask,
+            token_type_ids=flat_token_type_ids,
+            position_ids=flat_position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            mc_token_ids=mc_token_ids,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
-        )
-
-        if inputs["input_ids"] is not None:
-            input_shapes = shape_list(inputs["input_ids"])
-        else:
-            input_shapes = shape_list(inputs["inputs_embeds"])[:-1]
-
-        seq_length = input_shapes[-1]
-        flat_input_ids = tf.reshape(inputs["input_ids"], (-1, seq_length)) if inputs["input_ids"] is not None else None
-        flat_attention_mask = (
-            tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
-        )
-        flat_token_type_ids = (
-            tf.reshape(inputs["token_type_ids"], (-1, seq_length)) if inputs["token_type_ids"] is not None else None
-        )
-        flat_position_ids = (
-            tf.reshape(inputs["position_ids"], (-1, seq_length)) if inputs["position_ids"] is not None else None
-        )
-        transformer_outputs = self.transformer(
-            input_ids=flat_input_ids,
-            past=inputs["past"],
-            attention_mask=flat_attention_mask,
-            token_type_ids=flat_token_type_ids,
-            position_ids=flat_position_ids,
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            use_cache=inputs["use_cache"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         hidden_states = transformer_outputs[0]
         hidden_states = tf.reshape(hidden_states, input_shapes + shape_list(hidden_states)[-1:])
         lm_logits = self.transformer.wte(hidden_states, mode="linear")
-        mc_logits = self.multiple_choice_head(hidden_states, inputs["mc_token_ids"], training=inputs["training"])
+        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids, training=training)
         mc_logits = tf.squeeze(mc_logits, axis=-1)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             return (lm_logits, mc_logits) + transformer_outputs[1:]
 
         return TFGPT2DoubleHeadsModelOutput(
