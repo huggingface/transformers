@@ -539,6 +539,11 @@ class GLPNModel(GLPNPreTrainedModel):
 
 
 class GLPNSelectiveFeatureFusion(nn.Module):
+    """
+    Selective Feature Fusion module, as explained in the [paper](https://arxiv.org/abs/2201.07436) (section 3.4). This module adaptively selects
+    and integrates local and global features by attaining an attention map for each feature.
+    """
+
     def __init__(self, in_channel=64):
         super().__init__()
 
@@ -560,16 +565,19 @@ class GLPNSelectiveFeatureFusion(nn.Module):
 
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x_local, x_global):
-        x = torch.cat((x_local, x_global), dim=1)
-        x = self.convolutional_layer1(x)
-        x = self.convolutional_layer2(x)
-        x = self.convolutional_layer3(x)
-        attn = self.sigmoid(x)
+    def forward(self, local_features, global_features):
+        # concatenate features along the channel dimension
+        features = torch.cat((local_features, global_features), dim=1)
+        # pass through convolutional layers
+        features = self.convolutional_layer1(features)
+        features = self.convolutional_layer2(features)
+        features = self.convolutional_layer3(features)
+        # apply sigmoid to get two-channel attention map
+        attn = self.sigmoid(features)
+        # construct hybrid features by adding element-wise
+        hybrid_features = local_features * attn[:, 0, :, :].unsqueeze(1) + global_features * attn[:, 1, :, :].unsqueeze(1)
 
-        out = x_local * attn[:, 0, :, :].unsqueeze(1) + x_global * attn[:, 1, :, :].unsqueeze(1)
-
-        return out
+        return hybrid_features
 
 
 class GLPNDecoderStage(nn.Module):
@@ -642,11 +650,11 @@ class GLPNDepthEstimationHead(nn.Module):
 
         self.config = config
 
-        features = config.hidden_sizes[0]
+        channels = config.decoder_hidden_size
         self.head = nn.Sequential(
-            nn.Conv2d(features, features, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1),
             nn.ReLU(inplace=False),
-            nn.Conv2d(features, 1, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(channels, 1, kernel_size=3, stride=1, padding=1),
         )
 
     def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
