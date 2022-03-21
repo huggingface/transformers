@@ -682,7 +682,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
                 image size (before any data augmentation). For visualization, this should be the image size after data
                 augment, but before padding.
