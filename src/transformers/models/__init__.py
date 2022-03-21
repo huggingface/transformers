@@ -56,6 +56,7 @@ from . import (
     fsmt,
     funnel,
     gpt2,
+    bigscience176b,
     gpt_neo,
     gptj,
     herbert,
