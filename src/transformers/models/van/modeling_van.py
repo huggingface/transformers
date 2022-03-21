@@ -47,7 +47,7 @@ _CHECKPOINT_FOR_DOC = "van-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 512, 7, 7]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "van-base"
+_IMAGE_CLASS_CHECKPOINT = "Visual-Attention-Network/van-base"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 VAN_PRETRAINED_MODEL_ARCHIVE_LIST = [

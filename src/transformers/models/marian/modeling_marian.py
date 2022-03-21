@@ -18,7 +18,7 @@
 import copy
 import math
 import random
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -305,11 +305,11 @@ class MarianEncoderLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        layer_head_mask: torch.Tensor,
-        output_attentions: bool = False,
-    ):
+        hidden_states: torch.FloatTensor,
+        attention_mask: torch.FloatTensor,
+        layer_head_mask: torch.FloatTensor,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -393,7 +393,7 @@ class MarianDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
-    ):
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1573,20 +1573,20 @@ class MarianForCausalLM(MarianPreTrainedModel):
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
