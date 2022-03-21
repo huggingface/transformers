@@ -1571,7 +1571,7 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
 import math
 import copy
 import random
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Union
 
 import torch
 from torch import nn
