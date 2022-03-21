@@ -38,7 +38,7 @@ from ...modeling_tf_utils import (
     TFSharedEmbeddings,
     get_initializer,
     keras_serializable,
-    unpack_inputs
+    unpack_inputs,
 )
 from ...tf_utils import shape_list
 from ...utils import (
@@ -396,9 +396,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
             attention_mask_shape = shape_list(attention_mask)
-            attention_mask = tf.reshape(
-                attention_mask, (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
-            )
+            attention_mask = tf.reshape(attention_mask, (attention_mask_shape[0], 1, 1, attention_mask_shape[1]))
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
@@ -407,18 +405,14 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             # effectively the same as removing these entirely.
             one_cst = tf.constant(1.0)
             attention_mask = tf.cast(attention_mask, dtype=one_cst.dtype)
-            attention_mask = tf.multiply(
-                tf.subtract(one_cst, attention_mask), tf.constant(-10000.0)
-            )
+            attention_mask = tf.multiply(tf.subtract(one_cst, attention_mask), tf.constant(-10000.0))
 
         # Copied from `modeling_tf_t5.py` with -1e9 -> -10000
         if self.config.add_cross_attention and encoder_attention_mask is not None:
             # If a 2D ou 3D attention mask is provided for the cross-attention
             # we need to make broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
             # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            encoder_attention_mask = tf.cast(
-                encoder_attention_mask, dtype=encoder_hidden_states.dtype
-            )
+            encoder_attention_mask = tf.cast(encoder_attention_mask, dtype=encoder_hidden_states.dtype)
             num_dims_encoder_attention_mask = len(shape_list(encoder_attention_mask))
             if num_dims_encoder_attention_mask == 3:
                 encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
@@ -455,9 +449,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         position_embeds = tf.gather(self.wpe, position_ids)
 
         if token_type_ids is not None:
-            token_type_ids = tf.reshape(
-                token_type_ids, [-1, shape_list(token_type_ids)[-1]]
-            )
+            token_type_ids = tf.reshape(token_type_ids, [-1, shape_list(token_type_ids)[-1]])
             token_type_embeds = self.wte(token_type_ids, mode="embedding")
         else:
             token_type_embeds = tf.constant(0.0)
@@ -1089,15 +1081,9 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
         seq_length = input_shapes[-1]
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
-        flat_attention_mask = (
-            tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
-        )
-        flat_token_type_ids = (
-            tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
-        )
-        flat_position_ids = (
-            tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
-        )
+        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
+        flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
+        flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
         transformer_outputs = self.transformer(
             input_ids=flat_input_ids,
             past=past,
@@ -1267,9 +1253,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0 : logits_shape[0], sequence_lengths]
 
-            loss = self.hf_compute_loss(
-                tf.reshape(labels, [-1]), tf.reshape(in_logits, [-1, self.num_labels])
-            )
+            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(in_logits, [-1, self.num_labels]))
         pooled_logits = in_logits if in_logits is not None else logits
 
         if not return_dict:
