@@ -18,8 +18,9 @@
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...file_utils import (
@@ -29,6 +30,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
 )
 from ...modeling_tf_utils import (
+    TFModelInputType,
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
@@ -1077,17 +1079,17 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
     )
     def call(
         self,
-        input_ids=None,
-        mems=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        mems: Optional[List[tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
         **kwargs,
-    ):
+    ) -> Union[Tuple, TFTransfoXLSequenceClassifierOutputWithPast]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
