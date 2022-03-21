@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import sys
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
@@ -273,6 +274,13 @@ class DataTrainingArguments:
             " input audio to a sequence of phoneme sequences."
         },
     )
+    per_lang_metrics: bool = field(
+        default=True,
+        metadata={
+            "help": "If `True`, compute the test metrics separately for each language, and average the results. "
+            "If `False` compute the average test metrics in a single pass for all languages at once."
+        },
+    )
 
 
 @dataclass
@@ -470,10 +478,6 @@ def main():
         if data_args.max_train_samples is not None:
             raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
 
-        if not is_text_target:
-            label_list = raw_datasets["train"].features[target_column_name].names
-            num_labels = len(label_list)
-
     if training_args.do_eval:
         raw_datasets["eval"] = load_dataset(
             data_args.dataset_name,
@@ -497,6 +501,11 @@ def main():
 
         if data_args.max_predict_samples is not None:
             raw_datasets["predict"] = raw_datasets["predict"].select(range(data_args.max_predict_samples))
+
+    if not is_text_target:
+        label_list = next(iter(raw_datasets.values())).features[target_column_name].names
+        lang_list = next(iter(raw_datasets.values())).features["lang_id"].names
+        num_labels = len(label_list)
 
     # 2. We remove some special characters from the datasets
     # that make training complicated and do not help in transcribing the speech
@@ -690,6 +699,9 @@ def main():
             batch["labels"] = tokenizer(batch["target_text"], **additional_kwargs).input_ids
         else:
             batch["labels"] = batch[target_column_name]
+
+        batch["lang"] = batch["lang_id"]
+
         return batch
 
     with training_args.main_process_first(desc="dataset map preprocessing"):
@@ -754,7 +766,8 @@ def main():
             tokenizer.save_pretrained(training_args.output_dir)
         config.save_pretrained(training_args.output_dir)
     # wait until configs are saved in the main process before loading the processor
-    torch.distributed.barrier()
+    if training_args.local_rank != -1:
+        torch.distributed.barrier()
 
     if is_text_target:
         processor = AutoProcessor.from_pretrained(training_args.output_dir)
@@ -818,7 +831,20 @@ def main():
     results = {}
     if training_args.do_predict:
         logger.info(f"*** Evaluating on the `{data_args.predict_split_name}` set ***")
-        metrics = trainer.evaluate(vectorized_datasets["predict"])
+        if data_args.per_lang_metrics:
+            metrics = {}
+            average_metrics = defaultdict(list)
+            for lang_id in range(len(lang_list)):
+                lang_name = lang_list[lang_id]
+                lang_dataset = vectorized_datasets["predict"].filter(lambda example: example["lang"] == lang_id)
+                lang_metrics = trainer.evaluate(lang_dataset)
+                for metric_name, value in lang_metrics.items():
+                    metrics[f"{metric_name}_{lang_name}"] = value
+                    average_metrics[metric_name].append(value)
+            for metric_name, value in average_metrics.items():
+                metrics[f"{metric_name}_average"] = np.mean(value)
+        else:
+            metrics = trainer.evaluate(vectorized_datasets["predict"])
         max_predict_samples = (
             data_args.max_predict_samples
             if data_args.max_predict_samples is not None
