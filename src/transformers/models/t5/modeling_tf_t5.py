@@ -19,9 +19,9 @@ import copy
 import itertools
 import math
 import warnings
-from typing import Tuple, Optional, Union
-import numpy as np
+from typing import Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -40,12 +40,12 @@ from ...modeling_tf_outputs import (
 )
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
+    TFModelInputType,
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
-    unpack_inputs,
     keras_serializable,
-    TFModelInputType,
+    unpack_inputs,
 )
 from ...tf_utils import shape_list
 from ...utils import logging
@@ -676,18 +676,12 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         # required mask seq length can be calculated via length of past
         mask_seq_length = (
-            shape_list(past_key_values[0][0])[2] + seq_length
-            if past_key_values is not None
-            else seq_length
+            shape_list(past_key_values[0][0])[2] + seq_length if past_key_values is not None else seq_length
         )
 
         if attention_mask is None:
             attention_mask = tf.fill((batch_size, mask_seq_length), 1)
-        if (
-            self.is_decoder
-            and encoder_attention_mask is None
-            and encoder_hidden_states is not None
-        ):
+        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
             encoder_seq_length = shape_list(encoder_hidden_states)[1]
             encoder_attention_mask = tf.fill((batch_size, encoder_seq_length), 1)
 
@@ -735,9 +729,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             # If a 2D ou 3D attention mask is provided for the cross-attention
             # we need to make broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
             # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            encoder_attention_mask = tf.cast(
-                encoder_attention_mask, dtype=extended_attention_mask.dtype
-            )
+            encoder_attention_mask = tf.cast(encoder_attention_mask, dtype=extended_attention_mask.dtype)
             num_dims_encoder_attention_mask = len(shape_list(encoder_attention_mask))
             if num_dims_encoder_attention_mask == 3:
                 encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
@@ -773,9 +765,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 encoder_attention_mask=encoder_extended_attention_mask,
                 encoder_decoder_position_bias=encoder_decoder_position_bias,
                 layer_head_mask=head_mask[idx] if head_mask is not None else None,
-                encoder_layer_head_mask=encoder_head_mask[idx]
-                if encoder_head_mask is not None
-                else None,
+                encoder_layer_head_mask=encoder_head_mask[idx] if encoder_head_mask is not None else None,
                 past_key_value=past_key_value,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
@@ -1144,21 +1134,21 @@ class TFT5Model(TFT5PreTrainedModel):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType]=None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]]=None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        use_cache: Optional[bool]=None,
-        output_attentions: Optional[bool]=None,
-        output_hidden_states: Optional[bool]=None,
-        return_dict: Optional[bool]=None,
-        training: Optional[bool]=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
         **kwargs,
     ) -> Union[Tuple, TFSeq2SeqModelOutput]:
         r"""
@@ -1186,7 +1176,7 @@ class TFT5Model(TFT5PreTrainedModel):
             warnings.warn(_HEAD_MASK_WARNING_MSG, FutureWarning)
             decoder_head_mask = head_mask
 
-       # Encode if needed (training, first prediction pass)
+        # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids,
@@ -1320,22 +1310,22 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType]=None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]]=None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        use_cache: Optional[bool]=None,
-        output_attentions: Optional[bool]=None,
-        output_hidden_states: Optional[bool]=None,
-        return_dict: Optional[bool]=None,
-        training: Optional[bool]=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
         **kwargs,
     ) -> Union[Tuple, TFSeq2SeqLMOutput]:
         r"""
@@ -1388,11 +1378,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         hidden_states = encoder_outputs[0]
 
-        if (
-            labels is not None
-            and decoder_input_ids is None
-            and decoder_inputs_embeds is None
-        ):
+        if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
             decoder_input_ids = self._shift_right(labels)
 
@@ -1565,13 +1551,13 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
     def call(
         self,
         input_ids: TFModelInputType,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]]=None,
-        output_attentions: Optional[bool]=None,
-        output_hidden_states: Optional[bool]=None,
-        return_dict: Optional[bool]=None,
-        training: Optional[bool]=False,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
         **kwargs,
     ) -> Union[Tuple, TFBaseModelOutput]:
         r"""
