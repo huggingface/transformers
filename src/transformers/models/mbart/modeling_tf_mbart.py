@@ -1183,7 +1183,7 @@ class TFMBartModel(TFMBartPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs
-    ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.tensor]]:
+    ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.Tensor]]:
 
         outputs = self.model(
             input_ids=input_ids,
