@@ -27,7 +27,6 @@ from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_
 from ...modeling_outputs import DecisionTransformerOutput
 from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import logging
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
 
 
 if version.parse(torch.__version__) >= version.parse("1.6"):
@@ -51,8 +50,8 @@ DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.gpt2.modeling_gpt2.load_tf_weights_in_gpt2 with gpt2->decision_transformer_gpt2
-def load_tf_weights_in_decision_transformer_gpt2(model, config, gpt2_checkpoint_path):
+# Copied from transformers.models.gpt2.modeling_gpt2.load_tf_weights_in_gpt2
+def load_tf_weights_in_gpt2(model, config, decision_transformer_gpt2_checkpoint_path):
     """Load tf checkpoints in a pytorch model"""
     try:
         import re
@@ -285,7 +284,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
             if not hasattr(self, "q_attn"):
                 raise ValueError(
                     "If class is used as cross attention, the weights `q_attn` have to be defined. "
-                    "Please make sure to instantiate class with `GPT2Attention(..., is_cross_attention=True)`."
+                    "Please make sure to instantiate class with `DecisionTransformerGPT2Attention(..., is_cross_attention=True)`."
                 )
 
             query = self.q_attn(hidden_states)
@@ -423,7 +422,6 @@ class DecisionTransformerGPT2Block(nn.Module):
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2PreTrainedModel with GPT2->DecisionTransformerGPT2
 class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -431,7 +429,7 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     """
 
     config_class = DecisionTransformerConfig
-    load_tf_weights = load_tf_weights_in_decision_transformer_gpt2
+    load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
@@ -471,7 +469,6 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Model with GPT2->DecisionTransformerGPT2
 class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
 
@@ -497,50 +494,13 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def parallelize(self, device_map=None):
-        # Check validity of device_map
-        self.device_map = (
-            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
-        )
-        assert_device_map(self.device_map, len(self.h))
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        self.wte = self.wte.to(self.first_device)
-        self.wpe = self.wpe.to(self.first_device)
-        # Load onto devices
-        for k, v in self.device_map.items():
-            for block in v:
-                cuda_device = "cuda:" + str(k)
-                self.h[block] = self.h[block].to(cuda_device)
-        # ln_f to last
-        self.ln_f = self.ln_f.to(self.last_device)
-
-    def deparallelize(self):
-        self.model_parallel = False
-        self.device_map = None
-        self.first_device = "cpu"
-        self.last_device = "cpu"
-        self.wte = self.wte.to("cpu")
-        self.wpe = self.wpe.to("cpu")
-        for index in range(len(self.h)):
-            self.h[index] = self.h[index].to("cpu")
-        self.ln_f = self.ln_f.to("cpu")
-        torch.cuda.empty_cache()
-
     def get_input_embeddings(self):
         return self.wte
 
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        """
-        for layer, heads in heads_to_prune.items():
-            self.h[layer].attn.prune_heads(heads)
-
+    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2Model.forward
     def forward(
         self,
         input_ids=None,
