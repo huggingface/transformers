@@ -47,14 +47,14 @@ class BigScience176BConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`BigScience176BModel`] or [`TFBigScience176BModel`].
-        n_positions (`int`, *optional*, defaults to 1024):
+        seq_length (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         n_embd (`int`, *optional*, defaults to 768):
             Dimensionality of the embeddings and hidden states.
         n_layer (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        n_head (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*, defaults to None):
             Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
@@ -70,37 +70,7 @@ class BigScience176BConfig(PretrainedConfig):
             The epsilon to use in the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        summary_type (`string`, *optional*, defaults to `"cls_index"`):
-            Argument used when doing sequence summary, used in the models [`BigScience176BDoubleHeadsModel`] and
-            [`TFBigScience176BDoubleHeadsModel`].
 
-            Has to be one of the following options:
-
-                - `"last"`: Take the last token hidden state (like XLNet).
-                - `"first"`: Take the first token hidden state (like BERT).
-                - `"mean"`: Take the mean of all tokens hidden states.
-                - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
-                - `"attn"`: Not implemented now, use multi-head attention.
-        summary_use_proj (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`BigScience176BDoubleHeadsModel`] and
-            [`TFBigScience176BDoubleHeadsModel`].
-
-            Whether or not to add a projection after the vector extraction.
-        summary_activation (`str`, *optional*):
-            Argument used when doing sequence summary. Used in for the multiple choice head in
-            [`BigScience176BDoubleHeadsModel`].
-
-            Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
-        summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`BigScience176BDoubleHeadsModel`] and
-            [`TFBigScience176BDoubleHeadsModel`].
-
-            Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
-        summary_first_dropout (`float`, *optional*, defaults to 0.1):
-            Argument used when doing sequence summary, used in the models [`BigScience176BDoubleHeadsModel`] and
-            [`TFBigScience176BDoubleHeadsModel`].
-
-            The dropout ratio to be used after the projection and activation.
         scale_attn_weights (`bool`, *optional*, defaults to `True`):
             Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -130,55 +100,46 @@ class BigScience176BConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "n_embd",
-        "max_position_embeddings": "n_positions",
-        "num_attention_heads": "n_head",
+        "max_position_embeddings": "seq_length",
         "num_hidden_layers": "n_layer",
     }
 
     def __init__(
         self,
-        vocab_size=50257,
-        n_positions=1024,
-        n_embd=768,
-        n_layer=12,
-        n_head=12,
+        vocab_size=250880,
+        seq_length=2048,
+        n_embd=14336,
+        n_layer=70,
+        num_attention_heads=122,
         n_inner=None,
-        activation_function="gelu_new",
-        resid_pdrop=0.1,
-        embd_pdrop=0.1,
-        attn_pdrop=0.1,
-        layer_norm_epsilon=1e-5,
-        initializer_range=0.02,
-        summary_type="cls_index",
-        summary_use_proj=True,
-        summary_activation=None,
-        summary_proj_to_labels=True,
-        summary_first_dropout=0.1,
-        scale_attn_weights=True,
-        use_cache=True,
-        bos_token_id=50256,
-        eos_token_id=50256,
-        scale_attn_by_inverse_layer_idx=False,
-        reorder_and_upcast_attn=False,
+        masked_softmax_fusion=True,
+        activation_function="gelu_new",  # TODO
+        resid_pdrop=0.1,  # TODO
+        embd_pdrop=0.1,  # TODO
+        attn_pdrop=0.1,  # TODO
+        layer_norm_epsilon=1e-5,  # TODO
+        initializer_range=0.02,  # TODO
+        scale_attn_weights=True,  # TODO
+        use_cache=True,  # TODO
+        bos_token_id=50256,  # TODO
+        eos_token_id=50256,  # TODO
+        scale_attn_by_inverse_layer_idx=False,  # TODO
+        reorder_and_upcast_attn=False,  # TODO
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.n_positions = n_positions
+        self.seq_length = seq_length
         self.n_embd = n_embd
         self.n_layer = n_layer
-        self.n_head = n_head
+        self.num_attention_heads = num_attention_heads
         self.n_inner = n_inner
+        self.masked_softmax_fusion = masked_softmax_fusion
         self.activation_function = activation_function
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
         self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-        self.summary_type = summary_type
-        self.summary_use_proj = summary_use_proj
-        self.summary_activation = summary_activation
-        self.summary_first_dropout = summary_first_dropout
-        self.summary_proj_to_labels = summary_proj_to_labels
         self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
@@ -217,10 +178,6 @@ class BigScience176BOnnxConfig(OnnxConfigWithPast):
     @property
     def num_layers(self) -> int:
         return self._config.n_layer
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self._config.n_head
 
     def generate_dummy_inputs(
         self,

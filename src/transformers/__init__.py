@@ -1016,7 +1016,6 @@ if is_torch_available():
             "BigScience176BLMHeadModel",
             "BigScience176BModel",
             "BigScience176BPreTrainedModel",
-            "load_tf_weights_in_bigscience176b",
         ]
     )
     _import_structure["models.gpt_neo"].extend(
@@ -3241,7 +3240,6 @@ if TYPE_CHECKING:
             BigScience176BLMHeadModel,
             BigScience176BModel,
             BigScience176BPreTrainedModel,
-            load_tf_weights_in_bigscience176b,
         )
         from .models.gpt_neo import (
             GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
