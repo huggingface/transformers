@@ -29,7 +29,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, r
 if is_torch_available():
     import torch
 
-    from transformers import DecisionTransformerModel
+    from transformers import DecisionTransformerGPT2Model, DecisionTransformerModel
     from transformers.models.decision_transformer.modeling_decision_transformer import (
         DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -133,7 +133,7 @@ class DecisionTransformerModelTester:
 @require_torch
 class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (DecisionTransformerModel,) if is_torch_available() else ()
+    all_model_classes = (DecisionTransformerModel, DecisionTransformerGPT2Model) if is_torch_available() else ()
     all_generative_model_classes = ()
 
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids

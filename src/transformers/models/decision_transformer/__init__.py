@@ -31,6 +31,8 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_decision_transformer"] = [
         "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "DecisionTransformerGPT2Model",
+        "DecisionTransformerGPT2PreTrainedModel",
         "DecisionTransformerModel",
         "DecisionTransformerPreTrainedModel",
     ]
@@ -45,6 +47,8 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_decision_transformer import (
             DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DecisionTransformerGPT2Model,
+            DecisionTransformerGPT2PreTrainedModel,
             DecisionTransformerModel,
             DecisionTransformerPreTrainedModel,
         )

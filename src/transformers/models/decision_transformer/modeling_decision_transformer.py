@@ -51,7 +51,7 @@ DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Copied from transformers.models.gpt2.modeling_gpt2.load_tf_weights_in_gpt2
-def load_tf_weights_in_gpt2(model, config, decision_transformer_gpt2_checkpoint_path):
+def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
     """Load tf checkpoints in a pytorch model"""
     try:
         import re
