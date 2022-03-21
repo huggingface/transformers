@@ -37,12 +37,12 @@ _CONFIG_FOR_DOC = "ResNetConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = ""
+_CHECKPOINT_FOR_DOC = "microsoft/resnet-50"
 _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = ""
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_IMAGE_CLASS_CHECKPOINT = "microsoft/resnet-50"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/resnet-50",
