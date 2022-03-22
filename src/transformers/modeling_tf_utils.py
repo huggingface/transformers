@@ -404,7 +404,8 @@ def input_processing(func, config, input_ids, **kwargs):
     signature = dict(inspect.signature(func).parameters)
     signature.pop("kwargs", None)
     signature.pop("self", None)
-    parameter_names = list(signature.keys())
+    parameter_names_list = list(signature.keys())
+    parameter_names = set(parameter_names_list)
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray, KerasTensor)
 
@@ -423,13 +424,13 @@ def input_processing(func, config, input_ids, **kwargs):
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
 
-    if "past" in kwargs["kwargs_call"] and "past_key_values" in kwargs:
+    if "past" in kwargs["kwargs_call"] and "past_key_values" in parameter_names:
         warnings.warn(
             "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
             FutureWarning,
         )
         kwargs["past_key_values"] = kwargs["kwargs_call"].pop("past")
-    elif "past_key_values" in kwargs["kwargs_call"] and "past" in kwargs:
+    elif "past_key_values" in kwargs["kwargs_call"] and "past" in parameter_names:
         kwargs["past"] = kwargs["kwargs_call"].pop("past_key_values")
 
     if len(kwargs["kwargs_call"]) > 0:
@@ -456,12 +457,12 @@ def input_processing(func, config, input_ids, **kwargs):
                 if tensor_name in parameter_names:
                     output[tensor_name] = input
                 else:
-                    output[parameter_names[i]] = input
+                    output[parameter_names_list[i]] = input
             elif isinstance(input, allowed_types) or input is None:
-                output[parameter_names[i]] = input
+                output[parameter_names_list[i]] = input
             else:
                 raise ValueError(
-                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names[i]}."
+                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names_list[i]}."
                 )
     elif isinstance(input_ids, (dict, BatchEncoding)):
         if "inputs" in input_ids:
@@ -491,10 +492,10 @@ def input_processing(func, config, input_ids, **kwargs):
                 raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
     else:
         if isinstance(input_ids, (tf.Tensor, KerasTensor)) or input_ids is None:
-            output[parameter_names[0]] = input_ids
+            output[parameter_names_list[0]] = input_ids
         else:
             raise ValueError(
-                f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for {parameter_names[0]}."
+                f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for {parameter_names_list[0]}."
             )
 
     for name in parameter_names:
