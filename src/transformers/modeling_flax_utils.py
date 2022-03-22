@@ -141,7 +141,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if _do_init:
             self.params = random_params
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params=None) -> Dict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> Dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
 
     @classmethod
@@ -640,7 +640,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         unexpected_keys = set(state.keys()) - model.required_params
 
         if missing_keys and not _do_init:
-            logger.info(
+            logger.warn(
                 f"The checkpoint {pretrained_model_name_or_path} is missing required keys: {missing_keys}. "
                 f"Make sure to call model.init_weights to initialize the missing weights."
             )
@@ -662,9 +662,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         "model."
                     )
 
-        # add missing keys as random parameters
-        for missing_key in missing_keys:
-            state[missing_key] = random_state[missing_key]
+        # add missing keys as random parameters if we are initializing
+        if missing_keys and _do_init:
+            for missing_key in missing_keys:
+                state[missing_key] = random_state[missing_key]
 
         # remove unexpected keys to not be saved again
         for unexpected_key in unexpected_keys:
