@@ -206,6 +206,8 @@
       title: DiT
     - local: model_doc/dpr
       title: DPR
+    - local: model_doc/dpt
+      title: DPT
     - local: model_doc/electra
       title: ELECTRA
     - local: model_doc/encoder-decoder

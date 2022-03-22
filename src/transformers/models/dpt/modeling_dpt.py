@@ -39,8 +39,8 @@ from ...file_utils import (
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    DepthEstimatorOutput,
     SemanticSegmentationModelOutput,
-    SequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
@@ -850,9 +850,11 @@ class DPTDepthEstimationHead(nn.Module):
         # use last features
         hidden_states = hidden_states[self.config.head_in_index]
 
-        logits = self.head(hidden_states)
+        predicted_depth = self.head(hidden_states)
 
-        return logits
+        predicted_depth = predicted_depth.squeeze(dim=1)
+
+        return predicted_depth
 
 
 @add_start_docstrings(
@@ -877,7 +879,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(DPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -933,8 +935,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         hidden_states = self.neck(hidden_states)
 
-        logits = self.head(hidden_states)
-        logits = logits.squeeze(dim=1)
+        predicted_depth = self.head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -942,14 +943,14 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         if not return_dict:
             if output_hidden_states:
-                output = (logits,) + outputs[2:]
+                output = (predicted_depth,) + outputs[2:]
             else:
-                output = (logits,) + outputs[3:]
+                output = (predicted_depth,) + outputs[3:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return DepthEstimatorOutput(
             loss=loss,
-            logits=logits,
+            predicted_depth=predicted_depth,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
