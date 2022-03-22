@@ -22,7 +22,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .debug_utils import DebugOption
 from .file_utils import (
     ExplicitEnum,
     cached_property,
@@ -37,6 +36,7 @@ from .file_utils import (
 )
 from .trainer_utils import EvaluationStrategy, HubStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
 from .utils import logging
+from .utils.debug import DebugOption
 
 
 if is_torch_available():

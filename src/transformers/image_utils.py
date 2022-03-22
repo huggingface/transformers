@@ -23,7 +23,7 @@ import PIL.ImageOps
 import requests
 
 from .file_utils import is_torch_available
-from .generic_utils import _is_torch
+from .utils.generic import _is_torch
 
 
 IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]

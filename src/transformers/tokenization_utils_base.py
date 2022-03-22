@@ -57,8 +57,8 @@ from .file_utils import (
     to_py_obj,
     torch_required,
 )
-from .generic_utils import _is_jax, _is_numpy, _is_tensorflow, _is_torch, _is_torch_device
 from .utils import logging
+from .utils.generic import _is_jax, _is_numpy, _is_tensorflow, _is_torch, _is_torch_device
 
 
 if TYPE_CHECKING:

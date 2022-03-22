@@ -91,7 +91,6 @@ _import_structure = {
     "debug_utils": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
-    "doc_utils": [],
     "dynamic_module_utils": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
@@ -128,9 +127,7 @@ _import_structure = {
         "is_torch_tpu_available",
         "is_vision_available",
     ],
-    "generic_utils": [],
     "hf_argparser": ["HfArgumentParser"],
-    "import_utils": [],
     "integrations": [
         "is_comet_available",
         "is_optuna_available",
