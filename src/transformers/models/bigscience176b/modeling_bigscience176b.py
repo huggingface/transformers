@@ -56,8 +56,9 @@ from ...modeling_utils import (
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_bigscience176b import BigScience176BConfig
-from .fused_layer_norm import MixedFusedLayerNorm
-from .fused_softmax import AttnMaskType, FusedScaleMaskSoftmax
+from torch.nn import LayerNorm as MixedFusedLayerNorm
+# from .fused_layer_norm import MixedFusedLayerNorm  # TODO use fused layer norm
+# from .fused_softmax import AttnMaskType, FusedScaleMaskSoftmax  # TODO scaled softmax
 from .mpu_utils import split_tensor_along_last_dim
 
 
@@ -80,16 +81,16 @@ class BigScience176BAttention(nn.Module):
         super().__init__()
 
         max_positions = config.max_position_embeddings
-        self.register_buffer(
-            "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
-                1, 1, max_positions, max_positions
-            ),
-        )
-        self.register_buffer("masked_bias", torch.tensor(-1e4))
+        # self.register_buffer(
+        #     "bias",
+        #     torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+        #         1, 1, max_positions, max_positions
+        #     ),
+        # )
+        # self.register_buffer("masked_bias", torch.tensor(-1e4))
 
         self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
+        self.num_heads = config.n_head
         self.head_dim = self.hidden_size // self.num_heads
         self.split_size = self.hidden_size
         if self.head_dim * self.num_heads != self.hidden_size:
@@ -97,21 +98,20 @@ class BigScience176BAttention(nn.Module):
                 f"`hidden_size` must be divisible by num_heads (got `hidden_size`: {self.hidden_size} and `num_heads`: {self.num_heads})."
             )
 
-        self.scale_attn_weights = config.scale_attn_weights
-
         # Layer-wise attention scaling
-        self.layer_number = layer_number
+        self.layer_number = max(1, layer_number)
         coeff = self.layer_number
         self.norm_factor = math.sqrt(self.head_dim) * coeff
 
-        self.scale_mask_softmax = FusedScaleMaskSoftmax(
-            fp16 = False,
-            bf16 = True,
-            attn_mask_type=AttnMaskType.Causal,
-            scaled_masked_softmax_fusion=config.masked_softmax_fusion,
-            mask_func=attention_mask_func,
-            softmax_in_fp32=False,
-            scale=coeff)
+        self.scale_mask_softmax = nn.Softmax()
+        # self.scale_mask_softmax = FusedScaleMaskSoftmax(  # TODO setup back
+        #     fp16 = False,
+        #     bf16 = True,
+        #     attn_mask_type=AttnMaskType.causal,
+        #     scaled_masked_softmax_fusion=config.masked_softmax_fusion,
+        #     mask_func=attention_mask_func,
+        #     softmax_in_fp32=False,
+        #     scale=coeff)
 
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size)
         self.dense = nn.Linear(self.hidden_size, self.hidden_size)
@@ -131,7 +131,7 @@ class BigScience176BAttention(nn.Module):
         alibi = alibi.repeat(hidden_states.shape[0], 1, 1)  # repeat with batch size
 
         # Attention heads [sq, b, h] --> [sq, b, (np * 3 * hn)]
-        query, key, value = self.query_key_value(hidden_states)
+        mixed_x_layer = self.query_key_value(hidden_states)
 
         # [sq, b, (np * 3 * hn)] --> [sq, b, np, 3 * hn]
         new_tensor_shape = mixed_x_layer.size()[:-1] + \
@@ -143,6 +143,10 @@ class BigScience176BAttention(nn.Module):
         (query_layer,
             key_layer,
             value_layer) = split_tensor_along_last_dim(mixed_x_layer, 3)
+
+        print(">==Q==", query_layer.shape)
+        print(">==K===", key_layer.shape)
+        print(">==V===", value_layer.shape)
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -161,14 +165,25 @@ class BigScience176BAttention(nn.Module):
         # ===================================
 
         # [b, np, sq, sk]
-        output_size = (query.size(1),
-                       query.size(2),
-                       query.size(0),
-                       key.size(0))
+        output_size = (query_layer.size(1),
+                       query_layer.size(2),
+                       query_layer.size(0),
+                       key_layer.size(0))
+
+        # [sq, b, np, hn] -> [sq, b * np, hn]
+        query_layer = query_layer.view(output_size[2],
+                                       output_size[0] * output_size[1], -1)
+        # [sk, b, np, hn] -> [sk, b * np, hn]
+        key_layer = key_layer.view(output_size[3],
+                                   output_size[0] * output_size[1], -1)
 
 
         # alibi
         matmul_result = alibi[:output_size[0]*output_size[1], :, :output_size[3]]
+        print("======", matmul_result.shape)
+        print("==Q==", query_layer.shape)
+        print("==K===", key_layer.shape)
+        print("==V===", value_layer.shape)
 
         # Raw attention scores. [b * np, sq, sk]
         beta = 1.0 / self.layer_number
@@ -258,7 +273,7 @@ class BigScience176BAttention(nn.Module):
 
 # Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP with GPT2->BigScience176B
 class BigScience176BMLP(nn.Module):
-    def __init__(self, intermediate_size, config):
+    def __init__(self, config):
         super().__init__()
         hidden_size = config.hidden_size
         self.dense_h_to_4h = nn.Linear(hidden_size, 4 * hidden_size)
@@ -279,16 +294,16 @@ class BigScience176BBlock(nn.Module):
         hidden_size = config.hidden_size
 
         self.input_layernorm = MixedFusedLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.alibi = self._build_alibi_tensor(config.seq_length, config.num_attention_heads)
+        self.alibi = self._build_alibi_tensor(config.seq_length, config.n_head)
         self.self_attention = BigScience176BAttention(config, layer_number=layer_number)
         self.post_attention_layernorm = MixedFusedLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = BigScience176BMLP(config)
 
     @staticmethod
-    def _build_alibi_tensor(max_seq_len, num_attention_heads):
+    def _build_alibi_tensor(max_seq_len, n_head):
         # Based on https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
-        """Returns tensor shaped (num_attention_heads, 1, max_seq_len)"""
+        """Returns tensor shaped (n_head, 1, max_seq_len)"""
 
         def get_slopes(n):
             def get_slopes_power_of_2(n):
@@ -303,9 +318,9 @@ class BigScience176BBlock(nn.Module):
                 return get_slopes_power_of_2(closest_power_of_2) + get_slopes(2 * closest_power_of_2)[0::2][
                                                                    :n - closest_power_of_2]
 
-        slopes = torch.Tensor(get_slopes(num_attention_heads))
+        slopes = torch.Tensor(get_slopes(n_head))
         alibi = slopes.unsqueeze(1).unsqueeze(1) * torch.arange(max_seq_len).unsqueeze(0).unsqueeze(0).expand(
-            num_attention_heads, -1, -1)
+            n_head, -1, -1)
         
         #Select the part of the tensor that corresponds to our tensor parallel index.
         # tp_world_size = mpu.get_tensor_model_parallel_world_size()
@@ -555,9 +570,8 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
 
         self.embed_dim = config.hidden_size
 
-        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
-        self.embed_layernorm = MixedFusedLayerNorm(self.embed_dim)
-        self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.word_embeddings_layernorm = MixedFusedLayerNorm(self.embed_dim)
 
         self.h = nn.ModuleList([BigScience176BBlock(config, layer_number=i) for i in range(config.num_hidden_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
@@ -580,7 +594,7 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
         self.model_parallel = True
         self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
         self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        self.wte = self.wte.to(self.first_device)
+        self.word_embeddings = self.word_embeddings.to(self.first_device)
         self.wpe = self.wpe.to(self.first_device)
         # Load onto devices
         for k, v in self.device_map.items():
@@ -596,7 +610,7 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
         self.device_map = None
         self.first_device = "cpu"
         self.last_device = "cpu"
-        self.wte = self.wte.to("cpu")
+        self.word_embeddings = self.word_embeddings.to("cpu")
         self.wpe = self.wpe.to("cpu")
         for index in range(len(self.h)):
             self.h[index] = self.h[index].to("cpu")
@@ -604,10 +618,10 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
         torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
-        return self.wte
+        return self.word_embeddings
 
     def set_input_embeddings(self, new_embeddings):
-        self.wte = new_embeddings
+        self.word_embeddings = new_embeddings
 
     @add_start_docstrings_to_model_forward(BIGSCIENCE176B_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -687,20 +701,17 @@ class BigScience176BModel(BigScience176BPreTrainedModel):
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x num_attention_heads x N x N
-        # head_mask has shape n_layer x batch x num_attention_heads x N x N
+        # attention_probs has shape bsz x n_head x N x N
+        # head_mask has shape n_layer x batch x n_head x N x N
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
 
         if inputs_embeds is None:
-            inputs_embeds = self.wte(input_ids)
+            inputs_embeds = self.word_embeddings(input_ids)
 
-        inputs_embeds_norm = self.embed_layernorm(inputs_embeds)
-
-        position_embeds = self.wpe(position_ids)
-        hidden_states = inputs_embeds_norm + position_embeds
+        hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
         if token_type_ids is not None:
-            token_type_embeds = self.wte(token_type_ids)
+            token_type_embeds = self.word_embeddings(token_type_ids)
             hidden_states = hidden_states + token_type_embeds
 
         output_shape = input_shape + (hidden_states.size(-1),)
