@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "decision_transformer": "https://huggingface.co/decision_transformer/resolve/main/config.json",
+    "decision-transformer-gym-hopper-medium": "https://huggingface.co/edbeeching/decision-transformer-gym-hopper-medium/resolve/main/config.json",
     # See all DecisionTransformer models at https://huggingface.co/models?filter=decision_transformer
 }
 
