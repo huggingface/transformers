@@ -917,7 +917,6 @@ class TFGenerationMixin:
             if self._use_cache(outputs, use_cache):
                 past = outputs[1]
 
-            breakpoint()
             # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
                 next_token_logits_penalties = _create_next_token_logits_penalties(
