@@ -281,7 +281,6 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
-        input_length = [feature["input_length"] for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
         # reformat list to dict and set to pytorch format
@@ -315,12 +314,8 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
         labels = labels.filled(fill_value=-100)
 
         batch["inputs"] = batch.pop("input_values")
-        batch["input_length"] = np.array(input_length)
         batch["labels"] = labels
         batch["decoder_input_ids"] = decoder_input_ids
-        # decoder_attention_mask known to give issues with nan's
-        # remove decoder_attention_mask as an arg for the time being - handled by the causal mask in XXXForCausalLM
-        # batch["decoder_attention_mask"] = labels_batch.attention_mask
 
         return batch
 
@@ -577,7 +572,7 @@ def main():
 
         wer = metric.compute(predictions=pred_str, references=label_str)
 
-        return {"wer": wer}
+        return {"wer": wer}, pred_str
 
     # 9. Create a single speech processor
     if is_main_process(training_args.local_rank):
@@ -709,7 +704,6 @@ def main():
 
         def compute_loss(params):
             labels = batch.pop("labels")
-            sample_size = batch.pop("input_length").sum()
             logits = state.apply_fn(
                 **batch,
                 params=params,
@@ -720,13 +714,11 @@ def main():
             loss = loss_fn(logits, labels, label_smoothing_factor)
             # normalize loss over gradient accumulation steps (ignore for now)
             # loss = loss / gradient_accumulation_steps
-            return loss, sample_size
+            return loss
 
-        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
-        (loss, sample_size), grad = grad_fn(state.params)
-        # true-average of gradients - weighted by input sample-size
-        grad = jax.lax.psum(grad, "batch")
-        grad = jax.tree_map(lambda g: g / sample_size, grad)
+        grad_fn = jax.value_and_grad(compute_loss)
+        loss, grad = grad_fn(state.params)
+        grad = jax.lax.pmean(grad, "batch")
 
         # compute gradient norm for monitoring
         grad_norm = jnp.linalg.norm(jax.tree_util.tree_leaves(jax.tree_map(jnp.linalg.norm, grad)))
@@ -741,7 +733,6 @@ def main():
     # Define eval fn
     def eval_step(params, batch, label_smoothing_factor=0.0):
         labels = batch.pop("labels")
-        sample_size = batch.pop("input_length")
         logits = model(**batch, params=params, train=False)[0]
         loss = loss_fn(logits, labels, label_smoothing_factor)
 
@@ -843,7 +834,7 @@ def main():
         # compute WER metric
         wer_desc = ""
         if training_args.predict_with_generate:
-            wer_metric = compute_metrics(eval_preds, eval_labels)
+            wer_metric, pred_str = compute_metrics(eval_preds, eval_labels)
             eval_metrics.update(wer_metric)
             wer_desc = " ".join([f"Eval {key}: {value} |" for key, value in wer_metric.items()])
 
@@ -856,6 +847,8 @@ def main():
         if has_tensorboard and jax.process_index() == 0:
             cur_step = epoch * (len(vectorized_datasets["train"]) // train_batch_size)
             write_eval_metric(summary_writer, eval_metrics, cur_step)
+            if training_args.predict_with_generate:
+                summary_writer.text('eval_predictions', "\n".join(pred_str), cur_step)
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
